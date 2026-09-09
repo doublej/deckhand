@@ -1,0 +1,14 @@
+.DS_Store
+Thumbs.db
+*.log
+.env
+.env.local
+.env.*.local
+
+.build/
+.swiftpm/
+DerivedData/
+*.xcodeproj
+
+.claude/claude-tree.*
+**/CLAUDE.md.history.jsonl

@@ -1,0 +1,28 @@
+excluded:
+  - .build
+  - Packages
+
+function_body_length:
+  warning: 20
+  error: 40
+
+file_length:
+  warning: 300
+  error: 400
+
+custom_rules:
+  bare_nsapp_activate:
+    name: "Ineffective NSApp.activate()"
+    # macOS 14 cooperative activation: a background or accessory app is never yielded
+    # activation, so this call silently does nothing and the window opens behind other
+    # apps. See AppActivation.swift for the measurements.
+    regex: '\bNSApp(lication\.shared)?\.activate\(\s*\)'
+    message: "NSApp.activate() is a no-op for a background/LSUIElement app — use AppActivation.front()"
+    severity: error
+    excluded_match_kinds:
+      - comment
+      - doccomment
+
+disabled_rules:
+  - todo
+  - line_length

@@ -1,0 +1,11 @@
+{
+  "description": "iOS remote for live Claude Code sessions in iTerm — list, read, and speak to them",
+  "type": "swift",
+  "framework": "swiftui",
+  "archived": false,
+  "flow": {
+    "policy": "gitflow",
+    "trunk": "main",
+    "integration": "develop"
+  }
+}

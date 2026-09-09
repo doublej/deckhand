@@ -1,0 +1,21 @@
+{
+  "template": "swift/ios",
+  "template_version": "3.3.0",
+  "template_source": {
+    "type": "local",
+    "path": "/Users/jurrejan/dev/_management/cookiecutter-templates",
+    "git_remote": "git@github.com:doublej/cookiecutter-templates.git",
+    "git_sha": "0d6ca7e2093b290d36dedfec197aed317484ddf9"
+  },
+  "rendered_at": "2026-09-09T11:14:11.916095+00:00",
+  "context": {
+    "project_name": "deckhand",
+    "project_slug": "deckhand",
+    "module_name": "Deckhand",
+    "description": "iOS remote for live Claude Code sessions in iTerm \u2014 list, read, and speak to them",
+    "author": "Jurre-Jan Smit",
+    "deployment_target": "26.0",
+    "mcp_servers": "none",
+    "mcp_scope": "project"
+  }
+}
