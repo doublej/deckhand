@@ -44,12 +44,19 @@ private struct TalkGesture: ViewModifier {
     let start: () -> Void
     let stop: () -> Void
 
+    /// A press has to settle before it counts as talking. Without the wait, a finger dragged
+    /// across the deck to scroll it starts recording instead of scrolling.
+    private static let settle = 0.2
+
     func body(content: Content) -> some View {
         switch mode {
         case .hold:
             content.gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { _ in if !isRecording { start() } }
+                LongPressGesture(minimumDuration: Self.settle)
+                    .sequenced(before: DragGesture(minimumDistance: 0))
+                    .onChanged { value in
+                        if case .second(true, _) = value, !isRecording { start() }
+                    }
                     .onEnded { _ in stop() }
             )
         case .toggle:

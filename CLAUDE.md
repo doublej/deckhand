@@ -19,6 +19,11 @@ controls the daemon.
   `com.jurrejan.deckhand`. Logs to `~/Library/Logs/Deckhand/deckhand.log`, which is what
   Console.app shows in its sidebar (`just logs` to follow it).
 - Transcription: utt's local API on `127.0.0.1:8756`, on-device, nothing leaves the Mac.
+  It has to be switched on in utt: `api.enabled` in
+  `~/Library/Application Support/dev.jurrejan.utt/settings.json`. Editing that file does not
+  start the listener — utt reads it at launch, so the app has to be relaunched (or the switch
+  flipped in its Settings UI). `access: "thisMac"` binds loopback only, and utt's version
+  string says nothing about whether the build has the API at all.
 - Summaries: the Claude Agent SDK, sonnet at low effort, one turn, no tools.
 - Menu bar app (`menubar/`, target `DeckhandMenu`): start, stop, restart, copy the token,
   open the log. `just menubar`.
@@ -72,6 +77,9 @@ unauthenticated route; everything else needs the `x-deckhand-token` header, and 
   and says so in the `iterm` field. A failed lookup backs off for a minute — before that, the
   4 s timeout was paid on every request and starved the event loop. Run `just daemon` from an
   iTerm window when you want panes and Focus on Mac.
+- **utt re-mints its bearer token** every time its API is switched off and on, which leaves
+  the 1Password copy stale and every clip answered with a 401. onenv stays the source of truth,
+  but a rejected token is retried once against utt's own `api.token` and the log says so.
 - **onenv cannot run under launchd** either: 1Password has no way to ask for a fingerprint, so
   the read hangs and times out. `just sync-secrets` materialises `deckhand/UTT_SECRET` into
   `~/Library/Application Support/Deckhand/utt-token` (0600) and the daemon reads that.

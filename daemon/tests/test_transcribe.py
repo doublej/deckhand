@@ -1,3 +1,4 @@
+import json
 import subprocess
 
 from deckhand_daemon import transcribe
@@ -97,6 +98,30 @@ def test_a_closed_utt_is_named_as_the_cause(monkeypatch, tmp_path):
     text, error = transcribe.transcribe(clip)
     assert text is None
     assert error == "utt is not running on the Mac — open utt and try again"
+
+
+def test_a_rejected_token_falls_back_to_the_one_utt_holds(monkeypatch, tmp_path):
+    """utt re-mints its token when its API is toggled; 1Password's copy goes stale."""
+    import urllib.error
+    import urllib.request
+
+    settings = tmp_path / "settings.json"
+    settings.write_text(json.dumps({"api": {"enabled": True, "token": "the-live-one"}}))
+    monkeypatch.setattr(transcribe, "UTT_SETTINGS", settings)
+    monkeypatch.setattr(transcribe, "_token", "the-stale-one")
+    clip = tmp_path / "clip.m4a"
+    clip.write_bytes(b"x")
+    seen: list[str] = []
+
+    def answer(request, *_a, **_k):
+        seen.append(request.headers["Authorization"])
+        if request.headers["Authorization"].endswith("the-stale-one"):
+            raise urllib.error.HTTPError(transcribe.UTT_URL, 401, "no", {}, None)
+        return _Response(b'{"text": "second time lucky"}')
+
+    monkeypatch.setattr(urllib.request, "urlopen", answer)
+    assert transcribe.transcribe(clip) == ("second time lucky", None)
+    assert seen == ["Bearer the-stale-one", "Bearer the-live-one"]
 
 
 class _Response:

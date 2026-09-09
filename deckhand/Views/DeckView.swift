@@ -31,33 +31,56 @@ struct DeckView: View {
         }
     }
 
+    /// Below this a column is a stripe, not a transcript. Past it the deck scrolls sideways.
+    private static let minColumnWidth: CGFloat = 240
+
     private var columns: some View {
-        HStack(spacing: 1) {
-            ForEach(model.deckSessions) { session in
-                TalkControl(
-                    recorder: recorder,
-                    mode: model.preferences.talkMode,
-                    isMine: active == session.sessionId,
-                    onStart: {
-                        active = session.sessionId
-                        model.status = "Recording for \(session.name)"
-                    },
-                    onClip: { clip in
-                        await model.upload(clip: clip, to: session)
-                        active = nil
-                    },
-                    content: { isRecording, busy in
-                        Column(
-                            session: session,
-                            turns: model.deckTurns[session.sessionId] ?? [],
-                            isRecording: isRecording,
-                            busy: busy
-                        )
-                        .accessibilityIdentifier("deck-column")
-                    }
-                )
+        GeometryReader { geo in
+            ScrollView(.horizontal) {
+                deck(width: columnWidth(in: geo.size.width))
+                    .frame(height: geo.size.height)
             }
         }
+    }
+
+    /// Share the width while the columns still fit; stop shrinking at the minimum and scroll.
+    private func columnWidth(in total: CGFloat) -> CGFloat {
+        let count = CGFloat(max(model.deckSessions.count, 1))
+        return max(Self.minColumnWidth, (total - (count - 1)) / count)
+    }
+
+    private func deck(width: CGFloat) -> some View {
+        HStack(spacing: 1) {
+            ForEach(model.deckSessions) { session in
+                column(for: session).frame(width: width)
+            }
+        }
+    }
+
+    private func startTalking(to session: Session) {
+        active = session.sessionId
+        model.status = "Recording for \(session.name)"
+    }
+
+    private func column(for session: Session) -> some View {
+        TalkControl(
+            recorder: recorder,
+            mode: model.preferences.talkMode,
+            isMine: active == session.sessionId,
+            onStart: { startTalking(to: session) },
+            onClip: { clip in
+                await model.upload(clip: clip, to: session)
+                active = nil
+            },
+            content: { isRecording, busy in
+                Column(
+                    session: session,
+                    turns: model.deckTurns[session.sessionId] ?? [],
+                    isRecording: isRecording,
+                    busy: busy
+                ).accessibilityIdentifier("deck-column")
+            }
+        )
     }
 }
 
