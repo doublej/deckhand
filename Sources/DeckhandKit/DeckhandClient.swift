@@ -4,7 +4,7 @@ import Foundation
 public struct DeckhandClient: Sendable {
     public let baseURL: URL
     public let token: String
-    private let urlSession: URLSession
+    let urlSession: URLSession
 
     public init(baseURL: URL, token: String, urlSession: URLSession = .shared) {
         self.baseURL = baseURL
@@ -203,9 +203,12 @@ public struct DeckhandClient: Sendable {
 
     // MARK: - plumbing
 
-    private enum Method: String { case get = "GET", post = "POST", put = "PUT" }
+    // Internal rather than private, because `Artifacts.swift` builds its calls out of the same
+    // four pieces and `private` in Swift is one file wide.
 
-    private func request(_ method: Method, _ path: String) -> URLRequest {
+    enum Method: String { case get = "GET", post = "POST", put = "PUT" }
+
+    func request(_ method: Method, _ path: String) -> URLRequest {
         var req = URLRequest(url: URL(string: path, relativeTo: baseURL) ?? baseURL)
         req.httpMethod = method.rawValue
         req.setValue(token, forHTTPHeaderField: "x-deckhand-token")
@@ -217,7 +220,7 @@ public struct DeckhandClient: Sendable {
         try decode(try await send(request(.get, path)))
     }
 
-    private func send(_ req: URLRequest, body: Data? = nil) async throws -> Data {
+    func send(_ req: URLRequest, body: Data? = nil) async throws -> Data {
         let (data, response): (Data, URLResponse)
         if let body {
             (data, response) = try await urlSession.upload(for: req, from: body)
@@ -233,7 +236,7 @@ public struct DeckhandClient: Sendable {
         }
     }
 
-    private func decode<T: Decodable>(_ data: Data) throws -> T {
+    func decode<T: Decodable>(_ data: Data) throws -> T {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         return try decoder.decode(T.self, from: data)

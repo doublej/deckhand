@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse
 
 from . import (
     __version__,
+    artifacts,
     briefings,
     config,
     deliver,
@@ -44,6 +45,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Deckhand", version=__version__, lifespan=lifespan)
+app.include_router(artifacts.router, dependencies=[Depends(require_token)])
 app.include_router(filter_routes.router, dependencies=[Depends(require_token)])
 app.include_router(saying.router, dependencies=[Depends(require_token)])
 

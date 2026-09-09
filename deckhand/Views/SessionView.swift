@@ -17,11 +17,11 @@ struct SessionView: View {
     @State private var wantedName = ""
     @Environment(\.dismiss) private var dismiss
 
-    /// Three things you want on arriving, and they want different layouts: the briefing wants
-    /// a page to itself, the transcript wants to be pinned to its newest line, and the files
-    /// are a list you scroll from the top.
+    /// Four things you want on arriving, and they want different layouts: the briefing wants
+    /// a page to itself, the transcript wants to be pinned to its newest line, and the files and
+    /// the pages this session put on the phone are lists you scroll from the top.
     enum Pane: String, CaseIterable {
-        case summary = "Summary", transcript = "Transcript", files = "Files"
+        case summary = "Summary", transcript = "Transcript", files = "Files", pages = "Pages"
     }
 
     /// The session as the Mac last described it, not as it was when the page opened. A compact,
@@ -109,6 +109,7 @@ struct SessionView: View {
         case .summary: BriefingView(model: model, session: session)
         case .transcript: TranscriptView(model: model, session: session)
         case .files: FilesView(model: model, session: session)
+        case .pages: ArtifactsView(model: model, session: session)
         }
     }
 

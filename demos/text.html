@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Session name</title>
+</head>
+<body>
+<main>
+  <p class="eyebrow" id="slug">session-name</p>
+  <h1>What should this session be called?</h1>
+  <p class="lead">It is <code>artifacts</code> on the rail now, which says nothing about what it
+    is doing. The name is what you will be looking for on the phone tomorrow.</p>
+
+  <label class="eyebrow" for="name">New name</label>
+  <input id="name" type="text" value="artifacts" autocapitalize="none" autocomplete="off"
+         spellcheck="false" enterkeyhint="send">
+  <p class="hint">Renaming runs <code>/rename</code> in the pane, so a busy session only picks it
+    up when its turn ends. Your stars travel with the name.</p>
+
+  <div class="actions">
+    <button id="send" class="primary">Send</button>
+  </div>
+
+  <section id="loose" hidden>
+    <hr>
+    <p class="state">OFF</p>
+    <p class="hint">Opened outside Deckhand, so nothing is connected and an answer goes
+      nowhere. What it would have sent shows up here instead.</p>
+    <pre id="shape" hidden></pre>
+  </section>
+</main>
+
+<script>
+  const connected = Boolean(window.deckhand);
+  const field = document.getElementById("name");
+  const send = document.getElementById("send");
+  const shape = document.getElementById("shape");
+
+  // A text dialog's answer is the string, exactly as typed. An empty one is not an answer:
+  // `ask` would have come back cancelled, and that is a different thing to say.
+  function refresh() { send.disabled = field.value.trim() === ""; }
+
+  function answer() {
+    if (send.disabled) return;
+    const value = { answer: field.value.trim() };
+    if (!connected) {
+      shape.hidden = false;
+      shape.textContent = JSON.stringify(value, null, 2);
+      return;
+    }
+    window.deckhand.respond(value);
+    window.deckhand.close();
+  }
+
+  field.addEventListener("input", refresh);
+  field.addEventListener("keydown", (e) => { if (e.key === "Enter") answer(); });
+  send.addEventListener("click", answer);
+  refresh();
+
+  // Last, so the page only claims to be connected once everything on it is wired. Opened in a
+  // plain browser there is no window.deckhand at all, and that has to read as a state of this
+  // page rather than as a page that failed to load.
+  if (connected) document.getElementById("slug").textContent = window.deckhand.artifact.id;
+  else document.getElementById("loose").hidden = false;
+</script>
+</body>
+</html>

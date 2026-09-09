@@ -99,6 +99,11 @@ daemon-test:
 daemon-lint:
     uv run --directory daemon ruff check src tests
 
+# Every demo artifact parses, names itself, answers through the app, and stays inside the CSP.
+[group('quality')]
+demo-check:
+    python3 demos/check.py
+
 # Drives the app in the simulator against a running daemon (`just daemon` first).
 [group('quality')]
 ui-test: generate
@@ -172,6 +177,8 @@ check:
     just daemon-lint
     @echo '→ Testing the daemon...'
     just daemon-test
+    @echo '→ Checking the demo artifacts...'
+    just demo-check
 
 [group('build')]
 build: generate

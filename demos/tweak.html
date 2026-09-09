@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rail fade</title>
+</head>
+<body>
+<main>
+  <p class="eyebrow" id="slug">rail-fade</p>
+  <h1>How far should a quiet session recede?</h1>
+  <p class="lead">A row fades with how long its session has been quiet. These three numbers are
+    the whole curve, and the only way to know them is to look at the rail.</p>
+
+  <div class="card">
+    <div class="slider">
+      <p class="eyebrow">Fade floor <span class="value" data-for="fade-floor"></span></p>
+      <input type="range" id="fade-floor" min="0.2" max="1" step="0.05" value="0.5"
+             data-places="2" aria-label="Fade floor">
+      <p class="hint"><code>Fade.floor</code> — dim, never gone. What eight hours of quiet
+        leaves of a row.</p>
+    </div>
+    <div class="slider">
+      <p class="eyebrow">Grace <span class="value" data-for="grace"></span></p>
+      <input type="range" id="grace" min="30" max="600" step="30" value="120"
+             data-unit=" s" aria-label="Grace">
+      <p class="hint"><code>Fade.grace</code> — full contrast inside this, because a session
+        that stopped a minute ago is between turns.</p>
+    </div>
+    <div class="slider">
+      <p class="eyebrow">Rail row size <span class="value" data-for="rail-row-size"></span></p>
+      <input type="range" id="rail-row-size" min="9" max="17" step="1" value="13"
+             data-unit=" pt" aria-label="Rail row size">
+      <p class="hint"><code>Typography.railRow</code> — how big a session's name is set on the
+        rail.</p>
+    </div>
+  </div>
+
+  <p class="hint">All three live in <code>Sources/DeckhandKit/Design/</code>. A page on the phone
+    cannot write to the Mac, so whatever you land on comes back for me to apply.</p>
+
+  <div class="actions">
+    <button id="leave">Leave as it is</button>
+    <button id="apply" class="primary">Apply these</button>
+  </div>
+
+  <section id="loose" hidden>
+    <hr>
+    <p class="state">OFF</p>
+    <p class="hint">Opened outside Deckhand, so nothing is connected and an answer goes
+      nowhere. What it would have sent shows up here instead.</p>
+    <pre id="shape" hidden></pre>
+  </section>
+</main>
+
+<script>
+  const connected = Boolean(window.deckhand);
+  const sliders = [...document.querySelectorAll("input[type=range]")];
+  const shape = document.getElementById("shape");
+
+  function show() {
+    for (const slider of sliders) {
+      const places = Number(slider.dataset.places || 0);
+      const unit = slider.dataset.unit || "";
+      document.querySelector('[data-for="' + slider.id + '"]').textContent =
+        Number(slider.value).toFixed(places) + unit;
+    }
+  }
+
+  // What `tweak` comes back with: the values keyed by parameter id, and an action. It is always
+  // `agent` here — an artifact has no file lane of its own, so there is nothing on disk to keep.
+  function send(value) {
+    if (!connected) {
+      shape.hidden = false;
+      shape.textContent = JSON.stringify(value, null, 2);
+      return;
+    }
+    window.deckhand.respond(value);
+    window.deckhand.close();
+  }
+
+  document.getElementById("apply").addEventListener("click", () => {
+    const answer = {};
+    for (const slider of sliders) answer[slider.id] = Number(slider.value);
+    send({ answer: answer, action: "agent" });
+  });
+
+  document.getElementById("leave").addEventListener("click", () => send({ cancelled: true }));
+
+  document.querySelector("main").addEventListener("input", show);
+  show();
+
+  // Last, so the page only claims to be connected once everything on it is wired. Opened in a
+  // plain browser there is no window.deckhand at all, and that has to read as a state of this
+  // page rather than as a page that failed to load.
+  if (connected) document.getElementById("slug").textContent = window.deckhand.artifact.id;
+  else document.getElementById("loose").hidden = false;
+</script>
+</body>
+</html>

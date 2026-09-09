@@ -133,6 +133,57 @@ struct ClientTests {
         await #expect(throws: DeckhandError.notLive) { try await client().turns(of: "gone") }
     }
 
+    @Test("the artifact listing decodes, and a daemon without the route means none rather than an error")
+    func listsArtifacts() async throws {
+        StubProtocol.respond(with: Data("""
+        {"artifacts":[{"id":"release-check","title":"Release check",
+                       "modified":1757500000.0,"answered":false}]}
+        """.utf8))
+        let found = try await client().artifacts(of: "sid")
+        #expect(found.first?.title == "Release check")
+        #expect(StubProtocol.lastRequest?.url?.path == "/sessions/sid/artifacts")
+        // The version-skew case, and the reason this is not a thrown error: a daemon that
+        // predates artifacts answers 404 to the route, exactly as it does for a dead session.
+        StubProtocol.respond(with: Data(#"{"detail":"Not Found"}"#.utf8), status: 404)
+        #expect(try await client().artifacts(of: "sid").isEmpty)
+    }
+
+    @Test("a page is fetched by its slug in the path, and arrives as the HTML it is")
+    func fetchesAPage() async throws {
+        StubProtocol.respond(with: Data("<!doctype html><title>Pick one</title>".utf8))
+        let html = try await client().page(of: "release check", in: "sid")
+        #expect(html.hasPrefix("<!doctype html>"))
+        // A slug is a filename an agent picked, so it is escaped as a path segment rather than
+        // trusted: a space in one would otherwise make the URL itself invalid.
+        #expect(StubProtocol.lastRequest?.url?.path == "/sessions/sid/artifacts/release check")
+        #expect(StubProtocol.lastRequest?.url?.absoluteString.hasSuffix("release%20check") == true)
+    }
+
+    @Test("an answer travels as JSON the phone has parsed, never as the text it was handed")
+    func answersAnArtifact() async throws {
+        StubProtocol.respond(with: Data(#"{"delivered":true,"delivered_by":"socket"}"#.utf8))
+        let sent = try await client().answer("which-branch", in: "sid",
+                                            valueJSON: #"{"branch":"develop","sure":true}"#,
+                                            route: .socket)
+        #expect(sent.went)
+        #expect(sent.deliveredBy == "socket")
+        #expect(StubProtocol.lastRequest?.url?.path == "/sessions/sid/artifacts/which-branch/answer")
+        // The person's own chosen route, the same one speaking travels by.
+        #expect(StubProtocol.lastRequest?.url?.query == "route=socket")
+        let body = try #require(StubProtocol.lastBody)
+        let text = try #require(String(bytes: body, encoding: .utf8))
+        #expect(text.contains(#""branch":"develop""#))
+    }
+
+    @Test("a page that answers with something that is not JSON gets nowhere near the Mac")
+    func refusesRubbish() async throws {
+        StubProtocol.respond(with: Data(#"{"delivered":true}"#.utf8))
+        await #expect(throws: (any Error).self) {
+            try await client().answer("x", in: "sid", valueJSON: "not json at all")
+        }
+        #expect(StubProtocol.lastRequest == nil)
+    }
+
     private func fixture(_ name: String) -> Data {
         let url = Bundle.module.url(forResource: "Fixtures/\(name)", withExtension: "json")
         return (try? Data(contentsOf: url!)) ?? Data()
