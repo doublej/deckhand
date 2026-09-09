@@ -35,22 +35,40 @@ struct AskList: View {
     }
 }
 
-/// One ask as a dot, in the language the rest of the app already speaks: filled is finished,
-/// the recording colour is under way, an outline is not started.
+/// One ask as a box you can tick. Square on purpose: a round dot is what a tool call wears in
+/// the transcript, and two different things reading as the same mark is worse than either.
+///
+/// Empty is not started, a small mark inside is under way, a filled one is done.
 struct AskDot: View {
     let state: Ask.State
-    var size: CGFloat = 9
+    var size: CGFloat = 11
 
     var body: some View {
-        Group {
-            switch state {
-            case .done: Circle().fill(Palette.tint)
-            case .doing: Circle().fill(Palette.lcdYellow)
-            case .todo: Circle().strokeBorder(Palette.textTertiary, lineWidth: 1.5)
+        RoundedRectangle(cornerRadius: size * 0.22, style: .continuous)
+            .strokeBorder(edge, lineWidth: 1.2)
+            .frame(width: size, height: size)
+            .overlay {
+                if state != .todo {
+                    RoundedRectangle(cornerRadius: size * 0.14, style: .continuous)
+                        .fill(edge)
+                        .frame(width: size * inside, height: size * inside)
+                }
             }
+            .accessibilityHidden(true)
+    }
+
+    private var edge: Color {
+        switch state {
+        case .done: Palette.tint
+        case .doing: Palette.lcdYellow
+        case .todo: Palette.textTertiary
         }
-        .frame(width: size, height: size)
-        .accessibilityHidden(true)
+    }
+
+    /// Done fills the box; under way is a smaller mark in it, so the two differ by more than
+    /// colour alone.
+    private var inside: CGFloat {
+        state == .done ? 0.52 : 0.34
     }
 }
 
@@ -61,7 +79,7 @@ struct AskDots: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            ForEach(asks) { ask in AskDot(state: ask.progress, size: 6) }
+            ForEach(asks) { ask in AskDot(state: ask.progress, size: 9) }
         }
         .accessibilityElement()
         .accessibilityLabel("\(asks.filter { $0.progress == .done }.count) of \(asks.count) done")

@@ -24,7 +24,10 @@ controlled from its own page inside utt.
   utt's HTTP API is switched on. `plugins/deckhand.json` is the manifest, rewritten at every
   start-up; `deckhand.values.json` carries what the person set on the page, and
   `deckhand.action.json` which button they pressed.
-- Summaries: the Claude Agent SDK, sonnet at low effort, one turn, no tools.
+- Summaries: the Claude Agent SDK, sonnet at low effort, one turn, no tools. The same run
+  writes the person's own task list after a `:tasks` marker, so the list costs nothing on top
+  of the briefing. `/summary` reports what it spent; caching means a run bills a few hundred
+  tokens against fifty thousand read from cache, so the two are counted apart.
 - Lock Screen: a Live Activity (`widgets/`, target `DeckhandWidgets`) saying how many sessions
   have stopped and are waiting. The **Mac** drives it over APNs — a backgrounded app has no
   promise of running again — so the phone only hands over push tokens and the daemon does the
@@ -66,6 +69,8 @@ Sources/DeckhandKit/Design/
 daemon/src/deckhand_daemon/
   sessions.py     # which Claude sessions are alive, and their iTerm pane
   transcripts.py  # the last rounds, and the activity blob a summary is written from
+  asked.py        # what the person asked for, and what is still in the session's inbox
+  files.py        # what the session touched that a person could open, and the permission
   push.py         # what the Lock Screen says, when it changes, and how it gets there
   transcribe.py   # utt turns a clip into text, through its jobs folder
   plugin.py       # Deckhand's page inside utt: the manifest, its settings, its buttons
@@ -85,7 +90,9 @@ launchd/          # the agent plist, symlinked into ~/Library/LaunchAgents
 hold to talk → `POST /sessions/{id}/audio`, which answers with the transcript and whether it
 reached the session. `?deliver=false` transcribes without sending, for the review card, and
 `POST /sessions/{id}/say` sends the text once the person has read it.
-`POST /sessions/{id}/focus` brings that pane forward on the Mac. `/health` is the only
+`GET /sessions/{id}/files` lists what the session touched that a phone can open and
+`GET /sessions/{id}/file?path=` serves one. `POST /sessions/{id}/focus` brings that pane
+forward on the Mac. `/health` is the only
 unauthenticated route; everything else needs the `x-deckhand-token` header, and both
 `/health` and `/sessions` carry an `iterm` field saying whether pane data is trustworthy.
 
@@ -110,6 +117,26 @@ unauthenticated route; everything else needs the `x-deckhand-token` header, and 
   backs off for a minute so a real outage cannot starve the event loop, and the `iterm` field
   still says what is wrong. This matters for more than window titles: without a pane there is no
   keyboard, and delivery falls back to the peer socket.
+- **The session's inbox is a lane of its own.** Claude Code writes a `queue-operation` line
+  (`enqueue` / `dequeue` / `remove` / `popAll`) every time something joins or leaves a session's
+  message queue, and `asked.queued` replays it. This is the only honest answer to "has it seen
+  what I said yet": a message sent mid-turn is **not a turn** — it appears nowhere in the
+  transcript until the session absorbs it, which is why speaking to a busy session and seeing
+  nothing happen used to read as having sent nothing. `dequeue` carries no content, so the
+  replay pops the oldest; a `remove` naming something outside the tail window does the same,
+  which is what lets a replay that began mid-queue still empty in the right order.
+- **The file listing is the whole permission.** `/file` serves a path only because that
+  session's transcript named it, re-derived per request. There is no allow-list to maintain and
+  no way to widen it by accident — which is what keeps a file endpoint off the rest of the Mac.
+  Source files and `node_modules`/`.build`/`.git` are left out on purpose: the tool trace
+  already shows the code, and a phone listing 200 files shows nothing.
+- **A `NavigationLink` inside a `List` costs two things**: it draws the system's disclosure
+  chevron outside the row's own fill, and it swallows `swipeActions` so a swipe never reveals
+  them. The sessions list uses a plain `Button` and `navigationDestination(item:)` instead.
+  The UI test caught the second one ("no star action on the row"); nothing catches the first.
+- **Hiding the navigation bar takes swipe-back with it.** `SessionView` catches its own: a
+  `simultaneousGesture` that only fires for a drag starting within 28pt of the leading edge,
+  simultaneous so it never competes with scrolling the transcript.
 - **The clip must be whole before it is audio.** utt picks up finished audio extensions from
   the jobs folder, so a clip is written as `<name>.wav.part` and only then renamed — skip the
   rename and utt reads the file mid-write. `<name>.hints.json` goes in *before* the rename, or
