@@ -183,7 +183,7 @@ update-scaffold *ARGS:
 install-agent:
     ln -sf {{ justfile_directory() }}/launchd/com.jurrejan.deckhand.plist ~/Library/LaunchAgents/com.jurrejan.deckhand.plist
     launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.jurrejan.deckhand.plist
-    @sleep 1 && curl -sf http://127.0.0.1:4180/health && echo ' ← daemon is up'
+    @curl -sf --retry 20 --retry-delay 1 --retry-connrefused http://127.0.0.1:4180/health && echo ' ← daemon is up'
 
 [group('ops')]
 uninstall-agent:
