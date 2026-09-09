@@ -42,6 +42,12 @@ public struct Turn: Codable, Hashable, Sendable {
     public let text: String
     public let timestamp: String
 
+    public init(role: String, text: String, timestamp: String) {
+        self.role = role
+        self.text = text
+        self.timestamp = timestamp
+    }
+
     public var isUser: Bool { role == "user" }
 }
 

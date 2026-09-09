@@ -74,18 +74,9 @@ struct TalkMark: View {
     let isRecording: Bool
     let busy: Bool
     let level: Double
-    /// What the Mac heard last, kept under the mark so the words are near the button.
-    let heard: String?
 
     var body: some View {
         VStack(spacing: Spacing.extraSmall) {
-            if let heard, !isRecording {
-                Text(heard)
-                    .font(Typography.subtitle)
-                    .foregroundStyle(Palette.textSecondary)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
-            }
             DotMark.live(
                 size: 72,
                 tint: isRecording ? Palette.recording : Palette.tint,

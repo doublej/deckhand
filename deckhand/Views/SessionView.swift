@@ -64,13 +64,13 @@ struct SessionView: View {
                     ForEach(Array(model.turns.enumerated()), id: \.offset) { index, turn in
                         TurnCard(turn: turn, showsRole: startsRun(index)).id(index)
                     }
+                    pending
                 }
                 .padding(.horizontal, Spacing.medium)
                 .padding(.bottom, Spacing.medium)
             }
-            .onChange(of: model.turns.count) {
-                withAnimation { proxy.scrollTo(model.turns.count - 1, anchor: .bottom) }
-            }
+            .onChange(of: model.turns.count) { scroll(proxy) }
+            .onChange(of: model.pending[session.sessionId]) { scroll(proxy) }
         }
     }
 
@@ -112,9 +112,34 @@ struct SessionView: View {
             onClip: { await model.upload(clip: $0, to: session) },
             content: { isRecording, busy in
                 TalkMark(mode: model.preferences.talkMode, isRecording: isRecording, busy: busy,
-                         level: recorder.level, heard: model.heard)
+                         level: recorder.level)
             }
         )
+    }
+
+    /// The newest thing is always what you want to see, and what you just said is newer than
+    /// anything the session has written down.
+    private func scroll(_ proxy: ScrollViewProxy) {
+        withAnimation {
+            if model.pending[session.sessionId] != nil {
+                proxy.scrollTo("pending", anchor: .bottom)
+            } else {
+                proxy.scrollTo(model.turns.count - 1, anchor: .bottom)
+            }
+        }
+    }
+
+    /// What you just said, sitting where it will sit once the session has written it down.
+    /// Dimmed until then, so "sent" and "arrived" are not drawn as the same thing.
+    @ViewBuilder private var pending: some View {
+        if let text = model.pending[session.sessionId] {
+            TurnCard(
+                turn: Turn(role: "user", text: text, timestamp: ""),
+                showsRole: model.turns.last?.isUser != true
+            )
+            .opacity(0.55)
+            .id("pending")
+        }
     }
 
     /// Only the first turn of a run carries the name: repeating it reads as an interruption.

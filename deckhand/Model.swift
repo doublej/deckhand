@@ -49,7 +49,10 @@ final class AppModel {
     var current: String?
     var connection: Connection = .unpaired
     var status: String?
-    var heard: String?
+    /// What you just said, per session, waiting for the real transcript to catch up. It reads
+    /// as a turn in the conversation because that is what it is — the session simply has not
+    /// written it down yet.
+    var pending: [String: String] = [:]
     var showsHidden = false
 
     private let logger = Logger(subsystem: "com.jj.Deckhand", category: "app")
@@ -126,7 +129,14 @@ final class AppModel {
 
     func loadTurns(for session: Session, limit: Int = 8) async {
         guard let client = settings.client() else { return }
-        await run { self.turns = try await client.turns(of: session.sessionId, limit: limit) }
+        await run {
+            self.turns = try await client.turns(of: session.sessionId, limit: limit)
+            // The session has written it down: the optimistic copy has done its job.
+            if let waiting = self.pending[session.sessionId],
+               self.turns.contains(where: { $0.isUser && $0.text.contains(waiting) }) {
+                self.pending[session.sessionId] = nil
+            }
+        }
     }
 
     /// The landscape deck watches several sessions at once, so it fetches them together.
@@ -175,7 +185,7 @@ final class AppModel {
                 to: session.sessionId,
                 route: self.preferences.route
             )
-            self.heard = receipt.transcript
+            self.pending[session.sessionId] = receipt.delivered ? receipt.transcript : nil
             self.status = Self.outcome(of: receipt, to: session)
             self.logger.info("transcript: \(receipt.transcript ?? "none", privacy: .public)")
             try? FileManager.default.removeItem(at: clip)
