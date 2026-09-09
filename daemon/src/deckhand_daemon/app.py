@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 import uuid
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, UploadFile
 
-from . import __version__, config, sessions, transcripts
+from . import __version__, config, sessions, summarize, transcribe, transcripts
+from .log import log
 
 AUDIO_SUFFIXES = {".m4a", ".caf", ".wav", ".mp3", ".aac", ".mp4", ".ogg", ".flac", ".webm"}
 
@@ -19,6 +21,11 @@ def require_token(x_deckhand_token: str = Header(default="")) -> None:
 
 
 app = FastAPI(title="Deckhand", version=__version__)
+
+
+async def _live_session(session_id: str) -> sessions.Session:
+    """Same lookup, off the event loop: listing shells out and would block every other request."""
+    return await asyncio.to_thread(_session_or_404, session_id)
 
 
 def _session_or_404(session_id: str) -> sessions.Session:
@@ -33,12 +40,38 @@ def _session_or_404(session_id: str) -> sessions.Session:
 @app.get("/health")
 def health() -> dict:
     """Open on purpose: the app pings it to tell 'wrong host' from 'wrong token'."""
-    return {"name": "deckhand", "version": __version__, "host": config.base_url()}
+    return {
+        "name": "deckhand",
+        "version": __version__,
+        "host": config.base_url(),
+        "iterm": sessions.iterm_status(),
+    }
+
+
+# Two clients polling every few seconds would bury everything else in the log, so a listing
+# only gets a line when the answer actually changed.
+_last_listing: tuple[int, str] | None = None
 
 
 @app.get("/sessions", dependencies=[Depends(require_token)])
 def list_sessions() -> dict:
-    return {"sessions": [s.to_json() for s in sessions.live_sessions()]}
+    global _last_listing
+    live = sessions.live_sessions()
+    status = sessions.iterm_status()
+    if _last_listing != (len(live), status):
+        _last_listing = (len(live), status)
+        log.info("listing changed: %d sessions, iterm %s", len(live), status)
+    return {"sessions": [s.to_json() for s in live], "iterm": status}
+
+
+@app.get("/sessions/{session_id}/summary", dependencies=[Depends(require_token)])
+async def session_summary(session_id: str) -> dict:
+    """What this session has been doing since the person last spoke to it."""
+    session = await _live_session(session_id)
+    activity = await asyncio.to_thread(transcripts.activity_since_last_user, session_id)
+    text, error = await summarize.summarize(session_id, activity)
+    log.info("summary for %s: %s", session.name, error or f"{len(text or '')} chars")
+    return {"summary": text, "error": error}
 
 
 @app.get("/sessions/{session_id}/turns", dependencies=[Depends(require_token)])
@@ -57,8 +90,8 @@ def focus_session(session_id: str) -> dict:
 
 @app.post("/sessions/{session_id}/audio", dependencies=[Depends(require_token)], status_code=201)
 async def upload_audio(session_id: str, file: UploadFile) -> dict:
-    """Phase 1 of speaking to a session: the clip lands on the Mac, transcript stays empty."""
-    _session_or_404(session_id)
+    """Speaking to a session: the clip lands on the Mac and utt turns it into text."""
+    session = await _live_session(session_id)
     suffix = Path(file.filename or "clip.m4a").suffix.lower()
     if suffix not in AUDIO_SUFFIXES:
         raise HTTPException(status_code=415, detail=f"unsupported audio type {suffix!r}")
@@ -70,16 +103,20 @@ async def upload_audio(session_id: str, file: UploadFile) -> dict:
     stamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime())
     path = config.audio_dir(session_id) / f"{stamp}-{uuid.uuid4().hex[:8]}{suffix}"
     path.write_bytes(body)
+    log.info("clip for %s: %d bytes", session.name, len(body))
+    text, error = await asyncio.to_thread(transcribe.transcribe, path)
+    log.info("transcript for %s: %s", session.name, error or repr(text))
     return {
         "path": str(path),
         "bytes": len(body),
         "received_at": time.time(),
-        "transcript": None,  # filled in phase 2, on the Mac
+        "transcript": text,
+        "transcript_error": error,
     }
 
 
 def main() -> None:
     import uvicorn
 
-    print(f"deckhand {config.base_url()}  token: {config.token()}", flush=True)
+    log.info("deckhand %s  token: %s", config.base_url(), config.token())
     uvicorn.run(app, host="0.0.0.0", port=config.PORT, log_level="info")

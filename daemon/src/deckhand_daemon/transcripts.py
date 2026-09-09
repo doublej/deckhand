@@ -67,6 +67,46 @@ def _text_of(entry: dict) -> str | None:
     return text[:MAX_TEXT] if text else None
 
 
+def activity_since_last_user(session_id: str, cap: int = 12_000) -> str:
+    """What the session has done since the person last spoke, as plain text to summarise.
+
+    Unlike `read_turns` this keeps the tool calls: what a session did is mostly what it ran.
+    """
+    path = transcript_path(session_id)
+    if path is None:
+        return ""
+    lines = _tail_lines(path, TAIL_WINDOWS[1])
+    events: list[str] = []
+    for raw in lines:
+        entry = _parse(raw)
+        if entry is None or entry.get("isSidechain"):
+            continue
+        if entry.get("type") == "user" and _text_of(entry) is not None:
+            events = []  # the person spoke: everything before that is old news
+            continue
+        events.extend(_describe(entry))
+    return "\n".join(events)[-cap:]
+
+
+def _describe(entry: dict) -> list[str]:
+    """One line per thing the session did, in the order it did them."""
+    if entry.get("type") != "assistant":
+        return []
+    content = entry.get("message", {}).get("content")
+    if not isinstance(content, list):
+        return []
+    lines = []
+    for block in content:
+        if not isinstance(block, dict):
+            continue
+        if block.get("type") == "text" and block.get("text", "").strip():
+            lines.append(f"said: {block['text'].strip()[:600]}")
+        elif block.get("type") == "tool_use":
+            detail = json.dumps(block.get("input", {}))[:200]
+            lines.append(f"ran {block.get('name', 'a tool')}: {detail}")
+    return lines
+
+
 def read_turns(session_id: str, limit: int = 8) -> list[Turn]:
     """The last `limit` conversation turns, oldest first."""
     path = transcript_path(session_id)
@@ -80,22 +120,31 @@ def read_turns(session_id: str, limit: int = 8) -> list[Turn]:
     return turns[-limit:]
 
 
-def _scan(path: Path, window: int) -> list[Turn]:
-    """Parse the conversation turns in the last `window` bytes of the transcript."""
+def _tail_lines(path: Path, window: int) -> list[bytes]:
+    """The last `window` bytes of the file, split into whole lines."""
     with path.open("rb") as f:
         size = f.seek(0, os.SEEK_END)
         f.seek(max(0, size - window))
         chunk = f.read()
     lines = chunk.split(b"\n")
-    if size > window:
-        lines = lines[1:]  # first line is a fragment
+    return lines[1:] if size > window else lines  # first line of a partial read is a fragment
+
+
+def _parse(raw: bytes) -> dict | None:
+    if not raw.strip():
+        return None
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+
+
+def _scan(path: Path, window: int) -> list[Turn]:
+    """Parse the conversation turns in the last `window` bytes of the transcript."""
     turns: list[Turn] = []
-    for raw in lines:
-        if not raw.strip():
-            continue
-        try:
-            entry = json.loads(raw)
-        except json.JSONDecodeError:
+    for raw in _tail_lines(path, window):
+        entry = _parse(raw)
+        if entry is None:
             continue
         if entry.get("type") not in ("user", "assistant"):
             continue

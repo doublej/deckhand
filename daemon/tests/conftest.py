@@ -1,9 +1,24 @@
 import json
+import logging
 import time
 
 import pytest
 
 from deckhand_daemon import config, sessions
+
+
+@pytest.fixture(autouse=True)
+def keep_the_real_log_clean(tmp_path, monkeypatch):
+    """A test run must never appear in the log file the user watches in Console.app."""
+    from deckhand_daemon import log as log_module
+
+    directory = tmp_path / "logs"
+    directory.mkdir()
+    monkeypatch.setattr(log_module, "LOG_DIR", directory)
+    monkeypatch.setattr(log_module, "LOG_FILE", directory / "deckhand.log")
+    handler = logging.FileHandler(directory / "deckhand.log")
+    handler.setFormatter(logging.Formatter(log_module.FORMAT))
+    monkeypatch.setattr(log_module.log, "handlers", [handler])
 
 
 @pytest.fixture

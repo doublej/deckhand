@@ -1,7 +1,9 @@
 import json
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from deckhand_daemon import app as app_module
 from deckhand_daemon import config, sessions
 from deckhand_daemon.app import app
 
@@ -72,3 +74,22 @@ def test_focus_asks_iterm_for_that_pane(token, monkeypatch):
     monkeypatch.setattr(sessions, "focus", lambda s: seen.setdefault("id", s.pane.iterm_session_id) or True)
     assert client(token).post(f"/sessions/{SID}/focus").json() == {"focused": True}
     assert seen["id"] == "ITERM-A"
+
+
+def test_upload_answers_with_what_utt_heard(token, monkeypatch):
+    monkeypatch.setattr(app_module.transcribe, "transcribe", lambda clip: ("Testing, one, two.", None))
+    r = client(token).post(
+        f"/sessions/{SID}/audio", files={"file": ("clip.m4a", b"audio bytes", "audio/m4a")}
+    )
+    assert r.json()["transcript"] == "Testing, one, two."
+    assert r.json()["transcript_error"] is None
+
+
+def test_a_clip_is_kept_even_when_utt_is_off(token, monkeypatch):
+    monkeypatch.setattr(app_module.transcribe, "transcribe", lambda clip: (None, "utt is off"))
+    body = client(token).post(
+        f"/sessions/{SID}/audio", files={"file": ("clip.m4a", b"audio bytes", "audio/m4a")}
+    ).json()
+    assert body["transcript"] is None
+    assert body["transcript_error"] == "utt is off"
+    assert Path(body["path"]).read_bytes() == b"audio bytes"

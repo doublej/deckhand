@@ -15,8 +15,19 @@ import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from .log import log
+
 PANE_TTL = 3.0  # seconds; one `it2` call costs ~0.5 s and the phone polls every few
+# When iTerm will not answer, every call costs the full timeout. Back off instead of paying
+# that on each request: nothing about the answer changes in the next minute.
+PANE_RETRY_AFTER = 60.0
 _pane_cache: tuple[float, dict] = (0.0, {})
+_pane_error: str | None = None
+
+
+def iterm_status() -> str:
+    """What the phone should be told about the iTerm side: "ok" or why panes are missing."""
+    return _pane_error or "ok"
 
 
 def sessions_dir() -> Path:
@@ -70,7 +81,8 @@ def _panes() -> dict[str, Pane]:
     """tty short name -> iTerm pane. Empty when iTerm or its Python API is unavailable."""
     global _pane_cache
     fetched_at, cached = _pane_cache
-    if time.monotonic() - fetched_at < PANE_TTL:
+    age = time.monotonic() - fetched_at
+    if age < (PANE_TTL if cached else PANE_RETRY_AFTER):
         return cached
     panes = _fetch_panes()
     _pane_cache = (time.monotonic(), panes)
@@ -78,6 +90,7 @@ def _panes() -> dict[str, Pane]:
 
 
 def _fetch_panes() -> dict[str, Pane]:
+    global _pane_error
     try:
         out = subprocess.run(
             ["it2", "session", "list", "--json"],
@@ -89,14 +102,25 @@ def _fetch_panes() -> dict[str, Pane]:
             timeout=4,
             check=False,
         )
-    except (OSError, subprocess.TimeoutExpired):
+    except subprocess.TimeoutExpired:
+        _pane_error = "iTerm did not answer in time — approve the Python API in iTerm2"
+        log.warning("panes unavailable: it2 timed out")
+        return {}
+    except OSError as error:
+        _pane_error = f"cannot run it2: {error}"
+        log.warning("panes unavailable: %s", error)
         return {}
     if out.returncode != 0:
+        _pane_error = f"it2 exited {out.returncode}: {out.stderr.strip()[:120]}"
+        log.warning("panes unavailable: %s", _pane_error)
         return {}
     try:
         listing = json.loads(out.stdout)
     except json.JSONDecodeError:
+        _pane_error = "it2 answered something that is not JSON"
+        log.warning("panes unavailable: unparseable it2 output")
         return {}
+    _pane_error = None
     panes: dict[str, Pane] = {}
     for s in listing:
         tty = str(s.get("tty", "")).removeprefix("/dev/")
