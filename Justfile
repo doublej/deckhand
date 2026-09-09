@@ -7,6 +7,7 @@ default:
     @echo "branch: $(git branch --show-current 2>/dev/null || echo 'n/a')"
 
 sim := "iPhone 17 Pro Max"
+phone := "iphone"
 project := "-project Deckhand.xcodeproj -scheme Deckhand"
 
 [group('setup')]
@@ -42,10 +43,16 @@ sim: generate
     xcrun simctl install booted "$(xcodebuild {{ project }} -destination 'platform=iOS Simulator,name={{ sim }}' -showBuildSettings 2>/dev/null | awk -F' = ' '/ BUILT_PRODUCTS_DIR/ {print $2; exit}')/Deckhand.app"
     xcrun simctl launch booted com.jj.Deckhand -deckhand.host 127.0.0.1:4180 -deckhand.token "$(just token)"
 
-# Install on the iPhone. Needs Xcode signed in — see CLAUDE.md.
+# Build, install and start the app on the iPhone, already paired with this Mac.
+# Needs Xcode signed in and the phone unlocked (the developer disk image will not
+
+# mount on a locked device).
 [group('develop')]
 device: generate
-    xcodebuild {{ project }} -destination 'platform=iOS,name=Pocketline Swing' -allowProvisioningUpdates build
+    xcodebuild {{ project }} -destination 'generic/platform=iOS' -allowProvisioningUpdates -derivedDataPath .build/device build
+    xcrun devicectl device install app --device '{{ phone }}' .build/device/Build/Products/Debug-iphoneos/Deckhand.app
+    xcrun devicectl device process launch --device '{{ phone }}' com.jj.Deckhand \
+        -deckhand.host m2-2.local -deckhand.token "$(just token)"
 
 [group('quality')]
 lint:

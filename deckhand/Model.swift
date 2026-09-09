@@ -14,6 +14,9 @@ final class AppModel {
 
     init(settings: ServerSettings = .load()) {
         self.settings = settings
+        // Launch arguments (`-deckhand.host`, `-deckhand.token`) land in the same defaults,
+        // so an install that was handed the pairing details keeps them after a cold start.
+        if settings.isComplete { settings.save() }
     }
 
     var isConfigured: Bool { settings.isComplete }

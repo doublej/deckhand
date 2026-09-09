@@ -57,9 +57,17 @@ header.
   every live session is listed so the app still works without the iTerm Python API.
 - ATS: the app talks plain HTTP to a `.local` name, which needs `NSAllowsLocalNetworking`
   plus `NSLocalNetworkUsageDescription` (both in `project.yml`, not a checked-in plist).
-- **Device installs are blocked**: Xcode is signed out on this Mac, so `just device` fails at
-  provisioning. Sign in as `jurrejan@gmail.com` (team KA6433FU8U) first. The simulator path
-  (`just sim`, `just ui-test`) needs nothing.
+- **Installing on a phone** (`just device`, `just phone="Pocketline Swing" device`) takes four
+  things, and the error message names whichever is missing: Xcode signed in as
+  `jurrejan@gmail.com` (team KA6433FU8U); `-allowProvisioningDeviceRegistration` alongside
+  `-allowProvisioningUpdates`, or a phone that is not already in the team's wildcard profile is
+  refused with "isn't registered in your developer account"; an **unlocked** phone, or the
+  developer disk image will not mount; and, the first time a phone gets a build from this team,
+  the profile trusted by hand in Settings → General → VPN & Device Management. Deployment target
+  is iOS 18.0 — the 12 Pro runs 18.7.
+- `xcrun devicectl device process launch ... -- -deckhand.host <host> -deckhand.token <token>`
+  starts the app already paired; the model writes launch-argument settings back to defaults, so
+  the pairing survives a cold start. The `--` matters: devicectl eats the flags without it.
 - Phase 2 has two ready threads: `messagingSocketPath` in the session record is Claude Code's
   own peer socket (better than typing into the pane), and `python/parakeet-server` is the
   local ASR service, currently disabled for memory.

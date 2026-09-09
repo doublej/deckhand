@@ -2,7 +2,7 @@ name: Deckhand
 options:
   bundleIdPrefix: com.jj
   deploymentTarget:
-    iOS: "26.0"
+    iOS: "18.0"
   createIntermediateGroups: true
 packages:
   DeckhandKit:
