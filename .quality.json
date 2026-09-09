@@ -4,7 +4,7 @@
     "error": 400
   },
   "dir": {
-    "max_files": 12
+    "max_files": 13
   },
   "globs": [
     "deckhand/**/*.swift",

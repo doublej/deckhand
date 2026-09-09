@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import re
 import time
 
 from .log import log
@@ -60,7 +61,54 @@ Never exceed about fifteen lines.
 Use `code` for anything they could type or search for — file paths, commands, symbols, error
 strings. Use **bold** once or twice at most, for the thing that would change what they do next:
 a failure, a decision waiting on them, a question the session asked. If the session is blocked
-or asking something, that belongs in the opening sentences, not in a bullet at the bottom."""
+or asking something, that belongs in the opening sentences, not in a bullet at the bottom.
+
+TASKS. After the briefing, on a line of its own, write `:tasks` and then one line for each
+thing this person has asked this session for, oldest first. This is their list, not yours: it
+comes from what they asked for in their own words, shortened to a few. Never break an ask down
+into steps, never merge two asks into one, and never add a task they did not ask for — not a
+step you decided to take, not a check you ran, not something that seemed like a good idea.
+
+Each line is a box and the ask, and the box is the only thing you have to judge:
+
+  - [ ]   nothing has been done about it yet
+  - [~]   work has started on it and it is not finished
+  - [x]   finished, and nothing about it is still open
+
+So a list looks like this, and like nothing else:
+
+  :tasks
+  - [x] delete the menu bar app
+  - [~] the files tab
+  - [ ] privacy policy URL
+
+Nothing else goes on these lines: no status words, no explanations, no dates, no `code` or
+**bold**. At most twelve, and if they have asked for nothing, write `:tasks` and stop.
+Everything above `:tasks` is the briefing and follows the format above; nothing below it is."""
+
+# `- [x] the ask`, in the three states the person cares about.
+TASK_LINE = re.compile(r"^\s*[-*]?\s*\[([ x~×✓])\]\s*(.+?)\s*$", re.IGNORECASE)
+TASK_STATES = {" ": "todo", "~": "doing", "x": "done", "×": "done", "✓": "done"}
+MARKER = ":tasks"
+MAX_TASKS = 12
+
+
+def split_tasks(summary: str | None) -> tuple[str | None, list[dict]]:
+    """The briefing and the task list, which arrive as one answer and are two things.
+
+    One model run writes both: the transcript it needs to read to say what happened is the
+    same transcript the list comes out of, so asking twice would be paying twice for one read.
+    """
+    if not summary or MARKER not in summary:
+        return summary, []
+    prose, _, block = summary.partition(MARKER)
+    tasks = []
+    for line in block.splitlines():
+        if match := TASK_LINE.match(line):
+            box, text = match.group(1).lower(), match.group(2)
+            tasks.append({"text": text, "state": TASK_STATES.get(box, "todo")})
+    return prose.strip() or None, tasks[:MAX_TASKS]
+
 
 def headline(summary: str | None) -> str | None:
     """The first line: what this person needs to know or do, for the list of sessions.
@@ -80,28 +128,77 @@ def headline(summary: str | None) -> str | None:
 # (session_id, activity hash) -> (summary, written_at). Cleared by tests.
 _cache: dict[tuple[str, str], tuple[str, float]] = {}
 
+# What the briefings have cost since the daemon started, per session and in total. Kept in
+# memory on purpose: it answers "is this thing expensive?", which is a question about now.
+# A cache hit costs nothing and is counted as nothing, which is the point of the cache.
+_spent: dict[str, dict[str, int]] = {}
 
-async def summarize(session_id: str, activity: str) -> tuple[str | None, str | None]:
+
+def spent(session_id: str | None = None) -> dict[str, int]:
+    """What the briefings have cost: for one session, or every session added up.
+
+    Three numbers, because three is what anyone would ask: how many were written, what they
+    were billed, and how much of the reading was already cached. Cache reads are counted apart
+    from the rest — they are most of the traffic and almost none of the cost, and adding them
+    in would make the whole thing look ten times more expensive than it is.
+    """
+    counts = _spent.get(session_id, {}) if session_id is not None else _total()
+    return {
+        "runs": counts.get("runs", 0),
+        "tokens": counts.get("input_tokens", 0) + counts.get("output_tokens", 0),
+        "cached": counts.get("cache_read_input_tokens", 0),
+    }
+
+
+def _total() -> dict[str, int]:
+    total: dict[str, int] = {}
+    for counts in _spent.values():
+        for name, count in counts.items():
+            total[name] = total.get(name, 0) + count
+    return total
+
+
+def _count(session_id: str, usage: dict | None) -> None:
+    """One run's usage, added to this session's running total.
+
+    Cache reads are the whole point of the cache, so they are not counted — what is counted is
+    what was actually asked of the model.
+    """
+    if not isinstance(usage, dict):
+        return
+    counts = _spent.setdefault(session_id, {})
+    for name in ("input_tokens", "output_tokens",
+                 "cache_creation_input_tokens", "cache_read_input_tokens"):
+        if isinstance(value := usage.get(name), int):
+            counts[name] = counts.get(name, 0) + value
+    counts["runs"] = counts.get("runs", 0) + 1
+
+
+async def summarize(
+    session_id: str, activity: str, asks: str = ""
+) -> tuple[str | None, str | None]:
     """Returns (summary, error). Never raises: a session without a summary is still usable."""
-    if not activity.strip():
+    if not activity.strip() and not asks.strip():
         return None, None
-    key = (session_id, hashlib.sha256(activity.encode()).hexdigest())
+    blob = f"{asks}\n\nSINCE THEY LAST SPOKE\n{activity}" if asks.strip() else activity
+    key = (session_id, hashlib.sha256(blob.encode()).hexdigest())
     cached = _cached(key)
     if cached:
         return cached, None
-    summary, error = await _run(activity)
+    summary, error, usage = await _run(blob)
+    _count(session_id, usage)
     if summary:
         _store(key, summary)
     return summary, error
 
 
-async def _run(activity: str) -> tuple[str | None, str | None]:
+async def _run(activity: str) -> tuple[str | None, str | None, dict | None]:
     """One turn, no tools, low effort. Every expected failure comes back as a sentence."""
     try:
         from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKError, ResultMessage, query
     except ImportError:
         log.warning("summary skipped: claude-agent-sdk is not installed")
-        return None, "claude-agent-sdk is not installed"
+        return None, "claude-agent-sdk is not installed", None
 
     options = ClaudeAgentOptions(
         model=MODEL,
@@ -115,14 +212,15 @@ async def _run(activity: str) -> tuple[str | None, str | None]:
         setting_sources=[],
     )
 
-    async def collect() -> tuple[str | None, str | None]:
+    async def collect() -> tuple[str | None, str | None, dict | None]:
         async for message in query(prompt=activity, options=options):
             if isinstance(message, ResultMessage):
+                used = message.usage if isinstance(message.usage, dict) else None
                 if message.is_error:
-                    return None, f"the model returned an error: {message.subtype}"
+                    return None, f"the model returned an error: {message.subtype}", used
                 text = (message.result or "").strip()
-                return text or None, None if text else "the model returned nothing"
-        return None, "the model returned nothing"
+                return text or None, None if text else "the model returned nothing", used
+        return None, "the model returned nothing", None
 
     task = asyncio.create_task(collect())
     try:
@@ -132,10 +230,10 @@ async def _run(activity: str) -> tuple[str | None, str | None]:
     except TimeoutError:
         task.cancel()
         log.warning("summary timed out after %ss", TIMEOUT)
-        return None, f"the model did not answer within {TIMEOUT}s"
+        return None, f"the model did not answer within {TIMEOUT}s", None
     except (ClaudeSDKError, OSError) as error:
         log.warning("summary failed: %s", error)
-        return None, f"the model could not be reached: {error}"
+        return None, f"the model could not be reached: {error}", None
 
 
 def _cached(key: tuple[str, str]) -> str | None:

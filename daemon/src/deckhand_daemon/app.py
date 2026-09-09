@@ -9,11 +9,14 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Body, Depends, FastAPI, Header, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse
 
 from . import (
     __version__,
+    asked,
     config,
     deliver,
+    files,
     plugin,
     push,
     sessions,
@@ -94,15 +97,60 @@ async def session_summary(session_id: str) -> dict:
     """What this session has been doing since the person last spoke to it."""
     session = await _live_session(session_id)
     activity = await asyncio.to_thread(transcripts.activity_since_last_user, session_id)
-    text, error = await summarize.summarize(session_id, activity)
-    log.info("summary for %s: %s", session.name, error or f"{len(text or '')} chars")
-    return {"summary": text, "headline": summarize.headline(text), "error": error}
+    asks = await asyncio.to_thread(asked.asks_of, session_id)
+    text, error = await summarize.summarize(session_id, activity, asks)
+    briefing, tasks = summarize.split_tasks(text)
+    told = error or f"{len(text or '')} chars, {len(tasks)} tasks"
+    log.info("summary for %s: %s", session.name, told)
+    whole = summarize.spent()
+    if whole["runs"]:
+        plugin.status(briefings=f"{whole['runs']} written, {whole['tokens']:,} tokens")
+    return {
+        "summary": briefing,
+        "headline": summarize.headline(briefing),
+        "tasks": tasks,
+        # What writing these has cost since the daemon started. Everything else here is
+        # free — utt transcribes on this Mac and reads the transcripts off disk — so this
+        # one number is the whole of what Deckhand spends.
+        "spent": summarize.spent(session_id),
+        "error": error,
+    }
+
+
+@app.get("/sessions/{session_id}/files", dependencies=[Depends(require_token)])
+def session_files(session_id: str) -> dict:
+    """Everything this session touched that a person could open and look at."""
+    session = _session_or_404(session_id)
+    return {"files": [f.to_json() for f in files.readable_files(session_id, session.cwd)]}
+
+
+@app.get("/sessions/{session_id}/file", dependencies=[Depends(require_token)])
+def session_file(session_id: str, path: str = Query(description="one of /files")) -> FileResponse:
+    """One of those files, by the path the listing gave.
+
+    The listing is the whole permission: a path this session's transcript never named is a
+    404, so this stays a way to see what a session made and never becomes a file browser.
+    """
+    session = _session_or_404(session_id)
+    # ponytail: re-reads the transcript tail per request (~10 ms). Cache it if a files tab
+    # ever polls rather than being opened.
+    found = files.allowed(session_id, session.cwd, path)
+    if found is None:
+        raise HTTPException(status_code=404, detail="that file is not in this session's transcript")
+    if found.stat().st_size > config.MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="file larger than 32 MB")
+    return FileResponse(found, filename=found.name)
 
 
 @app.get("/sessions/{session_id}/turns", dependencies=[Depends(require_token)])
 def session_turns(session_id: str, limit: int = Query(default=8, ge=1, le=50)) -> dict:
     _session_or_404(session_id)
-    return {"turns": [t.to_json() for t in transcripts.read_turns(session_id, limit)]}
+    return {
+        "turns": [t.to_json() for t in transcripts.read_turns(session_id, limit)],
+        # Said, delivered, and not picked up yet. Nothing in the transcript shows this: a
+        # message sent mid-turn is not a turn until the session absorbs it.
+        "queued": asked.queued(session_id),
+    }
 
 
 @app.post("/sessions/{session_id}/focus", dependencies=[Depends(require_token)])

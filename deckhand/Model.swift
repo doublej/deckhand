@@ -45,6 +45,16 @@ final class AppModel {
     var summaries: [String: String] = [:]
     /// The one line each session needs to say in the rail: what to know, or what to do.
     var headlines: [String: String] = [:]
+    /// What you have asked each session for, and how far it has got. Written by the same
+    /// model run as the briefing, so it costs nothing on top of it.
+    var tasks: [String: [Ask]] = [:]
+    /// The files each session touched that you could open. Fetched when you ask for them.
+    var assets: [String: [Asset]] = [:]
+    /// What you have said to each session that it has not picked up yet. The session's own
+    /// inbox, read off its transcript — not a guess made from the shape of the conversation.
+    var queued: [String: [String]] = [:]
+    /// What each session's briefings have cost the Mac since it last started.
+    var spend: [String: Spend] = [:]
     /// Sessions whose summary is being written right now, so the screen can say so.
     var summarising: Set<String> = []
     /// The session whose page is open. The rail lights exactly one row, the way utt does.
@@ -132,55 +142,6 @@ final class AppModel {
         } catch {
             connection = .failed(reason(error))
             logger.error("session refresh failed: \(String(describing: error))")
-        }
-    }
-
-    func loadTurns(for session: Session, limit: Int = 8) async {
-        guard let client = settings.client() else { return }
-        await run {
-            self.turns = try await client.turns(of: session.sessionId, limit: limit)
-        }
-    }
-
-    /// The landscape deck watches several sessions at once, so it fetches them together.
-    func loadDeck(limit: Int = 6) async {
-        guard let client = settings.client() else { return }
-        for session in deckSessions {
-            guard let turns = try? await client.turns(of: session.sessionId, limit: limit) else {
-                continue
-            }
-            deckTurns[session.sessionId] = turns
-        }
-    }
-
-    /// Reads every listed session's headline, one at a time.
-    ///
-    /// The Mac caches on what the session has actually done, so asking again about a session
-    /// that has been quiet costs a round trip and no model run. Sequential on purpose: six
-    /// sessions summarised at once is six models thinking, and the rail is not worth that.
-    func loadHeadlines() async {
-        for session in visibleSessions where !summarising.contains(session.sessionId) {
-            await loadSummary(for: session, announcing: false)
-        }
-    }
-
-    /// `announcing` is false for the rail's own sweep: six sessions taking turns to write the
-    /// status line would make it flicker through six messages nobody asked for.
-    func loadSummary(for session: Session, announcing: Bool = true) async {
-        guard let client = settings.client() else { return }
-        summarising.insert(session.sessionId)
-        defer { summarising.remove(session.sessionId) }
-        await run {
-            let summary = try await client.summary(of: session.sessionId)
-            if let error = summary.error, announcing {
-                self.status = error
-            }
-            // No summary and no error means the session has done nothing since you last spoke.
-            // Say that: a card that simply disappears reads as a failure.
-            self.summaries[session.sessionId] = summary.summary
-                ?? summary.error
-                ?? "Nothing since you last spoke"
-            self.headlines[session.sessionId] = summary.headline
         }
     }
 
@@ -278,7 +239,8 @@ final class AppModel {
         }
     }
 
-    private func run(_ work: () async throws -> Void) async {
+    /// Not private: `Reading.swift` is the other half of this type.
+    func run(_ work: () async throws -> Void) async {
         do {
             try await work()
         } catch {
@@ -287,7 +249,7 @@ final class AppModel {
         }
     }
 
-    private func reason(_ error: Error) -> String {
+    func reason(_ error: Error) -> String {
         guard let error = error as? DeckhandError else { return error.localizedDescription }
         switch error {
         case .unauthorized: return "Token rejected by the Mac"

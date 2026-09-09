@@ -22,6 +22,14 @@ final class DeckLoopTests: XCTestCase {
         let appeared = talk.waitForExistence(timeout: 15)
         add(screenshot(app, named: "session"))
         XCTAssertTrue(appeared, "the talk button never appeared")
+
+        // The other two tabs are their own screens and are worth seeing on their own.
+        for tab in ["transcript", "files"] {
+            let button = app.descendants(matching: .any).matching(identifier: "tab-\(tab)").firstMatch
+            XCTAssertTrue(button.waitForExistence(timeout: 5), "no \(tab) tab")
+            button.tap()
+            add(screenshot(app, named: tab))
+        }
     }
 
     func testTheConnectionIsAlwaysStated() throws {

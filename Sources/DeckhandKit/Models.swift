@@ -65,6 +65,29 @@ public struct Turn: Codable, Hashable, Sendable {
     public var isUser: Bool { role == "user" }
 }
 
+/// The conversation as the phone reads it: what has been said, and what you have said that
+/// has not been picked up yet.
+///
+/// Two lists because they are two different things. A turn is in the session's history; a
+/// queued line is in its inbox, and until it is absorbed it appears nowhere in the transcript
+/// at all — which is exactly why sending something and seeing nothing happen was confusing.
+public struct Rounds: Codable, Hashable, Sendable {
+    public var turns: [Turn] = []
+    public var queued: [String] = []
+
+    public init(turns: [Turn] = [], queued: [String] = []) {
+        self.turns = turns
+        self.queued = queued
+    }
+
+    /// Tolerant, like everything else off this wire: a daemon a version behind sends no queue.
+    public init(from decoder: Decoder) throws {
+        let box = try decoder.container(keyedBy: CodingKeys.self)
+        turns = try box.decodeIfPresent([Turn].self, forKey: .turns) ?? []
+        queued = try box.decodeIfPresent([String].self, forKey: .queued) ?? []
+    }
+}
+
 /// One thing a session ran. Small on purpose: a dot until you ask for more.
 public struct Tool: Codable, Hashable, Sendable, Identifiable {
     public let name: String
@@ -147,13 +170,112 @@ public struct Summary: Codable, Hashable, Sendable {
     public let summary: String?
     /// The first line of it: what you need to know or do, short enough for a list row.
     public var headline: String?
+    /// Everything you have asked this session for, and how far each one got.
+    public var tasks: [Ask] = []
+    /// What writing these has cost. Nothing else in Deckhand spends anything.
+    public var spent: Spend?
     public let error: String?
 
     public init(from decoder: Decoder) throws {
         let box = try decoder.container(keyedBy: CodingKeys.self)
         summary = try box.decodeIfPresent(String.self, forKey: .summary)
         headline = try box.decodeIfPresent(String.self, forKey: .headline)
+        tasks = try box.decodeIfPresent([Ask].self, forKey: .tasks) ?? []
+        spent = try box.decodeIfPresent(Spend.self, forKey: .spent)
         error = try box.decodeIfPresent(String.self, forKey: .error)
+    }
+}
+
+/// What the briefings for one session have cost since the Mac last started.
+///
+/// Everything else here is free: utt transcribes on the Mac and the transcripts are read off
+/// disk. This one model run is the whole of what Deckhand spends, so it is worth saying out
+/// loud rather than leaving to be discovered on a bill.
+public struct Spend: Codable, Hashable, Sendable {
+    public var runs = 0
+    public var tokens = 0
+    /// Read from the cache rather than billed as new. Most of the traffic, almost none of it.
+    public var cached = 0
+
+    public init(runs: Int = 0, tokens: Int = 0, cached: Int = 0) {
+        self.runs = runs
+        self.tokens = tokens
+        self.cached = cached
+    }
+
+    public init(from decoder: Decoder) throws {
+        let box = try decoder.container(keyedBy: CodingKeys.self)
+        runs = try box.decodeIfPresent(Int.self, forKey: .runs) ?? 0
+        tokens = try box.decodeIfPresent(Int.self, forKey: .tokens) ?? 0
+        cached = try box.decodeIfPresent(Int.self, forKey: .cached) ?? 0
+    }
+
+    /// One line for the foot of a briefing: what it cost, in the units a person reads.
+    public var line: String {
+        let thousands = Double(tokens) / 1000
+        let size = tokens < 1000 ? "\(tokens) tokens" : String(format: "%.1fk tokens", thousands)
+        return "\(runs) briefing\(runs == 1 ? "" : "s") · \(size)"
+    }
+}
+
+/// One thing you asked a session for, and whether it has got to it.
+///
+/// Written by the same model run as the briefing, from your own messages — it is your list,
+/// not the session's plan, which is why it is short and in your words.
+public struct Ask: Codable, Hashable, Sendable, Identifiable {
+    public let text: String
+    public let state: String
+
+    public init(text: String, state: String) {
+        self.text = text
+        self.state = state
+    }
+
+    public var id: String { text }
+
+    public enum State: Sendable { case todo, doing, done }
+
+    public var progress: State {
+        switch state {
+        case "done": .done
+        case "doing": .doing
+        default: .todo
+        }
+    }
+}
+
+/// A file this session touched that you could actually open: a shot it took, a note it wrote.
+public struct Asset: Codable, Hashable, Sendable, Identifiable {
+    public let path: String
+    public let name: String
+    public let kind: String
+    public let size: Int
+    public let modified: Double
+
+    public init(path: String, name: String, kind: String, size: Int, modified: Double) {
+        self.path = path
+        self.name = name
+        self.kind = kind
+        self.size = size
+        self.modified = modified
+    }
+
+    public var id: String { path }
+    public var changed: Date { Date(timeIntervalSince1970: modified) }
+
+    public enum Kind: Sendable { case image, video, text }
+
+    public var sort: Kind {
+        switch kind {
+        case "image": .image
+        case "video": .video
+        default: .text
+        }
+    }
+
+    /// The folder it sits in, which is most of what tells two `report.md`s apart.
+    public var folder: String {
+        (path as NSString).deletingLastPathComponent
     }
 }
 

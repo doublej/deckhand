@@ -67,7 +67,7 @@ def transcript_path(session_id: str) -> Path | None:
     return matches[0] if matches else None
 
 
-def _text_of(entry: dict) -> str | None:
+def text_of(entry: dict) -> str | None:
     """The human-readable text of one transcript entry, or None if it carries none.
 
     Tool calls, tool results, thinking blocks and subagent traffic are not part of the
@@ -99,20 +99,20 @@ def activity_since_last_user(session_id: str, cap: int = 12_000) -> str:
     path = transcript_path(session_id)
     if path is None:
         return ""
-    lines = _tail_lines(path, TAIL_WINDOWS[1])
+    lines = tail_lines(path, TAIL_WINDOWS[1])
     events: list[str] = []
     for raw in lines:
-        entry = _parse(raw)
+        entry = parse_line(raw)
         if entry is None or entry.get("isSidechain"):
             continue
-        if entry.get("type") == "user" and _text_of(entry) is not None:
+        if entry.get("type") == "user" and text_of(entry) is not None:
             events = []  # the person spoke: everything before that is old news
             continue
-        events.extend(_describe(entry))
+        events.extend(describe(entry))
     return "\n".join(events)[-cap:]
 
 
-def _describe(entry: dict) -> list[str]:
+def describe(entry: dict) -> list[str]:
     """One line per thing the session did, in the order it did them."""
     if entry.get("type") != "assistant":
         return []
@@ -144,7 +144,7 @@ def read_turns(session_id: str, limit: int = 8) -> list[Turn]:
     return turns[-limit:]
 
 
-def _tail_lines(path: Path, window: int) -> list[bytes]:
+def tail_lines(path: Path, window: int) -> list[bytes]:
     """The last `window` bytes of the file, split into whole lines."""
     with path.open("rb") as f:
         size = f.seek(0, os.SEEK_END)
@@ -154,7 +154,7 @@ def _tail_lines(path: Path, window: int) -> list[bytes]:
     return lines[1:] if size > window else lines  # first line of a partial read is a fragment
 
 
-def _parse(raw: bytes) -> dict | None:
+def parse_line(raw: bytes) -> dict | None:
     if not raw.strip():
         return None
     try:
@@ -174,13 +174,13 @@ def _scan(path: Path, window: int) -> list[Turn]:
     turns: list[Turn] = []
     ran: list[tuple[str, Tool]] = []
     answers: dict[str, tuple[str, bool]] = {}
-    for raw in _tail_lines(path, window):
-        entry = _parse(raw)
+    for raw in tail_lines(path, window):
+        entry = parse_line(raw)
         if entry is None or entry.get("type") not in ("user", "assistant"):
             continue
         answers.update(_answers(entry))
         ran.extend(_tools_of(entry))
-        text = _text_of(entry)
+        text = text_of(entry)
         if text is None:
             continue
         turns.append(Turn(role=entry["type"], text=text, timestamp=entry.get("timestamp", ""),

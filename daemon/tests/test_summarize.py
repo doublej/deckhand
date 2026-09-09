@@ -70,3 +70,27 @@ def test_a_failing_sdk_becomes_a_message_not_a_crash(monkeypatch):
     summary, error = run(summarize("s1", ACTIVITY))
     assert summary is None
     assert "claude binary not found" in error
+
+
+def test_the_task_list_comes_out_of_the_same_answer_as_the_briefing():
+    briefing, tasks = summarize_module.split_tasks(
+        "Waiting: which database first\n\nRewrote the importer.\n"
+        ":tasks\n- [x] delete the menu bar app\n- [~] the files tab\n- [ ] privacy policy URL\n"
+    )
+
+    assert briefing == "Waiting: which database first\n\nRewrote the importer."
+    assert tasks == [
+        {"text": "delete the menu bar app", "state": "done"},
+        {"text": "the files tab", "state": "doing"},
+        {"text": "privacy policy URL", "state": "todo"},
+    ]
+
+
+def test_a_briefing_without_a_task_list_is_left_alone():
+    assert summarize_module.split_tasks("Done: 14 tests green") == ("Done: 14 tests green", [])
+    assert summarize_module.split_tasks(None) == (None, [])
+
+
+def test_the_headline_is_read_off_the_briefing_not_the_task_list():
+    briefing, _ = summarize_module.split_tasks(":tasks\n- [ ] the only thing here")
+    assert summarize_module.headline(briefing) is None

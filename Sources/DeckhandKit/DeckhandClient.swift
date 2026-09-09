@@ -30,9 +30,23 @@ public struct DeckhandClient: Sendable {
         return try decode(try await send(req))
     }
 
-    public func turns(of sessionId: String, limit: Int = 8) async throws -> [Turn] {
-        let body: [String: [Turn]] = try await get("sessions/\(sessionId)/turns?limit=\(limit)")
-        return body["turns"] ?? []
+    /// Everything this session touched that you could open and look at.
+    public func files(of sessionId: String) async throws -> [Asset] {
+        let body: [String: [Asset]] = try await get("sessions/\(sessionId)/files")
+        return body["files"] ?? []
+    }
+
+    /// One of those files, whole. The Mac serves only what that session's transcript named,
+    /// so this is a way to see what it made and never a way to read the Mac's disk.
+    public func contents(of asset: Asset, in sessionId: String) async throws -> Data {
+        let escaped = asset.path.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        var req = request(.get, "sessions/\(sessionId)/file?path=\(escaped)")
+        req.timeoutInterval = 60
+        return try await send(req)
+    }
+
+    public func turns(of sessionId: String, limit: Int = 8) async throws -> Rounds {
+        try await get("sessions/\(sessionId)/turns?limit=\(limit)")
     }
 
     /// Put words into a session. The other half of an upload the person asked to read first.

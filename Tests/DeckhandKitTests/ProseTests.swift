@@ -99,3 +99,36 @@ struct TurnDecodingTests {
         #expect(turn.tools.first?.kind == .running)
     }
 }
+
+@Suite("What a session asked for and what it made")
+struct AskAndAssetTests {
+    @Test("a summary from a daemon that does not write task lists still decodes")
+    func summaryWithoutTasks() throws {
+        let json = #"{"summary":"Done: 14 tests green","headline":"Done: 14 tests green"}"#
+        let summary = try JSONDecoder().decode(Summary.self, from: Data(json.utf8))
+        #expect(summary.tasks.isEmpty)
+        #expect(summary.headline == "Done: 14 tests green")
+    }
+
+    @Test("the three states a task can be in survive the wire")
+    func taskStates() throws {
+        let json = """
+            {"summary":"x","tasks":[{"text":"the files tab","state":"doing"},
+             {"text":"privacy policy","state":"todo"},{"text":"tray","state":"done"}]}
+            """
+        let summary = try JSONDecoder().decode(Summary.self, from: Data(json.utf8))
+        #expect(summary.tasks.map(\.progress) == [.doing, .todo, .done])
+    }
+
+    @Test("a file knows which of the three ways to show it")
+    func assetKinds() throws {
+        let json = """
+            {"files":[{"path":"/tmp/a/shot.png","name":"shot.png","kind":"image",
+             "size":120,"modified":1.0}]}
+            """
+        let body = try JSONDecoder().decode([String: [Asset]].self, from: Data(json.utf8))
+        let asset = try #require(body["files"]?.first)
+        #expect(asset.sort == .image)
+        #expect(asset.folder == "/tmp/a")
+    }
+}

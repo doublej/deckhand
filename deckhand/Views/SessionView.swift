@@ -10,16 +10,20 @@ struct SessionView: View {
     @State private var showing: Pane = .summary
     @Environment(\.dismiss) private var dismiss
 
-    /// Two things you want on arriving, and they want opposite layouts: the briefing wants a
-    /// page to itself, the transcript wants to be pinned to its newest line.
-    enum Pane: String, CaseIterable { case summary = "Summary", transcript = "Transcript" }
+    /// Three things you want on arriving, and they want different layouts: the briefing wants
+    /// a page to itself, the transcript wants to be pinned to its newest line, and the files
+    /// are a list you scroll from the top.
+    enum Pane: String, CaseIterable {
+        case summary = "Summary", transcript = "Transcript", files = "Files"
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             header
             switch showing {
-            case .summary: briefing
+            case .summary: BriefingView(model: model, session: session)
             case .transcript: transcript
+            case .files: FilesView(model: model, session: session)
             }
             // One slot, two things: the button you hold, or what it heard waiting to be sent.
             // Never both — while there is something to answer, that is the only thing the
@@ -31,8 +35,20 @@ struct SessionView: View {
         .background(Palette.surfaceGround)
         // No navigation bar. It was a whole band holding one chevron, stacked above a header
         // that already named the page — two rows of chrome before a word of content. The
-        // chevron moved into the header and the band went with it. Swiping back still works.
+        // chevron moved into the header and the band went with it.
         .toolbar(.hidden, for: .navigationBar)
+        // Hiding the bar takes the system's swipe-back with it, so the page catches its own:
+        // started at the leading edge, mostly sideways, and simultaneous so it never competes
+        // with scrolling the transcript or opening a tool call.
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 30, coordinateSpace: .global)
+                .onEnded { drag in
+                    guard drag.startLocation.x < 28,
+                          drag.translation.width > 80,
+                          abs(drag.translation.height) < 80 else { return }
+                    dismiss()
+                }
+        )
         // Anything waiting on you lives in the transcript, so do not leave it on a tab the
         // person is not looking at.
         .task {
@@ -112,10 +128,22 @@ struct SessionView: View {
                             // What it ran sits above what it said, in the order it happened.
                             if !turn.tools.isEmpty { ToolTrace(tools: turn.tools) }
                             if !turn.text.isEmpty {
-                                TurnCard(turn: turn, showsRole: startsRun(index))
+                                TurnCard(turn: turn,
+                                         showsRole: startsRun(index),
+                                         waiting: index == unanswered ? awaiting : nil)
                             }
                         }
                         .id(index)
+                    }
+                    // Below everything the session has written down, because that is where
+                    // they are: after the last thing it said, waiting to be read.
+                    if !queued.isEmpty {
+                        VStack(alignment: .leading, spacing: Spacing.extraSmall) {
+                            ForEach(Array(queued.enumerated()), id: \.offset) { _, text in
+                                QueuedCard(text: text)
+                            }
+                        }
+                        .id("queued")
                     }
                 }
                 .padding(.horizontal, Spacing.medium)
@@ -126,9 +154,14 @@ struct SessionView: View {
             // summary has its own tab now, so the transcript can go back to doing the one
             // thing a transcript should do.
             .onChange(of: model.turns.count) { scroll(proxy) }
+            .onChange(of: queued.count) { scroll(proxy) }
             .onAppear { scroll(proxy) }
         }
     }
+
+    /// What you have said that the session has not picked up yet. Its own bookkeeping, read
+    /// off the transcript by the Mac — never inferred from the shape of the conversation.
+    private var queued: [String] { model.queued[session.sessionId] ?? [] }
 
     private var nothingYet: some View {
         Text(model.connection.isHealthy ? "Nothing said yet in this session" : "Waiting for the Mac…")
@@ -170,30 +203,6 @@ struct SessionView: View {
             .contentShape(.rect)
     }
 
-    /// What it did while you were away, with the whole page to say it in.
-    private var briefing: some View {
-        ScrollView {
-            Group {
-                if let text = model.summaries[session.sessionId] {
-                    Prose(text)
-                } else {
-                    Text(model.summarising.contains(session.sessionId)
-                         ? "Reading what it did…"
-                         : "Nothing yet")
-                        .font(Typography.subtitle)
-                        .foregroundStyle(Palette.textSecondary)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, Spacing.medium)
-            // The opening sentence needs room above it or it reads as a caption stuck to the
-            // header rather than the first thing on a page.
-            .padding(.top, Spacing.large)
-            .padding(.bottom, Spacing.extraLarge)
-        }
-        .frame(maxHeight: .infinity)
-    }
-
     /// The mark is the button. utt's mark, because recording is utt's job — it takes the
     /// recording tint and speeds up with the meter, exactly as it does in utt's own rail.
     private var talk: some View {
@@ -213,6 +222,8 @@ struct SessionView: View {
         withAnimation {
             if model.review[session.sessionId] != nil {
                 proxy.scrollTo("review", anchor: .bottom)
+            } else if !queued.isEmpty {
+                proxy.scrollTo("queued", anchor: .bottom)
             } else {
                 proxy.scrollTo(model.turns.count - 1, anchor: .bottom)
             }
@@ -244,37 +255,21 @@ struct SessionView: View {
     private func startsRun(_ index: Int) -> Bool {
         index == 0 || model.turns[index - 1].role != model.turns[index].role
     }
-}
 
-/// One round of conversation. Yours are marked down the edge in the app's own colour, so a
-/// glance down the transcript tells you who said what without reading a word of it.
-struct TurnCard: View {
-    let turn: Turn
-    /// False when the turn before this one was from the same speaker.
-    let showsRole: Bool
+    /// The last thing you said, when nothing has answered it yet.
+    ///
+    /// Your words used to sit at the foot of the transcript in grey, which read as "not sent";
+    /// removing that left no way at all to tell a prompt still in the queue from one that has
+    /// been dealt with. This marks the message itself instead of inventing a second one.
+    private var unanswered: Int? {
+        guard let mine = model.turns.lastIndex(where: \.isUser) else { return nil }
+        let answered = model.turns[(mine + 1)...].contains { !$0.isUser && !$0.text.isEmpty }
+        return answered ? nil : mine
+    }
 
-    var body: some View {
-        Card(spacing: Spacing.xxs) {
-            if showsRole {
-                Text(turn.isUser ? "YOU" : "CLAUDE")
-                    .font(Typography.eyebrow)
-                    .tracking(1)
-                    .foregroundStyle(turn.isUser ? Palette.tint : Palette.textTertiary)
-            }
-            Text(turn.text)
-                .font(.system(size: 13))
-                .foregroundStyle(Palette.textPrimary)
-                .textSelection(.enabled)
-        }
-        .overlay(alignment: .leading) {
-            if turn.isUser {
-                // A rail rather than a different ground: the transcript stays one column of
-                // cards, and yours are the ones with a line down the side.
-                Capsule()
-                    .fill(Palette.tint)
-                    .frame(width: 3)
-                    .padding(.vertical, Spacing.extraSmall)
-            }
-        }
+    /// Only while it is actually working. Anything it has not picked up at all is in the
+    /// queue below, which says so itself — this is the other half: picked up, being worked on.
+    private var awaiting: PillState? {
+        session.isBusy ? .busy : nil
     }
 }

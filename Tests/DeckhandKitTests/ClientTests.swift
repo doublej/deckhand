@@ -32,9 +32,11 @@ struct ClientTests {
     @Test("decodes a real /turns payload")
     func decodesTurns() async throws {
         StubProtocol.respond(with: fixture("turns"))
-        let turns = try await client().turns(of: "809bbb83-b4dd-4680-8109-de8c18cf7d69", limit: 4)
-        #expect(turns.count == 2)
-        #expect(turns.allSatisfy { $0.role == "assistant" })
+        let rounds = try await client().turns(of: "809bbb83-b4dd-4680-8109-de8c18cf7d69", limit: 4)
+        #expect(rounds.turns.count == 2)
+        #expect(rounds.turns.allSatisfy { $0.role == "assistant" })
+        // The fixture predates the inbox, which is the version-skew case: no key, no queue.
+        #expect(rounds.queued.isEmpty)
         #expect(StubProtocol.lastRequest?.url?.query == "limit=4")
     }
 

@@ -4,9 +4,21 @@ import SwiftUI
 /// The sessions screen is utt's rail, full width: the mark, the daemon's state, and every
 /// live Claude session as a row. Dark whatever the phone is set to, because the rail is
 /// always the warm ground — that is the surface the whole language is built on.
+///
+/// The page is about the sessions and nothing else. The mark, the daemon's state and the
+/// settings are one thin line at each end, small and quiet on purpose; everything between
+/// them belongs to the sessions, which are given the room to say what they need.
 struct SessionListView: View {
     @Bindable var model: AppModel
     @State private var showSettings = false
+    /// Pushed by hand rather than by a NavigationLink: a link inside a List draws the system's
+    /// disclosure chevron outside the row's own fill, which broke the one edge this page has.
+    @State private var chosen: Session?
+
+    /// Everything on this page starts at the same left edge. A row's own padding is what its
+    /// fill bleeds past that edge by, so the head, the group labels and a row's glyph line up
+    /// while the rows still read as objects sitting on the ground rather than text on it.
+    private static let gutter = Spacing.small
 
     var body: some View {
         NavigationStack {
@@ -15,12 +27,12 @@ struct SessionListView: View {
                 groups
                 foot
             }
-            .padding(.horizontal, Spacing.medium)
+            .padding(.horizontal, Self.gutter)
             .padding(.bottom, Spacing.small)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .background(Palette.lcdGround)
             .environment(\.colorScheme, .dark)
-            .navigationDestination(for: Session.self) { SessionView(model: model, session: $0) }
+            .navigationDestination(item: $chosen) { SessionView(model: model, session: $0) }
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showSettings) { SettingsView(model: model) }
         }
@@ -41,26 +53,25 @@ struct SessionListView: View {
         }
     }
 
-    /// The mark and the one thing the person always needs: whether the Mac is there.
+    /// One line: the mark, whatever is wrong, and the state. It is the least important thing
+    /// on the page and it is sized like it.
     private var head: some View {
-        VStack(alignment: .leading, spacing: Spacing.extraSmall) {
-            HStack(alignment: .top) {
-                DotMark(DotGlyph.anchor, size: 44, hotCore: 0.3)
-                Spacer(minLength: 0)
-                StatePill(model.connection.pill)
-            }
+        HStack(spacing: Spacing.extraSmall) {
+            DotMark(DotGlyph.anchor, size: 20, hotCore: 0.3)
             // The pill says which state it is in; this says why, and only when that adds
             // something. A line reading "Error" under a pill reading ERR is the pill twice.
             if let reason {
                 Text(reason)
                     .font(Typography.hint)
-                    .foregroundStyle(Palette.textSecondary)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .foregroundStyle(Palette.textTertiary)
+                    .lineLimit(1)
             }
+            Spacer(minLength: Spacing.extraSmall)
+            StatePill(model.connection.pill)
         }
+        .padding(.horizontal, Spacing.small)
         .padding(.top, Spacing.extraSmall)
-        .padding(.bottom, Spacing.medium)
+        .padding(.bottom, Spacing.large)
     }
 
     /// What the pill cannot carry: the reason. Nothing at all when the Mac is simply there.
@@ -79,7 +90,8 @@ struct SessionListView: View {
             group("Sessions", model.visibleSessions.filter { !model.preferences.isFavorite($0.name) })
         }
         .listStyle(.plain)
-        .listRowSpacing(1)
+        .listRowSpacing(Spacing.extraSmall)
+        .listSectionSeparator(.hidden)
         .scrollContentBackground(.hidden)
         .scrollIndicators(.hidden)
         .environment(\.defaultMinListRowHeight, 1)
@@ -89,8 +101,9 @@ struct SessionListView: View {
     /// Says which of the four empty states this is, rather than implying the Mac is idle.
     private var empty: some View {
         Text(emptyMessage)
-            .font(Typography.railRow)
+            .font(Typography.primaryRow)
             .foregroundStyle(Palette.textSecondary)
+            .padding(.horizontal, Spacing.small)
             .padding(.vertical, Spacing.large)
     }
 
@@ -113,20 +126,21 @@ struct SessionListView: View {
                 Text(title.uppercased())
                     .font(Typography.groupLabel)
                     .tracking(0.6)
-                    .foregroundStyle(Palette.textSecondary)
-                    .padding(.horizontal, Spacing.extraSmall)
-                    .padding(.bottom, Spacing.xxs)
+                    .foregroundStyle(Palette.textTertiary)
+                    .padding(.horizontal, Spacing.small)
+                    .padding(.bottom, Spacing.extraSmall)
             }
         }
     }
 
     private func row(_ session: Session) -> some View {
         let hidden = model.preferences.isHidden(session.name)
-        return NavigationLink(value: session) {
+        return Button { chosen = session } label: {
             SessionRow(
                 session: session,
                 current: model.current == session.sessionId,
-                headline: model.headlines[session.sessionId]
+                headline: model.headlines[session.sessionId],
+                asks: model.tasks[session.sessionId] ?? []
             )
         }
         .buttonStyle(.plain)
@@ -148,6 +162,8 @@ struct SessionListView: View {
         .tint(Palette.lcdGround)
     }
 
+    /// The other thin line. Settings are a place you go once; they do not need to look like
+    /// anything from here.
     private var foot: some View {
         HStack(spacing: Spacing.medium) {
             Wordmark()
@@ -158,9 +174,10 @@ struct SessionListView: View {
             Button("Settings", systemImage: "gearshape") { showSettings = true }
         }
         .labelStyle(.iconOnly)
-        .font(.system(size: 13, weight: .semibold))
-        .foregroundStyle(Palette.textSecondary)
-        .padding(.top, Spacing.small)
+        .font(.system(size: 12, weight: .semibold))
+        .foregroundStyle(Palette.textTertiary)
+        .padding(.horizontal, Spacing.small)
+        .padding(.top, Spacing.medium)
     }
 }
 
@@ -173,41 +190,59 @@ private extension View {
     }
 }
 
-/// One session as a rail row: its glyph on a tile, its name, its state.
+/// One session as a rail row: its glyph, its name, what it needs from you, and how far it has
+/// got through what you asked.
+///
+/// The headline is the row. It is written to about twelve words, but a model writing prose is
+/// not a layout engine — so the row gives it three lines and real leading rather than clipping
+/// the one sentence the page exists to show.
 private struct SessionRow: View {
     let session: Session
     let current: Bool
     /// What this session needs from you, in one line. Absent until the Mac has read it.
     let headline: String?
+    /// What you have asked it for, as one dot each. Empty until the Mac has read it.
+    let asks: [Ask]
 
     var body: some View {
-        HStack(alignment: .top, spacing: Spacing.extraSmall) {
-            GlyphTile(DotGlyph.forName(session.name), size: 24, prominent: current)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(session.name)
-                    .font(current ? Typography.railRowSelected : Typography.railRow)
-                    .foregroundStyle(current ? Palette.textPrimary : Palette.textSecondary)
-                    .lineLimit(1)
+        HStack(alignment: .top, spacing: Spacing.small) {
+            GlyphTile(DotGlyph.forName(session.name), size: 32, prominent: current)
+            VStack(alignment: .leading, spacing: Spacing.xxs) {
+                title
                 // The row is worth its extra height only when there is something in it; a
                 // placeholder saying "reading…" on six rows at once is worse than nothing.
                 if let headline {
                     Text(headline)
-                        .font(Typography.hint)
-                        .foregroundStyle(Palette.textTertiary)
-                        .lineLimit(2)
+                        .font(Typography.subtitle)
+                        .foregroundStyle(Palette.textSecondary)
+                        .lineSpacing(3)
+                        .lineLimit(3)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                if !asks.isEmpty {
+                    AskDots(asks: asks).padding(.top, 2)
+                }
             }
+        }
+        .padding(Spacing.small)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: Radius.medium, style: .continuous)
+                .fill(Color.primary.opacity(current ? 0.11 : 0.045))
+        )
+        .contentShape(.rect)
+    }
+
+    /// The name and the state on one baseline, so the headline below them has the full width.
+    private var title: some View {
+        HStack(alignment: .firstTextBaseline, spacing: Spacing.extraSmall) {
+            Text(session.name)
+                .font(Typography.primaryRow)
+                .fontWeight(current ? .semibold : .medium)
+                .foregroundStyle(Palette.textPrimary)
+                .lineLimit(1)
             Spacer(minLength: Spacing.extraSmall)
             StatePill(session.isBusy ? .busy : .idle)
         }
-        .padding(.horizontal, 6)
-        .padding(.vertical, Spacing.extraSmall)
-        .frame(minHeight: 34)
-        .background(
-            RoundedRectangle(cornerRadius: Radius.small, style: .continuous)
-                .fill(Color.primary.opacity(current ? 0.10 : 0))
-        )
-        .contentShape(.rect)
     }
 }
