@@ -11,26 +11,47 @@ struct ArtifactsView: View {
     @Bindable var model: AppModel
     let session: Session
     @State private var open: Artifact?
+    /// Which of them to show. Not remembered across opening the tab: what you want to see is
+    /// decided by what has happened since you last looked, not by what you picked last time.
+    @State private var show: Show = .all
+    /// A tab inside the session's page, so its marks go orange with the rest of it.
+    @Environment(\.accent) private var accent
+
+    /// The minimum a finger can be asked to hit. Same raw number `FilesView` writes, for the
+    /// same reason: no spacing token means "a finger".
+    private static let target: CGFloat = 44
+
+    /// Waiting or answered, and all of them. Answered is a real thing to want to see — it is
+    /// what you said, and the page still holds the question you said it about.
+    private enum Show: String, CaseIterable, Identifiable {
+        case all = "All", waiting = "Waiting", answered = "Answered"
+        var id: Self { self }
+    }
 
     private var artifacts: [Artifact] { model.artifacts[session.sessionId] ?? [] }
+    private var waiting: [Artifact] { artifacts.filter { !$0.answered } }
+    private var answered: [Artifact] { artifacts.filter(\.answered) }
+
+    private var shown: [Artifact] {
+        switch show {
+        case .all: artifacts
+        case .waiting: waiting
+        case .answered: answered
+        }
+    }
+
+    /// One choice is not a choice. With every page in the same state the row would be furniture,
+    /// and the rows below already say which state that is.
+    private var mixed: Bool { !waiting.isEmpty && !answered.isEmpty }
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: Spacing.xxs) {
-                if artifacts.isEmpty { empty }
-                ForEach(artifacts) { artifact in
-                    Button { open = artifact } label: { ArtifactRow(artifact: artifact) }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("artifact-row")
-                }
-            }
-            .padding(.horizontal, Spacing.medium)
-            .padding(.top, Spacing.medium)
-            .padding(.bottom, Spacing.extraLarge)
+        VStack(spacing: 0) {
+            // Above the scroll view rather than in it, so it is still there after you have
+            // scrolled past a dozen answered pages looking for the one that is not.
+            if mixed { selector }
+            list
         }
         .frame(maxHeight: .infinity)
-        // Room at the end for the mark that floats over this.
-        .contentMargins(.bottom, TalkMark.clearance, for: .scrollContent)
         .task { await model.loadArtifacts(for: session) }
         // A cover rather than a sheet: a sheet keeps a grabber, a corner radius and an inch of
         // this page showing behind it, and all three are the chrome the viewer is meant not to
@@ -40,8 +61,65 @@ struct ArtifactsView: View {
         }
     }
 
+    private var list: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: Spacing.xxs) {
+                if shown.isEmpty { empty }
+                ForEach(shown) { artifact in
+                    Button { open = artifact } label: { ArtifactRow(artifact: artifact) }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("artifact-row")
+                }
+            }
+            .padding(.horizontal, Spacing.medium)
+            .padding(.top, mixed ? Spacing.extraSmall : Spacing.medium)
+            .padding(.bottom, Spacing.extraLarge)
+        }
+        // Room at the end for the mark that floats over this.
+        .contentMargins(.bottom, TalkMark.clearance, for: .scrollContent)
+    }
+
+    /// The same control the file list uses, because it is the same question asked of a different
+    /// folder. Waiting comes before answered: it is the one with something owed on it.
+    private var selector: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: Spacing.xxs) {
+                choice(.all, count: artifacts.count)
+                choice(.waiting, count: waiting.count)
+                choice(.answered, count: answered.count)
+            }
+            .padding(.horizontal, Spacing.medium)
+            .padding(.vertical, Spacing.extraSmall)
+        }
+        .scrollIndicators(.hidden)
+    }
+
+    private func choice(_ option: Show, count: Int) -> some View {
+        let chosen = show == option
+        return Button { show = option } label: {
+            HStack(spacing: Spacing.extraSmall) {
+                Text(option.rawValue)
+                Text(count.formatted())
+                    .foregroundStyle(chosen ? Color.white.opacity(0.75) : Palette.textTertiary)
+            }
+            .font(Typography.primaryRow)
+            .foregroundStyle(chosen ? Color.white : Palette.textSecondary)
+            .lineLimit(1)
+            .padding(.horizontal, Spacing.medium)
+            .frame(minHeight: Self.target)
+            .background(Capsule().fill(chosen ? accent : Palette.tileIdle))
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("artifact-filter")
+        .accessibilityLabel("\(option.rawValue), \(count) pages")
+        .accessibilityAddTraits(chosen ? [.isSelected] : [])
+    }
+
     private var empty: some View {
-        Text("Nothing this session has put on your phone")
+        Text(show == .all
+             ? "Nothing this session has put on your phone"
+             : "No \(show.rawValue.lowercased()) pages")
             .font(Typography.subtitle)
             .foregroundStyle(Palette.textSecondary)
             .padding(.vertical, Spacing.small)
@@ -55,18 +133,26 @@ struct ArtifactsView: View {
 /// One page in the listing: what it is called, when it was written, and whether it is still
 /// waiting on you.
 ///
-/// The waiting is the word `WAIT` and nothing else — no dot, no capsule, no badge, which is the
-/// one shape this app has banned outright. An answered page says so in its own line instead of
-/// wearing a second state word: "answered" is a fact about the file, and the state vocabulary
-/// has no word for finished.
+/// A page you have answered is *done*, and has to look it from across the room. It used to say
+/// so in one grey word at the end of a caption, which read the same as a page that had not been
+/// answered at all — the whole row was identical but for a missing `WAIT`. Now the mark goes
+/// from the page's own colour to a tick in the quiet one, and the title recedes with it. The
+/// listing stays in one order and rows do not move under you when one is answered.
+///
+/// The waiting is still the word `WAIT` and nothing else — no dot, no capsule, no badge, which
+/// is the one shape this app has banned outright. There is deliberately no second state word
+/// for finished: "answered" is a fact about a file, not a state the session is in.
 private struct ArtifactRow: View {
     let artifact: Artifact
+    @Environment(\.accent) private var accent
+
+    private var done: Bool { artifact.answered }
 
     var body: some View {
         HStack(spacing: Spacing.small) {
-            Image(systemName: "doc.richtext")
+            Image(systemName: done ? "checkmark" : "doc.richtext")
                 .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(Palette.tint)
+                .foregroundStyle(done ? Palette.textTertiary : accent)
                 .frame(width: 30, height: 30)
                 .background(
                     RoundedRectangle(cornerRadius: 30 * 0.28, style: .continuous)
@@ -75,7 +161,7 @@ private struct ArtifactRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(artifact.title)
                     .font(Typography.primaryRow)
-                    .foregroundStyle(Palette.textPrimary)
+                    .foregroundStyle(done ? Palette.textSecondary : Palette.textPrimary)
                     .lineLimit(1)
                     .truncationMode(.tail)
                 Text(caption)
@@ -84,7 +170,7 @@ private struct ArtifactRow: View {
                     .lineLimit(1)
             }
             Spacer(minLength: Spacing.extraSmall)
-            if !artifact.answered { StateWord(.wait) }
+            if !done { StateWord(.wait) }
             Image(systemName: "chevron.right")
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(Palette.textTertiary)
@@ -96,6 +182,9 @@ private struct ArtifactRow: View {
             RoundedRectangle(cornerRadius: Radius.medium, style: .continuous)
                 .fill(Palette.surfacePrimary)
         )
+        // Answered pages stay readable and stay tappable — they are the record of what you said
+        // — but they stop competing with the one that still wants something.
+        .opacity(done ? 0.72 : 1)
         .contentShape(.rect)
     }
 
@@ -103,6 +192,6 @@ private struct ArtifactRow: View {
     /// tells you there is something on your phone.
     private var caption: String {
         let ago = artifact.changed.formatted(.relative(presentation: .numeric, unitsStyle: .narrow))
-        return artifact.answered ? "answered · \(ago) · \(artifact.id)" : "\(ago) · \(artifact.id)"
+        return done ? "answered · \(ago) · \(artifact.id)" : "\(ago) · \(artifact.id)"
     }
 }
