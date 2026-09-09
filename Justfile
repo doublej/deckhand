@@ -52,6 +52,11 @@ menubar: generate
         -configuration Debug -derivedDataPath .build/menubar build
     open .build/menubar/Build/Products/Debug/DeckhandMenu.app
 
+# Redraw the app icon from the mark's own geometry.
+[group('develop')]
+icon:
+    swift run IconMaker deckhand/Assets.xcassets/AppIcon.appiconset/icon.png
+
 # The pairing token the app needs.
 [group('develop')]
 token:

@@ -12,6 +12,9 @@ let package = Package(
     ],
     targets: [
         .target(name: "DeckhandKit"),
+        // Draws the app icon from DotMatrix's own geometry, so the home screen and the rail
+        // cannot drift apart. macOS only, and only ever run by `just icon`.
+        .executableTarget(name: "IconMaker", dependencies: ["DeckhandKit"]),
         .testTarget(
             name: "DeckhandKitTests",
             dependencies: ["DeckhandKit"],

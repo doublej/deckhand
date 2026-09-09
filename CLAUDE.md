@@ -40,6 +40,10 @@ controls the daemon.
   runs `DotMatrixDriver`, utt's shared clock, so it is never still: six seconds a pattern in
   silence, down to a tenth of a second at full voice, and the glow follows the phone's own
   input meter while you hold it.
+- The app icon is the anchor on the same grid, drawn by `Sources/IconMaker` from
+  `DotMatrix.rect` itself — `just icon` redraws it. Same geometry as the in-app mark by
+  construction, so the home screen and the rail cannot drift apart. It sits at 0.74 of the
+  canvas rather than the 0.62 a tile uses, because iOS masks the icon to a squircle.
 - State on the Mac: `~/Library/Application Support/Deckhand/` — `token` and `audio/<sessionId>/`.
 
 ## Mental model

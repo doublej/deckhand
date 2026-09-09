@@ -13,6 +13,7 @@ targets:
     platform: iOS
     sources:
       - deckhand
+      - deckhand/Assets.xcassets
     dependencies:
       - package: DeckhandKit
         product: DeckhandKit
@@ -21,7 +22,6 @@ targets:
       properties:
         CFBundleDisplayName: Deckhand
         UILaunchScreen: {}
-        UIUserInterfaceStyle: Dark
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft
@@ -39,6 +39,7 @@ targets:
         CODE_SIGN_STYLE: Automatic
         SWIFT_VERSION: "6.2"
         TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_USER_SCRIPT_SANDBOXING: NO
   DeckhandMenu:
     type: application
