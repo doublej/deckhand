@@ -81,6 +81,24 @@ def test_an_empty_answer_is_reported_as_nothing_heard(monkeypatch, tmp_path):
     assert transcribe.transcribe(clip) == (None, "nothing recognisable in that clip")
 
 
+def test_a_closed_utt_is_named_as_the_cause(monkeypatch, tmp_path):
+    """Errno 61 on the port means nobody is listening: the app is shut, not broken."""
+    import urllib.error
+    import urllib.request
+
+    monkeypatch.setattr(transcribe, "_token", "t")
+    clip = tmp_path / "clip.m4a"
+    clip.write_bytes(b"x")
+
+    def refused(*_a, **_k):
+        raise urllib.error.URLError(ConnectionRefusedError(61, "Connection refused"))
+
+    monkeypatch.setattr(urllib.request, "urlopen", refused)
+    text, error = transcribe.transcribe(clip)
+    assert text is None
+    assert error == "utt is not running on the Mac — open utt and try again"
+
+
 class _Response:
     def __init__(self, body: bytes):
         self._body = body

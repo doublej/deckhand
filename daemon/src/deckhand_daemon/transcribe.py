@@ -93,7 +93,12 @@ def transcribe(clip: Path) -> tuple[str | None, str | None]:
         return (text, None) if text else (None, "nothing recognisable in that clip")
     except urllib.error.HTTPError as error:
         return None, _message(error)
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as error:
+    except urllib.error.URLError as error:
+        # Nothing on the port means the app is not open. Say that, not the errno.
+        if isinstance(error.reason, ConnectionRefusedError):
+            return None, "utt is not running on the Mac — open utt and try again"
+        return None, f"utt did not answer: {error.reason}"
+    except (TimeoutError, json.JSONDecodeError) as error:
         return None, f"utt did not answer: {error}"
 
 
