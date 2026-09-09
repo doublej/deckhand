@@ -162,19 +162,19 @@ struct SessionView: View {
     /// menu is there and says why rather than quietly doing nothing.
     private var controls: some View {
         Menu {
-            Button("Show on the Mac", systemImage: "macwindow") {
+            Button("Show on the Mac", systemImage: "display") {
                 Task { await model.focus(session) }
             }
-            Button("Rename…", systemImage: "pencil") {
+            Button("Rename…", systemImage: "text.cursor") {
                 wantedName = session.name
                 renaming = true
             }
             // Always reachable, not only when something looks wrong: every other view here is
             // a reading of that file, and this is the file.
-            Button("Raw transcript", systemImage: "doc.plaintext") { reading = true }
+            Button("Raw transcript", systemImage: "scroll") { reading = true }
             // For prompts that outlived the session that was going to read them: a session
             // killed mid-queue leaves its enqueues with nothing to remove them.
-            Button("Clear queued prompts", systemImage: "tray") {
+            Button("Clear queued prompts", systemImage: "tray.and.arrow.up") {
                 Task { await model.clearQueue(for: session) }
             }
             .disabled((model.queued[session.sessionId] ?? []).isEmpty)
@@ -284,7 +284,7 @@ struct SessionView: View {
             ReviewCard(
                 text: text,
                 target: session.name,
-                send: { Task { await model.send(text, to: session) } },
+                send: { edited in Task { await model.send(edited, to: session) } },
                 discard: { model.discard(for: session) },
                 snaps: model.snaps(for: session),
                 attach: { model.attach($0, to: session) },

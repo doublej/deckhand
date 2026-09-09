@@ -182,7 +182,7 @@ struct SessionListView: View {
             ReviewCard(
                 text: text,
                 target: session.name,
-                send: { Task { await model.send(text, to: session) } },
+                send: { edited in Task { await model.send(edited, to: session) } },
                 discard: { model.discard(for: session) },
                 compact: true,
                 snaps: model.snaps(for: session),
@@ -194,9 +194,14 @@ struct SessionListView: View {
     }
 
     private func star(_ session: Session) -> some View {
-        Button(model.preferences.isFavorite(session.name) ? "Unstar" : "Star",
-               systemImage: "star") { model.toggleFavorite(session) }
-            .tint(Palette.tint)
+        let starred = model.preferences.isFavorite(session.name)
+        // The glyph says what the swipe will do, like the word beside it. It was `star` either
+        // way, so on a starred row the action and its icon disagreed.
+        return Button(starred ? "Unstar" : "Star",
+                      systemImage: starred ? "star.slash" : "star") {
+            model.toggleFavorite(session)
+        }
+        .tint(Palette.tint)
     }
 
     private func hide(_ session: Session, _ hidden: Bool) -> some View {

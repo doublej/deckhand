@@ -9,7 +9,9 @@ import SwiftUI
 struct ReviewCard: View {
     let text: String
     let target: String
-    let send: () -> Void
+    /// Takes the words as they stand when Send is pressed, which is not always the words that
+    /// were heard: what utt returns is a first draft, and the point of holding it is to fix it.
+    let send: (String) -> Void
     let discard: () -> Void
     /// Small enough for a deck column, which has no room for a full card.
     var compact = false
@@ -20,15 +22,28 @@ struct ReviewCard: View {
     var paste: (() -> Void)?
     var unattach: ((Snap) -> Void)?
     @State private var picked: PhotosPickerItem?
+    @State private var editing = false
+    /// The words as they stand. Seeded from what was heard and kept across an edit, so opening
+    /// the editor twice does not throw away the first correction.
+    @State private var draft: String?
+
+    private var words: String { draft ?? text }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.extraSmall) {
             attachments
-            Text(text)
-                .font(compact ? .system(size: 10) : Typography.mono)
-                .foregroundStyle(Palette.textPrimary)
-                .lineLimit(compact ? 4 : 6)
-                .fixedSize(horizontal: false, vertical: true)
+            // All of it. This was capped at six lines, which quietly hid the end of anything
+            // said in more than a sentence — and the end of a spoken instruction is usually
+            // the part with the actual instruction in it. Long ones scroll rather than clip.
+            ScrollView {
+                Text(words)
+                    .font(compact ? .system(size: 10) : Typography.mono)
+                    .foregroundStyle(Palette.textPrimary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxHeight: compact ? 96 : 260)
+            .scrollBounceBehavior(.basedOnSize)
             if !snaps.isEmpty { pinned }
             HStack(spacing: Spacing.extraSmall) {
                 Text("→ \(target)")
@@ -40,10 +55,20 @@ struct ReviewCard: View {
                     .buttonStyle(.plain)
                     .font(Typography.hint)
                     .foregroundStyle(Palette.textSecondary)
-                Button("Send", action: send)
+                Button("Edit") { editing = true }
+                    .buttonStyle(.plain)
+                    .font(Typography.hint)
+                    .foregroundStyle(Palette.tint)
+                Button("Send") { send(words) }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                     .tint(Palette.tint)
+            }
+        }
+        .sheet(isPresented: $editing) {
+            Editor(words: words, target: target) { edited in
+                draft = edited
+                editing = false
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -65,7 +90,7 @@ struct ReviewCard: View {
         if let attach {
             HStack(spacing: Spacing.small) {
                 PhotosPicker(selection: $picked, matching: .images, photoLibrary: .shared()) {
-                    Attach(word: "Photo", symbol: "photo.on.rectangle", compact: compact)
+                    Attach(word: "Photo", symbol: "photo.badge.plus", compact: compact)
                 }
                 if let paste {
                     Button(action: paste) {
@@ -142,6 +167,50 @@ private struct Attach: View {
             Image(systemName: symbol).font(.system(size: 13, weight: .semibold))
         } else {
             Label(word, systemImage: symbol)
+        }
+    }
+}
+
+/// The whole screen above the keyboard, as one field holding what was heard.
+///
+/// A phone dictates better than it types, but not perfectly: utt hears a name wrong, or the
+/// sentence ran on, and the fix is two words. The card is far too small a place to make that
+/// fix — so the edit is a page of its own, opened focused with the keyboard already up, which
+/// is the only arrangement where correcting one word is faster than saying the whole thing again.
+private struct Editor: View {
+    let words: String
+    let target: String
+    let keep: (String) -> Void
+    @State private var edited: String = ""
+    @FocusState private var typing: Bool
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            TextEditor(text: $edited)
+                .font(Typography.mono)
+                .focused($typing)
+                .scrollContentBackground(.hidden)
+                .padding(.horizontal, Spacing.small)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Palette.surfaceGround)
+                .navigationTitle("→ \(target)")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("Cancel") { dismiss() }.tint(Palette.textSecondary)
+                    }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Done") { keep(edited) }.tint(Palette.tint).fontWeight(.semibold)
+                    }
+                }
+        }
+        .task {
+            edited = words
+            // A beat, or the field takes focus before it is on screen and the keyboard does
+            // not come up at all — which leaves a page that looks editable and is not.
+            try? await Task.sleep(for: .milliseconds(120))
+            typing = true
         }
     }
 }

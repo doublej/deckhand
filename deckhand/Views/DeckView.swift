@@ -151,7 +151,7 @@ private struct Column: View {
                 ReviewCard(
                     text: review,
                     target: session.name,
-                    send: { send(review) },
+                    send: { send($0) },
                     discard: discard,
                     compact: true
                 )

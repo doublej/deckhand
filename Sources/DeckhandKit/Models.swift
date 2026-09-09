@@ -102,9 +102,14 @@ public enum Control: String, CaseIterable, Sendable {
 
     public var symbol: String {
         switch self {
-        case .cancel: "stop.circle"
-        case .compact: "arrow.down.right.and.arrow.up.left"
-        case .clear: "eraser"
+        // Filled, not outlined: this is the one you reach for while something is
+        // running, and an outline of a stop sign reads as a suggestion.
+        case .cancel: "stop.circle.fill"
+        // Says what compacting does to the conversation — folds it — where the old
+        // four-arrow glyph was the generic "make this smaller" from a window chrome.
+        case .compact: "rectangle.compress.vertical"
+        // The only irreversible thing in the app, and an eraser did not say so.
+        case .clear: "trash"
         }
     }
 

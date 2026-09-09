@@ -66,7 +66,7 @@ struct QueuedCard: View {
             if let force {
                 // The honest label. There is no way to make a session read its inbox early —
                 // the inbox is drained when the turn ends — so this ends the turn, and says so.
-                Button("Stop the run so it reads this", systemImage: "forward.end", action: force)
+                Button("Stop the run so it reads this", systemImage: "stop.circle.fill", action: force)
                     .buttonStyle(.plain)
                     .font(Typography.hint)
                     .foregroundStyle(Palette.tint)
