@@ -57,6 +57,21 @@ extension AppModel {
         attached[session.sessionId]?.removeAll { $0.id == snap.id }
     }
 
+    /// The marked copy in the unmarked one's place, keeping its spot in the strip — the pictures
+    /// reach the session in the order they were attached, and the remarks about them were laid
+    /// into the card in that same order, so taking one off the end and adding it back would put
+    /// the words and the pictures out of step.
+    ///
+    /// False when that picture is not attached any more, which is the one case where the remarks
+    /// must not be written at all. See `feedback(_:of:in:)`.
+    func replace(_ snap: Snap, with copy: Snap, in session: Session) -> Bool {
+        guard let spot = attached[session.sessionId]?.firstIndex(where: { $0.id == snap.id }) else {
+            return false
+        }
+        attached[session.sessionId]?[spot] = copy
+        return true
+    }
+
     /// Sends the words, with anything pinned to them.
     ///
     /// The pictures go first and the words name where they landed, so a failed upload means
