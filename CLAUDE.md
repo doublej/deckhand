@@ -1,67 +1,83 @@
 # deckhand
 
-> iOS remote for live Claude Code sessions in iTerm — list, read, and speak to them
+> iOS remote for the Claude Code sessions running in iTerm on the Mac
 
 ## What this is
 
-An iOS SwiftUI application built with SwiftPM. Deployment target: `26.0`. SwiftLint is the lint bar; tests are SwiftPM-driven.
+Two halves in one repo. A Python daemon on the Mac lists every live Claude Code session,
+serves the last rounds of its conversation, and stores voice clips the phone sends. A SwiftUI
+iOS app is the remote: pick a session, read what it just said, hold to talk.
+
+Phase 1 (shipped) carries audio to the Mac and stops there — `transcript` in the upload
+receipt is always `null`. Phase 2 transcribes on the Mac and types the result into the pane.
+
+## Stack
+
+- Daemon: Python 3.13, FastAPI, uv. Port **4180**, binds `0.0.0.0`, launchd agent
+  `com.jurrejan.deckhand`.
+- App: Swift 6.2, SwiftUI, iOS 26. `DeckhandKit` (SwiftPM library) holds the models and the
+  HTTP client so they are testable on the Mac; the app target comes from XcodeGen.
+- State on the Mac: `~/Library/Application Support/Deckhand/` — `token` and `audio/<sessionId>/`.
 
 ## Mental model
 
 ```
-deckhand/
-└── ...             # SwiftUI app source (views, models, services)
-Package.swift       # SwiftPM manifest — executable target + tests
-Justfile            # task runner
-.swiftlint.yml      # strict ruleset
+daemon/src/deckhand_daemon/
+  sessions.py     # which Claude sessions are alive, and their iTerm pane
+  transcripts.py  # the last rounds, read from the tail of the session's JSONL
+  app.py          # the five endpoints
+  config.py       # data dir, token, port
+Sources/DeckhandKit/
+  Models.swift, DeckhandClient.swift, ServerSettings.swift
+deckhand/         # the app: App, Model, Recorder, Views/
+UITests/          # drives the simulator against a running daemon
+launchd/          # the agent plist, symlinked into ~/Library/LaunchAgents
 ```
 
-The runtime path is `App entry (`@main struct ... : App`) → root `Scene` → `View` hierarchy`. New surfaces are SwiftUI `View` types composed from the root scene; persistence / network work belongs in `@Observable` services owned at the app or scene level.
+`GET /sessions` → tap a row → `GET /sessions/{id}/turns` → hold to talk →
+`POST /sessions/{id}/audio`. `POST /sessions/{id}/focus` brings that pane forward on the Mac.
+`/health` is the only unauthenticated route; everything else needs the `x-deckhand-token`
+header.
 
-## Invariants
+## Quirks worth knowing
 
-- SwiftPM is the build system — no Xcode project files committed. `just xcode` opens the package in Xcode for editing.
-- SwiftUI for the UI layer (UIKit only where SwiftUI cannot reach).
-- `async` / `await` for concurrency; avoid completion handlers and explicit `DispatchQueue` work in new code.
-- SwiftLint `--strict` must pass — no warnings.
-- Functions stay small (5–10 lines target, 20 max).
-- Errors surface at the boundary; throw, propagate with `try`, handle at the SwiftUI layer.
-
-## Common change patterns
-
-- **Add a view** → new `struct ...: View` in a dedicated file.
-- **Add a model** → `struct` (value-typed) or `@Observable` class for state that survives across views.
-- **Add a service** → class with `async` methods, injected via environment or initializer.
-- **Add a dependency** → declare in `Package.swift` `dependencies:` and the executable target's `dependencies:`.
+- **The join that makes this work**: Claude Code writes `~/.claude/sessions/<pid>.json` for
+  every running session — sessionId, cwd, name, and a live busy/idle status. Those files
+  outlive the process, so a record only counts when `ps` still shows that pid. `ps` gives the
+  tty, `it2 session list --json` maps tty → iTerm pane. No hooks, no polling of iTerm's title.
+- Transcript folder names are lossy (`/` and `_` both become `-`), so the JSONL is found by
+  globbing `~/.claude/projects/*/<sessionId>.jsonl`, never by rebuilding the path.
+- Transcripts run to megabytes: only the last 512 KB is read, and the first line of that
+  chunk is dropped as a fragment.
+- Sessions with no iTerm pane are hidden — unless iTerm answers nothing at all, in which case
+  every live session is listed so the app still works without the iTerm Python API.
+- ATS: the app talks plain HTTP to a `.local` name, which needs `NSAllowsLocalNetworking`
+  plus `NSLocalNetworkUsageDescription` (both in `project.yml`, not a checked-in plist).
+- **Device installs are blocked**: Xcode is signed out on this Mac, so `just device` fails at
+  provisioning. Sign in as `jurrejan@gmail.com` (team KA6433FU8U) first. The simulator path
+  (`just sim`, `just ui-test`) needs nothing.
+- Phase 2 has two ready threads: `messagingSocketPath` in the session record is Claude Code's
+  own peer socket (better than typing into the pane), and `python/parakeet-server` is the
+  local ASR service, currently disabled for memory.
 
 ## Verification
 
-Run `just check` after every change. It composes:
+`just check` — Justfile format, file sizes, directory sizes, SwiftLint, both builds, Swift
+tests, ruff, pytest. The app build needs the simulator named in the Justfile's `sim`.
 
-`just-fmt-check` + `loc-check` + `dir-check` + `lint` + `build` + `test`
+`just ui-test` additionally drives the simulator against a daemon started with `just daemon`.
 
-Recipe reference:
-
-- `just install` — resolve SwiftPM dependencies (warns if SwiftLint missing)
-- `just lint` — `swiftlint --strict`
-- `just lint-fix` — `swiftlint --fix` then relint
-- `just build` / `just build-release` — debug / release build
-- `just test` — SwiftPM test
-- `just xcode` — open in Xcode (required for running on a simulator / device)
-- `just loc-check` / `just dir-check` — file-size and per-directory thresholds from `.quality.json`
-- `just just-fmt-check` — verify Justfile formatting
-- `just clean` — remove `.build/` artifacts
-- `just update-scaffold` — pull updates from the cookiecutter template
+- `just daemon` — run the daemon, prints its address and pairing token
+- `just token` — print the token again
+- `just sim` — build, install and launch in the simulator, already paired
+- `just install-agent` / `just uninstall-agent` — run it at login, or stop doing that
 
 ## Related context
 
-- [agent.md](agent.md) — verify loop, auto-fix commands, common tasks, boundaries
-- `.claude/` — Claude Code settings, scaffold-update hook, library-freshness hook, diagnostic logging
-- `.quality.json` — loc / dir thresholds (single source of truth)
-- `.swiftlint.yml` — strict lint ruleset
-- As this project grows, add nested `CLAUDE.md` files in high-value subfolders (Views, Services, Models, integrations) following the `claude-md-tree` skill's context-packet pattern.
+- [agent.md](agent.md) — verify loop, auto-fix commands, boundaries
+- `.quality.json` — loc / dir thresholds
+- `launchd/com.jurrejan.deckhand.plist` — registered in `multi-stack/project-atlas/shared/daemons.json`
 
-<!-- agent-log:policy -->
 ### Shared agent journal
 
 Use `./agent-log` (a shim for `atlas agent-log` — both are identical) for short-lived

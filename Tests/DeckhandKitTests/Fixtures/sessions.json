@@ -1,0 +1,52 @@
+{
+  "sessions": [
+    {
+      "session_id": "809bbb83-b4dd-4680-8109-de8c18cf7d69",
+      "pid": 52073,
+      "name": "warm-okapi",
+      "cwd": "/Users/jurrejan/dev/web/the-ultimate-music-quiz",
+      "status": "busy",
+      "updated_at": 1788952243.232,
+      "tty": "ttys014",
+      "pane": {
+        "iterm_session_id": "240A0D3F-FEE7-49CD-860B-7FBA151F8A68",
+        "window_id": "pty-5975873D-B27B-4C3A-A761-4FF703C4C8D7",
+        "tab_id": "180",
+        "title": "\u25d0 warm-okapi"
+      },
+      "folder": "the-ultimate-music-quiz"
+    },
+    {
+      "session_id": "d226803b-bb2e-4d27-89fd-a01784faafef",
+      "pid": 84029,
+      "name": "framelink",
+      "cwd": "/Users/jurrejan/dev/multi-stack/framelink",
+      "status": "busy",
+      "updated_at": 1788952226.262,
+      "tty": "ttys017",
+      "pane": {
+        "iterm_session_id": "AC4C3870-EEA1-404F-9C9C-633500DC00D7",
+        "window_id": "pty-5975873D-B27B-4C3A-A761-4FF703C4C8D7",
+        "tab_id": "173",
+        "title": "\u25d0 framelink"
+      },
+      "folder": "framelink"
+    },
+    {
+      "session_id": "333a1f7c-43af-42ff-bf8b-46952ad86697",
+      "pid": 65330,
+      "name": "ios-claude-sessions",
+      "cwd": "/Users/jurrejan/dev",
+      "status": "busy",
+      "updated_at": 1788952220.769,
+      "tty": "ttys003",
+      "pane": {
+        "iterm_session_id": "AB195F9E-5A57-4149-AB10-7EAB80160387",
+        "window_id": "pty-5975873D-B27B-4C3A-A761-4FF703C4C8D7",
+        "tab_id": "181",
+        "title": "\u25d0 ios-claude-sessions"
+      },
+      "folder": "dev"
+    }
+  ]
+}

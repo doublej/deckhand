@@ -2,14 +2,20 @@
 import PackageDescription
 
 let package = Package(
-    name: "Deckhand",
+    name: "DeckhandKit",
     platforms: [
-        .iOS(.v26)
+        .iOS(.v26),
+        .macOS(.v15)
+    ],
+    products: [
+        .library(name: "DeckhandKit", targets: ["DeckhandKit"])
     ],
     targets: [
-        .executableTarget(
-            name: "Deckhand",
-            path: "deckhand"
+        .target(name: "DeckhandKit"),
+        .testTarget(
+            name: "DeckhandKitTests",
+            dependencies: ["DeckhandKit"],
+            resources: [.copy("Fixtures")]
         )
     ]
 )
