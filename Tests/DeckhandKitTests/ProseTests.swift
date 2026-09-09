@@ -132,3 +132,29 @@ struct AskAndAssetTests {
         #expect(asset.folder == "/tmp/a")
     }
 }
+
+@Suite("Renaming a session")
+struct RenameTests {
+    @Test("what you decided about a session follows it to its new name")
+    func preferencesFollow() {
+        // Keyed by name, because a session that restarts keeps its name and gets a new id.
+        // That holds until the name itself changes, and then the star has to be carried.
+        var preferences = Preferences(favorites: ["promo"], hidden: ["noisy"])
+        preferences.renamed(from: "promo", to: "promo-video-director")
+        preferences.renamed(from: "noisy", to: "quiet")
+
+        #expect(preferences.isFavorite("promo-video-director"))
+        #expect(!preferences.isFavorite("promo"))
+        #expect(preferences.isHidden("quiet"))
+        #expect(!preferences.isHidden("noisy"))
+    }
+
+    @Test("a session nobody starred stays unstarred under its new name")
+    func nothingInvented() {
+        var preferences = Preferences()
+        preferences.renamed(from: "utt", to: "utt-2")
+
+        #expect(!preferences.isFavorite("utt-2"))
+        #expect(!preferences.isHidden("utt-2"))
+    }
+}

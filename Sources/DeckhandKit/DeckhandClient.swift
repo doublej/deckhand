@@ -105,6 +105,13 @@ public struct DeckhandClient: Sendable {
         _ = try await send(request(.post, "sessions/\(sessionId)/control?action=\(action.rawValue)"))
     }
 
+    /// Give the session a new display name, by running Claude Code's own `/rename` in its pane.
+    public func rename(_ sessionId: String, to name: String) async throws {
+        var req = request(.post, "sessions/\(sessionId)/name")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        _ = try await send(req, body: try JSONEncoder().encode(["name": name]))
+    }
+
     /// Bring the session's iTerm pane to the front on the Mac.
     public func focus(_ sessionId: String) async throws {
         _ = try await send(request(.post, "sessions/\(sessionId)/focus"))

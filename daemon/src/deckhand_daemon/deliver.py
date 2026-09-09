@@ -68,6 +68,36 @@ def control(session: Session, action: str) -> str | None:
     return None
 
 
+MAX_NAME = 60
+
+
+def rename(session: Session, name: str) -> str | None:
+    """Give the session a new display name. Returns None on success, or why not.
+
+    `/rename` is Claude Code's own command and it takes the name as an argument, so this is the
+    same two keystroke bursts as anything else typed into the pane. The registry only picks the
+    new name up once the session runs the command, which for a busy one is when its turn ends —
+    so a rename can look like nothing happened for a while, and that is the truth of it.
+    """
+    wanted = clean_name(name)
+    if not wanted:
+        return "a name cannot be empty"
+    if not session.pane:
+        return f"{session.name} has no iTerm pane — nothing to type the rename into"
+    for burst in (CLEAR_LINE + f"/rename {wanted}", RETURN):
+        if not _keystrokes(session.pane.iterm_session_id, burst):
+            return f"iTerm would not rename {session.name}"
+    log.info("renamed %s to %s", session.name, wanted)
+    return None
+
+
+def clean_name(name: str) -> str:
+    """One line of ordinary characters. This is typed into a live prompt, so a newline in it
+    would submit half a command and leave the rest sitting in the box."""
+    flat = " ".join(name.split())
+    return "".join(c for c in flat if c.isprintable())[:MAX_NAME].strip()
+
+
 def deliver(session: Session, text: str, route: str = "auto") -> tuple[str | None, str | None]:
     """Returns (route taken, error). Never raises: a session that has gone is not an exception.
 

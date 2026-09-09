@@ -156,6 +156,25 @@ final class AppModel {
         }
     }
 
+    /// Rename a session on the Mac, and move what you had decided about it onto the new name.
+    ///
+    /// The listing catches up on its own once the session actually runs the command — which
+    /// for a busy one is when its turn ends, so the status line says it has been asked rather
+    /// than claiming it is done.
+    func rename(_ session: Session, to name: String) async {
+        guard let client = settings.client() else { return }
+        let wanted = name.collapsed
+        guard !wanted.isEmpty, wanted != session.name else { return }
+        await run {
+            try await client.rename(session.sessionId, to: wanted)
+            self.preferences.renamed(from: session.name, to: wanted)
+            self.preferences.save()
+            self.status = session.isBusy
+                ? "\(session.name) will be \(wanted) when it finishes this turn"
+                : "\(session.name) is now \(wanted)"
+        }
+    }
+
     func focus(_ session: Session) async {
         guard let client = settings.client() else { return }
         await run {

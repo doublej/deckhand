@@ -66,6 +66,16 @@ public struct Preferences: Equatable, Sendable {
         favorites.formSymmetricDifference([name])
     }
 
+    /// Carry what you decided about a session onto its new name.
+    ///
+    /// These are keyed by name because a session that restarts keeps its name and gets a new
+    /// id — which is the right trade until the name itself changes, and then the star has to
+    /// be moved by hand or it is silently lost.
+    public mutating func renamed(from old: String, to new: String) {
+        if favorites.remove(old) != nil { favorites.insert(new) }
+        if hidden.remove(old) != nil { hidden.insert(new) }
+    }
+
     public mutating func setHidden(_ name: String, _ hide: Bool) {
         if hide {
             hidden.insert(name)

@@ -10,6 +10,8 @@ struct SessionView: View {
     @State private var showing: Pane = .summary
     /// Set while the one control that cannot be undone waits to be confirmed.
     @State private var confirming: Control?
+    @State private var renaming = false
+    @State private var wantedName = ""
     @Environment(\.dismiss) private var dismiss
 
     /// Three things you want on arriving, and they want different layouts: the briefing wants
@@ -40,6 +42,17 @@ struct SessionView: View {
         // that already named the page — two rows of chrome before a word of content. The
         // chevron moved into the header and the band went with it.
         .toolbar(.hidden, for: .navigationBar)
+        // A name is the one thing here you type rather than press, and it is short enough that
+        // a whole screen for it would be more ceremony than the thing deserves.
+        .alert("Rename \(session.name)", isPresented: $renaming) {
+            TextField("Name", text: $wantedName)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+            Button("Rename") { Task { await model.rename(session, to: wantedName) } }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Runs Claude Code's own /rename in its pane on the Mac.")
+        }
         .confirmationDialog(
             "Clear \(session.name)?",
             isPresented: .init(get: { confirming != nil }, set: { if !$0 { confirming = nil } }),
@@ -124,6 +137,10 @@ struct SessionView: View {
         Menu {
             Button("Show on the Mac", systemImage: "macwindow") {
                 Task { await model.focus(session) }
+            }
+            Button("Rename…", systemImage: "pencil") {
+                wantedName = session.name
+                renaming = true
             }
             Divider()
             ForEach(Control.allCases, id: \.self) { action in

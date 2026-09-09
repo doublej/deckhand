@@ -130,12 +130,21 @@ unauthenticated route; everything else needs the `x-deckhand-token` header, and 
   input — `input_tokens` + `cache_creation_input_tokens` + `cache_read_input_tokens`. Output is
   not in it. The limit is `autoCompactWindow` from `~/.claude/settings.json` (450k here), not
   the model's own ceiling: what matters is when *this* Mac folds a session into a summary.
-  Read over a 256 KB tail, because it is asked for every session on every listing.
+  Read over a 256 KB tail, because it is asked for every session on every listing. It lags by
+  a turn on a busy session — the usage of a request in flight is not written until the assistant
+  entry it produced lands — and it will not match a statusline counting against the model's full
+  window rather than this setting.
 - **Never call a public type `Context` in DeckhandKit.** Inside a `UIViewRepresentable`,
   `Context` is already a typealias for `UIViewRepresentableContext<Self>`, so a module-level
   `Context` imported beside SwiftUI silently breaks the conformance of anything spelling
   `makeUIView(context:)` the documented way — the error names the representable, not the clash.
   It is `ContextWindow`.
+- **Renaming is `/rename`, Claude Code's own command**, typed into the pane like anything else
+  — it is `supportsNonInteractive`, so with an argument it renames without opening a picker.
+  Verified against a live session: the registry's `name` and `nameSince` both move. The phone's
+  favourites and hidden set are keyed by **name**, so `Preferences.renamed(from:to:)` has to
+  carry them or a starred session silently loses its star. A busy session only runs the command
+  when its turn ends, so the listing catches up late and the app says so rather than lying.
 - **Stop, compact and clear are keystrokes, not messages.** `deliver.control` sends Escape for
   a cancel and types `/compact` or `/clear` the same way a spoken line is typed. The peer socket
   cannot do any of them — it delivers a message and none of these is one — so a session with no

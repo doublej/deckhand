@@ -190,6 +190,16 @@ async def control_session(
     return {"sent": action}
 
 
+@app.post("/sessions/{session_id}/name", dependencies=[Depends(require_token)])
+async def rename_session(session_id: str, name: str = Body(embed=True)) -> dict:
+    """Give a session a new display name, by running Claude Code's own `/rename` in its pane."""
+    session = await _live_session(session_id)
+    error = await asyncio.to_thread(deliver.rename, session, name)
+    if error:
+        raise HTTPException(status_code=409, detail=error)
+    return {"renamed": deliver.clean_name(name), "was": session.name}
+
+
 @app.post("/sessions/{session_id}/audio", dependencies=[Depends(require_token)], status_code=201)
 async def upload_audio(
     session_id: str,

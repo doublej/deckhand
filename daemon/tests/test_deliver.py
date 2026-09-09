@@ -211,3 +211,37 @@ def test_an_unknown_control_is_refused_rather_than_typed(inbox, claude_home, mon
     session.pane = a_pane()
 
     assert deliver.control(session, "rm -rf") == "no such control 'rm -rf'"
+
+
+def test_a_rename_runs_claude_code_s_own_command(inbox, claude_home, monkeypatch):
+    """`/rename` takes the name as an argument, so it is typed like any other line."""
+    typed: list[list[str]] = []
+    monkeypatch.setattr(
+        deliver.subprocess,
+        "run",
+        lambda argv, **_k: (typed.append(argv), subprocess.CompletedProcess(argv, 0, "", ""))[1],
+    )
+    session = session_for(inbox.getsockname())
+    session.pane = a_pane()
+
+    assert deliver.rename(session, "  the   promo  edit \n") is None
+    assert typed == [
+        ["it2", "session", "send", "-s", "PANE-1", deliver.CLEAR_LINE + "/rename the promo edit"],
+        ["it2", "session", "send", "-s", "PANE-1", deliver.RETURN],
+    ]
+
+
+def test_a_name_is_flattened_before_it_is_typed():
+    """A newline in it would submit half a command and leave the rest in the box."""
+    assert deliver.clean_name("two\nlines") == "two lines"
+    assert deliver.clean_name("  padded  ") == "padded"
+    assert deliver.clean_name("x" * 200) == "x" * deliver.MAX_NAME
+    assert deliver.clean_name("   ") == ""
+
+
+def test_an_empty_name_is_refused_rather_than_typed(inbox, claude_home, monkeypatch):
+    monkeypatch.setattr(deliver.subprocess, "run", lambda *_a, **_k: pytest.fail("typed anyway"))
+    session = session_for(inbox.getsockname())
+    session.pane = a_pane()
+
+    assert deliver.rename(session, "  ") == "a name cannot be empty"
