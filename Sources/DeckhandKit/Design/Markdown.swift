@@ -158,22 +158,27 @@ public struct Markdown: View {
 /// heading. `Prose`'s four-block contract is the thing that may not be widened, and this is not
 /// part of it.
 enum Inline {
-    static func styled(_ text: String, at size: CGFloat) -> AttributedString {
+    /// `tint` is what inline code and any address in the line are drawn in. A parameter rather
+    /// than a read of `\.accent`, for the reason ``Links/linked(_:in:)`` gives: this builds an
+    /// `AttributedString` outside the view tree, where there is no environment to read. A renderer
+    /// that is a view passes what it read — which is how a briefing's code goes utt orange with
+    /// the screen around it — and the default keeps everything else on Deckhand's teal.
+    static func styled(_ text: String, at size: CGFloat, in tint: Color = Palette.tint) -> AttributedString {
         let options = AttributedString.MarkdownParsingOptions(
             interpretedSyntax: .inlineOnlyPreservingWhitespace
         )
         guard var parsed = try? AttributedString(markdown: text, options: options) else {
-            return Links.marked(text)
+            return Links.marked(text, in: tint)
         }
         // `AttributedString` marks inline code but does not style it. Half a point under the
         // prose it sits in: a monospaced face at an identical point size still reads as larger.
         for run in parsed.runs where run.inlinePresentationIntent == .code {
             parsed[run.range].font = .system(size: size - 0.5, design: .monospaced)
-            parsed[run.range].foregroundColor = Palette.tint
+            parsed[run.range].foregroundColor = tint
         }
         // A session names addresses the way a person would, bare rather than in brackets, so
         // markdown alone leaves the useful half of them dead.
-        return Links.linked(parsed)
+        return Links.linked(parsed, in: tint)
     }
 }
 

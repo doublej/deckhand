@@ -12,8 +12,8 @@ public enum Links {
     static let local: Set<String> = ["localhost", "127.0.0.1", "0.0.0.0", "::1", "[::1]"]
 
     /// Plain text with every address in it marked, so a `Text` renders them as taps.
-    public static func marked(_ text: String) -> AttributedString {
-        linked(AttributedString(text))
+    public static func marked(_ text: String, in tint: Color = Palette.tint) -> AttributedString {
+        linked(AttributedString(text), in: tint)
     }
 
     /// The same, over text that already carries styling — the summary, which is markdown first.
@@ -21,7 +21,12 @@ public enum Links {
     /// `NSDataDetector` rather than a pattern of my own: it is what the rest of the system uses
     /// to find an address in a message, so what is tappable here is what is tappable everywhere
     /// else. Anything markdown already linked is left exactly as it is.
-    public static func linked(_ attributed: AttributedString) -> AttributedString {
+    ///
+    /// `tint` is the colour an address is drawn in, and it is a parameter rather than a read of
+    /// `\.accent` because this is not a view: an `AttributedString` is built outside the view tree
+    /// and has no environment to read. A caller that is a view passes what it read there; the
+    /// default is for the ones with no opinion.
+    public static func linked(_ attributed: AttributedString, in tint: Color = Palette.tint) -> AttributedString {
         var out = attributed
         let plain = String(attributed.characters)
         guard !plain.isEmpty,
@@ -32,7 +37,7 @@ public enum Links {
                   out[span].link == nil else { continue }
             out[span].link = url
             out[span].underlineStyle = .single
-            out[span].foregroundColor = Palette.tint
+            out[span].foregroundColor = tint
         }
         return out
     }

@@ -17,7 +17,7 @@ struct TurnCard: View {
                     .tracking(1)
                     .foregroundStyle(turn.isUser ? accent : Palette.textTertiary)
             }
-            Text(Links.marked(turn.text))
+            Text(Links.marked(turn.text, in: accent))
                 .font(.system(size: 13))
                 .foregroundStyle(Palette.textPrimary)
                 .textSelection(.enabled)

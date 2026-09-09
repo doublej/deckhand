@@ -25,6 +25,9 @@ struct FilesView: View {
     /// every time — which suffix you picked last is not something a file list should decide for
     /// you on arrival. View state and not the model's, for the same reason.
     @State private var only: String?
+    /// This is a tab inside the session's page, not a surface of its own, so it goes orange with
+    /// the rest of the page while the mark at the foot of it is open.
+    @Environment(\.accent) private var accent
 
     /// The minimum a finger can be asked to hit, and the whole point of this rework. The one raw
     /// number in the file, because no spacing token means "a finger" and rounding it to the
@@ -113,7 +116,7 @@ struct FilesView: View {
             .lineLimit(1)
             .padding(.horizontal, Spacing.medium)
             .frame(minHeight: Self.target)
-            .background(Capsule().fill(chosen ? Palette.tint : Palette.tileIdle))
+            .background(Capsule().fill(chosen ? accent : Palette.tileIdle))
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -134,12 +137,13 @@ struct FilesView: View {
 /// of what it is underneath.
 private struct AssetRow: View {
     let asset: Asset
+    @Environment(\.accent) private var accent
 
     var body: some View {
         HStack(spacing: Spacing.small) {
             Image(systemName: symbol)
                 .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(Palette.tint)
+                .foregroundStyle(accent)
                 .frame(width: 30, height: 30)
                 .background(
                     RoundedRectangle(cornerRadius: 30 * 0.28, style: .continuous)

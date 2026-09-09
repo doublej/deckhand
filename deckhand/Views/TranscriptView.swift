@@ -124,7 +124,6 @@ struct RawView: View {
     @State private var lines: [String] = []
     @State private var read = false
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.accent) private var accent
 
     var body: some View {
         NavigationStack {
@@ -147,7 +146,10 @@ struct RawView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Close") { dismiss() }.tint(accent)
+                    // Teal on purpose, not an oversight: a sheet is its own surface and
+                    // the talk mark is behind it. Same rule as `AssetView` and
+                    // `SessionFilters` — only the page you are dictating into goes orange.
+                    Button("Close") { dismiss() }.tint(Palette.tint)
                 }
             }
         }

@@ -14,6 +14,10 @@ public struct Prose: View {
     /// Deck size: the same four things in the landscape column's own small type. A briefing set
     /// at reading size in a 240pt column is two paragraphs and no column left.
     private let compact: Bool
+    /// A briefing is read inside the session's page and inside a deck column, both of which are
+    /// screens you can dictate into, so its bullets and its inline code go orange with them. The
+    /// inline half cannot read this itself — see ``Inline/styled(_:at:in:)`` — so it is handed on.
+    @Environment(\.accent) private var accent
 
     public init(_ text: String, compact: Bool = false) {
         blocks = Block.parse(text)
@@ -37,7 +41,7 @@ public struct Prose: View {
         case .heading(let text): heading(text)
         case .bullet(let text): bullet(text)
         case .paragraph(let text):
-            Text(Inline.styled(text, at: lead ? leadSize : bodySize))
+            Text(Inline.styled(text, at: lead ? leadSize : bodySize, in: accent))
                 .font(paragraphFont(lead: lead))
                 .foregroundStyle(lead ? Palette.textPrimary : Palette.textSecondary)
                 // Roughly 1.45x the type size. Text set solid reads as a wall; this is the
@@ -68,7 +72,7 @@ public struct Prose: View {
     }
 
     private func heading(_ text: String) -> some View {
-        Text(Inline.styled(text, at: headingSize))
+        Text(Inline.styled(text, at: headingSize, in: accent))
             .font(.system(size: headingSize, weight: .semibold, design: .monospaced))
             .tracking(1)
             .foregroundStyle(Palette.textTertiary)
@@ -84,10 +88,10 @@ public struct Prose: View {
         HStack(alignment: .firstTextBaseline, spacing: Spacing.extraSmall) {
             // A dot from the same grid the marks are drawn on, not a typographic bullet.
             Circle()
-                .fill(Palette.tint)
+                .fill(accent)
                 .frame(width: compact ? 3 : 4, height: compact ? 3 : 4)
                 .offset(y: -1)
-            Text(Inline.styled(text, at: bodySize))
+            Text(Inline.styled(text, at: bodySize, in: accent))
                 .font(.system(size: bodySize))
                 .foregroundStyle(Palette.textPrimary)
                 .lineSpacing(compact ? 2 : 5)
