@@ -1,60 +1,26 @@
 import DeckhandKit
 import SwiftUI
 
-/// Pairing and the two choices that change how the whole app behaves.
+/// Groups of rows, utt's way: an uppercase label, one card, a title and a sentence saying
+/// what the thing does. The sentence is on the page because a tooltip is only read by
+/// someone who already suspects there is something to know.
 struct SettingsView: View {
     @Bindable var model: AppModel
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section("Mac") {
-                    TextField("m2-2.local", text: $model.settings.host)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .keyboardType(.URL)
-                    TextField("token", text: $model.settings.token)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
+            ScrollView {
+                VStack(alignment: .leading, spacing: Spacing.medium) {
+                    mac
+                    talking
+                    route
+                    hidden
+                    footline
                 }
-                .font(.system(.body, design: .monospaced))
-
-                Section("Talking") {
-                    Picker("Button", selection: talkMode) {
-                        ForEach(TalkMode.allCases, id: \.self) { mode in
-                            Text(mode.label).tag(mode)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                }
-
-                Section {
-                    Picker("Route", selection: route) {
-                        ForEach(DeliveryRoute.allCases, id: \.self) { route in
-                            Text(route.label).tag(route)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                } header: {
-                    Text("How it goes in")
-                } footer: {
-                    Text(model.preferences.route.explanation)
-                        .font(.system(.caption2, design: .monospaced))
-                }
-
-                hiddenSection
-
-                Section {
-                    Button("Check connection") {
-                        model.saveSettings()
-                        Task { await model.checkConnection() }
-                    }
-                } footer: {
-                    Text(model.status ?? "The daemon prints its address and token on start: just daemon")
-                        .font(.system(.caption2, design: .monospaced))
-                }
+                .padding(Spacing.medium)
             }
+            .background(Palette.surfaceGround)
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -63,30 +29,104 @@ struct SettingsView: View {
                         model.saveSettings()
                         dismiss()
                     }
+                    .tint(Palette.tint)
                 }
             }
         }
+    }
+
+    private var mac: some View {
+        SettingsGroup("Mac") {
+            SettingRow("Address", detail: "Where the daemon answers. `just daemon` prints it.") {
+                TextField("m2-2.local", text: $model.settings.host)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.URL)
+                    .multilineTextAlignment(.trailing)
+                    .font(Typography.mono)
+                    .frame(maxWidth: 150)
+            }
+            SettingRow("Token", detail: "From the menu bar app: Copy token.") {
+                TextField("token", text: $model.settings.token)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .multilineTextAlignment(.trailing)
+                    .font(Typography.mono)
+                    .frame(maxWidth: 150)
+            }
+            SettingRow("Connection", detail: model.status ?? model.connection.label) {
+                Button("Check") {
+                    model.saveSettings()
+                    Task { await model.checkConnection() }
+                }
+                .buttonStyle(.bordered)
+                .tint(Palette.tint)
+            }
+        }
+    }
+
+    private var talking: some View {
+        SettingsGroup("Talking") {
+            SettingRow("Button", detail: "Hold the mark down, or tap once to start and again to send.") {
+                Picker("Button", selection: talkMode) {
+                    ForEach(TalkMode.allCases, id: \.self) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 180)
+            }
+        }
+    }
+
+    private var route: some View {
+        SettingsGroup("How it goes in") {
+            SettingRow("Route", detail: model.preferences.route.explanation) {
+                Picker("Route", selection: routeChoice) {
+                    ForEach(DeliveryRoute.allCases, id: \.self) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.menu)
+                .tint(Palette.tint)
+            }
+        }
+    }
+
+    @ViewBuilder private var hidden: some View {
+        if !model.preferences.hidden.isEmpty {
+            SettingsGroup("Hidden") {
+                ForEach(Array(model.preferences.hidden).sorted(), id: \.self) { name in
+                    SettingRow(name, detail: "Hidden from the rail.") {
+                        Button("Show") {
+                            model.preferences.setHidden(name, false)
+                            model.preferences.save()
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(Palette.tint)
+                    }
+                }
+            }
+        }
+    }
+
+    private var footline: some View {
+        HStack(spacing: Spacing.medium) {
+            Text("deckhand \(Bundle.main.version)")
+            Text(model.connection.label)
+        }
+        .font(Typography.hint)
+        .foregroundStyle(Palette.textTertiary)
+        .padding(.horizontal, Spacing.xxs)
     }
 
     private var talkMode: Binding<TalkMode> {
         Binding(get: { model.preferences.talkMode }, set: { model.setTalkMode($0) })
     }
 
-    private var route: Binding<DeliveryRoute> {
+    private var routeChoice: Binding<DeliveryRoute> {
         Binding(get: { model.preferences.route }, set: { model.setRoute($0) })
     }
+}
 
-    @ViewBuilder private var hiddenSection: some View {
-        if !model.preferences.hidden.isEmpty {
-            Section("Hidden") {
-                ForEach(Array(model.preferences.hidden).sorted(), id: \.self) { name in
-                    Button("Show \(name)", systemImage: "eye") {
-                        model.preferences.setHidden(name, false)
-                        model.preferences.save()
-                    }
-                    .font(.system(.footnote, design: .monospaced))
-                }
-            }
-        }
+extension Bundle {
+    var version: String {
+        object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
     }
 }

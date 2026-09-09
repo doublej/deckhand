@@ -28,13 +28,29 @@ controls the daemon.
 - Menu bar app (`menubar/`, target `DeckhandMenu`): start, stop, restart, copy the token,
   open the log. `just menubar`.
 - Secrets: onenv namespace **deckhand**, key `UTT_SECRET` (utt's bearer token).
-- App: Swift 6.2, SwiftUI, iOS 26. `DeckhandKit` (SwiftPM library) holds the models and the
-  HTTP client so they are testable on the Mac; the app target comes from XcodeGen.
+- App: Swift 6.2, SwiftUI, iOS 18. `DeckhandKit` (SwiftPM library) holds the models, the HTTP
+  client and the design layer so they are testable on the Mac; the app target comes from
+  XcodeGen.
+- Look: utt's language, because Deckhand is a plugin of utt's and a guest borrows its host's
+  identity whole. `Sources/DeckhandKit/Design/` is a port of `swift/utt/Utt/Design/` — the
+  values are copied from there, never re-picked, so a change in utt is a diff here and not a
+  redesign. The one thing that is Deckhand's own is `Palette.tint` (#3EAFB4) and its mark, an
+  anchor on the same 6×6 dot grid utt's own mark lives on. Recording is the single exception:
+  it goes utt orange, because recording is utt's job in every plugin. The hold-to-talk mark
+  runs `DotMatrixDriver`, utt's shared clock, so it is never still: six seconds a pattern in
+  silence, down to a tenth of a second at full voice, and the glow follows the phone's own
+  input meter while you hold it.
 - State on the Mac: `~/Library/Application Support/Deckhand/` — `token` and `audio/<sessionId>/`.
 
 ## Mental model
 
 ```
+Sources/DeckhandKit/Design/
+  Palette, Typography, Spacing   # utt's tokens, copied
+  DotMatrix.swift # the 6x6 geometry and the level curves; DotGlyph holds the shapes
+  DotMark.swift   # a shape on the grid, and the wordmark
+  StatePill.swift # the four-letter state vocabulary, and a glyph on its tile
+  Chrome.swift    # Card, SettingsGroup, SettingRow, PageHeader
 daemon/src/deckhand_daemon/
   sessions.py     # which Claude sessions are alive, and their iTerm pane
   transcripts.py  # the last rounds, and the activity blob a summary is written from
@@ -94,6 +110,13 @@ unauthenticated route; everything else needs the `x-deckhand-token` header, and 
   settings starts every configured MCP server, which cost more than a minute.
 - Sessions with no iTerm pane are hidden — unless iTerm answers nothing at all, in which case
   every live session is listed so the app still works without the iTerm Python API.
+- **A screen is one of two surfaces.** The sessions list and the landscape deck are the rail:
+  `Palette.lcdGround` with `.environment(\.colorScheme, .dark)`, whatever the phone is set to.
+  Everything else is a page on the system's own light ground. The app therefore forces no
+  colour scheme — it did once, which made both surfaces the same and lost the distinction the
+  whole language rests on.
+- Session glyphs are derived from the session's name with FNV-1a, not `hashValue`: Swift seeds
+  its hashing per process, so a session's face would change on every cold start.
 - ATS: the app talks plain HTTP to a `.local` name, which needs `NSAllowsLocalNetworking`
   plus `NSLocalNetworkUsageDescription` (both in `project.yml`, not a checked-in plist).
 - **Installing on a phone** (`just device`, `just phone="Pocketline Swing" device`) takes four

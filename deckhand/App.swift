@@ -1,3 +1,4 @@
+import DeckhandKit
 import SwiftUI
 
 @main
@@ -6,9 +7,10 @@ struct DeckhandApp: App {
 
     var body: some Scene {
         WindowGroup {
+            // No forced scheme: the rail paints its own dark ground, and a session page is
+            // meant to be the phone's own light one. Forcing dark made both the same surface.
             RootView(model: model)
-                .preferredColorScheme(.dark)
-                .tint(.white)
+                .tint(Palette.tint)
         }
     }
 }

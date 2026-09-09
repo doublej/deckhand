@@ -65,24 +65,52 @@ private struct TalkGesture: ViewModifier {
     }
 }
 
-/// The bar under a transcript: the label says exactly what a press will do.
-struct TalkBar: View {
+/// The mark is the button, and it is the living one: utt's whole show, drifting slowly in
+/// Deckhand's teal at rest. While you talk it turns utt orange, speeds up with your voice and
+/// dims between words — recording is utt's job in every plugin, so it wears utt's colour.
+/// The label says exactly what a press will do.
+struct TalkMark: View {
     let mode: TalkMode
     let isRecording: Bool
     let busy: Bool
+    let level: Double
+    /// What the Mac heard last, kept under the mark so the words are near the button.
+    let heard: String?
 
     var body: some View {
-        Text(label)
-            .font(.system(.footnote, design: .monospaced).weight(.semibold))
-            .foregroundStyle(isRecording ? .black : .white)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 22)
-            .background(isRecording ? .white : .white.opacity(0.12))
+        VStack(spacing: Spacing.extraSmall) {
+            if let heard, !isRecording {
+                Text(heard)
+                    .font(Typography.subtitle)
+                    .foregroundStyle(Palette.textSecondary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+            }
+            DotMark.live(
+                size: 72,
+                tint: isRecording ? Palette.recording : Palette.tint,
+                recording: isRecording,
+                level: isRecording ? level : 0,
+                hotCore: 0.3
+            )
+            .padding(Spacing.extraSmall)
+            .background(
+                RoundedRectangle(cornerRadius: Radius.extraLarge, style: .continuous)
+                    .fill(Palette.lcdGround)
+            )
+            Text(label)
+                .font(Typography.pill)
+                .tracking(1.4)
+                .foregroundStyle(isRecording ? Palette.recording : Palette.textTertiary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, Spacing.medium)
+        .contentShape(.rect)
     }
 
     private var label: String {
-        if busy { return "SENDING…" }
-        if isRecording { return mode == .hold ? "RECORDING — RELEASE TO SEND" : "RECORDING — TAP TO SEND" }
+        if busy { return "SENDING" }
+        if isRecording { return mode == .hold ? "RELEASE TO SEND" : "TAP TO SEND" }
         return mode == .hold ? "HOLD TO TALK" : "TAP TO TALK"
     }
 }

@@ -21,6 +21,16 @@ enum Connection: Equatable {
 
     var isWorking: Bool { self == .checking }
     var isHealthy: Bool { if case .connected = self { true } else { false } }
+
+    /// The same four-letter vocabulary utt uses, so the two apps say a state the same way.
+    var pill: PillState {
+        switch self {
+        case .unpaired: .off
+        case .checking: .wait
+        case .connected(let iterm): iterm == "ok" ? .online : .wait
+        case .failed: .err
+        }
+    }
 }
 
 /// Everything the screens read: the server, the sessions, what they said, what you sent.
@@ -35,6 +45,8 @@ final class AppModel {
     var summaries: [String: String] = [:]
     /// Sessions whose summary is being written right now, so the screen can say so.
     var summarising: Set<String> = []
+    /// The session whose page is open. The rail lights exactly one row, the way utt does.
+    var current: String?
     var connection: Connection = .unpaired
     var status: String?
     var heard: String?

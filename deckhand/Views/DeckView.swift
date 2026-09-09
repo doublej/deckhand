@@ -1,27 +1,23 @@
 import DeckhandKit
 import SwiftUI
 
-/// Landscape: every favourite as a column, transcripts in small type, and holding a whole
-/// column talks to that session. Nothing to aim at — the column is the button.
+/// Landscape: every favourite as a column on the warm ground, transcripts in small type, and
+/// holding a whole column talks to that session. Nothing to aim at — the column is the button.
 struct DeckView: View {
     @Bindable var model: AppModel
     @State private var recorder = Recorder()
     @State private var active: String?
 
+    /// Below this a column is a stripe, not a transcript. Past it the deck scrolls sideways.
+    private static let minColumnWidth: CGFloat = 240
+
     var body: some View {
         VStack(spacing: 0) {
-            ConnectionBar(connection: model.connection, status: model.status)
-            if model.deckSessions.isEmpty {
-                Spacer()
-                Text("Star a session in portrait to put it on the deck")
-                    .font(.system(.footnote, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                Spacer()
-            } else {
-                columns
-            }
+            head
+            if model.deckSessions.isEmpty { placeholder } else { columns }
         }
-        .background(.black)
+        .background(Palette.lcdGround)
+        .environment(\.colorScheme, .dark)
         .task {
             while !Task.isCancelled {
                 await model.refreshSessions()
@@ -31,8 +27,29 @@ struct DeckView: View {
         }
     }
 
-    /// Below this a column is a stripe, not a transcript. Past it the deck scrolls sideways.
-    private static let minColumnWidth: CGFloat = 240
+    private var head: some View {
+        HStack(spacing: Spacing.small) {
+            DotMark(DotGlyph.anchor, size: 24, tint: Palette.tint)
+            Text(model.connection.label)
+                .font(Typography.hint)
+                .foregroundStyle(Palette.textSecondary)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+            StatePill(model.connection.pill)
+        }
+        .padding(.horizontal, Spacing.small)
+        .padding(.vertical, Spacing.extraSmall)
+    }
+
+    private var placeholder: some View {
+        VStack {
+            Spacer()
+            Text("Star a session in portrait to put it on the deck")
+                .font(Typography.railRow)
+                .foregroundStyle(Palette.textSecondary)
+            Spacer()
+        }
+    }
 
     private var columns: some View {
         GeometryReader { geo in
@@ -40,6 +57,7 @@ struct DeckView: View {
                 deck(width: columnWidth(in: geo.size.width))
                     .frame(height: geo.size.height)
             }
+            .scrollIndicators(.hidden)
         }
     }
 
@@ -84,7 +102,7 @@ struct DeckView: View {
     }
 }
 
-/// One session's column: who it is, then as much of the conversation as fits, tiny.
+/// One session's column: a rail row for a head, then as much of the conversation as fits.
 private struct Column: View {
     let session: Session
     let turns: [Turn]
@@ -95,49 +113,63 @@ private struct Column: View {
         VStack(alignment: .leading, spacing: 0) {
             header
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 10) {
+                LazyVStack(alignment: .leading, spacing: Spacing.extraSmall) {
                     if turns.isEmpty {
                         Text("reading…")
-                            .font(.system(size: 8, design: .monospaced))
-                            .foregroundStyle(.tertiary)
+                            .font(.system(size: 9))
+                            .foregroundStyle(Palette.textTertiary)
                     }
                     ForEach(Array(turns.enumerated()), id: \.offset) { index, turn in
-                        TurnBlock(
-                            turn: turn,
-                            compact: true,
-                            showsRole: index == 0 || turns[index - 1].role != turn.role
-                        )
+                        DeckTurn(turn: turn, showsRole: index == 0 || turns[index - 1].role != turn.role)
                     }
                 }
-                .padding(8)
+                .padding(Spacing.extraSmall)
             }
             .scrollDisabled(isRecording)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(isRecording ? .white.opacity(0.16) : .white.opacity(0.04))
+        .background(Color.primary.opacity(isRecording ? 0.10 : 0.04))
         .overlay(alignment: .top) {
             if isRecording || busy {
-                Rectangle().fill(.white).frame(height: 2)
+                Rectangle().fill(Palette.recording).frame(height: 2)
             }
         }
     }
 
     private var header: some View {
-        HStack(spacing: 6) {
-            Rectangle()
-                .fill(session.isBusy ? .white : .white.opacity(0.25))
-                .frame(width: 6, height: 6)
+        HStack(spacing: Spacing.extraSmall) {
+            GlyphTile(DotGlyph.forName(session.name), size: 20, prominent: isRecording)
             Text(session.name)
-                .font(.system(size: 10, design: .monospaced).weight(.medium))
+                .font(Typography.railRowSelected)
+                .foregroundStyle(Palette.textPrimary)
                 .lineLimit(1)
             Spacer(minLength: 0)
-            Text(busy ? "sending" : isRecording ? "listening" : session.folder)
-                .font(.system(size: 8, design: .monospaced))
-                .foregroundStyle(.tertiary)
-                .lineLimit(1)
+            StatePill(isRecording ? .rec : busy ? .wait : session.isBusy ? .busy : .idle)
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, Spacing.extraSmall)
         .padding(.vertical, 6)
-        .background(.white.opacity(0.06))
+        .background(Color.primary.opacity(0.06))
+    }
+}
+
+/// A turn in a column: the same eyebrow the page uses, at deck size.
+private struct DeckTurn: View {
+    let turn: Turn
+    let showsRole: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if showsRole {
+                Text(turn.isUser ? "YOU" : "CLAUDE")
+                    .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                    .tracking(1)
+                    .foregroundStyle(turn.isUser ? Palette.tint : Palette.textTertiary)
+            }
+            Text(turn.text)
+                .font(.system(size: 9))
+                .foregroundStyle(Palette.textPrimary.opacity(turn.isUser ? 1 : 0.75))
+                .lineLimit(14)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

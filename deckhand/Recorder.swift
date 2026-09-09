@@ -1,4 +1,5 @@
 import AVFoundation
+import Foundation
 import Observation
 
 /// Records one clip at a time, 16 kHz mono AAC — what the Mac wants to transcribe later.
@@ -6,7 +7,10 @@ import Observation
 @Observable
 final class Recorder {
     private(set) var isRecording = false
+    /// Amplitude, 0...1, for the mark to burn and cycle by. Zero when nothing is recording.
+    private(set) var level: Double = 0
     private var recorder: AVAudioRecorder?
+    private var metering: Task<Void, Never>?
 
     /// Starts recording, or reports why it could not.
     func start() async -> String? {
@@ -15,9 +19,11 @@ final class Recorder {
         }
         do {
             let recorder = try makeRecorder()
+            recorder.isMeteringEnabled = true
             recorder.record()
             self.recorder = recorder
             isRecording = true
+            meter()
             return nil
         } catch {
             return error.localizedDescription
@@ -38,6 +44,18 @@ final class Recorder {
         ])
     }
 
+    /// Publishes the input level while recording. AVAudioRecorder reports dBFS; the mark
+    /// wants the amplitude that came from, because that is what its curves were fitted to.
+    private func meter() {
+        metering = Task { [weak self] in
+            while !Task.isCancelled, let recorder = self?.recorder {
+                recorder.updateMeters()
+                self?.level = pow(10, Double(recorder.averagePower(forChannel: 0)) / 20)
+                try? await Task.sleep(for: .seconds(0.05))
+            }
+        }
+    }
+
     /// Stops and hands back the clip, or nil when nothing usable was recorded.
     /// Anything under 0.3 s is a tap, and the transcription engine rejects those.
     func stop() -> URL? {
@@ -45,6 +63,9 @@ final class Recorder {
         let tooShort = recorder.currentTime < 0.3
         recorder.stop()
         isRecording = false
+        metering?.cancel()
+        metering = nil
+        level = 0
         self.recorder = nil
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         if tooShort {

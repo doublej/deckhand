@@ -27,8 +27,8 @@ final class DeckLoopTests: XCTestCase {
     func testTheConnectionIsAlwaysStated() throws {
         let app = try launch()
         // Whatever happens, the bar says something: connected, reaching, or why not.
-        let bar = app.staticTexts.matching(
-            NSPredicate(format: "label CONTAINS 'Connected' OR label CONTAINS 'Reaching' OR label CONTAINS 'Not paired'")
+        let bar = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label IN {'ON', 'WAIT', 'ERR', 'OFF'}")
         )
         XCTAssertTrue(bar.firstMatch.waitForExistence(timeout: 20), "no connection status shown")
     }

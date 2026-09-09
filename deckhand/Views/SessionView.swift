@@ -1,7 +1,8 @@
 import DeckhandKit
 import SwiftUI
 
-/// One session: what it has been doing, what it said, and the control that talks back.
+/// One session as a page: who it is, what it has been doing, what it said, and the mark you
+/// hold to answer. Light ground — the rail is the only dark surface in the language.
 struct SessionView: View {
     @Bindable var model: AppModel
     let session: Session
@@ -9,36 +10,26 @@ struct SessionView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ConnectionBar(connection: model.connection, status: model.status)
-            summary
+            header
             transcript
-            heard
-            TalkControl(
-                recorder: recorder,
-                mode: model.preferences.talkMode,
-                isMine: true,
-                onStart: { model.status = "Recording for \(session.name)" },
-                onClip: { await model.upload(clip: $0, to: session) },
-                content: { isRecording, busy in
-                    TalkBar(mode: model.preferences.talkMode, isRecording: isRecording, busy: busy)
-                }
-            )
+            talk
         }
-        .background(.black)
-        .navigationTitle(session.name)
+        .background(Palette.surfaceGround)
+        // The bar stays, emptied: the page names itself, but a phone still needs its back
+        // button and there is nowhere honest to put a second one.
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(.black, for: .navigationBar)
-        .toolbarBackgroundVisibility(.visible, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Focus on Mac", systemImage: "macwindow") {
                     Task { await model.focus(session) }
                 }
                 .disabled(session.pane == nil)
+                .tint(Palette.tint)
             }
         }
         .task {
             model.turns = []
+            model.current = session.sessionId
             await model.loadSummary(for: session)
             while !Task.isCancelled {
                 await model.loadTurns(for: session)
@@ -47,94 +38,109 @@ struct SessionView: View {
         }
     }
 
-    @ViewBuilder private var summary: some View {
-        let text = model.summaries[session.sessionId]
-        let working = model.summarising.contains(session.sessionId)
-        if text != nil || working {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
-                    Text("since you last spoke")
-                        .font(.system(.caption2, design: .monospaced))
-                        .foregroundStyle(.tertiary)
-                    if working {
-                        ProgressView().controlSize(.mini).tint(.white)
-                    }
-                }
-                Text(text ?? "reading what it did…")
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(text == nil ? Color.secondary : Color.white.opacity(0.85))
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
-            .background(.white.opacity(0.04))
+    private var header: some View {
+        PageHeader(
+            glyph: DotGlyph.forName(session.name),
+            title: session.name,
+            subtitle: subtitle
+        ) {
+            StatePill(session.isBusy ? .busy : .idle)
         }
+        .padding(.horizontal, Spacing.medium)
+        .padding(.bottom, Spacing.small)
     }
 
-    @ViewBuilder private var heard: some View {
-        if let heard = model.heard {
-            Text(heard)
-                .font(.system(.footnote, design: .monospaced))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .textSelection(.enabled)
-        }
-    }
-
-    /// Only the first turn of a run carries the name: repeating it reads as an interruption.
-    private func startsRun(_ index: Int) -> Bool {
-        index == 0 || model.turns[index - 1].role != model.turns[index].role
+    private var subtitle: String {
+        let ago = session.lastActive.formatted(.relative(presentation: .numeric, unitsStyle: .narrow))
+        return "\(session.folder) · \(ago)"
     }
 
     private var transcript: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 18) {
-                    if model.turns.isEmpty {
-                        Text(model.connection.isHealthy
-                            ? "Nothing said yet in this session"
-                            : "Waiting for the Mac…")
-                            .font(.system(.footnote, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                    }
+                LazyVStack(alignment: .leading, spacing: Spacing.extraSmall) {
+                    summary
+                    if model.turns.isEmpty { nothingYet }
                     ForEach(Array(model.turns.enumerated()), id: \.offset) { index, turn in
-                        TurnBlock(turn: turn, compact: false, showsRole: startsRun(index)).id(index)
+                        TurnCard(turn: turn, showsRole: startsRun(index)).id(index)
                     }
                 }
-                .padding(16)
+                .padding(.horizontal, Spacing.medium)
+                .padding(.bottom, Spacing.medium)
             }
             .onChange(of: model.turns.count) {
                 withAnimation { proxy.scrollTo(model.turns.count - 1, anchor: .bottom) }
             }
         }
     }
+
+    private var nothingYet: some View {
+        Text(model.connection.isHealthy ? "Nothing said yet in this session" : "Waiting for the Mac…")
+            .font(Typography.subtitle)
+            .foregroundStyle(Palette.textSecondary)
+            .padding(.vertical, Spacing.small)
+    }
+
+    /// What it did while you were away. Absent until there is something to say about it.
+    @ViewBuilder private var summary: some View {
+        let text = model.summaries[session.sessionId]
+        let working = model.summarising.contains(session.sessionId)
+        if text != nil || working {
+            Card(spacing: Spacing.xxs) {
+                HStack(spacing: Spacing.extraSmall) {
+                    Text("SINCE YOU LAST SPOKE")
+                        .font(Typography.eyebrow)
+                        .tracking(1)
+                        .foregroundStyle(Palette.textTertiary)
+                    if working { ProgressView().controlSize(.mini) }
+                }
+                Text(text ?? "reading what it did…")
+                    .font(Typography.subtitle)
+                    .foregroundStyle(text == nil ? Palette.textSecondary : Palette.textPrimary)
+            }
+        }
+    }
+
+    /// The mark is the button. utt's mark, because recording is utt's job — it takes the
+    /// recording tint and speeds up with the meter, exactly as it does in utt's own rail.
+    private var talk: some View {
+        TalkControl(
+            recorder: recorder,
+            mode: model.preferences.talkMode,
+            isMine: true,
+            onStart: { model.status = "Recording for \(session.name)" },
+            onClip: { await model.upload(clip: $0, to: session) },
+            content: { isRecording, busy in
+                TalkMark(mode: model.preferences.talkMode, isRecording: isRecording, busy: busy,
+                         level: recorder.level, heard: model.heard)
+            }
+        )
+    }
+
+    /// Only the first turn of a run carries the name: repeating it reads as an interruption.
+    private func startsRun(_ index: Int) -> Bool {
+        index == 0 || model.turns[index - 1].role != model.turns[index].role
+    }
 }
 
-/// One round of conversation. The compact variant is what the landscape deck shows.
-struct TurnBlock: View {
+/// One round of conversation, as a card with a mono eyebrow.
+struct TurnCard: View {
     let turn: Turn
-    let compact: Bool
     /// False when the turn before this one was from the same speaker.
     let showsRole: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: compact ? 2 : 6) {
+        Card(spacing: Spacing.xxs) {
             if showsRole {
-                Text(turn.isUser ? "you" : "claude")
-                    .font(.system(.caption2, design: .monospaced))
-                    .foregroundStyle(turn.isUser ? Color.white : Color.secondary)
+                Text(turn.isUser ? "YOU" : "CLAUDE")
+                    .font(Typography.eyebrow)
+                    .tracking(1)
+                    .foregroundStyle(turn.isUser ? Palette.tint : Palette.textTertiary)
             }
             Text(turn.text)
-                .font(.system(size: compact ? 8 : 13, design: .monospaced))
-                .foregroundStyle(turn.isUser ? .white : .white.opacity(0.75))
-                .lineLimit(compact ? 14 : nil)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.leading, turn.isUser ? 0 : 10)
-        .overlay(alignment: .leading) {
-            if !turn.isUser {
-                Rectangle().fill(.white.opacity(0.2)).frame(width: 1)
-            }
+                .font(.system(size: 13))
+                .foregroundStyle(Palette.textPrimary)
+                .textSelection(.enabled)
         }
     }
 }
