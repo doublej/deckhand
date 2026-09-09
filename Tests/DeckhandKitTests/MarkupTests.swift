@@ -66,6 +66,44 @@ struct MarkupTests {
         #expect(!text.contains("1."))
     }
 
+    @Test("a picture pinned to the card is described without a path or a filename")
+    func attached() {
+        // The one thing this must not do is invent a path. A picture attached to the review card is
+        // bytes on the phone until Send uploads it, and the Mac renames what arrives to a
+        // timestamp — so both a path and a filename would point at nothing, and a session one
+        // character off a file that does not exist is worse off than one told nothing.
+        let pins = [
+            Pin(spot: CGPoint(x: 12, y: 30), words: "this arrow points at the wrong cell"),
+            Pin(spot: CGPoint(x: 40, y: 90))
+        ]
+        #expect(Pin.prose(pins) == """
+            Feedback on the attached picture, marked on it:
+
+            1. this arrow points at the wrong cell
+            2. look here
+            """)
+        #expect(!Pin.prose(pins).contains("`"))
+        #expect(!Pin.prose(pins).contains("original"))
+    }
+
+    @Test("an attached picture with only a drawing on it says so and stops")
+    func attachedDrawnOnly() {
+        #expect(Pin.prose([]) == "Feedback drawn on the attached picture.")
+    }
+
+    @Test("the numbering is the same for a file and for an attached picture")
+    func sameNumbers() {
+        // The two halves of the feedback are joined by the number on the marker, and the markers
+        // are drawn by one function whichever picture they are on. A file's remarks numbered
+        // differently from an attachment's would be the one bug neither could be read through.
+        let pins = [Pin(spot: .zero, words: "first"), Pin(spot: .zero), Pin(spot: .zero, words: "third")]
+        let numbered = ["1. first", "2. look here", "3. third"]
+        for line in numbered {
+            #expect(Pin.prose(pins).contains(line))
+            #expect(Pin.prose(pins, about: "a.png", at: "/a.png").contains(line))
+        }
+    }
+
     @Test("the original's path is carried exactly as it came")
     func spacedPath() {
         // What a Mac screenshot is really called. The path is the session's way back to the

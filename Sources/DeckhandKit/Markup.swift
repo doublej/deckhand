@@ -38,12 +38,32 @@ public struct Pin: Identifiable, Equatable, Sendable {
         guard !pins.isEmpty else {
             return "Feedback drawn on the attached copy of \(name).\n\n\(original)"
         }
-        var lines = ["Feedback on \(name), marked on the attached copy:", ""]
-        for (number, pin) in pins.enumerated() {
-            let words = pin.words.trimmingCharacters(in: .whitespacesAndNewlines)
-            lines.append("\(number + 1). \(words.isEmpty ? "look here" : words)")
-        }
-        lines.append(contentsOf: ["", original])
+        let lines = ["Feedback on \(name), marked on the attached copy:", ""]
+            + numbered(pins) + ["", original]
         return lines.joined(separator: "\n")
+    }
+
+    /// What the session reads about a picture pinned to the words rather than a file on the Mac.
+    ///
+    /// No path and no filename, and neither is an omission. A picture attached to the review card
+    /// is bytes on the phone until Send uploads it, so there is no path to name — and the Mac
+    /// renames what arrives to a timestamp, so the name this phone knows it by is one the session
+    /// never sees. Either would be a sentence pointing at nothing, which is worse than no sentence:
+    /// the marked copy *is* the attachment, so "the attached picture" is the whole of what can
+    /// honestly be said, and the numbered markers are burnt into the very file the session opens.
+    public static func prose(_ pins: [Pin]) -> String {
+        guard !pins.isEmpty else { return "Feedback drawn on the attached picture." }
+        return (["Feedback on the attached picture, marked on it:", ""] + numbered(pins))
+            .joined(separator: "\n")
+    }
+
+    /// The remarks, numbered by where their markers are in the list and nothing else. Shared by
+    /// both, because a number that disagreed between a file's feedback and an attachment's would
+    /// be the one bug neither could be read through.
+    private static func numbered(_ pins: [Pin]) -> [String] {
+        pins.enumerated().map { number, pin in
+            let words = pin.words.trimmingCharacters(in: .whitespacesAndNewlines)
+            return "\(number + 1). \(words.isEmpty ? "look here" : words)"
+        }
     }
 }
