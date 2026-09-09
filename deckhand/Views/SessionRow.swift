@@ -60,6 +60,11 @@ struct SessionRow: View {
             }
         }
         .contentShape(.rect)
+        // How long it has been quiet, said as presence rather than as another line of text.
+        // Applied last so it carries the tile and the border with the words — fading only the
+        // ink would leave a bright empty tile behind a dim name, which reads as a loading row.
+        // Hit testing is unaffected by opacity, so a faded row is still as tappable as any.
+        .opacity(talk.isRecording || talk.busy || current ? 1 : session.contrast())
     }
 
     /// The name and the state on one baseline, so the headline below them has the full width.
