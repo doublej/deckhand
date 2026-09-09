@@ -26,9 +26,11 @@ controlled from its own page inside utt.
   `deckhand.action.json` which button they pressed.
 - Summaries: the Claude Agent SDK, sonnet at low effort, one turn, no tools.
 - The Mac-side UI is Deckhand's page inside utt (`plugin.py`): three settings, and buttons for
-  stop, copy the pairing code and open the log. Start and restart are utt's own Restart button,
-  which reads live launchd state from `daemon.label`. There was a menu bar app for this; the
-  plugin page replaced every reason it existed, so it is gone.
+  copy the pairing code and open the log. Start and restart are utt's own Restart button, which
+  reads live launchd state from `daemon.label`. `showsInMenuBar` puts the same status lines,
+  the same Restart and the same buttons in utt's menu bar under a teal sailboat, so the tray is
+  back without Deckhand shipping a status item of its own. There was a menu bar app for all of
+  this; the plugin page replaced every reason it existed, so it is gone.
 - App: Swift 6.2, SwiftUI, iOS 18. `DeckhandKit` (SwiftPM library) holds the models, the HTTP
   client and the design layer so they are testable on the Mac; the app target comes from
   XcodeGen.
@@ -118,6 +120,13 @@ unauthenticated route; everything else needs the `x-deckhand-token` header, and 
   it to a 0600 file for launchd, and fall back to utt's own `settings.json` on a 401. The file
   lane removed all three: `needsApi` is false, so utt hands out nothing and there is nothing to
   go stale. `just sync-secrets` is gone with it.
+- **Every action has to be safe to press by accident**, because `showsInMenuBar` is all of them
+  or none — there is no per-action opt-in. There was a "Stop listening" action running
+  `launchctl bootout`, which *unloads* the job; utt's Restart is `kickstart`, which cannot revive
+  a job that is not loaded (verified: exit 113, "Could not find service"). It was a one-way door
+  with no handle on the far side, and utt 1.1.0 does not honour `confirms` from the menu, so it
+  was one mis-click from the daemon being gone until someone opened a terminal. Stopping it for
+  good is `just uninstall-agent`, which is the right place for that.
 - **The plugin page needs utt 1.1.0 or newer.** Before that, utt dropped manifest keys that
   were not all-lowercase and said nothing, so `copyToken` and `openLog` never became buttons and
   only `stop` did — a page can be half-missing and look complete. 1.1.0's `isSafeKey` accepts

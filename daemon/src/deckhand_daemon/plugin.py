@@ -66,11 +66,15 @@ def manifest() -> dict[str, Any]:
         "wantsTranscripts": False,
         "sendsAudio": True,
         "tint": "#3EAFB4",
+        "showsInMenuBar": True,
         "daemon": {"label": DAEMON_LABEL},
+        # Every action is reachable from the menu bar or none is, so each one here has to be
+        # safe to press by accident. There was a "Stop listening" button; it ran `launchctl
+        # bootout`, which unloads the job — and utt's Restart is `kickstart`, which cannot
+        # revive a job that is not loaded (verified: "Could not find service"). One mis-click
+        # would have taken Deckhand down until someone opened a terminal. Stopping it for
+        # good is `just uninstall-agent`, which is where a one-way door belongs.
         "actions": [
-            {"key": "stop", "label": "Stop listening", "confirms": True,
-             "detail": "Your phone can no longer reach this Mac. Sessions keep running and "
-                       "nothing is lost; Restart brings it back."},
             {"key": "copyToken", "label": "Copy pairing code",
              "detail": "Puts the code your phone asks for on the clipboard."},
             {"key": "openLog", "label": "Open the log",
@@ -167,11 +171,6 @@ def _act(key: str) -> None:
         status(lastAction="pairing code copied")
     elif key == "openLog":
         subprocess.run(["/usr/bin/open", "-a", "Console", str(LOG_FILE)], check=False)
-    elif key == "stop":
-        # launchd owns this process and would start it straight back up, so stopping means
-        # asking launchd. The daemon is killed by the command it is running.
-        status(daemon="stopped from utt")
-        subprocess.Popen(["/bin/launchctl", "bootout", f"gui/{os.getuid()}/{DAEMON_LABEL}"])
 
 
 def _write(path: Path, payload: dict) -> None:

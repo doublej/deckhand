@@ -28,6 +28,17 @@ def test_the_manifest_says_who_it_is(page):
     assert written["wantsTranscripts"] is False
 
 
+def test_nothing_in_the_menu_bar_is_dangerous_to_press(page):
+    """utt puts every action in its menu bar or none of them, so each has to be safe to press
+    by accident. An action that wants confirming is one that should not be a mis-click away —
+    and utt 1.1.0 does not ask from the menu even when `confirms` is set. The action this
+    replaces ran `launchctl bootout`, which unloads the job; utt's Restart is `kickstart`,
+    which cannot revive one that is not loaded. That is a door with no handle on the far side."""
+    written = json.loads((page / "deckhand.json").read_text())
+    assert written["showsInMenuBar"] is True
+    assert [row for row in written["actions"] if row.get("confirms")] == []
+
+
 def test_every_setting_is_one_utt_can_render(page):
     for setting in json.loads((page / "deckhand.json").read_text())["settings"]:
         assert setting["kind"] in {"bool", "string", "number", "choice"}
