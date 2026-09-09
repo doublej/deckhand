@@ -74,7 +74,7 @@ device: generate
     xcodebuild {{ project }} -destination 'generic/platform=iOS' -allowProvisioningUpdates -derivedDataPath .build/device build
     xcrun devicectl device install app --device '{{ phone }}' .build/device/Build/Products/Debug-iphoneos/Deckhand.app
     xcrun devicectl device process launch --device '{{ phone }}' com.jj.Deckhand \
-        -deckhand.host m2-2.local -deckhand.token "$(just token)"
+        -- -deckhand.host m2-2.local -deckhand.token "$(just token)"
 
 [group('quality')]
 lint:
