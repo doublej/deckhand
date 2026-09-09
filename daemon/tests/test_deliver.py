@@ -127,7 +127,7 @@ def test_a_message_arrives_as_a_user_frame(inbox, claude_home):
     assert [f["type"] for f in frames] == ["auth", "user"]
     assert frames[1]["message"] == {
         "role": "user",
-        "content": f"{deliver.PREAMBLE}\n\nrun the tests",
+        "content": f"{deliver.PREAMBLE} run the tests",
     }
     assert frames[1]["priority"] == "next"
     assert frames[1]["msgV"] == deliver.MSG_VERSION

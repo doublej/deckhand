@@ -31,9 +31,10 @@ TYPE_TIMEOUT = 15
 MSG_VERSION = 1
 CLEAR_LINE = "\x15"  # ctrl-U: whatever is half-typed in the prompt is not part of what was said
 RETURN = "\r"
-# The receiving session renders this as a message from another Claude session, which is not
-# what it is: it is the person, speaking. Say so, or the session weighs it as a peer's request.
-PREAMBLE = "Spoken by JJ into the deckhand app on his phone — his own words, transcribed:"
+# The receiver already wraps a socket message in its own "another Claude session sent this"
+# framing, so this only has to say who is actually speaking — and it has to be short, because
+# it sits in JJ's pane taking up room he wanted for the message.
+PREAMBLE = "JJ, spoken:"
 
 
 ROUTES = ("auto", "keyboard", "socket")
@@ -108,7 +109,7 @@ def _through_socket(session: Session, message: str) -> tuple[bool, str | None]:
     path = session.socket_path
     if not path:
         return False, f"{session.name} has no inbox socket"
-    payload = _frames(_peer_token(session.pid), f"{PREAMBLE}\n\n{message}")
+    payload = _frames(_peer_token(session.pid), f"{PREAMBLE} {message}")
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
             client.settimeout(TIMEOUT)
