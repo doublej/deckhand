@@ -41,9 +41,13 @@ public struct DeckhandClient: Sendable {
     }
 
     /// Upload a recorded clip. The Mac stores it, transcribes it, and answers with the text.
-    public func upload(clip: URL, to sessionId: String) async throws -> UploadReceipt {
+    public func upload(
+        clip: URL,
+        to sessionId: String,
+        route: DeliveryRoute = .auto
+    ) async throws -> UploadReceipt {
         let boundary = "deckhand.\(UUID().uuidString)"
-        var req = request(.post, "sessions/\(sessionId)/audio")
+        var req = request(.post, "sessions/\(sessionId)/audio?route=\(route.rawValue)")
         req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         // The Mac transcribes before answering, and utt's first request loads the model.
         req.timeoutInterval = 200

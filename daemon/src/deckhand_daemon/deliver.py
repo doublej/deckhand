@@ -36,15 +36,32 @@ RETURN = "\r"
 PREAMBLE = "Spoken by JJ into the deckhand app on his phone — his own words, transcribed:"
 
 
-def deliver(session: Session, text: str) -> tuple[bool, str | None]:
-    """Returns (delivered, error). Never raises: a session that has gone is not an exception."""
+ROUTES = ("auto", "keyboard", "socket")
+
+
+def deliver(session: Session, text: str, route: str = "auto") -> tuple[str | None, str | None]:
+    """Returns (route taken, error). Never raises: a session that has gone is not an exception.
+
+    The route is the person's choice, because the two are not interchangeable. The keyboard
+    carries their authority and needs a pane; the socket always arrives but is stamped as coming
+    from another agent. `auto` takes the keyboard when there is a pane and the socket when there
+    is not.
+    """
     message = " ".join(text.split())
     if not message:
-        return False, "nothing to deliver"
-    if session.pane and _type_into_pane(session.pane.iterm_session_id, message):
-        log.info("typed %d chars into %s's pane", len(message), session.name)
-        return True, None
-    return _through_socket(session, message)
+        return None, "nothing to deliver"
+    if route not in ROUTES:
+        return None, f"no such route {route!r}"
+    if route != "socket" and session.pane:
+        if _type_into_pane(session.pane.iterm_session_id, message):
+            log.info("typed %d chars into %s's pane", len(message), session.name)
+            return "keyboard", None
+        if route == "keyboard":
+            return None, f"iTerm would not type into {session.name}"
+    if route == "keyboard":
+        return None, f"{session.name} has no iTerm pane to type into"
+    delivered, error = _through_socket(session, message)
+    return ("socket" if delivered else None), error
 
 
 def _type_into_pane(pane_id: str, message: str) -> bool:

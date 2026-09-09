@@ -24,13 +24,13 @@ phone. Ticked items are verified, not just written.
       approval wall, as assumed all day. 9/9 sessions resolve a pane now.
 
 ## Next
+- [ ] Route per session rather than globally. Some sessions want the keyboard's authority,
+      others are fine as a peer — right now it is one choice for all of them.
 - [ ] **Send-on-release vs confirm-before-send.** Today the transcript goes straight in on
       release. Speaking into a busy session is not undoable, so decide whether the phone should
       show the text for approval first — a toggle next to hold/tap is the obvious shape.
-- [ ] The peer-socket fallback still arrives labelled as a message from another Claude session,
-      carrying none of JJ's authority. That wrapper is a deliberate control and should not be
-      defeated; the answer is to keep a pane available so the keyboard path is used. Watch how
-      often the fallback actually fires.
+- [x] **The route is a setting**, not a guess: Auto, Keyboard or Socket, in Settings, and the
+      phone says which one took each message.
 - [ ] Guard against pid reuse before delivering. The key file carries `procStart`, which is how
       Claude Code itself avoids messaging a recycled pid; `deliver()` does not check it. Records
       are read fresh on every request today, so the window is small — it opens the moment

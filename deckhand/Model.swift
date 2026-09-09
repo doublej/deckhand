@@ -87,6 +87,11 @@ final class AppModel {
         preferences.save()
     }
 
+    func setRoute(_ route: DeliveryRoute) {
+        preferences.route = route
+        preferences.save()
+    }
+
     // MARK: - the Mac
 
     func refreshSessions() async {
@@ -153,7 +158,11 @@ final class AppModel {
         status = "Sending to \(session.name)…"
         logger.info("uploading clip for \(session.name, privacy: .public)")
         await run {
-            let receipt = try await client.upload(clip: clip, to: session.sessionId)
+            let receipt = try await client.upload(
+                clip: clip,
+                to: session.sessionId,
+                route: self.preferences.route
+            )
             self.heard = receipt.transcript
             self.status = Self.outcome(of: receipt, to: session)
             self.logger.info("transcript: \(receipt.transcript ?? "none", privacy: .public)")
@@ -166,7 +175,9 @@ final class AppModel {
         guard receipt.transcript != nil else {
             return receipt.transcriptError ?? "Sent \(receipt.bytes / 1024) KB, no transcript"
         }
-        if receipt.delivered { return "Sent to \(session.name)" }
+        if receipt.delivered {
+            return "Sent to \(session.name) by \(receipt.deliveredBy ?? "the Mac")"
+        }
         return receipt.deliveryError ?? "Transcribed, but \(session.name) did not take it"
     }
 

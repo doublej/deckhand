@@ -89,7 +89,11 @@ def focus_session(session_id: str) -> dict:
 
 
 @app.post("/sessions/{session_id}/audio", dependencies=[Depends(require_token)], status_code=201)
-async def upload_audio(session_id: str, file: UploadFile) -> dict:
+async def upload_audio(
+    session_id: str,
+    file: UploadFile,
+    route: str = Query(default="auto", description="auto, keyboard or socket"),
+) -> dict:
     """Speaking to a session: the clip lands on the Mac and utt turns it into text."""
     session = await _live_session(session_id)
     suffix = Path(file.filename or "clip.m4a").suffix.lower()
@@ -106,17 +110,18 @@ async def upload_audio(session_id: str, file: UploadFile) -> dict:
     log.info("clip for %s: %d bytes", session.name, len(body))
     text, error = await asyncio.to_thread(transcribe.transcribe, path)
     log.info("transcript for %s: %s", session.name, error or repr(text))
-    delivered, delivery_error = False, None
+    taken, delivery_error = None, None
     if text:
-        delivered, delivery_error = await asyncio.to_thread(deliver.deliver, session, text)
-        log.info("delivery to %s: %s", session.name, delivery_error or "arrived")
+        taken, delivery_error = await asyncio.to_thread(deliver.deliver, session, text, route)
+        log.info("delivery to %s: %s", session.name, delivery_error or f"{taken} took it")
     return {
         "path": str(path),
         "bytes": len(body),
         "received_at": time.time(),
         "transcript": text,
         "transcript_error": error,
-        "delivered": delivered,
+        "delivered": taken is not None,
+        "delivered_by": taken,
         "delivery_error": delivery_error,
     }
 

@@ -62,7 +62,7 @@ def test_a_session_with_a_pane_is_typed_into(inbox, claude_home, monkeypatch):
     monkeypatch.setattr(deliver.subprocess, "run", run)
     session = session_for(inbox.getsockname())
     session.pane = a_pane()
-    assert deliver.deliver(session, "  run  the tests  ") == (True, None)
+    assert deliver.deliver(session, "  run  the tests  ") == ("keyboard", None)
     assert typed == [
         ["it2", "session", "send", "-s", "PANE-1", deliver.CLEAR_LINE + "run the tests"],
         ["it2", "session", "send", "-s", "PANE-1", deliver.RETURN],
@@ -78,13 +78,51 @@ def test_a_pane_that_will_not_take_it_falls_back_to_the_socket(inbox, claude_hom
     )
     session = session_for(inbox.getsockname())
     session.pane = a_pane()
-    assert deliver.deliver(session, "hello") == (True, None)
+    assert deliver.deliver(session, "hello") == ("socket", None)
     assert [f["type"] for f in read_frames(inbox)] == ["user"]
+
+
+def test_the_keyboard_route_does_not_quietly_use_the_socket(inbox, claude_home, monkeypatch):
+    """Choosing the keyboard is choosing whose authority the words carry. Never substitute."""
+    monkeypatch.setattr(
+        deliver.subprocess,
+        "run",
+        lambda argv, **_k: subprocess.CompletedProcess(argv, 1, "", "no such session"),
+    )
+    session = session_for(inbox.getsockname())
+    session.pane = a_pane()
+    taken, error = deliver.deliver(session, "hello", route="keyboard")
+    assert taken is None
+    assert "would not type" in error
+
+
+def test_the_keyboard_route_says_so_when_there_is_no_pane(inbox, claude_home):
+    taken, error = deliver.deliver(session_for(inbox.getsockname()), "hello", route="keyboard")
+    assert taken is None
+    assert "no iTerm pane" in error
+
+
+def test_the_socket_route_ignores_a_perfectly_good_pane(inbox, claude_home, monkeypatch):
+    monkeypatch.setattr(
+        deliver.subprocess,
+        "run",
+        lambda *_a, **_k: pytest.fail("the socket route must not touch iTerm"),
+    )
+    session = session_for(inbox.getsockname())
+    session.pane = a_pane()
+    assert deliver.deliver(session, "hello", route="socket") == ("socket", None)
+    assert [f["type"] for f in read_frames(inbox)] == ["user"]
+
+
+def test_an_unknown_route_is_refused(inbox, claude_home):
+    taken, error = deliver.deliver(session_for(inbox.getsockname()), "hello", route="carrier pigeon")
+    assert taken is None
+    assert "no such route" in error
 
 
 def test_a_message_arrives_as_a_user_frame(inbox, claude_home):
     (claude_home / "sessions" / "4242.abc123.key").write_text(json.dumps({"peerToken": "beef" * 8}))
-    assert deliver.deliver(session_for(inbox.getsockname()), "  run the tests  ") == (True, None)
+    assert deliver.deliver(session_for(inbox.getsockname()), "  run the tests  ") == ("socket", None)
     frames = read_frames(inbox)
     assert [f["type"] for f in frames] == ["auth", "user"]
     assert frames[1]["message"] == {
@@ -102,37 +140,37 @@ def test_the_auth_line_carries_the_sessions_peer_token(inbox, claude_home):
 
 
 def test_a_session_without_a_key_file_is_still_written_to(inbox, claude_home):
-    assert deliver.deliver(session_for(inbox.getsockname(), pid=7777), "hello") == (True, None)
+    assert deliver.deliver(session_for(inbox.getsockname(), pid=7777), "hello") == ("socket", None)
     assert [f["type"] for f in read_frames(inbox)] == ["user"]
 
 
 def test_an_empty_message_is_refused_before_connecting(inbox, claude_home):
-    delivered, error = deliver.deliver(session_for(inbox.getsockname()), "   \n ")
-    assert (delivered, error) == (False, "nothing to deliver")
+    taken, error = deliver.deliver(session_for(inbox.getsockname()), "   \n ")
+    assert (taken, error) == (None, "nothing to deliver")
 
 
 def test_a_session_record_without_a_socket_is_refused(claude_home):
-    delivered, error = deliver.deliver(session_for(""), "hello")
-    assert not delivered
+    taken, error = deliver.deliver(session_for(""), "hello")
+    assert taken is None
     assert "no inbox socket" in error
 
 
 def test_a_stale_socket_reports_the_session_as_gone(inbox, claude_home):
     path = inbox.getsockname()
     inbox.close()  # the file stays behind, the way it does when a session is killed
-    delivered, error = deliver.deliver(session_for(path), "hello")
-    assert not delivered
+    taken, error = deliver.deliver(session_for(path), "hello")
+    assert taken is None
     assert "stale" in error
 
 
 def test_a_dead_session_leaves_nothing_to_connect_to(claude_home):
     # Never a real inbox path: a live session with this pid would be messaged for real.
-    delivered, error = deliver.deliver(session_for("/tmp/deckhand-gone.sock"), "hello")
-    assert not delivered
+    taken, error = deliver.deliver(session_for("/tmp/deckhand-gone.sock"), "hello")
+    assert taken is None
     assert "not listening" in error
 
 
 def test_an_unreadable_key_file_does_not_stop_delivery(inbox, claude_home):
     (claude_home / "sessions" / "4242.abc123.key").write_text("{ not json")
-    assert deliver.deliver(session_for(inbox.getsockname()), "hello") == (True, None)
+    assert deliver.deliver(session_for(inbox.getsockname()), "hello") == ("socket", None)
     assert [f["type"] for f in read_frames(inbox)] == ["user"]

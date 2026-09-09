@@ -52,8 +52,10 @@ public struct UploadReceipt: Codable, Hashable, Sendable {
     public let receivedAt: Double
     public let transcript: String?
     public let transcriptError: String?
-    /// Whether the text reached the session itself, and why not when it did not.
+    /// Whether the text reached the session itself, which way it went in, and why not when
+    /// it did not.
     public let delivered: Bool
+    public let deliveredBy: String?
     public let deliveryError: String?
 }
 

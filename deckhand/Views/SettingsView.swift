@@ -29,6 +29,20 @@ struct SettingsView: View {
                     .pickerStyle(.segmented)
                 }
 
+                Section {
+                    Picker("Route", selection: route) {
+                        ForEach(DeliveryRoute.allCases, id: \.self) { route in
+                            Text(route.label).tag(route)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                } header: {
+                    Text("How it goes in")
+                } footer: {
+                    Text(model.preferences.route.explanation)
+                        .font(.system(.caption2, design: .monospaced))
+                }
+
                 hiddenSection
 
                 Section {
@@ -56,6 +70,10 @@ struct SettingsView: View {
 
     private var talkMode: Binding<TalkMode> {
         Binding(get: { model.preferences.talkMode }, set: { model.setTalkMode($0) })
+    }
+
+    private var route: Binding<DeliveryRoute> {
+        Binding(get: { model.preferences.route }, set: { model.setRoute($0) })
     }
 
     @ViewBuilder private var hiddenSection: some View {

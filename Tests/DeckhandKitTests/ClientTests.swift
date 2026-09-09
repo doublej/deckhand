@@ -44,7 +44,7 @@ struct ClientTests {
         try Data("pretend audio".utf8).write(to: clip)
         StubProtocol.respond(with: Data("""
         {"path":"/tmp/x.m4a","bytes":13,"received_at":1.0,"transcript":"Testing, one, two, three.",
-         "transcript_error":null,"delivered":true,"delivery_error":null}
+         "transcript_error":null,"delivered":true,"delivered_by":"keyboard","delivery_error":null}
         """.utf8), status: 201)
 
         let receipt = try await client().upload(clip: clip, to: "sid")
@@ -52,11 +52,13 @@ struct ClientTests {
         #expect(receipt.transcript == "Testing, one, two, three.")
         #expect(receipt.transcriptError == nil)
         #expect(receipt.delivered)
+        #expect(receipt.deliveredBy == "keyboard")
         let body = try #require(StubProtocol.lastBody)
         let text = try #require(String(bytes: body, encoding: .utf8))
         #expect(text.contains("filename=\"clip.m4a\""))
         #expect(text.contains("pretend audio"))
         #expect(StubProtocol.lastRequest?.url?.path == "/sessions/sid/audio")
+        #expect(StubProtocol.lastRequest?.url?.query == "route=auto")
     }
 
     @Test("a bad token surfaces as unauthorized, a dead session as notLive")

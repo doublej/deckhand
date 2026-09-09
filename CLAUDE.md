@@ -107,7 +107,12 @@ unauthenticated route; everything else needs the `x-deckhand-token` header, and 
 - `xcrun devicectl device process launch ... -- -deckhand.host <host> -deckhand.token <token>`
   starts the app already paired; the model writes launch-argument settings back to defaults, so
   the pairing survives a cold start. The `--` matters: devicectl eats the flags without it.
-- **Delivery prefers the keyboard.** `it2 session send` types the words into the session's pane
+- **The route is the person's choice**, in Settings, and `POST /sessions/{id}/audio?route=`
+  carries it: `auto` (keyboard when there is a pane, socket when there is not), `keyboard`, or
+  `socket`. `keyboard` never silently falls back to the socket — choosing it is choosing whose
+  authority the words carry, so it fails and says why instead. The receipt names the route that
+  took it (`delivered_by`) and the phone shows it.
+- **The keyboard route.** `it2 session send` types the words into the session's pane
   and presses return, so they arrive as a prompt from the person at the machine — which is what
   they are. Three bursts, not one: ctrl-U (a half-typed line in the prompt is not part of what
   was said), the words, then return alone — a return at the tail of one fast paste is what
