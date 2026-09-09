@@ -3,8 +3,9 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from deckhand_daemon import app as app_module
 from deckhand_daemon import config, sessions
+from deckhand_daemon import deliver as deliver_module
+from deckhand_daemon import transcribe as transcribe_module
 from deckhand_daemon.app import app
 
 SID = "aaaa1111-2222-3333-4444-555566667777"
@@ -77,7 +78,7 @@ def test_focus_asks_iterm_for_that_pane(token, monkeypatch):
 
 
 def test_upload_answers_with_what_utt_heard(token, monkeypatch):
-    monkeypatch.setattr(app_module.transcribe, "transcribe", lambda clip, hints: ("Testing, one, two.", None))
+    monkeypatch.setattr(transcribe_module, "transcribe", lambda clip, hints: ("Testing, one, two.", None))
     r = client(token).post(
         f"/sessions/{SID}/audio", files={"file": ("clip.m4a", b"audio bytes", "audio/m4a")}
     )
@@ -86,7 +87,7 @@ def test_upload_answers_with_what_utt_heard(token, monkeypatch):
 
 
 def test_a_clip_is_kept_even_when_utt_is_off(token, monkeypatch):
-    monkeypatch.setattr(app_module.transcribe, "transcribe", lambda clip, hints: (None, "utt is off"))
+    monkeypatch.setattr(transcribe_module, "transcribe", lambda clip, hints: (None, "utt is off"))
     body = client(token).post(
         f"/sessions/{SID}/audio", files={"file": ("clip.m4a", b"audio bytes", "audio/m4a")}
     ).json()
@@ -97,9 +98,9 @@ def test_a_clip_is_kept_even_when_utt_is_off(token, monkeypatch):
 
 def test_a_clip_can_be_transcribed_without_being_delivered(token, monkeypatch):
     """Reading it first is the whole point: nothing reaches the session until the person says."""
-    monkeypatch.setattr(app_module.transcribe, "transcribe", lambda _clip, _hints: ("read me first", None))
+    monkeypatch.setattr(transcribe_module, "transcribe", lambda _clip, _hints: ("read me first", None))
     delivered = []
-    monkeypatch.setattr(app_module.deliver, "deliver", lambda *a, **k: delivered.append(a))
+    monkeypatch.setattr(deliver_module, "deliver", lambda *a, **k: delivered.append(a))
     answer = client(token).post(
         f"/sessions/{SID}/audio?deliver=false",
         files={"file": ("clip.m4a", b"x" * 64, "audio/mp4")},
@@ -118,7 +119,7 @@ def test_say_puts_the_words_in_and_names_the_route(token, monkeypatch):
         seen.update(text=text, route=route)
         return "keyboard", None
 
-    monkeypatch.setattr(app_module.deliver, "deliver", deliver)
+    monkeypatch.setattr(deliver_module, "deliver", deliver)
     answer = client(token).post(f"/sessions/{SID}/say?route=keyboard", json={"text": "run the tests"})
     assert answer.status_code == 200
     assert answer.json() == {
@@ -132,7 +133,7 @@ def test_a_picture_is_kept_and_the_message_names_it(token, monkeypatch):
     """An image reaches a session as a path: the session's own Read is what can see a file."""
     seen = {}
     monkeypatch.setattr(
-        app_module.deliver, "deliver",
+        deliver_module, "deliver",
         lambda session, text, route: (seen.update(text=text), ("keyboard", None))[1],
     )
     kept = client(token).post(
@@ -152,7 +153,7 @@ def test_only_this_sessions_own_pictures_can_be_named(token, monkeypatch):
     """Otherwise "say this and read that file" would point a session at anything on the Mac."""
     seen = {}
     monkeypatch.setattr(
-        app_module.deliver, "deliver",
+        deliver_module, "deliver",
         lambda session, text, route: (seen.update(text=text), ("keyboard", None))[1],
     )
     elsewhere = config.data_dir() / "escape.png"

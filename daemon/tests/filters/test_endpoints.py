@@ -5,8 +5,9 @@ Beside the filter tests rather than in `test_api.py`, which is at its size targe
 
 from fastapi.testclient import TestClient
 
-from deckhand_daemon import app as app_module
+from deckhand_daemon import deliver as deliver_module
 from deckhand_daemon import filters
+from deckhand_daemon import transcribe as transcribe_module
 from deckhand_daemon.app import app
 
 SID = "aaaa1111-2222-3333-4444-555566667777"
@@ -49,7 +50,7 @@ def test_filters_need_the_token_like_everything_else(claude_home):
 def test_the_words_that_reach_a_session_are_the_filtered_ones(token, monkeypatch):
     seen = {}
     monkeypatch.setattr(
-        app_module.deliver, "deliver",
+        deliver_module, "deliver",
         lambda session, text, route: (seen.update(text=text), ("keyboard", None))[1],
     )
     c = client(token)
@@ -66,7 +67,7 @@ def test_the_words_that_reach_a_session_are_the_filtered_ones(token, monkeypatch
 def test_a_stopped_prompt_never_reaches_the_session(token, monkeypatch):
     """It is refused, and the phone is told by whom and why — not left to guess."""
     delivered = []
-    monkeypatch.setattr(app_module.deliver, "deliver", lambda *a: delivered.append(a))
+    monkeypatch.setattr(deliver_module, "deliver", lambda *a: delivered.append(a))
     monkeypatch.setitem(
         filters.registry._known, "gate",
         filters.Filter(name="gate", title="gate", summary="gate",
@@ -85,8 +86,8 @@ def test_a_stopped_prompt_never_reaches_the_session(token, monkeypatch):
 
 def test_a_filter_is_told_which_session_and_how_the_words_arrived(token, monkeypatch):
     """A slip of the tongue and a slip of the finger are not the same mistake, so `source` says."""
-    monkeypatch.setattr(app_module.transcribe, "transcribe", lambda clip, hints: ("spoken", None))
-    monkeypatch.setattr(app_module.deliver, "deliver", lambda *a: ("socket", None))
+    monkeypatch.setattr(transcribe_module, "transcribe", lambda clip, hints: ("spoken", None))
+    monkeypatch.setattr(deliver_module, "deliver", lambda *a: ("socket", None))
     seen = []
     monkeypatch.setitem(
         filters.registry._known, "probe",
@@ -106,10 +107,10 @@ def test_a_filter_is_told_which_session_and_how_the_words_arrived(token, monkeyp
 
 def test_a_clip_is_filtered_too_and_the_transcript_still_says_what_was_heard(token, monkeypatch):
     monkeypatch.setattr(
-        app_module.transcribe, "transcribe", lambda clip, hints: ("the deck hand", None))
+        transcribe_module, "transcribe", lambda clip, hints: ("the deck hand", None))
     seen = {}
     monkeypatch.setattr(
-        app_module.deliver, "deliver",
+        deliver_module, "deliver",
         lambda session, text, route: (seen.update(text=text), ("socket", None))[1],
     )
     c = client(token)
