@@ -35,13 +35,6 @@ daemon:
 logs:
     tail -f ~/Library/Logs/Deckhand/deckhand.log
 
-# Build and start the menu bar controller for the daemon.
-[group('develop')]
-menubar: generate
-    xcodebuild -project Deckhand.xcodeproj -scheme DeckhandMenu -destination 'platform=macOS' \
-        -configuration Debug -derivedDataPath .build/menubar build
-    open .build/menubar/Build/Products/Debug/DeckhandMenu.app
-
 # Redraw the app icon from the mark's own geometry.
 [group('develop')]
 icon:
@@ -162,8 +155,6 @@ check:
     just lint
     @echo '→ Running build...'
     just build
-    @echo '→ Building the menu bar app...'
-    xcodebuild -project Deckhand.xcodeproj -scheme DeckhandMenu -destination 'platform=macOS' -configuration Debug build | tail -1
     @echo '→ Running tests...'
     just test
     @echo '→ Linting the daemon...'

@@ -46,7 +46,7 @@ struct SettingsView: View {
                     .font(Typography.mono)
                     .frame(maxWidth: 150)
             }
-            SettingRow("Token", detail: "From the menu bar app: Copy token.") {
+            SettingRow("Token", detail: "Deckhand's page in utt: Copy pairing code.") {
                 TextField("token", text: $model.settings.token)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()

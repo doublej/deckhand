@@ -10,8 +10,8 @@ iOS app is the remote: pick a session, read what it just said, hold to talk.
 
 What is shipped, end to end: the phone lists sessions, reads the last rounds, and holds to
 talk; the Mac stores the clip, transcribes it with utt, and writes the text straight into that
-session's own inbox socket, the way one Claude session messages another. A menu bar app
-controls the daemon.
+session's own inbox socket, the way one Claude session messages another. The daemon is
+controlled from its own page inside utt.
 
 ## Stack
 
@@ -25,8 +25,10 @@ controls the daemon.
   start-up; `deckhand.values.json` carries what the person set on the page, and
   `deckhand.action.json` which button they pressed.
 - Summaries: the Claude Agent SDK, sonnet at low effort, one turn, no tools.
-- Menu bar app (`menubar/`, target `DeckhandMenu`): start, stop, restart, copy the token,
-  open the log. `just menubar`.
+- The Mac-side UI is Deckhand's page inside utt (`plugin.py`): three settings, and buttons for
+  stop, copy the pairing code and open the log. Start and restart are utt's own Restart button,
+  which reads live launchd state from `daemon.label`. There was a menu bar app for this; the
+  plugin page replaced every reason it existed, so it is gone.
 - App: Swift 6.2, SwiftUI, iOS 18. `DeckhandKit` (SwiftPM library) holds the models, the HTTP
   client and the design layer so they are testable on the Mac; the app target comes from
   XcodeGen.

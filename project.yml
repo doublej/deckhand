@@ -41,29 +41,6 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_USER_SCRIPT_SANDBOXING: NO
-  DeckhandMenu:
-    type: application
-    platform: macOS
-    deploymentTarget: "15.0"
-    sources:
-      - menubar
-    dependencies:
-      - package: DeckhandKit
-        product: DeckhandKit
-    info:
-      path: menubar/Info.plist
-      properties:
-        CFBundleDisplayName: Deckhand Menu
-        LSUIElement: true
-        NSAppTransportSecurity:
-          NSAllowsLocalNetworking: true
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.jj.DeckhandMenu
-        DEVELOPMENT_TEAM: KA6433FU8U
-        CODE_SIGN_STYLE: Automatic
-        SWIFT_VERSION: "6.2"
-        ENABLE_USER_SCRIPT_SANDBOXING: NO
   DeckhandUITests:
     type: bundle.ui-testing
     platform: iOS
@@ -90,9 +67,3 @@ schemes:
       config: Debug
       targets:
         - DeckhandUITests
-  DeckhandMenu:
-    build:
-      targets:
-        DeckhandMenu: all
-    run:
-      config: Debug
