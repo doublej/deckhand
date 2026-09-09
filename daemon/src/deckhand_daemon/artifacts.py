@@ -130,6 +130,27 @@ def page(session: sessions.Session, artifact_id: str) -> str | None:
         return None
 
 
+def answered(session: sessions.Session, artifact_id: str) -> Any:
+    """What was answered last time, or None if nobody has.
+
+    A page that asked a question and got one is not finished with it: reopening it should show
+    what you said, not an empty form pretending it has never been filled in. The page is the only
+    thing that knows how to put its own answer back into its own controls, so this hands back the
+    value exactly as it was responded with and says nothing about shape.
+
+    None covers both "never answered" and "the file is unreadable", and deliberately: a page that
+    cannot find a previous answer draws itself blank, which is what it did before any of this.
+    """
+    beside = _file(session, artifact_id, ".answer.json")
+    if beside is None or not beside.is_file():
+        return None
+    try:
+        return json.loads(beside.read_text()).get("value")
+    except (OSError, json.JSONDecodeError) as error:
+        log.warning("could not read the answer to %s: %s", artifact_id, error)
+        return None
+
+
 def answer(session: sessions.Session, artifact_id: str, value: Any) -> dict | None:
     """Write `<id>.answer.json` beside the page and hand back what was written.
 
@@ -245,6 +266,20 @@ async def artifact_page(session_id: str, artifact_id: str) -> HTMLResponse:
     if found is None:
         raise HTTPException(status_code=404, detail="no artifact with that id in this project")
     return HTMLResponse(found)
+
+
+@router.get("/sessions/{session_id}/artifacts/{artifact_id}/answer")
+async def read_answer(session_id: str, artifact_id: str) -> dict:
+    """What was answered last time. `{"value": null}` when nobody has, which is not an error.
+
+    Its own request rather than a field on the listing: the listing draws a whole tab and would
+    then be reading every answer file on the Mac to fill in a value only the one page you open
+    can use. `answered` in the listing is the flag; this is the thing itself.
+    """
+    session = await live_session(session_id)
+    if page(session, artifact_id) is None:
+        raise HTTPException(status_code=404, detail="no artifact with that id in this project")
+    return {"value": answered(session, artifact_id)}
 
 
 @router.post("/sessions/{session_id}/artifacts/{artifact_id}/answer")

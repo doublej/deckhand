@@ -168,3 +168,31 @@ def test_any_json_value_is_an_answer_including_a_falsy_one(token, asking, taken)
         assert kept["value"] == value, value
 
     assert c.post(f"/sessions/{SID}/artifacts/which-branch/answer", json={}).status_code == 422
+
+
+def test_a_page_can_read_back_what_was_answered_last_time(token, asking):
+    """Reopening an answered page shows what you said, rather than an empty form.
+
+    The page is the only thing that knows how to put its own answer back into its own controls,
+    so the value comes back exactly as it was responded with — shape included.
+    """
+    given = {"answer": {"branch": "develop"}, "completedCount": 1}
+    client(token).post(f"/sessions/{SID}/artifacts/which-branch/answer", json={"value": given})
+
+    read = client(token).get(f"/sessions/{SID}/artifacts/which-branch/answer")
+    assert read.status_code == 200
+    assert read.json()["value"] == given
+
+
+def test_a_page_nobody_has_answered_reads_back_as_nothing(token, asking):
+    """Not an error, and not an empty object either: a page draws itself blank on None, which is
+    exactly what every page did before it could read its own answer at all."""
+    read = client(token).get(f"/sessions/{SID}/artifacts/which-branch/answer")
+    assert read.status_code == 200
+    assert read.json()["value"] is None
+
+
+def test_reading_the_answer_to_a_page_that_is_not_there_is_a_404(token, asking):
+    """The same refusal the page itself gets. An answer to a question nobody asked is not an
+    answer, and a missing page must not read as a page with nothing said about it."""
+    assert client(token).get(f"/sessions/{SID}/artifacts/no-such-page/answer").status_code == 404
