@@ -86,7 +86,8 @@ extension AppModel {
     private func went(_ sent: Delivery, saying text: String, to session: Session) -> Bool {
         guard sent.went else {
             review[session.sessionId] = text
-            status = sent.stoppedBy.map { stopped(by: $0, notes: sent.notes) }
+            status = sent.stoppedBy
+                .map { stopped(by: $0, because: sent.deliveryError, notes: sent.notes) }
                 ?? sent.deliveryError
                 ?? "\(session.name) did not take it"
             return false

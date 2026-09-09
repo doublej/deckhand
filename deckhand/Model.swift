@@ -80,7 +80,7 @@ final class AppModel {
     var knownFilters: [Filter] = []
     /// The chain, in the order it runs. One step per filter, the off ones included, so the
     /// settings screen has something to draw for a filter nobody has switched on yet.
-    var filterChain: [FilterStep] = []
+    var filterChain: [FilterRow] = []
     /// Edited and not yet sent. The save happens on the way out of Settings rather than on each
     /// change, because a text field changes on every letter.
     var filtersDirty = false
@@ -222,7 +222,7 @@ final class AppModel {
             return receipt.transcriptError ?? "Sent \(receipt.bytes / 1024) KB, no transcript"
         }
         if let refused = receipt.stoppedBy {
-            return stopped(by: refused, notes: receipt.notes)
+            return stopped(by: refused, because: receipt.deliveryError, notes: receipt.notes)
         }
         if receipt.delivered {
             return said("Sent to \(session.name) by \(receipt.deliveredBy ?? "the Mac")",
@@ -264,7 +264,9 @@ final class AppModel {
         switch error {
         case .unauthorized: return "Token rejected by the Mac"
         case .notLive: return "That session is no longer running"
-        case .http(let code, let body): return "Mac said \(code): \(body.prefix(120))"
+        // The Mac's own sentence when it sent one: a refused save says which filter this Mac
+        // does not have, which is the one thing a person can act on.
+        case .http(let code, let body): return error.detail ?? "Mac said \(code): \(body.prefix(120))"
         case .badResponse: return "Unreadable answer from the Mac"
         }
     }

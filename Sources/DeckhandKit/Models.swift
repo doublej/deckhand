@@ -228,6 +228,18 @@ public enum DeckhandError: Error, Equatable, Sendable {
     case notLive
     case http(Int, String)
     case badResponse
+
+    /// The sentence the Mac refused with, when it sent one.
+    ///
+    /// FastAPI answers every rejection as `{"detail": …}`, and the detail is the only half a
+    /// person can do anything about: "no such filter: translate" rather than "Mac said 400:
+    /// {"detail"…". Nil for a body that is not one — a validation error's detail is a list of
+    /// its own, and an HTML error page is not a sentence either.
+    public var detail: String? {
+        guard case .http(_, let body) = self else { return nil }
+        struct Refusal: Decodable { let detail: String }
+        return (try? JSONDecoder().decode(Refusal.self, from: Data(body.utf8)))?.detail
+    }
 }
 
 public extension String {

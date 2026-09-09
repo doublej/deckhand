@@ -186,17 +186,15 @@ public struct Filter: Codable, Hashable, Sendable, Identifiable {
 
 /// One place in the chain: which filter, whether it runs, and what the person set on it.
 ///
-/// Identified by the filter it names, so the chain holds each filter once. That is what the
-/// settings screen can edit — a switch and a position per filter — and running the same filter
-/// twice with two settings is not a thing anybody has asked for.
-public struct FilterStep: Codable, Hashable, Sendable, Identifiable {
+/// A position in a list and not an entry keyed by a name: the list's order is the run order, and
+/// the same filter may sit in it twice with different settings each time — two replacement passes
+/// are a reasonable thing to want. `FilterRow` is what carries identity, for that reason.
+public struct FilterStep: Codable, Hashable, Sendable {
     public let filter: String
     public var isOn: Bool
     /// Only what was actually set. The Mac merges its own defaults over the top, so sending the
     /// merged set instead would freeze today's defaults into the person's saved chain.
     public var settings: [String: JSONValue]
-
-    public var id: String { filter }
 
     enum CodingKeys: String, CodingKey {
         case filter, settings
@@ -219,18 +217,36 @@ public struct FilterStep: Codable, Hashable, Sendable, Identifiable {
     }
 }
 
-public extension FilterStep {
+/// One row of the chain as a screen holds it: the step, and an identity of the phone's own.
+///
+/// The identity is a `UUID` and not the filter's name, because a filter may be in the chain more
+/// than once. Keyed by name, the second one is invisible to every edit — a switch, a move, a word
+/// typed into a field all find the first one — and the two collapse into one the moment anything
+/// is saved. A name is what a step points at, never what distinguishes it.
+public struct FilterRow: Identifiable, Hashable, Sendable {
+    public let id: UUID
+    public var step: FilterStep
+
+    public init(id: UUID = UUID(), step: FilterStep) {
+        self.id = id
+        self.step = step
+    }
+
+    public var filter: String { step.filter }
+
     /// The chain as a screen needs it: the saved steps in the order they run, then every filter
-    /// the Mac offers that nobody has put in one yet, off.
+    /// the Mac offers that is not in the chain at all, off, so that it can be switched on.
     ///
-    /// A step naming a filter the Mac no longer offers stays where it is rather than being
-    /// dropped. Dropping it would be the phone quietly deleting a setting it cannot draw — which
-    /// is what an app one version behind its Mac would do to every filter added since.
-    static func chain(_ steps: [FilterStep], over known: [Filter]) -> [FilterStep] {
+    /// Nothing is de-duplicated and nothing is dropped. A step naming a filter the Mac no longer
+    /// offers stays where it is: dropping it would be the phone quietly deleting a setting it
+    /// cannot draw, which is what an app one version behind its Mac would do to every filter
+    /// added since.
+    public static func chain(_ steps: [FilterStep], over known: [Filter]) -> [FilterRow] {
         let named = Set(steps.map(\.filter))
-        return steps + known
+        let offered = known
             .filter { !named.contains($0.name) }
             .map { FilterStep(filter: $0.name, isOn: false) }
+        return (steps + offered).map { FilterRow(step: $0) }
     }
 }
 

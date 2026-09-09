@@ -91,13 +91,37 @@ struct FilterTests {
     func buildsTheChain() {
         let known = [Filter(name: "words", title: "Word replacement"),
                      Filter(name: "dutch", title: "Translate")]
-        let chain = FilterStep.chain([FilterStep(filter: "gone"),
-                                      FilterStep(filter: "dutch")], over: known)
+        let chain = FilterRow.chain([FilterStep(filter: "gone"),
+                                     FilterStep(filter: "dutch")], over: known)
         #expect(chain.map(\.filter) == ["gone", "dutch", "words"])
         // The one the Mac no longer offers is still there and still on; the one nobody has asked
         // for is appended off.
-        #expect(chain.first?.isOn == true)
-        #expect(chain.last?.isOn == false)
+        #expect(chain.first?.step.isOn == true)
+        #expect(chain.last?.step.isOn == false)
+    }
+
+    @Test("a filter twice in the chain stays twice, with its own settings each time")
+    func keepsEveryCopy() {
+        let steps = [FilterStep(filter: "words", settings: ["pairs": .rows([["a", "b"]])]),
+                     FilterStep(filter: "words", settings: ["pairs": .rows([["c", "d"]])])]
+        let chain = FilterRow.chain(steps, over: [Filter(name: "words", title: "Word replacement")])
+        #expect(chain.count == 2)
+        // Two rows, two identities. Keyed by the filter's name instead, every edit would find the
+        // first row and saving would collapse the pair into one.
+        #expect(Set(chain.map(\.id)).count == 2)
+        #expect(chain.first?.step.settings["pairs"]?.rows == [["a", "b"]])
+        #expect(chain.last?.step.settings["pairs"]?.rows == [["c", "d"]])
+    }
+
+    @Test("a refusal the person can act on reads as the Mac's own sentence")
+    func readsTheDetailOutOfARefusal() {
+        let refused = DeckhandError.http(400, #"{"detail":"no such filter: translate"}"#)
+        #expect(refused.detail == "no such filter: translate")
+        // Not every error body is one: a validation error's detail is a list, an error page is
+        // HTML, and neither is a sentence to put in front of somebody.
+        #expect(DeckhandError.http(422, #"{"detail":[{"loc":["body"]}]}"#).detail == nil)
+        #expect(DeckhandError.http(500, "<html>nope</html>").detail == nil)
+        #expect(DeckhandError.unauthorized.detail == nil)
     }
 
     @Test("a receipt from a daemon that predates filtering has nothing to say and went")
