@@ -67,6 +67,7 @@ Sources/DeckhandKit/Design/
   DotMark.swift   # a shape on the grid, and the wordmark
   StateWord.swift # the four-letter state vocabulary, and a glyph on its tile
   Links.swift     # addresses in what a session wrote, and what localhost means from a phone
+  Fade.swift      # how present a rail row is, given how long its session has been quiet
   Chrome.swift    # Card, SettingsGroup, SettingRow, PageHeader
 daemon/src/deckhand_daemon/
   sessions.py     # which Claude sessions are alive, and their iTerm pane
@@ -74,6 +75,13 @@ daemon/src/deckhand_daemon/
     transcripts.py  # the last rounds, and the activity blob a summary is written from
     asked.py        # what the person asked for, and what is still in the session's inbox
     readable.py     # the whole transcript as lines, for when the app's reading looks wrong
+  filters/        # what happens to a prompt between the phone and the session
+    kinds.py        # Prompt, Verdict, Outcome, Field, Filter — the contract, and only that
+    registry.py     # a filter declares itself here; known() describes them for the phone
+    config.py       # the saved chain, where list order is run order
+    runner.py       # runs it, and survives a filter that does not
+    routes.py       # GET and PUT /filters, knowing nothing about tokens
+    words.py        # the first filter: swap words dictation keeps getting wrong
   briefings.py    # where briefings are kept, and the one worker that keeps them current
   nudge.py        # asks a session that stopped about the asks still open on its list
   tasks.py        # the person's list of asks, and the only three tools that may change it
@@ -100,7 +108,9 @@ reached the session. `?deliver=false` transcribes without sending, for the revie
 `GET /briefings` hands back every live session's last briefing at once, off disk, for a cold start.
 `GET /sessions/{id}/raw` hands back the transcript as readable lines — one per event, the syntax
 dropped — for when the question is whether the app read it right.
-`POST /sessions/{id}/queue/clear` draws a line under an inbox holding prompts nothing will read. `GET /sessions/{id}/files` lists what the session touched that a phone can open and
+`POST /sessions/{id}/queue/clear` draws a line under an inbox holding prompts nothing will read.
+`GET /filters` says what this Mac can do to a prompt and what it is currently doing; `PUT /filters`
+replaces the chain. `GET /sessions/{id}/files` lists what the session touched that a phone can open and
 `GET /sessions/{id}/file?path=` serves one. `POST /sessions/{id}/focus` brings that pane
 forward on the Mac. `/health` is the only
 unauthenticated route; everything else needs the `x-deckhand-token` header, and both
@@ -207,6 +217,37 @@ unauthenticated route; everything else needs the `x-deckhand-token` header, and 
   line is tens of thousands of points wide, and past that CoreText renders **nothing** — a black
   screen, no error, no warning. It is one wrapped `Text` per line in a `LazyVStack` now, and it
   says how many lines arrived so that empty never looks like broken again.
+- **A prompt is filtered on its way in, and the chain is an ordered list.** `filters/` sits between
+  the phone and `deliver`: `run(Prompt) -> Outcome`, where each step is
+  `{"filter": name, "on": bool, "settings": {}}` in `filters.json` and **the array order is the run
+  order**. Nothing is keyed by name, because the same filter may appear twice with different
+  settings — a step is a position in a list, not an entry in a table. A step missing `on` is on. A
+  filter that raises is logged, noted as skipped, and the words carry on unchanged; only an
+  explicit `Verdict.stop` ends the chain, and `PUT /filters` refuses a name this Mac does not have
+  rather than saving a step the runner would step over, because a step that silently does nothing
+  looks exactly like one that silently fails.
+- **`delivered: true` is not the same as "it was said".** The daemon can answer `delivered: true`
+  alongside a stop, so every screen asks `Delivery.went` — `delivered && stoppedBy == nil` — and
+  never `delivered` alone. A stopped prompt goes back into the review card rather than only into
+  the status line: the card is the one place words exist unsent and it is editable, which is the
+  only useful answer to "a filter will not pass that". The status line names the filter by its
+  *title*, not its wire name.
+- **`convertFromSnakeCase` rewrites dictionary keys too, not only struct keys.** A filter taking a
+  `max_words` setting would be handed back `maxWords`, a key it has never heard of, and the
+  setting would silently vanish. So `filters()` and `saveFilters()` decode through a decoder with
+  no key strategy while the rest of the client keeps the conversion. Nothing on the filters wire
+  is snake case, so nothing is lost either way; a test asserts `max_words` survives a real call.
+- **A filter's settings are saved on dismissal, not per change.** A text field changes per
+  keystroke — the same thing that produced 40-odd revisions in four seconds on the Mac's own
+  plugin page — so `onDisappear` covers both Done and a swipe-down, and a dirty flag means no PUT
+  when nothing changed.
+- **`updated_at` is the moment a session's status last changed, not a heartbeat.** Measured here: a
+  session reporting `busy` with a 1553 s old stamp while it was mid-turn. So it is only the age of
+  an *idle* session, which is what `Fade` reads it as — a busy row is never faded whatever its
+  timestamp says, or the hardest-working row on the rail would be the faintest one. The fade is
+  one opacity over the whole row, applied last so the tile and border travel with the words, log
+  curve from a two-minute grace to a 0.5 floor at eight hours. Portrait only; `SessionRow` has no
+  other caller.
 - **No badges.** A state is the word alone — 9pt mono, tracked, in the state's colour, nothing
   around it. It was a dot and a label inside a bordered capsule, ported from utt, and that shape
   is not to appear in this app again: it reads as something you press, and each one sits beside

@@ -72,15 +72,29 @@ extension AppModel {
                                             to: session.sessionId,
                                             route: self.preferences.route,
                                             images: paths)
-            guard sent.delivered else {
-                self.review[session.sessionId] = text
-                self.status = sent.deliveryError ?? "\(session.name) did not take it"
-                return
-            }
-            self.attached[session.sessionId] = nil
-            self.status = "Sent to \(session.name) by \(sent.deliveredBy ?? "the Mac")"
+            guard self.went(sent, saying: text, to: session) else { return }
             await self.loadTurns(for: session)
         }
+    }
+
+    /// What became of the words, and what the screen does about it. True only when they are
+    /// actually in the session, which is the one case where the transcript is worth re-reading.
+    ///
+    /// A filter refusing them and a session that would not take them are the same case here:
+    /// either way the words still exist and have been said to nobody, so they go back into the
+    /// card rather than being reported and let go of. The status line says which of the two.
+    private func went(_ sent: Delivery, saying text: String, to session: Session) -> Bool {
+        guard sent.went else {
+            review[session.sessionId] = text
+            status = sent.stoppedBy.map { stopped(by: $0, notes: sent.notes) }
+                ?? sent.deliveryError
+                ?? "\(session.name) did not take it"
+            return false
+        }
+        attached[session.sessionId] = nil
+        status = said("Sent to \(session.name) by \(sent.deliveredBy ?? "the Mac")",
+                      notes: sent.notes)
+        return true
     }
 
     private func keep(

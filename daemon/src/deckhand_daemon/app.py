@@ -18,6 +18,7 @@ from . import (
     config,
     deliver,
     files,
+    filters,
     nudge,
     plugin,
     push,
@@ -25,6 +26,7 @@ from . import (
     summarize,
     transcribe,
 )
+from .filters import routes as filter_routes
 from .log import log
 from .reading import asked, readable, transcripts
 
@@ -49,6 +51,16 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Deckhand", version=__version__, lifespan=lifespan)
+app.include_router(filter_routes.router, dependencies=[Depends(require_token)])
+
+
+async def _filtered(
+    session: sessions.Session, text: str, route: str, source: str, images: list[str] | None = None
+) -> filters.Outcome:
+    """What the chain makes of the words, before the session is ever told about them."""
+    return await filters.run(filters.Prompt(
+        text=text, session_id=session.session_id, session_name=session.name, cwd=session.cwd,
+        route=route, source=source, images=images or []))
 
 
 async def _live_session(session_id: str) -> sessions.Session:
@@ -254,21 +266,30 @@ async def upload_audio(
     text, error = await asyncio.to_thread(transcribe.transcribe, path, hints)
     log.info("transcript for %s: %s", session.name, error or repr(text))
     plugin.status(lastClip=f"{session.name}, {error or 'heard'}")
-    taken, delivery_error = None, None
+    taken, delivery_error, checked = None, None, filters.Outcome(text=text or "")
     if text and deliver_now and plugin.delivers():
-        taken, delivery_error = await asyncio.to_thread(
-            deliver.deliver, session, text, route or plugin.route())
-        log.info("delivery to %s: %s", session.name, delivery_error or f"{taken} took it")
-        push.spoke_to(session_id)
+        chosen = route or plugin.route()
+        checked = await _filtered(session, text, chosen, "spoken")
+        if checked.delivered:
+            taken, delivery_error = await asyncio.to_thread(
+                deliver.deliver, session, checked.text, chosen)
+            log.info("delivery to %s: %s", session.name, delivery_error or f"{taken} took it")
+            push.spoke_to(session_id)
+        else:
+            delivery_error = checked.reason
+            log.info("%s refused a clip for %s: %s", checked.stopped_by, session.name, checked.reason)
     return {
         "path": str(path),
         "bytes": len(body),
         "received_at": time.time(),
+        # What utt heard, not what the chain made of it. The notes say what was changed.
         "transcript": text,
         "transcript_error": error,
         "delivered": taken is not None,
         "delivered_by": taken,
         "delivery_error": delivery_error,
+        "notes": checked.notes,
+        "stopped_by": checked.stopped_by,
     }
 
 
@@ -306,12 +327,21 @@ async def say(
 ) -> dict:
     """Put words into a session. The other half of an upload the person asked to read first."""
     session = await _live_session(session_id)
-    said = deliver.with_images(text, _kept_images(session_id, images or []))
-    taken, error = await asyncio.to_thread(
-        deliver.deliver, session, said, route or plugin.route())
-    log.info("delivery to %s: %s", session.name, error or f"{taken} took it")
-    push.spoke_to(session_id)
-    return {"delivered": taken is not None, "delivered_by": taken, "delivery_error": error}
+    chosen = route or plugin.route()
+    kept = _kept_images(session_id, images or [])
+    # The words are filtered before the attachments are named: a replacement list is aimed at
+    # what a person said, and a path is not something they said.
+    checked = await _filtered(session, text, chosen, "typed", kept)
+    taken, error = None, checked.reason or None
+    if checked.delivered:
+        said = deliver.with_images(checked.text, kept)
+        taken, error = await asyncio.to_thread(deliver.deliver, session, said, chosen)
+        log.info("delivery to %s: %s", session.name, error or f"{taken} took it")
+        push.spoke_to(session_id)
+    else:
+        log.info("%s refused a prompt for %s: %s", checked.stopped_by, session.name, checked.reason)
+    return {"delivered": taken is not None, "delivered_by": taken, "delivery_error": error,
+            "notes": checked.notes, "stopped_by": checked.stopped_by}
 
 
 def _kept_images(session_id: str, wanted: list[str]) -> list[str]:

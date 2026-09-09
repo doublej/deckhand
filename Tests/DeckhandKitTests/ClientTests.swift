@@ -93,6 +93,38 @@ struct ClientTests {
         #expect(try #require(String(bytes: body, encoding: .utf8)).contains("run the tests"))
     }
 
+    @Test("the filters arrive with the keys the filters own untouched")
+    func decodesFilters() async throws {
+        StubProtocol.respond(with: Data("""
+        {"known":[{"name":"words","title":"Word replacement","summary":"Swaps words",
+                   "fields":[{"key":"pairs","label":"Replacements","kind":"pairs",
+                              "default":[],"hint":""}]}],
+         "steps":[{"filter":"words","on":true,"settings":{"max_words":12}}]}
+        """.utf8))
+        let offered = try await client().filters()
+        #expect(offered.known.first?.fields.first?.kind == .pairs)
+        // The one way this breaks: the snake-case key strategy reaching a dictionary the filter
+        // owns. `max_words` is the filter's own word and has to come back as it left.
+        #expect(offered.steps.first?.settings["max_words"] == .int(12))
+        #expect(StubProtocol.lastRequest?.url?.path == "/filters")
+    }
+
+    @Test("saving the chain PUTs it and reads back what the Mac will actually run")
+    func savesFilters() async throws {
+        StubProtocol.respond(with: Data("""
+        {"steps":[{"filter":"words","on":false,"settings":{}}]}
+        """.utf8))
+        let step = FilterStep(filter: "words", isOn: true, settings: ["max_words": .int(12)])
+        let saved = try await client().saveFilters([step])
+        #expect(saved.first?.isOn == false)
+        #expect(StubProtocol.lastRequest?.httpMethod == "PUT")
+        #expect(StubProtocol.lastRequest?.url?.path == "/filters")
+        let body = try #require(StubProtocol.lastBody)
+        let text = try #require(String(bytes: body, encoding: .utf8))
+        #expect(text.contains("\"max_words\":12"))
+        #expect(text.contains("\"on\":true"))
+    }
+
     @Test("a bad token surfaces as unauthorized, a dead session as notLive")
     func errors() async throws {
         StubProtocol.respond(with: Data("{}".utf8), status: 401)

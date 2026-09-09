@@ -121,7 +121,10 @@ def test_say_puts_the_words_in_and_names_the_route(token, monkeypatch):
     monkeypatch.setattr(app_module.deliver, "deliver", deliver)
     answer = client(token).post(f"/sessions/{SID}/say?route=keyboard", json={"text": "run the tests"})
     assert answer.status_code == 200
-    assert answer.json() == {"delivered": True, "delivered_by": "keyboard", "delivery_error": None}
+    assert answer.json() == {
+        "delivered": True, "delivered_by": "keyboard", "delivery_error": None,
+        "notes": [], "stopped_by": None,
+    }
     assert seen == {"text": "run the tests", "route": "keyboard"}
 
 

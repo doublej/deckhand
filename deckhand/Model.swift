@@ -75,6 +75,15 @@ final class AppModel {
     /// Pictures pinned to those words, per session, until they are sent or discarded.
     var attached: [String: [Snap]] = [:]
     var showsHidden = false
+    /// Everything the Mac can do to words on their way in, as the Mac describes it. The phone
+    /// holds no list of its own: `Filtering.swift` is the whole of what it knows about filters.
+    var knownFilters: [Filter] = []
+    /// The chain, in the order it runs. One step per filter, the off ones included, so the
+    /// settings screen has something to draw for a filter nobody has switched on yet.
+    var filterChain: [FilterStep] = []
+    /// Edited and not yet sent. The save happens on the way out of Settings rather than on each
+    /// change, because a text field changes on every letter.
+    var filtersDirty = false
 
     private let logger = Logger(subsystem: "dev.jurrejan.deckhand", category: "app")
 
@@ -177,12 +186,20 @@ final class AppModel {
 
     /// Either it is already on its way, or it is waiting to be read first.
     private func received(_ receipt: UploadReceipt, for session: Session, confirms: Bool) {
+        // A filter refused it: the words are held rather than reported and let go of. The review
+        // card is the one place in this app where words exist and have not been sent, and it can
+        // be edited — which is the only useful answer to a filter that will not pass something.
+        if let text = receipt.transcript, receipt.stoppedBy != nil {
+            review[session.sessionId] = text
+            status = outcome(of: receipt, to: session)
+            return
+        }
         guard let text = receipt.transcript, confirms else {
-            status = Self.outcome(of: receipt, to: session)
+            status = outcome(of: receipt, to: session)
             // Fetch rather than fake it: the words are in the session's own transcript within
             // a moment, and showing them from there means they are shown once, in order, and
             // looking like every other thing said in this conversation.
-            if receipt.delivered { Task { await self.loadTurns(for: session) } }
+            if receipt.went { Task { await self.loadTurns(for: session) } }
             return
         }
         review[session.sessionId] = text
@@ -198,13 +215,18 @@ final class AppModel {
         status = "Discarded"
     }
 
-    /// What actually happened to the clip, in the order the person cares about it.
-    static func outcome(of receipt: UploadReceipt, to session: Session) -> String {
+    /// What actually happened to the clip, in the order the person cares about it. A filter
+    /// refusing it comes first: that is the one outcome that looks like success from the outside.
+    func outcome(of receipt: UploadReceipt, to session: Session) -> String {
         guard receipt.transcript != nil else {
             return receipt.transcriptError ?? "Sent \(receipt.bytes / 1024) KB, no transcript"
         }
+        if let refused = receipt.stoppedBy {
+            return stopped(by: refused, notes: receipt.notes)
+        }
         if receipt.delivered {
-            return "Sent to \(session.name) by \(receipt.deliveredBy ?? "the Mac")"
+            return said("Sent to \(session.name) by \(receipt.deliveredBy ?? "the Mac")",
+                        notes: receipt.notes)
         }
         return receipt.deliveryError ?? "Transcribed, but \(session.name) did not take it"
     }

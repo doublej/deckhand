@@ -15,6 +15,7 @@ struct SettingsView: View {
                     mac
                     talking
                     route
+                    FilterSettings(model: model)
                     hidden
                     footline
                 }

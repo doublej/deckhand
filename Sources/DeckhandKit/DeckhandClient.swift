@@ -128,6 +128,25 @@ public struct DeckhandClient: Sendable {
         return kept.path
     }
 
+    /// What this Mac can do to words on their way in, and the chain it is running now.
+    ///
+    /// `known` is the description the settings screen draws itself from — the phone holds no
+    /// list of filters, which is what lets a filter added on the Mac appear here without a build.
+    public func filters() async throws -> (known: [Filter], steps: [FilterStep]) {
+        let offered: FilterOffer = try literally(try await send(request(.get, "filters")))
+        return (offered.known, offered.steps)
+    }
+
+    /// Save the chain, and take the Mac's own reading of it back. What it answers with is what
+    /// it will run, so the screen follows that rather than what it just sent.
+    public func saveFilters(_ steps: [FilterStep]) async throws -> [FilterStep] {
+        var req = request(.put, "filters")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body = try JSONEncoder().encode(FilterChain(steps: steps))
+        let saved: FilterChain = try literally(try await send(req, body: body))
+        return saved.steps
+    }
+
     /// Hand the Mac a token it can push a Lock Screen update to.
     ///
     /// Two kinds, and the daemon needs both. An `activity` token updates the card that is
@@ -184,7 +203,7 @@ public struct DeckhandClient: Sendable {
 
     // MARK: - plumbing
 
-    private enum Method: String { case get = "GET", post = "POST" }
+    private enum Method: String { case get = "GET", post = "POST", put = "PUT" }
 
     private func request(_ method: Method, _ path: String) -> URLRequest {
         var req = URLRequest(url: URL(string: path, relativeTo: baseURL) ?? baseURL)
@@ -218,6 +237,16 @@ public struct DeckhandClient: Sendable {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         return try decoder.decode(T.self, from: data)
+    }
+
+    /// The same decode with the keys left exactly as they arrived.
+    ///
+    /// `.convertFromSnakeCase` rewrites the keys of a dictionary as well as those of a struct,
+    /// and a step's `settings` is a dictionary the filter owns: a filter taking `max_words` would
+    /// be handed back `maxWords`, which is a setting it has never heard of. Nothing on the
+    /// filters wire is snake case, so there is nothing to convert either.
+    private func literally<T: Decodable>(_ data: Data) throws -> T {
+        try JSONDecoder().decode(T.self, from: data)
     }
 
     private func multipart(boundary: String, clip: URL) throws -> Data {

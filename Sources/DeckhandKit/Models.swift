@@ -122,6 +122,25 @@ public struct Delivery: Codable, Hashable, Sendable {
     public let delivered: Bool
     public let deliveredBy: String?
     public let deliveryError: String?
+    /// What the filters on the Mac wanted said about the words on their way in: what was
+    /// swapped, what was looked up. Empty from a daemon that predates filtering.
+    public var notes: [String] = []
+    /// The filter that refused to let the words through, when one did.
+    public var stoppedBy: String?
+
+    /// Whether the words actually reached the session. `delivered` alone is not that question:
+    /// a filter stopping something is not a delivery failure, it is a deliberate no, and every
+    /// screen here has to tell the person which of the two happened.
+    public var went: Bool { delivered && stoppedBy == nil }
+
+    public init(from decoder: Decoder) throws {
+        let box = try decoder.container(keyedBy: CodingKeys.self)
+        delivered = try box.decodeIfPresent(Bool.self, forKey: .delivered) ?? false
+        deliveredBy = try box.decodeIfPresent(String.self, forKey: .deliveredBy)
+        deliveryError = try box.decodeIfPresent(String.self, forKey: .deliveryError)
+        notes = try box.decodeIfPresent([String].self, forKey: .notes) ?? []
+        stoppedBy = try box.decodeIfPresent(String.self, forKey: .stoppedBy)
+    }
 }
 
 /// What the Mac wrote to disk for an uploaded clip. `transcript` stays nil until phase two.
@@ -136,6 +155,26 @@ public struct UploadReceipt: Codable, Hashable, Sendable {
     public let delivered: Bool
     public let deliveredBy: String?
     public let deliveryError: String?
+    /// The filters' own two answers, exactly as on `Delivery`: what they wanted to say, and
+    /// which of them refused. Both absent from a daemon that predates filtering.
+    public var notes: [String] = []
+    public var stoppedBy: String?
+
+    public var went: Bool { delivered && stoppedBy == nil }
+
+    public init(from decoder: Decoder) throws {
+        let box = try decoder.container(keyedBy: CodingKeys.self)
+        path = try box.decodeIfPresent(String.self, forKey: .path) ?? ""
+        bytes = try box.decodeIfPresent(Int.self, forKey: .bytes) ?? 0
+        receivedAt = try box.decodeIfPresent(Double.self, forKey: .receivedAt) ?? 0
+        transcript = try box.decodeIfPresent(String.self, forKey: .transcript)
+        transcriptError = try box.decodeIfPresent(String.self, forKey: .transcriptError)
+        delivered = try box.decodeIfPresent(Bool.self, forKey: .delivered) ?? false
+        deliveredBy = try box.decodeIfPresent(String.self, forKey: .deliveredBy)
+        deliveryError = try box.decodeIfPresent(String.self, forKey: .deliveryError)
+        notes = try box.decodeIfPresent([String].self, forKey: .notes) ?? []
+        stoppedBy = try box.decodeIfPresent(String.self, forKey: .stoppedBy)
+    }
 }
 
 public struct Health: Codable, Hashable, Sendable {
