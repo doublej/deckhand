@@ -33,3 +33,39 @@ struct ServerSettingsTests {
         #expect(loaded == ServerSettings(host: "mini.local:4180", token: "abc123"))
     }
 }
+
+@Suite("Preferences")
+struct PreferencesTests {
+    @Test("starring and hiding survive a round trip")
+    func roundTrip() throws {
+        let defaults = try #require(UserDefaults(suiteName: "deckhand.prefs.\(UUID().uuidString)"))
+        var prefs = Preferences()
+        prefs.toggleFavorite("warm-okapi")
+        prefs.setHidden("binwatch", true)
+        prefs.talkMode = .toggle
+        prefs.save(to: defaults)
+
+        let loaded = Preferences.load(from: defaults)
+        #expect(loaded.isFavorite("warm-okapi"))
+        #expect(loaded.isHidden("binwatch"))
+        #expect(loaded.talkMode == .toggle)
+    }
+
+    @Test("hiding a session drops it from favourites, since it cannot be both")
+    func hidingClearsFavourite() {
+        var prefs = Preferences(favorites: ["utt"])
+        prefs.setHidden("utt", true)
+        #expect(prefs.isFavorite("utt") == false)
+        #expect(prefs.isHidden("utt"))
+        prefs.setHidden("utt", false)
+        #expect(prefs.isHidden("utt") == false)
+    }
+
+    @Test("starring twice unstars")
+    func toggling() {
+        var prefs = Preferences()
+        prefs.toggleFavorite("a")
+        prefs.toggleFavorite("a")
+        #expect(prefs.favorites.isEmpty)
+    }
+}

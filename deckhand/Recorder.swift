@@ -38,13 +38,19 @@ final class Recorder {
         ])
     }
 
-    /// Stops and hands back the clip, or nil when nothing was recorded.
+    /// Stops and hands back the clip, or nil when nothing usable was recorded.
+    /// Anything under 0.3 s is a tap, and the transcription engine rejects those.
     func stop() -> URL? {
         guard let recorder, isRecording else { return nil }
+        let tooShort = recorder.currentTime < 0.3
         recorder.stop()
         isRecording = false
         self.recorder = nil
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        if tooShort {
+            try? FileManager.default.removeItem(at: recorder.url)
+            return nil
+        }
         return recorder.url
     }
 }

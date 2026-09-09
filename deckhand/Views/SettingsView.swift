@@ -1,6 +1,7 @@
+import DeckhandKit
 import SwiftUI
 
-/// Pairing: where the Mac is, and the token the daemon printed when it started.
+/// Pairing and the two choices that change how the whole app behaves.
 struct SettingsView: View {
     @Bindable var model: AppModel
     @Environment(\.dismiss) private var dismiss
@@ -19,6 +20,17 @@ struct SettingsView: View {
                 }
                 .font(.system(.body, design: .monospaced))
 
+                Section("Talking") {
+                    Picker("Button", selection: talkMode) {
+                        ForEach(TalkMode.allCases, id: \.self) { mode in
+                            Text(mode.label).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                hiddenSection
+
                 Section {
                     Button("Check connection") {
                         model.saveSettings()
@@ -29,7 +41,7 @@ struct SettingsView: View {
                         .font(.system(.caption2, design: .monospaced))
                 }
             }
-            .navigationTitle("Pair")
+            .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -37,6 +49,24 @@ struct SettingsView: View {
                         model.saveSettings()
                         dismiss()
                     }
+                }
+            }
+        }
+    }
+
+    private var talkMode: Binding<TalkMode> {
+        Binding(get: { model.preferences.talkMode }, set: { model.setTalkMode($0) })
+    }
+
+    @ViewBuilder private var hiddenSection: some View {
+        if !model.preferences.hidden.isEmpty {
+            Section("Hidden") {
+                ForEach(Array(model.preferences.hidden).sorted(), id: \.self) { name in
+                    Button("Show \(name)", systemImage: "eye") {
+                        model.preferences.setHidden(name, false)
+                        model.preferences.save()
+                    }
+                    .font(.system(.footnote, design: .monospaced))
                 }
             }
         }

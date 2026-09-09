@@ -30,6 +30,28 @@ xcode: generate
 daemon:
     uv run --directory daemon deckhand-daemon
 
+# Copy the utt API token out of 1Password so the launchd agent can read it.
+
+# onenv cannot run under launchd: 1Password has no way to ask for a fingerprint there.
+[group('setup')]
+sync-secrets:
+    @mkdir -p ~/Library/Application\ Support/Deckhand
+    @onenv get deckhand UTT_SECRET > ~/Library/Application\ Support/Deckhand/utt-token
+    @chmod 600 ~/Library/Application\ Support/Deckhand/utt-token
+    @echo 'utt token written to ~/Library/Application Support/Deckhand/utt-token'
+
+# Follow the daemon log (the same file Console.app shows under ~/Library/Logs).
+[group('develop')]
+logs:
+    tail -f ~/Library/Logs/Deckhand/deckhand.log
+
+# Build and start the menu bar controller for the daemon.
+[group('develop')]
+menubar: generate
+    xcodebuild -project Deckhand.xcodeproj -scheme DeckhandMenu -destination 'platform=macOS' \
+        -configuration Debug -derivedDataPath .build/menubar build
+    open .build/menubar/Build/Products/Debug/DeckhandMenu.app
+
 # The pairing token the app needs.
 [group('develop')]
 token:
@@ -145,6 +167,8 @@ check:
     just lint
     @echo '→ Running build...'
     just build
+    @echo '→ Building the menu bar app...'
+    xcodebuild -project Deckhand.xcodeproj -scheme DeckhandMenu -destination 'platform=macOS' -configuration Debug build | tail -1
     @echo '→ Running tests...'
     just test
     @echo '→ Linting the daemon...'
@@ -187,7 +211,7 @@ update-scaffold *ARGS:
 
 # Run the daemon at login, on port 4180.
 [group('ops')]
-install-agent:
+install-agent: sync-secrets
     ln -sf {{ justfile_directory() }}/launchd/com.jurrejan.deckhand.plist ~/Library/LaunchAgents/com.jurrejan.deckhand.plist
     launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.jurrejan.deckhand.plist
     @curl -sf --retry 20 --retry-delay 1 --retry-connrefused http://127.0.0.1:4180/health && echo ' ← daemon is up'

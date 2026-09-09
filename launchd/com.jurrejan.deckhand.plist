@@ -17,15 +17,15 @@
     <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>/tmp/deckhand.log</string>
+    <string>/Users/jurrejan/Library/Logs/Deckhand/launchd.out.log</string>
     <key>StandardErrorPath</key>
-    <string>/tmp/deckhand.error.log</string>
+    <string>/Users/jurrejan/Library/Logs/Deckhand/launchd.err.log</string>
     <key>EnvironmentVariables</key>
     <dict>
         <key>HOME</key>
         <string>/Users/jurrejan</string>
         <key>PATH</key>
-        <string>/opt/homebrew/bin:/Users/jurrejan/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <string>/opt/homebrew/bin:/Users/jurrejan/.local/bin:/Users/jurrejan/.bun/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
     </dict>
     <key>ProcessType</key>
     <string>Background</string>

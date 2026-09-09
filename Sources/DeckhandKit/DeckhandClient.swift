@@ -17,8 +17,13 @@ public struct DeckhandClient: Sendable {
     }
 
     public func sessions() async throws -> [Session] {
-        let body: [String: [Session]] = try await get("sessions")
-        return body["sessions"] ?? []
+        let body: SessionList = try await get("sessions")
+        return body.sessions
+    }
+
+    /// What the session did since you last spoke. The Mac runs a small model to write it.
+    public func summary(of sessionId: String) async throws -> Summary {
+        try await get("sessions/\(sessionId)/summary")
     }
 
     public func turns(of sessionId: String, limit: Int = 8) async throws -> [Turn] {
@@ -31,11 +36,13 @@ public struct DeckhandClient: Sendable {
         _ = try await send(request(.post, "sessions/\(sessionId)/focus"))
     }
 
-    /// Upload a recorded clip. Phase one: the Mac stores it and answers with where it landed.
+    /// Upload a recorded clip. The Mac stores it, transcribes it, and answers with the text.
     public func upload(clip: URL, to sessionId: String) async throws -> UploadReceipt {
         let boundary = "deckhand.\(UUID().uuidString)"
         var req = request(.post, "sessions/\(sessionId)/audio")
         req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        // The Mac transcribes before answering, and utt's first request loads the model.
+        req.timeoutInterval = 200
         let data = try multipart(boundary: boundary, clip: clip)
         return try decode(try await send(req, body: data))
     }
@@ -88,6 +95,10 @@ public struct DeckhandClient: Sendable {
         data.append("\r\n--\(boundary)--\r\n")
         return data
     }
+}
+
+private struct SessionList: Decodable {
+    let sessions: [Session]
 }
 
 private extension Data {
