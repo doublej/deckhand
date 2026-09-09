@@ -52,9 +52,11 @@ class Session:
     updated_at: float
     tty: str
     pane: Pane | None
+    socket_path: str = ""  # its own peer inbox; how text gets in. Local to the Mac.
 
     def to_json(self) -> dict:
         d = asdict(self)
+        d.pop("socket_path")
         d["folder"] = Path(self.cwd).name
         return d
 
@@ -162,6 +164,7 @@ def live_sessions(iterm_only: bool = True) -> list[Session]:
                 updated_at=rec.get("updatedAt", rec.get("startedAt", 0)) / 1000,
                 tty=tty,
                 pane=pane,
+                socket_path=rec.get("messagingSocketPath", ""),
             )
         )
     found.sort(key=lambda s: s.updated_at, reverse=True)

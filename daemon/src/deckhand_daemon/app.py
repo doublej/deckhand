@@ -9,7 +9,7 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, UploadFile
 
-from . import __version__, config, sessions, summarize, transcribe, transcripts
+from . import __version__, config, deliver, sessions, summarize, transcribe, transcripts
 from .log import log
 
 AUDIO_SUFFIXES = {".m4a", ".caf", ".wav", ".mp3", ".aac", ".mp4", ".ogg", ".flac", ".webm"}
@@ -106,12 +106,18 @@ async def upload_audio(session_id: str, file: UploadFile) -> dict:
     log.info("clip for %s: %d bytes", session.name, len(body))
     text, error = await asyncio.to_thread(transcribe.transcribe, path)
     log.info("transcript for %s: %s", session.name, error or repr(text))
+    delivered, delivery_error = False, None
+    if text:
+        delivered, delivery_error = await asyncio.to_thread(deliver.deliver, session, text)
+        log.info("delivery to %s: %s", session.name, delivery_error or "arrived")
     return {
         "path": str(path),
         "bytes": len(body),
         "received_at": time.time(),
         "transcript": text,
         "transcript_error": error,
+        "delivered": delivered,
+        "delivery_error": delivery_error,
     }
 
 

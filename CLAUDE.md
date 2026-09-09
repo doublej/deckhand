@@ -8,13 +8,21 @@ Two halves in one repo. A Python daemon on the Mac lists every live Claude Code 
 serves the last rounds of its conversation, and stores voice clips the phone sends. A SwiftUI
 iOS app is the remote: pick a session, read what it just said, hold to talk.
 
-Phase 1 (shipped) carries audio to the Mac and stops there — `transcript` in the upload
-receipt is always `null`. Phase 2 transcribes on the Mac and types the result into the pane.
+What is shipped, end to end: the phone lists sessions, reads the last rounds, and holds to
+talk; the Mac stores the clip, transcribes it with utt, and writes the text straight into that
+session's own inbox socket, the way one Claude session messages another. A menu bar app
+controls the daemon.
 
 ## Stack
 
 - Daemon: Python 3.13, FastAPI, uv. Port **4180**, binds `0.0.0.0`, launchd agent
-  `com.jurrejan.deckhand`.
+  `com.jurrejan.deckhand`. Logs to `~/Library/Logs/Deckhand/deckhand.log`, which is what
+  Console.app shows in its sidebar (`just logs` to follow it).
+- Transcription: utt's local API on `127.0.0.1:8756`, on-device, nothing leaves the Mac.
+- Summaries: the Claude Agent SDK, sonnet at low effort, one turn, no tools.
+- Menu bar app (`menubar/`, target `DeckhandMenu`): start, stop, restart, copy the token,
+  open the log. `just menubar`.
+- Secrets: onenv namespace **deckhand**, key `UTT_SECRET` (utt's bearer token).
 - App: Swift 6.2, SwiftUI, iOS 26. `DeckhandKit` (SwiftPM library) holds the models and the
   HTTP client so they are testable on the Mac; the app target comes from XcodeGen.
 - State on the Mac: `~/Library/Application Support/Deckhand/` — `token` and `audio/<sessionId>/`.
@@ -24,9 +32,13 @@ receipt is always `null`. Phase 2 transcribes on the Mac and types the result in
 ```
 daemon/src/deckhand_daemon/
   sessions.py     # which Claude sessions are alive, and their iTerm pane
-  transcripts.py  # the last rounds, read from the tail of the session's JSONL
-  app.py          # the five endpoints
+  transcripts.py  # the last rounds, and the activity blob a summary is written from
+  transcribe.py   # utt turns a clip into text
+  deliver.py      # the text goes into the session's own peer socket
+  summarize.py    # what happened since you last spoke, via the Claude Agent SDK
+  app.py          # the endpoints
   config.py       # data dir, token, port
+  log.py          # the one log file, in ~/Library/Logs
 Sources/DeckhandKit/
   Models.swift, DeckhandClient.swift, ServerSettings.swift
 deckhand/         # the app: App, Model, Recorder, Views/
@@ -34,10 +46,12 @@ UITests/          # drives the simulator against a running daemon
 launchd/          # the agent plist, symlinked into ~/Library/LaunchAgents
 ```
 
-`GET /sessions` → tap a row → `GET /sessions/{id}/turns` → hold to talk →
-`POST /sessions/{id}/audio`. `POST /sessions/{id}/focus` brings that pane forward on the Mac.
-`/health` is the only unauthenticated route; everything else needs the `x-deckhand-token`
-header.
+`GET /sessions` → tap a row → `GET /sessions/{id}/turns` and `GET /sessions/{id}/summary` →
+hold to talk → `POST /sessions/{id}/audio`, which answers with the transcript and whether it
+reached the session.
+`POST /sessions/{id}/focus` brings that pane forward on the Mac. `/health` is the only
+unauthenticated route; everything else needs the `x-deckhand-token` header, and both
+`/health` and `/sessions` carry an `iterm` field saying whether pane data is trustworthy.
 
 ## Quirks worth knowing
 
@@ -53,6 +67,17 @@ header.
   someone clicks it, `it2` blocks: pane data is missing and `/sessions` costs the 4 s timeout.
   It happened once when the launchd agent was first bootstrapped and has been approved since.
   The pane map is cached for 3 s because one `it2` call costs ~0.5 s.
+- **Under launchd the iTerm join does not work**: `it2` blocks waiting for an approval that
+  cannot be shown to a background agent, so the daemon lists every live session with no pane
+  and says so in the `iterm` field. A failed lookup backs off for a minute — before that, the
+  4 s timeout was paid on every request and starved the event loop. Run `just daemon` from an
+  iTerm window when you want panes and Focus on Mac.
+- **onenv cannot run under launchd** either: 1Password has no way to ask for a fingerprint, so
+  the read hangs and times out. `just sync-secrets` materialises `deckhand/UTT_SECRET` into
+  `~/Library/Application Support/Deckhand/utt-token` (0600) and the daemon reads that.
+- Anything the summariser or the transcriber needs must be reachable without a person present.
+  The summariser passes `setting_sources=[]` for the same reason it is fast: loading the user
+  settings starts every configured MCP server, which cost more than a minute.
 - Sessions with no iTerm pane are hidden — unless iTerm answers nothing at all, in which case
   every live session is listed so the app still works without the iTerm Python API.
 - ATS: the app talks plain HTTP to a `.local` name, which needs `NSAllowsLocalNetworking`
@@ -68,9 +93,16 @@ header.
 - `xcrun devicectl device process launch ... -- -deckhand.host <host> -deckhand.token <token>`
   starts the app already paired; the model writes launch-argument settings back to defaults, so
   the pairing survives a cold start. The `--` matters: devicectl eats the flags without it.
-- Phase 2 has two ready threads: `messagingSocketPath` in the session record is Claude Code's
-  own peer socket (better than typing into the pane), and `python/parakeet-server` is the
-  local ASR service, currently disabled for memory.
+- **Delivery goes through the session's own peer socket**, not the keyboard: every session
+  listens on the `messagingSocketPath` in its record, and the wire format is newline-delimited
+  JSON — an optional `{"type":"auth","token":…}` line carrying the `peerToken` out of the
+  sibling `<pid>.<hash>.key` file, then one `{"msgV":1,"type":"user","message":{…},"priority":
+  "next"}` frame. Nothing comes back: a successful write is the only acknowledgement, and a
+  session that is mid-turn queues the message rather than dropping it. It arrives labelled as
+  a message from another Claude session, so the daemon does not have to fake a keystroke.
+  Verified against a real live session on 2026-09-09, not only against a test socket.
+- `python/parakeet-server` is the other local ASR service, currently disabled for memory; utt
+  is what deckhand uses.
 
 ## Verification
 
