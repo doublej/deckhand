@@ -16,9 +16,9 @@ final class DeckLoopTests: XCTestCase {
         add(screenshot(app, named: "deck"))
 
         firstSession.tap()
-        let talk = app.staticTexts.matching(
-            NSPredicate(format: "label CONTAINS 'TO TALK' OR label CONTAINS 'RECORDING'")
-        ).firstMatch
+        // The mark, not a label: at rest the talk control is the mark and nothing else — no
+        // bar, no caption — so the mark is what says this is a session's page.
+        let talk = app.descendants(matching: .any).matching(identifier: "talk-mark").firstMatch
         let appeared = talk.waitForExistence(timeout: 15)
         add(screenshot(app, named: "session"))
         XCTAssertTrue(appeared, "the talk button never appeared")
@@ -40,7 +40,7 @@ final class DeckLoopTests: XCTestCase {
         XCTAssertTrue(firstSession.waitForExistence(timeout: 20), "the deck stayed empty")
 
         firstSession.press(forDuration: 1.2)
-        let talk = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'TO TALK'")).firstMatch
+        let talk = app.descendants(matching: .any).matching(identifier: "talk-mark").firstMatch
         XCTAssertFalse(talk.waitForExistence(timeout: 3), "a press on a row opened the session")
         XCTAssertTrue(firstSession.exists, "the sessions list went away")
     }

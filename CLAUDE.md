@@ -156,6 +156,15 @@ unauthenticated route; everything else needs the `x-deckhand-token` header, and 
   and the phone decides how many to show (`AskList.shown`). This needs more than one turn, so the
   run is `max_turns=16` with `permission_mode="bypassPermissions"` — safe only because those three
   functions are the entire tool surface and nobody is at the daemon to answer a prompt.
+- **The talk control is a mark and nothing else.** It floats over the pane rather than sitting
+  under it, and the scrolling panes add `TalkMark.clearance` to the end of their content so
+  nothing is stuck behind it. No bar, no ground, no resting label: a band of furniture across
+  the page to hold one button was the first thing asked to go. What a tap will do slides out on
+  a pill to the left, the way out to the right, and both the mark and that left pill send —
+  the pill reads as an instruction otherwise. Because it floats, `TalkControl` sets **no**
+  `contentShape` of its own: the hit area is whatever the caller drew, or an invisible
+  full-width slot would swallow taps meant for the page behind it. Nothing is labelled at rest,
+  so the UI test looks for the mark's `talk-mark` identifier.
 - **A gesture on a list row has to share the touch.** The sessions row has three jobs on one
   touch: tap to open, press to talk, swipe to star. `highPriorityGesture` and `ExclusiveGesture`
   both take the touch and broke the tap *and* the swipe; a `Button` takes it the other way and the

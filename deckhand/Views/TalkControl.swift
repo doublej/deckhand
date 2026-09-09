@@ -37,7 +37,6 @@ struct TalkControl<Content: View>: View {
                           cancel: cancel,
                           stop: stop,
                           tapped: tapped))
-            .contentShape(.rect)
             .modifier(TalkGesture(mode: mode,
                                   isRecording: isRecording,
                                   pressToStart: pressToStart,
@@ -164,41 +163,41 @@ private struct TalkGesture: ViewModifier {
 /// Deckhand's teal at rest. While you talk it turns utt orange, speeds up with your voice and
 /// dims between words — recording is utt's job in every plugin, so it wears utt's colour.
 ///
-/// The mark sits in the middle and the two things you can do slide out either side of it: what
-/// a tap will do from the left, the way out from the right, each centred in its own half. They
-/// were a row that reflowed every time the state changed, which moved the button itself — the
-/// one thing on the page that must not move while your thumb is coming down on it.
+/// At rest it is the only thing here: one mark, in the middle, over whatever you were reading.
+/// Nothing else — no bar, no label, no ground. Press it and the two things you can do slide out
+/// either side, each on its own pill and each centred in its half. They were a row that
+/// reflowed whenever the state changed, which moved the button itself, and then a bar behind
+/// all three, which put a band of furniture across the page to hold one button.
 struct TalkMark: View {
     let state: TalkState
     let level: Double
 
-    /// How much room a scrolling pane leaves at the end of its content for this to float over.
-    /// The mark is 40, plus its tile, plus the capsule around it.
-    static let clearance: CGFloat = 76
+    /// How much room a scrolling pane leaves at the end of its content for the mark to float
+    /// over: the mark, its tile, and the air around it.
+    static let clearance: CGFloat = 68
 
     private var isRecording: Bool { state.isRecording }
 
     var body: some View {
         HStack(spacing: Spacing.extraSmall) {
-            wing(label, edge: .leading, tint: isRecording ? Palette.recording : Palette.textTertiary)
+            // Tappable, not a caption: it says "tap to send", so tapping it sends. The mark
+            // does the same thing, and either is the obvious one to reach for.
+            wing(label,
+                 edge: .leading,
+                 tint: isRecording ? Palette.recording : Palette.textTertiary,
+                 action: state.tapped)
             mark
             wing(state.canCancel ? "CANCEL" : nil, edge: .trailing, tint: Palette.textSecondary) {
                 state.cancel()
             }
         }
-        .padding(.horizontal, Spacing.small)
         .padding(.vertical, Spacing.extraSmall)
-        .background(
-            Capsule(style: .continuous)
-                .fill(Palette.surfacePrimary)
-                .shadow(color: .black.opacity(0.18), radius: 10, y: 3)
-        )
-        .overlay(Capsule(style: .continuous).strokeBorder(Palette.strokeHairline))
         .animation(.snappy(duration: 0.2), value: label)
         .animation(.snappy(duration: 0.2), value: state.canCancel)
-        .contentShape(.capsule)
     }
 
+    /// Its own ground and its own shadow, because there is nothing else behind it now — the
+    /// page it floats over is whatever you were reading.
     private var mark: some View {
         DotMark.live(
             size: 40,
@@ -211,11 +210,18 @@ struct TalkMark: View {
         .background(
             RoundedRectangle(cornerRadius: Radius.large, style: .continuous)
                 .fill(Palette.lcdGround)
+                .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
         )
+        .contentShape(.rect)
+        // The only thing on this page with no words on it, so it says what it is out loud —
+        // and it is what the UI test looks for now that nothing is labelled at rest.
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel(isRecording ? "Recording, tap to send" : "Talk to this session")
+        .accessibilityIdentifier("talk-mark")
     }
 
-    /// One half of the bar: a word centred in it, sliding in from its own edge. Nothing to say
-    /// still takes the space, so the mark stays where it was.
+    /// One half of the bar: a word on a pill, centred in that half, sliding in from its own
+    /// edge. Nothing to say takes the space but draws nothing and catches nothing.
     @ViewBuilder
     private func wing(_ word: String?,
                       edge: Edge,
@@ -223,23 +229,38 @@ struct TalkMark: View {
                       action: (() -> Void)? = nil) -> some View {
         ZStack {
             if let word {
-                Text(word)
-                    .font(Typography.pill)
-                    .tracking(1.4)
-                    .foregroundStyle(tint)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                pill(word, tint: tint, action: action)
                     .id(word)
                     .transition(.move(edge: edge).combined(with: .opacity))
-                    .onTapGesture { action?() }
             }
         }
         .frame(maxWidth: .infinity)
     }
 
+    private func pill(_ word: String, tint: Color, action: (() -> Void)?) -> some View {
+        Text(word)
+            .font(Typography.pill)
+            .tracking(1.4)
+            .foregroundStyle(tint)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .padding(.horizontal, Spacing.small)
+            .padding(.vertical, 6)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Palette.surfacePrimary)
+                    .shadow(color: .black.opacity(0.18), radius: 8, y: 2)
+            )
+            .contentShape(.capsule)
+            .onTapGesture { action?() }
+            .accessibilityAddTraits(.isButton)
+    }
+
+    /// Nothing at rest: the mark says what it is. Only once it is listening is there anything
+    /// to tell you, and then there are two things and they are both actions.
     private var label: String? {
         if state.busy { return "SENDING" }
-        if isRecording { return state.mode == .hold ? "RELEASE TO SEND" : "TAP TO SEND" }
-        return state.mode == .hold ? "HOLD TO TALK" : "TAP TO TALK"
+        guard isRecording else { return nil }
+        return state.mode == .hold ? "RELEASE TO SEND" : "TAP TO SEND"
     }
 }
