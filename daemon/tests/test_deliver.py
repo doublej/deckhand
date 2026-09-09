@@ -63,7 +63,10 @@ def test_a_session_with_a_pane_is_typed_into(inbox, claude_home, monkeypatch):
     session = session_for(inbox.getsockname())
     session.pane = a_pane()
     assert deliver.deliver(session, "  run  the tests  ") == (True, None)
-    assert typed == [["it2", "session", "run", "-s", "PANE-1", "run the tests"]]
+    assert typed == [
+        ["it2", "session", "send", "-s", "PANE-1", deliver.CLEAR_LINE + "run the tests"],
+        ["it2", "session", "send", "-s", "PANE-1", deliver.RETURN],
+    ]
 
 
 def test_a_pane_that_will_not_take_it_falls_back_to_the_socket(inbox, claude_home, monkeypatch):

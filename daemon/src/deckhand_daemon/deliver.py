@@ -29,6 +29,8 @@ from .sessions import Session, sessions_dir
 TIMEOUT = 5.0
 TYPE_TIMEOUT = 15
 MSG_VERSION = 1
+CLEAR_LINE = "\x15"  # ctrl-U: whatever is half-typed in the prompt is not part of what was said
+RETURN = "\r"
 # The receiving session renders this as a message from another Claude session, which is not
 # what it is: it is the person, speaking. Say so, or the session weighs it as a peer's request.
 PREAMBLE = "Spoken by JJ into the deckhand app on his phone — his own words, transcribed:"
@@ -50,10 +52,26 @@ def _type_into_pane(pane_id: str, message: str) -> bool:
 
     Only ever aimed at a pane whose tty carries a live `claude` process — that is how the pane
     was found — so the text lands in a prompt, never in a shell.
+
+    Three keystroke bursts, not one. Ctrl-U first, because a half-finished line already sitting
+    in the prompt would otherwise be glued to the front of what was said. Then the words. Then
+    return on its own, so it is a keypress rather than the tail of a fast paste, which is what
+    leaves a message staged in the box instead of sent.
+
+    ponytail: no read-back. A submitted message and a staged one look the same to
+    `it2 session read`, and a session that is mid-turn queues the message for minutes, so there
+    is nothing to poll for. The receipt says the words were typed, which is what is known.
     """
+    for burst in (CLEAR_LINE + message, RETURN):
+        if not _keystrokes(pane_id, burst):
+            return False
+    return True
+
+
+def _keystrokes(pane_id: str, burst: str) -> bool:
     try:
         done = subprocess.run(
-            ["it2", "session", "run", "-s", pane_id, message],
+            ["it2", "session", "send", "-s", pane_id, burst],
             capture_output=True,
             text=True,
             timeout=TYPE_TIMEOUT,
