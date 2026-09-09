@@ -27,11 +27,16 @@ phone. Ticked items are verified, not just written.
       If the receiving session should treat it as its own user speaking, the frame needs
       whatever marks a message as the operator's — worth reading Claude Code's peer protocol
       before guessing.
+- [ ] Guard against pid reuse before delivering. The key file carries `procStart`, which is how
+      Claude Code itself avoids messaging a recycled pid; `deliver()` does not check it. Records
+      are read fresh on every request today, so the window is small — it opens the moment
+      anything caches them.
 - [ ] Panes under launchd. `it2` cannot get iTerm's Python API approval from a background
       agent, so window/tab data and Focus on Mac are missing unless the daemon runs in a
       terminal. Candidate fix: let the menu bar app (a real GUI app, which can hold the
       permission) collect pane data and POST it to the daemon.
 - [ ] Summary latency is ~30 s cold. Cache is per activity blob; consider summarising on the
       Mac's own schedule so the phone reads a ready answer.
-- [ ] Multi-line transcripts in the deck columns are clipped at 14 lines; no way to scroll one
-      column without triggering the talk gesture. Needs a scroll/talk split.
+- [ ] A column scrolls vertically now that a press has to settle before it records, but the
+      two gestures still share a surface. Watch whether a slow, deliberate scroll ever starts
+      a clip in real use.
