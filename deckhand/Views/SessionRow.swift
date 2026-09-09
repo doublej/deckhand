@@ -35,14 +35,14 @@ struct SessionRow: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if !asks.isEmpty || session.pages > 0 {
-                    progress.padding(.top, 2)
+                    progress.padding(.top, Spacing.xxs)
                 }
                 // How full its context is, as the shape alone: the number belongs on the
                 // session's own page, and what a row needs to say is "this one is nearly
                 // out of room" without spending a line on it.
                 if let context = session.context {
                     Meter(context.share, tint: Palette.pressure(context.pressure), thickness: 2)
-                        .padding(.top, Spacing.xxs)
+                        .padding(.top, Spacing.extraSmall)
                 }
             }
         }
@@ -81,36 +81,51 @@ struct SessionRow: View {
     /// One band, because they are the same question — what is still open between the two of you —
     /// and a row has one place to answer it.
     private var progress: some View {
+        VStack(alignment: .leading, spacing: Spacing.xxs) {
+            if !asks.isEmpty {
+                band("checklist", in: Palette.textTertiary) { AskDots(asks: asks) }
+            }
+            if session.pages > 0 {
+                band("doc.richtext", in: session.waitingPages > 0 ? accent : Palette.textTertiary) {
+                    Text(pagesLine)
+                        .font(Typography.hint)
+                        .accessibilityLabel(pagesLine)
+                }
+            }
+        }
+    }
+
+    /// One line of the pair, and the reason they read as a pair at all.
+    ///
+    /// A fixed gutter rather than a glyph tucked in front of the words: at 12pt every line's
+    /// content starts on the same vertical, so the dots and the sentence below them line up like
+    /// two entries in a list instead of two unrelated things that happen to be stacked. The line
+    /// keeps a minimum height so a row with one band and a row with two have the same rhythm
+    /// rather than the same total.
+    ///
+    /// The glyph takes its line's colour rather than a fixed grey. A page waiting turns the whole
+    /// line accent, gutter included; anything quiet stays quiet all the way across. Half-tinting
+    /// a line is what made these two clash when they shared one.
+    private func band(
+        _ symbol: String,
+        in colour: Color,
+        @ViewBuilder content: () -> some View
+    ) -> some View {
         HStack(spacing: Spacing.extraSmall) {
-            if !asks.isEmpty { AskDots(asks: asks) }
-            if session.pages > 0 { pages }
-        }
-    }
-
-    /// The pages as words where the asks are dots, and deliberately not a second run of dots.
-    ///
-    /// `AskDot` is a box you can tick and that is the one thing it means here; a second row of the
-    /// same mark standing for something else is what its own note warns against, and two runs of
-    /// identical marks in one band cannot be told apart without a label that costs more than the
-    /// words do. Both numbers, because "one waiting" and "one of six waiting" are different
-    /// situations and the row is the only place that can say which this is.
-    ///
-    /// The accent does the rest: nothing else in a row's words is ever this colour, so a page
-    /// waiting is the one thing on the rail that reads as addressed to you — and it says so
-    /// without a second state word beside the one the title already carries. Everything answered
-    /// goes quiet instead, which is the whole point of saying both.
-    private var pages: some View {
-        HStack(spacing: Spacing.xxs) {
-            Image(systemName: "doc.richtext")
+            Image(systemName: symbol)
                 .font(.system(size: 10, weight: .semibold))
-            Text(pagesLine)
+                .frame(width: 12, alignment: .leading)
+            content()
         }
-        .font(Typography.hint)
-        .foregroundStyle(session.waitingPages > 0 ? accent : Palette.textTertiary)
-        .accessibilityElement()
-        .accessibilityLabel(pagesLine)
+        .foregroundStyle(colour)
+        .frame(minHeight: 18)
     }
 
+    /// Both numbers, because "one waiting" and "one of six waiting" are different situations and
+    /// the row is the only place that can say which this is. Words where the asks are dots, and
+    /// deliberately not a second run of the same mark: `AskDot` is a box you tick, its own note
+    /// warns against a second thing reading as that mark, and two runs of identical marks in one
+    /// row cannot be told apart without a label costing more than the words do.
     private var pagesLine: String {
         let noun = session.pages == 1 ? "page" : "pages"
         return session.waitingPages > 0
