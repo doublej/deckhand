@@ -24,6 +24,7 @@ final class Recorder {
             self.recorder = recorder
             isRecording = true
             OrientationLock.hold()
+            Awake.hold()
             meter()
             return nil
         } catch {
@@ -71,6 +72,7 @@ final class Recorder {
         recorder.stop()
         isRecording = false
         OrientationLock.release()
+        Awake.release()
         metering?.cancel()
         metering = nil
         level = 0

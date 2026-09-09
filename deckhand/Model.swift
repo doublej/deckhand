@@ -187,6 +187,9 @@ final class AppModel {
         let confirms = preferences.confirms
         status = confirms ? "Transcribing…" : "Sending to \(session.name)…"
         logger.info("uploading clip for \(session.name, privacy: .public)")
+        // The clip is on the wire: locking here suspends the app and loses it.
+        Awake.hold()
+        defer { Awake.release() }
         await run {
             let receipt = try await client.upload(
                 clip: clip,

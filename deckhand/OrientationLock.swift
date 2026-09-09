@@ -39,6 +39,29 @@ enum OrientationLock {
     }
 }
 
+/// The screen stays lit from the moment you start speaking until the words come back.
+///
+/// Not a convenience. The phone locking mid-sentence ends the recording, and locking during
+/// the upload suspends the app with the clip still in flight — so what you said is lost after
+/// you have already said it, which is the one failure this app cannot make good.
+///
+/// Counted rather than a flag: the recorder and the upload both hold it, and they hand over
+/// with a gap of a frame or two. A plain bool would let the screen sleep in that gap.
+@MainActor
+enum Awake {
+    private static var holds = 0
+
+    static func hold() {
+        holds += 1
+        UIApplication.shared.isIdleTimerDisabled = true
+    }
+
+    static func release() {
+        holds = max(0, holds - 1)
+        UIApplication.shared.isIdleTimerDisabled = holds > 0
+    }
+}
+
 /// The only reason this app has a delegate: UIKit asks it, not SwiftUI, which orientations a
 /// window may take.
 final class AppDelegate: NSObject, UIApplicationDelegate {

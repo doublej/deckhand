@@ -7,11 +7,20 @@ struct SessionView: View {
     @Bindable var model: AppModel
     let session: Session
     @State private var recorder = Recorder()
+    @State private var showing: Pane = .summary
+
+    /// Two things you want on arriving, and they want opposite layouts: the briefing wants a
+    /// page to itself, the transcript wants to be pinned to its newest line.
+    enum Pane: String, CaseIterable { case summary = "Summary", transcript = "Transcript" }
 
     var body: some View {
         VStack(spacing: 0) {
             header
-            transcript
+            tabs
+            switch showing {
+            case .summary: briefing
+            case .transcript: transcript
+            }
             talk
         }
         .background(Palette.surfaceGround)
@@ -27,6 +36,10 @@ struct SessionView: View {
                 .tint(Palette.tint)
             }
         }
+        // Anything waiting on you lives in the transcript, so do not leave it on a tab the
+        // person is not looking at.
+        .onChange(of: model.review[session.sessionId]) { showing = .transcript }
+        .onChange(of: model.pending[session.sessionId]) { showing = .transcript }
         .task {
             model.turns = []
             model.current = session.sessionId
@@ -63,7 +76,6 @@ struct SessionView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: Spacing.extraSmall) {
-                    summary
                     if model.turns.isEmpty { nothingYet }
                     ForEach(Array(model.turns.enumerated()), id: \.offset) { index, turn in
                         TurnCard(turn: turn, showsRole: startsRun(index)).id(index)
@@ -93,24 +105,55 @@ struct SessionView: View {
             .padding(.vertical, Spacing.small)
     }
 
-    /// What it did while you were away. Absent until there is something to say about it.
-    @ViewBuilder private var summary: some View {
-        let text = model.summaries[session.sessionId]
-        let working = model.summarising.contains(session.sessionId)
-        if text != nil || working {
-            Card(spacing: Spacing.xxs) {
-                HStack(spacing: Spacing.extraSmall) {
-                    Text("SINCE YOU LAST SPOKE")
-                        .font(Typography.eyebrow)
-                        .tracking(1)
-                        .foregroundStyle(Palette.textTertiary)
-                    if working { ProgressView().controlSize(.mini) }
-                }
-                Text(text ?? "reading what it did…")
-                    .font(Typography.subtitle)
-                    .foregroundStyle(text == nil ? Palette.textSecondary : Palette.textPrimary)
+    private var tabs: some View {
+        HStack(spacing: Spacing.medium) {
+            ForEach(Pane.allCases, id: \.self) { pane in
+                Button { showing = pane } label: { tab(pane) }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("tab-\(pane.rawValue.lowercased())")
             }
+            Spacer(minLength: 0)
+            if model.summarising.contains(session.sessionId) { ProgressView().controlSize(.mini) }
         }
+        .padding(.horizontal, Spacing.medium)
+        .padding(.bottom, Spacing.extraSmall)
+    }
+
+    private func tab(_ pane: Pane) -> some View {
+        let chosen = showing == pane
+        return VStack(spacing: Spacing.xxs) {
+            Text(pane.rawValue.uppercased())
+                .font(Typography.eyebrow)
+                .tracking(1)
+                .foregroundStyle(chosen ? Palette.textPrimary : Palette.textTertiary)
+            // The rule carries the state rather than a filled capsule: this sits directly
+            // under the page header and a second solid shape there fights it.
+            Capsule()
+                .fill(chosen ? Palette.tint : .clear)
+                .frame(height: 2)
+        }
+        .contentShape(.rect)
+    }
+
+    /// What it did while you were away, with the whole page to say it in.
+    private var briefing: some View {
+        ScrollView {
+            Group {
+                if let text = model.summaries[session.sessionId] {
+                    Prose(text)
+                } else {
+                    Text(model.summarising.contains(session.sessionId)
+                         ? "Reading what it did…"
+                         : "Nothing yet")
+                        .font(Typography.subtitle)
+                        .foregroundStyle(Palette.textSecondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, Spacing.medium)
+            .padding(.bottom, Spacing.medium)
+        }
+        .frame(maxHeight: .infinity)
     }
 
     /// The mark is the button. utt's mark, because recording is utt's job — it takes the
