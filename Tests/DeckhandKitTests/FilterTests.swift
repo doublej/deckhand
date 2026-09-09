@@ -135,6 +135,33 @@ struct FilterTests {
         #expect(receipt.went)
     }
 
+    @Test("the card shows the prepared words, and what was heard when nothing changed")
+    func prefersThePreparedWords() throws {
+        let changed: UploadReceipt = try decoded("""
+        {"path":"/tmp/x.m4a","bytes":13,"received_at":1.0,"transcript":"tell deck hand to stop",
+         "prepared":"tell deckhand to stop","notes":["words: deck hand → deckhand"],
+         "delivered":false,"delivered_by":null,"delivery_error":null}
+        """)
+        #expect(changed.words == "tell deckhand to stop")
+        // `transcript` still means what utt heard. Both are needed: one is what was said, the
+        // other is what the session will be handed, and the card has to show the second.
+        #expect(changed.transcript == "tell deck hand to stop")
+        #expect(changed.notes == ["words: deck hand → deckhand"])
+        // Null when the chain changed nothing, and absent from a Mac that predates the field —
+        // the same answer either way, which is what keeps the card right on both.
+        let untouched: UploadReceipt = try decoded("""
+        {"path":"/tmp/x.m4a","bytes":13,"received_at":1.0,"transcript":"say it plainly",
+         "prepared":null,"delivered":false,"delivered_by":null,"delivery_error":null}
+        """)
+        #expect(untouched.words == "say it plainly")
+        let older: UploadReceipt = try decoded("""
+        {"path":"/tmp/x.m4a","bytes":13,"received_at":1.0,"transcript":"say it plainly",
+         "delivered":false,"delivered_by":null,"delivery_error":null}
+        """)
+        #expect(older.prepared == nil)
+        #expect(older.words == "say it plainly")
+    }
+
     @Test("a filter's refusal is not a delivery, whatever else the Mac says")
     func readsARefusal() throws {
         let said: Delivery = try decoded("""

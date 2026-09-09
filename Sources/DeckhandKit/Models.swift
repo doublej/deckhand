@@ -150,6 +150,9 @@ public struct UploadReceipt: Codable, Hashable, Sendable {
     public let receivedAt: Double
     public let transcript: String?
     public let transcriptError: String?
+    /// The words after the chain has run over them, and nil when it changed nothing. Only on a
+    /// clip that asked not to be delivered — there is nothing to prepare for words already gone.
+    public var prepared: String?
     /// Whether the text reached the session itself, which way it went in, and why not when
     /// it did not.
     public let delivered: Bool
@@ -162,6 +165,14 @@ public struct UploadReceipt: Codable, Hashable, Sendable {
 
     public var went: Bool { delivered && stoppedBy == nil }
 
+    /// The words to put in front of the person: what the chain made of them, or what utt heard
+    /// when the chain left them alone.
+    ///
+    /// `transcript` keeps meaning what was heard, which is why this is a second field and not a
+    /// rewrite of the first. The card has to show this one: a card reading "deck hand" while the
+    /// session is about to be handed "deckhand" lies about the very thing it exists to confirm.
+    public var words: String? { prepared ?? transcript }
+
     public init(from decoder: Decoder) throws {
         let box = try decoder.container(keyedBy: CodingKeys.self)
         path = try box.decodeIfPresent(String.self, forKey: .path) ?? ""
@@ -169,6 +180,7 @@ public struct UploadReceipt: Codable, Hashable, Sendable {
         receivedAt = try box.decodeIfPresent(Double.self, forKey: .receivedAt) ?? 0
         transcript = try box.decodeIfPresent(String.self, forKey: .transcript)
         transcriptError = try box.decodeIfPresent(String.self, forKey: .transcriptError)
+        prepared = try box.decodeIfPresent(String.self, forKey: .prepared)
         delivered = try box.decodeIfPresent(Bool.self, forKey: .delivered) ?? false
         deliveredBy = try box.decodeIfPresent(String.self, forKey: .deliveredBy)
         deliveryError = try box.decodeIfPresent(String.self, forKey: .deliveryError)

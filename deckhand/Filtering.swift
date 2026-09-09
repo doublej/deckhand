@@ -90,6 +90,24 @@ extension AppModel {
 
     // MARK: - what a filter wants said
 
+    /// Words waiting to be read, and anything a filter wants said about them. The one way into
+    /// the review card, so a note cannot outlive the words it was written about.
+    ///
+    /// `Markups.swift` adds prose to text already held, which is a different move: it changes
+    /// what is in the card and the note still describes how those words were prepared.
+    func hold(_ text: String?, for session: Session, notes: [String] = []) {
+        review[session.sessionId] = text
+        reviewNotes[session.sessionId] = text == nil ? nil : notes
+    }
+
+    /// What the card says under the words, when a filter changed them. One quiet line: the words
+    /// on screen are not quite the words that were spoken, and nobody should have to work that
+    /// out by rereading them.
+    func reviewNote(for session: Session) -> String? {
+        let notes = reviewNotes[session.sessionId] ?? []
+        return notes.isEmpty ? nil : notes.joined(separator: " · ")
+    }
+
     /// One line for the status strip: what happened, then anything a filter wanted to add. The
     /// notes are quiet on purpose — a swapped word is worth seeing and not worth a card.
     func said(_ outcome: String, notes: [String]) -> String {

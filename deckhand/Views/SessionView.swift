@@ -286,6 +286,7 @@ struct SessionView: View {
                 target: session.name,
                 send: { edited in Task { await model.send(edited, to: session) } },
                 discard: { model.discard(for: session) },
+                note: model.reviewNote(for: session),
                 snaps: model.snaps(for: session),
                 attach: { model.attach($0, to: session) },
                 paste: { model.attachFromClipboard(to: session) },

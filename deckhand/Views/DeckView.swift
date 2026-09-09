@@ -108,6 +108,7 @@ struct DeckView: View {
             flip: { flip(session) },
             state: state,
             review: model.review[session.sessionId],
+            note: model.reviewNote(for: session),
             send: { text in Task { await model.send(text, to: session) } },
             discard: { model.discard(for: session) }
         ).accessibilityIdentifier("deck-column")
@@ -134,6 +135,8 @@ private struct Column: View {
     let state: TalkState
     /// Held for reading, if this column is the one that just heard something.
     let review: String?
+    /// What a filter changed about those words, when it changed something.
+    let note: String?
     let send: (String) -> Void
     let discard: () -> Void
 
@@ -153,6 +156,7 @@ private struct Column: View {
                     target: session.name,
                     send: { send($0) },
                     discard: discard,
+                    note: note,
                     compact: true
                 )
                 .padding(Spacing.xxs)

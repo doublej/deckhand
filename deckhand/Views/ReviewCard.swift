@@ -13,6 +13,12 @@ struct ReviewCard: View {
     /// were heard: what utt returns is a first draft, and the point of holding it is to fix it.
     let send: (String) -> Void
     let discard: () -> Void
+    /// What a filter on the Mac did to these words on their way here, when it did something.
+    ///
+    /// The card shows the prepared words rather than what was heard, because those are what the
+    /// session will be handed — and a word differing silently from the one that was spoken is a
+    /// card lying about the thing it exists to confirm. This line is how it does not.
+    var note: String?
     /// Small enough for a deck column, which has no room for a full card.
     var compact = false
     /// What is already pinned to these words, and the two ways to pin another. Left out where
@@ -44,6 +50,15 @@ struct ReviewCard: View {
             }
             .frame(maxHeight: compact ? 96 : 260)
             .scrollBounceBehavior(.basedOnSize)
+            // Under the words, quiet, and in a deck column too: there is no size of card on which
+            // it is acceptable to show somebody a word they did not say without saying so.
+            if let note {
+                Text(note)
+                    .font(Typography.hint)
+                    .foregroundStyle(Palette.textTertiary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if !snaps.isEmpty { pinned }
             HStack(spacing: Spacing.extraSmall) {
                 Text("→ \(target)")

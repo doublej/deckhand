@@ -26,3 +26,6 @@ __pycache__/
 .ruff_cache/
 .orchestrate/
 .build/
+
+# Worktrees for parallel agent work, machine-local.
+.worktrees/

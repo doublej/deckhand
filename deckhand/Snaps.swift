@@ -64,7 +64,7 @@ extension AppModel {
     func send(_ text: String, to session: Session) async {
         guard let client = settings.client() else { return }
         let pinned = snaps(for: session)
-        review[session.sessionId] = nil
+        hold(nil, for: session)
         status = pinned.isEmpty ? "Sending to \(session.name)…" : "Sending the pictures first…"
         await run {
             let paths = try await self.keep(pinned, for: session, with: client)
@@ -85,7 +85,7 @@ extension AppModel {
     /// card rather than being reported and let go of. The status line says which of the two.
     private func went(_ sent: Delivery, saying text: String, to session: Session) -> Bool {
         guard sent.went else {
-            review[session.sessionId] = text
+            hold(text, for: session, notes: sent.notes)
             status = sent.stoppedBy
                 .map { stopped(by: $0, because: sent.deliveryError, notes: sent.notes) }
                 ?? sent.deliveryError

@@ -72,6 +72,10 @@ final class AppModel {
     /// written it down yet.
     /// Transcribed, held, and waiting to be read before it goes anywhere.
     var review: [String: String] = [:]
+    /// What a filter wanted said about the words in that card. Written only through `hold`, so a
+    /// note can never outlive the words it was about — last clip's note under this clip's text
+    /// would be worse than saying nothing at all.
+    var reviewNotes: [String: [String]] = [:]
     /// Pictures pinned to those words, per session, until they are sent or discarded.
     var attached: [String: [Snap]] = [:]
     var showsHidden = false
@@ -189,12 +193,12 @@ final class AppModel {
         // A filter refused it: the words are held rather than reported and let go of. The review
         // card is the one place in this app where words exist and have not been sent, and it can
         // be edited — which is the only useful answer to a filter that will not pass something.
-        if let text = receipt.transcript, receipt.stoppedBy != nil {
-            review[session.sessionId] = text
+        if let text = receipt.words, receipt.stoppedBy != nil {
+            hold(text, for: session, notes: receipt.notes)
             status = outcome(of: receipt, to: session)
             return
         }
-        guard let text = receipt.transcript, confirms else {
+        guard let text = receipt.words, confirms else {
             status = outcome(of: receipt, to: session)
             // Fetch rather than fake it: the words are in the session's own transcript within
             // a moment, and showing them from there means they are shown once, in order, and
@@ -202,7 +206,10 @@ final class AppModel {
             if receipt.went { Task { await self.loadTurns(for: session) } }
             return
         }
-        review[session.sessionId] = text
+        // What the chain made of them, not what utt heard, and the chain's own note with it: a
+        // word the card shows differing silently from the word that was spoken is the lie this
+        // card exists to prevent.
+        hold(text, for: session, notes: receipt.notes)
         status = "Read it, then send it"
     }
 
@@ -210,7 +217,7 @@ final class AppModel {
     /// pinned to them, and those have to reach the Mac before the message that names them.
 
     func discard(for session: Session) {
-        review[session.sessionId] = nil
+        hold(nil, for: session)
         attached[session.sessionId] = nil
         status = "Discarded"
     }

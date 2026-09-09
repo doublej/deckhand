@@ -184,6 +184,7 @@ struct SessionListView: View {
                 target: session.name,
                 send: { edited in Task { await model.send(edited, to: session) } },
                 discard: { model.discard(for: session) },
+                note: model.reviewNote(for: session),
                 compact: true,
                 snaps: model.snaps(for: session),
                 attach: { model.attach($0, to: session) },
