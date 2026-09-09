@@ -118,6 +118,15 @@ unauthenticated route; everything else needs the `x-deckhand-token` header, and 
   it to a 0600 file for launchd, and fall back to utt's own `settings.json` on a 401. The file
   lane removed all three: `needsApi` is false, so utt hands out nothing and there is nothing to
   go stale. `just sync-secrets` is gone with it.
+- **The plugin page needs utt 1.1.0 or newer.** Before that, utt dropped manifest keys that
+  were not all-lowercase and said nothing, so `copyToken` and `openLog` never became buttons and
+  only `stop` did — a page can be half-missing and look complete. 1.1.0's `isSafeKey` accepts
+  camelCase. There is still no way for a plugin to learn that a key was refused, so a button
+  that does not appear is the only symptom.
+- **A string setting arrives per keystroke.** `revision` is correct per write, but typing one
+  sentence into the attribution field produced 40-odd revisions in four seconds. Anything done
+  on a values change has to be cheap, or debounced. Reading a value and assigning it is cheap;
+  restarting something would not be.
 - Anything the summariser or the transcriber needs must be reachable without a person present.
   The summariser passes `setting_sources=[]` for the same reason it is fast: loading the user
   settings starts every configured MCP server, which cost more than a minute.
