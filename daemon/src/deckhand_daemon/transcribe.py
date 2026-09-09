@@ -6,8 +6,8 @@ run under launchd — 1Password has no way to ask for a fingerprint there — so
 materialises the value into the data dir and the daemon reads that. Order: environment, then
 the materialised file, then onenv for a daemon started by hand.
 
-utt re-mints that token whenever its API is switched off and on again, which leaves the copy in
-1Password stale and every clip answered with a 401. Rather than fail until someone runs
+That token can be replaced inside utt — its "New" button, or "Reset to defaults" — leaving the
+copy in 1Password stale and every clip answered with a 401. Rather than fail until someone runs
 `just sync-secrets`, a rejected token is retried once against utt's own settings file, which is
 where the live value lives.
 """

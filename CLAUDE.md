@@ -77,9 +77,13 @@ unauthenticated route; everything else needs the `x-deckhand-token` header, and 
   and says so in the `iterm` field. A failed lookup backs off for a minute — before that, the
   4 s timeout was paid on every request and starved the event loop. Run `just daemon` from an
   iTerm window when you want panes and Focus on Mac.
-- **utt re-mints its bearer token** every time its API is switched off and on, which leaves
-  the 1Password copy stale and every clip answered with a 401. onenv stays the source of truth,
-  but a rejected token is retried once against utt's own `api.token` and the log says so.
+- **utt's bearer token can be replaced out from under the copy in 1Password**, and then every
+  clip comes back 401 with "The token is in utt's settings" — accurate, and confusing, because
+  a token *was* sent. Two things replace it: the "New" button on utt's API settings card, and
+  "Reset to defaults", which wipes the token so the next switch-on mints a fresh one. Toggling
+  the API off and on does **not** re-mint (verified: the value survived a toggle unchanged).
+  onenv stays the source of truth, but a rejected token is retried once against utt's own
+  `api.token`, and the log says when that happens.
 - **onenv cannot run under launchd** either: 1Password has no way to ask for a fingerprint, so
   the read hangs and times out. `just sync-secrets` materialises `deckhand/UTT_SECRET` into
   `~/Library/Application Support/Deckhand/utt-token` (0600) and the daemon reads that.
