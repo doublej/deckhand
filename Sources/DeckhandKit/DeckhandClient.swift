@@ -77,12 +77,12 @@ public struct DeckhandClient: Sendable {
         try await get("sessions/\(sessionId)/turns?limit=\(limit)")
     }
 
-    /// The transcript exactly as Claude Code wrote it. Every other reading is an interpretation
-    /// of this, which is what makes it worth having on the phone at all.
-    public func raw(of sessionId: String, limit: Int = 400) async throws -> String {
-        struct Raw: Codable { var text: String = "" }
+    /// Everything in the transcript, in order, one line per event and none of the syntax it is
+    /// stored in. Every other reading in this app is an interpretation of the same file.
+    public func raw(of sessionId: String, limit: Int = 1500) async throws -> [String] {
+        struct Raw: Codable { var lines: [String] = [] }
         let answer: Raw = try await get("sessions/\(sessionId)/raw?limit=\(limit)")
-        return answer.text
+        return answer.lines
     }
 
     /// Put words into a session, and name any pictures going with them. The other half of an

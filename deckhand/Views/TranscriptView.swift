@@ -31,17 +31,20 @@ struct TranscriptView: View {
                         }
                         .id(index)
                     }
-                    // Taken first, then still waiting, because that is the order they are in:
-                    // the session has read one lot and not the other. Mixed together they read
-                    // as a pile of stuck messages, some inexplicably without a way to move them.
+                    // Drawn as what they are: things you said. The session took them while it
+                    // was working and Claude Code wrote them down nowhere, so this card is the
+                    // only place they exist — but that is the app's problem, not yours, and a
+                    // note explaining it on every one of them explained nothing.
                     ForEach(taken) { item in
-                        QueuedCard(item: item, force: nil)
+                        TurnCard(turn: Turn(role: "user", text: item.text, timestamp: ""),
+                                 showsRole: true,
+                                 waiting: nil)
                     }
                     if !waiting.isEmpty {
                         VStack(alignment: .leading, spacing: Spacing.extraSmall) {
                             ForEach(waiting) { item in
                                 QueuedCard(
-                                    item: item,
+                                    text: item.text,
                                     // Nothing else will make it read this: the inbox is only
                                     // drained when a turn ends, so forcing it is ending the turn.
                                     force: session.isBusy
@@ -127,10 +130,11 @@ struct TranscriptView: View {
 /// — so when one of those looks wrong, this is the only way to tell from a phone whether the app
 /// is wrong or the session is. It opens at the bottom, which is where the news is.
 ///
-/// One `Text` per line, wrapped, in a lazy stack. It was one `Text` holding the whole file in a
-/// scroll view free on both axes, which drew nothing at all: a JSONL line runs to thousands of
-/// characters, unwrapped that is a line tens of thousands of points wide, and past that CoreText
-/// gives up and renders an empty view — a black screen with no error anywhere.
+/// One `Text` per event, wrapped, in a lazy stack. It was one `Text` holding the whole file in a
+/// scroll view free on both axes, which drew nothing at all: unwrapped, a line runs tens of
+/// thousands of points wide and CoreText gives up and renders an empty view — a black screen with
+/// no error anywhere. And it was the JSONL itself, which is mostly syntax: half a megabyte of
+/// file came back as ten lines, nine of them punctuation. The Mac renders it now.
 struct RawView: View {
     @Bindable var model: AppModel
     let session: Session
@@ -164,8 +168,7 @@ struct RawView: View {
             }
         }
         .task {
-            let text = await model.raw(for: session) ?? ""
-            lines = text.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
+            lines = await model.raw(for: session) ?? []
             read = true
         }
     }
@@ -187,7 +190,7 @@ struct RawView: View {
                 .foregroundStyle(Palette.textSecondary)
                 .padding(.vertical, Spacing.large)
         } else {
-            Text("\(lines.count) lines, newest last")
+            Text("\(lines.count) events, newest last")
                 .font(Typography.hint)
                 .foregroundStyle(Palette.textTertiary)
                 .padding(.top, Spacing.small)

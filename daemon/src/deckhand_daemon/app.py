@@ -20,6 +20,7 @@ from . import (
     files,
     plugin,
     push,
+    readable,
     sessions,
     summarize,
     tasks,
@@ -167,10 +168,14 @@ def session_turns(session_id: str, limit: int = Query(default=8, ge=1, le=50)) -
 
 
 @app.get("/sessions/{session_id}/raw", dependencies=[Depends(require_token)])
-def session_raw(session_id: str, limit: int = Query(default=400, ge=1, le=2000)) -> dict:
-    """The transcript as written, for when the question is whether the app read it right."""
+def session_raw(session_id: str, limit: int = Query(default=1500, ge=1, le=4000)) -> dict:
+    """Everything in the transcript, in order, without the syntax it is stored in.
+
+    Handing over the JSONL itself was the first answer and a bad one: one entry runs to tens of
+    kilobytes, so a window that holds a day of work held ten lines of mostly punctuation.
+    """
     _session_or_404(session_id)
-    return {"text": transcripts.raw_tail(session_id, limit)}
+    return {"lines": readable.plain_tail(session_id, limit)}
 
 
 @app.post("/sessions/{session_id}/focus", dependencies=[Depends(require_token)])

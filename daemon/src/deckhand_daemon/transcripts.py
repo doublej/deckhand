@@ -145,26 +145,6 @@ def read_turns(session_id: str, limit: int = 8) -> list[Turn]:
     return turns[-limit:]
 
 
-# What a phone can usefully be handed of a file that runs to megabytes. Lines, not bytes: the
-# unit of a JSONL file is the line, and half a line is not a line.
-MAX_RAW_LINES = 400
-MAX_RAW_CHARS = 200_000
-
-
-def raw_tail(session_id: str, limit: int = MAX_RAW_LINES) -> str:
-    """The end of the transcript exactly as Claude Code wrote it, newest last.
-
-    Every other reading here is an interpretation — turns, tool traces, the inbox replay. This
-    is the thing those are read from, which is what you want when the question is whether the
-    app is wrong or the session is.
-    """
-    path = transcript_path(session_id)
-    if path is None:
-        return ""
-    lines = [raw.decode("utf-8", "replace") for raw in tail_lines(path, TAIL_WINDOWS[0])]
-    return "\n".join(lines[-limit:])[-MAX_RAW_CHARS:]
-
-
 def tail_lines(path: Path, window: int) -> list[bytes]:
     """The last `window` bytes of the file, split into whole lines."""
     with path.open("rb") as f:

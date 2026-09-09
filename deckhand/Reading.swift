@@ -15,9 +15,9 @@ extension AppModel {
         }
     }
 
-    /// The transcript as Claude Code wrote it. Not kept on the model: it is large, it is asked
-    /// for by hand, and nothing else in the app wants it.
-    func raw(for session: Session) async -> String? {
+    /// Everything the transcript holds, as lines. Not kept on the model: it is large, it is
+    /// asked for by hand, and nothing else in the app wants it.
+    func raw(for session: Session) async -> [String]? {
         guard let client = settings.client() else { return nil }
         do {
             return try await client.raw(of: session.sessionId)

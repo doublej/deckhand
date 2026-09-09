@@ -23,6 +23,7 @@ struct ReviewCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.extraSmall) {
+            attachments
             Text(text)
                 .font(compact ? .system(size: 10) : Typography.mono)
                 .foregroundStyle(Palette.textPrimary)
@@ -30,7 +31,6 @@ struct ReviewCard: View {
                 .fixedSize(horizontal: false, vertical: true)
             if !snaps.isEmpty { pinned }
             HStack(spacing: Spacing.extraSmall) {
-                attachments
                 Text("→ \(target)")
                     .font(Typography.hint)
                     .foregroundStyle(Palette.textTertiary)
@@ -58,22 +58,25 @@ struct ReviewCard: View {
         )
     }
 
-    /// The two ways a picture gets in: the clipboard, when it holds one, and the library. Both
-    /// are icons — this row already carries the two decisions that matter.
+    /// The two ways a picture gets in, above the words they will go with. Both are always
+    /// offered: the clipboard one was hidden whenever the clipboard held no image, which from
+    /// the outside is a button that comes and goes for no visible reason.
     @ViewBuilder private var attachments: some View {
         if let attach {
-            if paste != nil, UIPasteboard.general.hasImages {
-                Button("Paste a picture", systemImage: "doc.on.clipboard") { paste?() }
-                    .labelStyle(.iconOnly)
-                    .buttonStyle(.plain)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Palette.tint)
+            HStack(spacing: Spacing.small) {
+                PhotosPicker(selection: $picked, matching: .images, photoLibrary: .shared()) {
+                    Attach(word: "Photo", symbol: "photo.on.rectangle", compact: compact)
+                }
+                if let paste {
+                    Button(action: paste) {
+                        Attach(word: "Clipboard", symbol: "doc.on.clipboard", compact: compact)
+                    }
+                        .buttonStyle(.plain)
+                }
+                Spacer(minLength: 0)
             }
-            PhotosPicker(selection: $picked, matching: .images, photoLibrary: .shared()) {
-                Image(systemName: "photo.on.rectangle")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Palette.tint)
-            }
+            .font(Typography.hint)
+            .foregroundStyle(Palette.tint)
             // The picker hands back an item, not bytes; the bytes come over a moment later.
             .onChange(of: picked) { _, item in
                 guard let item else { return }
@@ -122,6 +125,23 @@ struct ReviewCard: View {
                 .font(.system(size: 12))
                 .foregroundStyle(.white, .black.opacity(0.5))
                 .padding(2)
+        }
+    }
+}
+
+/// A glyph, and the word beside it where there is room for one. A deck column has room for two
+/// glyphs and nothing else. Its own view because a picker's label is built outside the main
+/// actor, which a method on the card cannot be.
+private struct Attach: View {
+    let word: String
+    let symbol: String
+    let compact: Bool
+
+    var body: some View {
+        if compact {
+            Image(systemName: symbol).font(.system(size: 13, weight: .semibold))
+        } else {
+            Label(word, systemImage: symbol)
         }
     }
 }
