@@ -22,7 +22,7 @@ struct SessionView: View {
     /// a page to itself, the transcript wants to be pinned to its newest line, and the files and
     /// the pages this session put on the phone are lists you scroll from the top.
     enum Pane: String, CaseIterable {
-        case summary = "Summary", files = "Files", transcript = "Transcript", pages = "Pages"
+        case summary = "Summary", pages = "Pages", transcript = "Transcript", files = "Files"
     }
 
     /// The session as the Mac last described it, not as it was when the page opened. A compact,
