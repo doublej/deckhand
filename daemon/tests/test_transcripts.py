@@ -109,6 +109,36 @@ def test_what_it_ran_is_attached_to_what_it_said_next(claude_home):
     ]
 
 
+def test_the_whole_call_and_the_whole_answer_are_carried(claude_home):
+    """A dot is enough until it is not; then the phone needs what was run and what came back
+    without another round trip."""
+    write_transcript(claude_home, [
+        assistant([{"type": "tool_use", "id": "t1", "name": "Bash",
+                    "input": {"command": "just check", "timeout": 600}}]),
+        {"type": "user", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": "t1",
+             "content": [{"type": "text", "text": "All checks passed!"}]}]},
+         "timestamp": "2026-09-09T10:00:02Z"},
+        assistant([{"type": "text", "text": "green"}]),
+    ])
+    ran = transcripts.read_turns(SID)[-1].tools[0]
+    assert '"command": "just check"' in ran.call
+    assert '"timeout": 600' in ran.call
+    assert ran.result == "All checks passed!"
+
+
+def test_a_huge_result_is_cut_rather_than_sent_whole(claude_home):
+    """This rides over the LAN on every poll, and one Read can be a megabyte."""
+    write_transcript(claude_home, [
+        assistant([{"type": "tool_use", "id": "t1", "name": "Read", "input": {"file_path": "/x"}}]),
+        {"type": "user", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": "t1", "content": "y" * 100_000}]},
+         "timestamp": "2026-09-09T10:00:02Z"},
+        assistant([{"type": "text", "text": "read it"}]),
+    ])
+    assert len(transcripts.read_turns(SID)[-1].tools[0].result) == transcripts.MAX_FULL
+
+
 def test_a_tool_nobody_has_a_field_for_still_shows_something(claude_home):
     write_transcript(claude_home, [
         assistant([{"type": "tool_use", "id": "t1", "name": "Odd", "input": {"whatever": "a value"}}]),

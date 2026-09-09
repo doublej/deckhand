@@ -94,35 +94,37 @@ struct TalkMark: View {
     private var isRecording: Bool { state.isRecording }
 
     var body: some View {
-        VStack(spacing: Spacing.extraSmall) {
+        // A row rather than a stack. The mark stacked over its label took a third of the
+        // screen to offer one button, on a page whose whole job is showing you something to
+        // read. The tap target is the full width of the row, so it lost none of its reach.
+        HStack(spacing: Spacing.small) {
             DotMark.live(
-                size: 72,
+                size: 40,
                 tint: isRecording ? Palette.recording : Palette.tint,
                 recording: isRecording,
                 level: isRecording ? level : 0,
                 hotCore: 0.3
             )
-            .padding(Spacing.extraSmall)
+            .padding(6)
             .background(
-                RoundedRectangle(cornerRadius: Radius.extraLarge, style: .continuous)
+                RoundedRectangle(cornerRadius: Radius.large, style: .continuous)
                     .fill(Palette.lcdGround)
             )
-            HStack(spacing: Spacing.small) {
-                Text(label)
+            Text(label)
+                .font(Typography.pill)
+                .tracking(1.4)
+                .foregroundStyle(isRecording ? Palette.recording : Palette.textTertiary)
+            if state.canCancel {
+                Button("CANCEL", action: state.cancel)
+                    .buttonStyle(.plain)
                     .font(Typography.pill)
                     .tracking(1.4)
-                    .foregroundStyle(isRecording ? Palette.recording : Palette.textTertiary)
-                if state.canCancel {
-                    Button("CANCEL", action: state.cancel)
-                        .buttonStyle(.plain)
-                        .font(Typography.pill)
-                        .tracking(1.4)
-                        .foregroundStyle(Palette.textSecondary)
-                }
+                    .foregroundStyle(Palette.textSecondary)
+                    .padding(.leading, Spacing.xxs)
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, Spacing.medium)
+        .padding(.vertical, Spacing.small)
         .contentShape(.rect)
     }
 

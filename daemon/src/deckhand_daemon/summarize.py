@@ -38,15 +38,44 @@ using anything else puts punctuation on the screen instead of formatting:
 Nothing else exists. No tables, no links, no images, no code fences, no block quotes, no
 horizontal rules, no bold headings used as headings, no emoji.
 
-SHAPE. Open with one or two plain sentences saying what the session did — this is the line
-they read first and it must stand alone. Then, only if there is genuinely more to say, one or
-two `##` sections of two to five bullets. Stop when you run out of things worth saying: three
-good lines beat a full screen of padding. Never exceed about fifteen lines.
+SHAPE. The first line is not a summary. It answers one question and nothing else:
+
+  **what does this person need to know, or need to do, right now?**
+
+One line, plain text, no markup, under about twelve words. If the session is waiting on them —
+a question, a permission prompt, a decision, a failure it cannot get past — that is the line,
+phrased as the thing itself: "Waiting: which database to migrate first". If it is working and
+needs nothing, say what it is doing: "Refactoring the payment tests, no action needed". If it
+finished, say what landed: "Done: 14 tests green, ready to merge". Never write "the user
+should" or "you may want to" — say the thing.
+
+That line is read on its own, in a list, next to five other sessions, by someone deciding
+which one to open. It is the most valuable line you write. Earn it.
+
+Then a blank line, then one or two plain sentences of what the session actually did. Then,
+only if there is genuinely more to say, one or two `##` sections of two to five bullets. Stop
+when you run out of things worth saying: three good lines beat a full screen of padding.
+Never exceed about fifteen lines.
 
 Use `code` for anything they could type or search for — file paths, commands, symbols, error
 strings. Use **bold** once or twice at most, for the thing that would change what they do next:
 a failure, a decision waiting on them, a question the session asked. If the session is blocked
 or asking something, that belongs in the opening sentences, not in a bullet at the bottom."""
+
+def headline(summary: str | None) -> str | None:
+    """The first line: what this person needs to know or do, for the list of sessions.
+
+    Taken from the briefing rather than asked for separately, because a second model run to
+    restate the first line of the first one is a second run for nothing. The brief guarantees
+    the line stands alone; this only has to survive a model that ignored it and opened with a
+    heading or a bullet anyway.
+    """
+    for line in (summary or "").splitlines():
+        stripped = line.strip().removeprefix("## ").removeprefix("- ").strip()
+        if stripped:
+            return stripped.replace("**", "").replace("`", "")
+    return None
+
 
 # (session_id, activity hash) -> (summary, written_at). Cleared by tests.
 _cache: dict[tuple[str, str], tuple[str, float]] = {}

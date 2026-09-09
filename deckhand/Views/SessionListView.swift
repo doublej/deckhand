@@ -30,6 +30,15 @@ struct SessionListView: View {
                 try? await Task.sleep(for: .seconds(4))
             }
         }
+        // Its own loop, slower than the listing's: a headline is a model reading a transcript,
+        // not a field on the session. Prefetching them here also means a session you then open
+        // already has its briefing written.
+        .task {
+            while !Task.isCancelled {
+                await model.loadHeadlines()
+                try? await Task.sleep(for: .seconds(45))
+            }
+        }
     }
 
     /// The mark and the one thing the person always needs: whether the Mac is there.
@@ -114,21 +123,29 @@ struct SessionListView: View {
     private func row(_ session: Session) -> some View {
         let hidden = model.preferences.isHidden(session.name)
         return NavigationLink(value: session) {
-            SessionRow(session: session, current: model.current == session.sessionId)
+            SessionRow(
+                session: session,
+                current: model.current == session.sessionId,
+                headline: model.headlines[session.sessionId]
+            )
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("session-row")
-        .swipeActions(edge: .leading) {
-            Button(model.preferences.isFavorite(session.name) ? "Unstar" : "Star",
-                   systemImage: "star") { model.toggleFavorite(session) }
-                .tint(Palette.tint)
+        .swipeActions(edge: .leading) { star(session) }
+        .swipeActions(edge: .trailing) { hide(session, hidden) }
+    }
+
+    private func star(_ session: Session) -> some View {
+        Button(model.preferences.isFavorite(session.name) ? "Unstar" : "Star",
+               systemImage: "star") { model.toggleFavorite(session) }
+            .tint(Palette.tint)
+    }
+
+    private func hide(_ session: Session, _ hidden: Bool) -> some View {
+        Button(hidden ? "Show" : "Hide", systemImage: hidden ? "eye" : "eye.slash") {
+            model.setHidden(session, !hidden)
         }
-        .swipeActions(edge: .trailing) {
-            Button(hidden ? "Show" : "Hide", systemImage: hidden ? "eye" : "eye.slash") {
-                model.setHidden(session, !hidden)
-            }
-            .tint(Palette.lcdGround)
-        }
+        .tint(Palette.lcdGround)
     }
 
     private var foot: some View {
@@ -160,19 +177,33 @@ private extension View {
 private struct SessionRow: View {
     let session: Session
     let current: Bool
+    /// What this session needs from you, in one line. Absent until the Mac has read it.
+    let headline: String?
 
     var body: some View {
-        HStack(spacing: Spacing.extraSmall) {
+        HStack(alignment: .top, spacing: Spacing.extraSmall) {
             GlyphTile(DotGlyph.forName(session.name), size: 24, prominent: current)
-            Text(session.name)
-                .font(current ? Typography.railRowSelected : Typography.railRow)
-                .foregroundStyle(current ? Palette.textPrimary : Palette.textSecondary)
-                .lineLimit(1)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(session.name)
+                    .font(current ? Typography.railRowSelected : Typography.railRow)
+                    .foregroundStyle(current ? Palette.textPrimary : Palette.textSecondary)
+                    .lineLimit(1)
+                // The row is worth its extra height only when there is something in it; a
+                // placeholder saying "reading…" on six rows at once is worse than nothing.
+                if let headline {
+                    Text(headline)
+                        .font(Typography.hint)
+                        .foregroundStyle(Palette.textTertiary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
             Spacer(minLength: Spacing.extraSmall)
             StatePill(session.isBusy ? .busy : .idle)
         }
         .padding(.horizontal, 6)
-        .frame(height: 34)
+        .padding(.vertical, Spacing.extraSmall)
+        .frame(minHeight: 34)
         .background(
             RoundedRectangle(cornerRadius: Radius.small, style: .continuous)
                 .fill(Color.primary.opacity(current ? 0.10 : 0))

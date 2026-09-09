@@ -44,8 +44,12 @@ def test_a_clip_becomes_text(jobs):
 def test_the_answer_is_cleaned_up_afterwards(jobs):
     """The audio is utt's to delete; the answer file is ours, and a folder that only grows is
     a second copy of everything ever said."""
-    fake_utt(jobs, {"text": "hello"})
+    utt = fake_utt(jobs, {"text": "hello"})
     transcribe.transcribe(_clip(jobs))
+    # utt deletes the audio just after writing the answer, so the real utt may still be at it
+    # when we return. Waiting for it is the test being honest about who deletes what, rather
+    # than a sleep hiding a race.
+    utt.join(timeout=5)
     assert list(jobs.iterdir()) == []
 
 

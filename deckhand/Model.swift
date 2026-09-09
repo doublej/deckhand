@@ -43,6 +43,8 @@ final class AppModel {
     var turns: [Turn] = []
     var deckTurns: [String: [Turn]] = [:]
     var summaries: [String: String] = [:]
+    /// The one line each session needs to say in the rail: what to know, or what to do.
+    var headlines: [String: String] = [:]
     /// Sessions whose summary is being written right now, so the screen can say so.
     var summarising: Set<String> = []
     /// The session whose page is open. The rail lights exactly one row, the way utt does.
@@ -52,7 +54,6 @@ final class AppModel {
     /// What you just said, per session, waiting for the real transcript to catch up. It reads
     /// as a turn in the conversation because that is what it is — the session simply has not
     /// written it down yet.
-    var pending: [String: String] = [:]
     /// Transcribed, held, and waiting to be read before it goes anywhere.
     var review: [String: String] = [:]
     var showsHidden = false
@@ -138,24 +139,6 @@ final class AppModel {
         guard let client = settings.client() else { return }
         await run {
             self.turns = try await client.turns(of: session.sessionId, limit: limit)
-            self.clearPendingIfWrittenDown(for: session)
-        }
-    }
-
-    /// The optimistic grey copy has done its job once the session has written the words down.
-    ///
-    /// It cannot be a plain `contains`: the daemon collapses runs of whitespace before it types
-    /// or sends, and the socket route wraps the words in an attribution, so what comes back is
-    /// never character-identical to what was shown. Comparing both sides collapsed is what
-    /// makes the two comparable at all — without it the grey line simply never went away.
-    private func clearPendingIfWrittenDown(for session: Session) {
-        guard let waiting = pending[session.sessionId] else { return }
-        let sent = waiting.collapsed
-        // A long dictation can be pushed out of the window by the replies it provokes, so the
-        // opening is enough to recognise it by.
-        let opening = String(sent.prefix(60))
-        if turns.contains(where: { $0.isUser && $0.text.collapsed.contains(opening) }) {
-            pending[session.sessionId] = nil
         }
     }
 
@@ -170,13 +153,26 @@ final class AppModel {
         }
     }
 
-    func loadSummary(for session: Session) async {
+    /// Reads every listed session's headline, one at a time.
+    ///
+    /// The Mac caches on what the session has actually done, so asking again about a session
+    /// that has been quiet costs a round trip and no model run. Sequential on purpose: six
+    /// sessions summarised at once is six models thinking, and the rail is not worth that.
+    func loadHeadlines() async {
+        for session in visibleSessions where !summarising.contains(session.sessionId) {
+            await loadSummary(for: session, announcing: false)
+        }
+    }
+
+    /// `announcing` is false for the rail's own sweep: six sessions taking turns to write the
+    /// status line would make it flicker through six messages nobody asked for.
+    func loadSummary(for session: Session, announcing: Bool = true) async {
         guard let client = settings.client() else { return }
         summarising.insert(session.sessionId)
         defer { summarising.remove(session.sessionId) }
         await run {
             let summary = try await client.summary(of: session.sessionId)
-            if let error = summary.error {
+            if let error = summary.error, announcing {
                 self.status = error
             }
             // No summary and no error means the session has done nothing since you last spoke.
@@ -184,6 +180,7 @@ final class AppModel {
             self.summaries[session.sessionId] = summary.summary
                 ?? summary.error
                 ?? "Nothing since you last spoke"
+            self.headlines[session.sessionId] = summary.headline
         }
     }
 
@@ -219,8 +216,11 @@ final class AppModel {
     /// Either it is already on its way, or it is waiting to be read first.
     private func received(_ receipt: UploadReceipt, for session: Session, confirms: Bool) {
         guard let text = receipt.transcript, confirms else {
-            pending[session.sessionId] = receipt.delivered ? receipt.transcript : nil
             status = Self.outcome(of: receipt, to: session)
+            // Fetch rather than fake it: the words are in the session's own transcript within
+            // a moment, and showing them from there means they are shown once, in order, and
+            // looking like every other thing said in this conversation.
+            if receipt.delivered { Task { await self.loadTurns(for: session) } }
             return
         }
         review[session.sessionId] = text
@@ -232,17 +232,16 @@ final class AppModel {
     func send(_ text: String, to session: Session) async {
         guard let client = settings.client() else { return }
         review[session.sessionId] = nil
-        pending[session.sessionId] = text
         status = "Sending to \(session.name)…"
         await run {
             let sent = try await client.say(text, to: session.sessionId, route: self.preferences.route)
             guard sent.delivered else {
-                self.pending[session.sessionId] = nil
                 self.review[session.sessionId] = text
                 self.status = sent.deliveryError ?? "\(session.name) did not take it"
                 return
             }
             self.status = "Sent to \(session.name) by \(sent.deliveredBy ?? "the Mac")"
+            await self.loadTurns(for: session)
         }
     }
 

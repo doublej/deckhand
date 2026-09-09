@@ -35,7 +35,6 @@ struct SessionView: View {
         .toolbar(.hidden, for: .navigationBar)
         // Anything waiting on you lives in the transcript, so do not leave it on a tab the
         // person is not looking at.
-        .onChange(of: model.pending[session.sessionId]) { showing = .transcript }
         .task {
             model.turns = []
             model.current = session.sessionId
@@ -118,7 +117,6 @@ struct SessionView: View {
                         }
                         .id(index)
                     }
-                    pending
                 }
                 .padding(.horizontal, Spacing.medium)
                 .padding(.bottom, Spacing.medium)
@@ -129,7 +127,6 @@ struct SessionView: View {
             // thing a transcript should do.
             .onChange(of: model.turns.count) { scroll(proxy) }
             .onAppear { scroll(proxy) }
-            .onChange(of: model.pending[session.sessionId]) { scroll(proxy) }
         }
     }
 
@@ -216,8 +213,6 @@ struct SessionView: View {
         withAnimation {
             if model.review[session.sessionId] != nil {
                 proxy.scrollTo("review", anchor: .bottom)
-            } else if model.pending[session.sessionId] != nil {
-                proxy.scrollTo("pending", anchor: .bottom)
             } else {
                 proxy.scrollTo(model.turns.count - 1, anchor: .bottom)
             }
@@ -244,26 +239,15 @@ struct SessionView: View {
         }
     }
 
-    /// What you just said, sitting where it will sit once the session has written it down.
-    /// Dimmed until then, so "sent" and "arrived" are not drawn as the same thing.
-    @ViewBuilder private var pending: some View {
-        if let text = model.pending[session.sessionId] {
-            TurnCard(
-                turn: Turn(role: "user", text: text, timestamp: ""),
-                showsRole: model.turns.last?.isUser != true
-            )
-            .opacity(0.55)
-            .id("pending")
-        }
-    }
-
-    /// Only the first turn of a run carries the name: repeating it reads as an interruption.
+    /// False when the turn before this one was from the same speaker, so a run of replies
+    /// carries one label rather than the same word over and over.
     private func startsRun(_ index: Int) -> Bool {
         index == 0 || model.turns[index - 1].role != model.turns[index].role
     }
 }
 
-/// One round of conversation, as a card with a mono eyebrow.
+/// One round of conversation. Yours are marked down the edge in the app's own colour, so a
+/// glance down the transcript tells you who said what without reading a word of it.
 struct TurnCard: View {
     let turn: Turn
     /// False when the turn before this one was from the same speaker.
@@ -281,6 +265,16 @@ struct TurnCard: View {
                 .font(.system(size: 13))
                 .foregroundStyle(Palette.textPrimary)
                 .textSelection(.enabled)
+        }
+        .overlay(alignment: .leading) {
+            if turn.isUser {
+                // A rail rather than a different ground: the transcript stays one column of
+                // cards, and yours are the ones with a line down the side.
+                Capsule()
+                    .fill(Palette.tint)
+                    .frame(width: 3)
+                    .padding(.vertical, Spacing.extraSmall)
+            }
         }
     }
 }

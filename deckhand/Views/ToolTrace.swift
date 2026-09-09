@@ -1,77 +1,128 @@
 import DeckhandKit
 import SwiftUI
 
-/// What the session ran between one message and the next, as a row of dots.
+/// What the session ran between one message and the next, at whichever depth you want it.
 ///
-/// A busy turn can carry fifty tool calls. Listed, they bury the words either side of them;
-/// as dots they take one line and still say the three things worth knowing at a glance — how
-/// much it did, what kind of work it was, and whether any of it failed. Tapping unfolds the
-/// list, because the moment you care at all you care about which file and which command.
+/// Three states, because there are three genuinely different questions. Did it do much, and
+/// did anything break — that is a row of dots. Which files, which commands — that is a list.
+/// What exactly did it run and what came back — that is everything, and it is what you want
+/// perhaps once a day, so it is two taps away rather than on the screen by default.
 struct ToolTrace: View {
     let tools: [Tool]
-    @State private var open = false
+    @State private var depth: Depth = .dots
+
+    enum Depth {
+        case dots, list, everything
+
+        /// Tapping walks forward and wraps, so one control reaches all three and gets home.
+        var next: Depth {
+            switch self {
+            case .dots: .list
+            case .list: .everything
+            case .everything: .dots
+            }
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.extraSmall) {
-            Button { open.toggle() } label: { dots }
+            Button { depth = depth.next } label: { head }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("tool-trace")
-                .accessibilityLabel("\(tools.count) tool calls")
-            if open {
-                VStack(alignment: .leading, spacing: Spacing.xxs) {
-                    ForEach(tools) { line($0) }
+            if depth != .dots {
+                VStack(alignment: .leading, spacing: Spacing.extraSmall) {
+                    ForEach(tools) { row($0) }
                 }
                 .padding(.leading, Spacing.xxs)
-                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
         .padding(.horizontal, Spacing.extraSmall)
         .padding(.vertical, Spacing.xxs)
-        .animation(.snappy(duration: 0.18), value: open)
+        .animation(.snappy(duration: 0.18), value: depth)
     }
 
-    private var dots: some View {
+    /// The dots are the closed state's whole content. Once the list is open they are stacked
+    /// down the left of it, one per row, so repeating them across the top says nothing twice.
+    private var head: some View {
         HStack(spacing: 5) {
-            ForEach(Array(tools.enumerated()), id: \.offset) { _, tool in
-                Circle()
-                    .fill(colour(tool))
-                    .frame(width: 6, height: 6)
+            if depth == .dots {
+                ForEach(Array(tools.enumerated()), id: \.offset) { _, tool in
+                    Circle().fill(colour(tool)).frame(width: 6, height: 6)
+                }
             }
-            Text(open ? "hide" : summary)
+            Text(label)
                 .font(Typography.hint)
                 .foregroundStyle(Palette.textTertiary)
-                .padding(.leading, Spacing.xxs)
+                .padding(.leading, depth == .dots ? Spacing.xxs : 0)
             Spacer(minLength: 0)
         }
         .contentShape(.rect)
     }
 
-    /// Failures are the reason to look, so they are what the closed row says.
-    private var summary: String {
+    /// Failures are the reason to look, so the closed row leads with them.
+    private var label: String {
         let failed = tools.filter { !$0.succeeded }.count
-        if failed > 0 { return "\(tools.count) steps · \(failed) failed" }
-        return tools.count == 1 ? "1 step" : "\(tools.count) steps"
-    }
-
-    private func line(_ tool: Tool) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: Spacing.extraSmall) {
-            Circle()
-                .fill(colour(tool))
-                .frame(width: 6, height: 6)
-            Text(tool.name)
-                .font(Typography.cardLabel)
-                .foregroundStyle(Palette.textSecondary)
-            Text(tool.detail)
-                .font(Typography.mono)
-                .foregroundStyle(tool.succeeded ? Palette.textTertiary : Palette.lcdRed)
-                .lineLimit(2)
-                .truncationMode(.middle)
-            Spacer(minLength: 0)
+        let count = tools.count == 1 ? "1 step" : "\(tools.count) steps"
+        switch depth {
+        case .dots: return failed > 0 ? "\(count) · \(failed) failed" : count
+        case .list: return "\(count) · tap for the full call"
+        case .everything: return "\(count) · tap to close"
         }
     }
 
-    /// A failure is red whatever it was doing: that is the one thing worth breaking the
-    /// colour scheme for.
+    @ViewBuilder private func row(_ tool: Tool) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.xxs) {
+            HStack(alignment: .firstTextBaseline, spacing: Spacing.extraSmall) {
+                Circle()
+                    .fill(colour(tool))
+                    .frame(width: 6, height: 6)
+                Text(tool.name)
+                    .font(Typography.cardLabel)
+                    .foregroundStyle(Palette.textSecondary)
+                Text(tool.detail)
+                    .font(Typography.mono)
+                    .foregroundStyle(tool.succeeded ? Palette.textTertiary : Palette.lcdRed)
+                    .lineLimit(depth == .everything ? 1 : 2)
+                    .truncationMode(.middle)
+                Spacer(minLength: 0)
+            }
+            if depth == .everything { whole(tool) }
+        }
+    }
+
+    /// Selectable, because the reason to open a tool call on a phone is usually to get a path
+    /// or an error string off it and into somewhere else.
+    @ViewBuilder private func whole(_ tool: Tool) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.xxs) {
+            if !tool.call.isEmpty { block("CALL", tool.call, Palette.textSecondary) }
+            if !tool.result.isEmpty {
+                block(tool.succeeded ? "RESULT" : "FAILED", tool.result,
+                      tool.succeeded ? Palette.textSecondary : Palette.lcdRed)
+            }
+        }
+        .padding(.leading, Spacing.small)
+    }
+
+    private func block(_ title: String, _ body: String, _ tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(Typography.eyebrow)
+                .tracking(1)
+                .foregroundStyle(tint)
+            Text(body)
+                .font(Typography.mono)
+                .foregroundStyle(Palette.textPrimary)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(Spacing.extraSmall)
+        .background(
+            RoundedRectangle(cornerRadius: Radius.small, style: .continuous)
+                .fill(Palette.tileIdle)
+        )
+    }
+
+    /// A failure is red whatever it was doing: the one thing worth breaking the scheme for.
     private func colour(_ tool: Tool) -> Color {
         guard tool.succeeded else { return Palette.lcdRed }
         switch tool.kind {

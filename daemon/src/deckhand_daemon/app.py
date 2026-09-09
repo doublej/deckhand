@@ -96,7 +96,7 @@ async def session_summary(session_id: str) -> dict:
     activity = await asyncio.to_thread(transcripts.activity_since_last_user, session_id)
     text, error = await summarize.summarize(session_id, activity)
     log.info("summary for %s: %s", session.name, error or f"{len(text or '')} chars")
-    return {"summary": text, "error": error}
+    return {"summary": text, "headline": summarize.headline(text), "error": error}
 
 
 @app.get("/sessions/{session_id}/turns", dependencies=[Depends(require_token)])

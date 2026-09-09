@@ -24,6 +24,9 @@ _NOISE = re.compile(r"<(system-reminder|command-message|command-name|command-arg
 # Anything not listed falls back to the first short string in the input.
 TOOL_DETAIL = ("command", "file_path", "pattern", "path", "description", "prompt", "url", "query")
 MAX_DETAIL = 140
+# The whole call and whatever came back, for the phone's fully-unfolded view. Capped because
+# a single Read can be a megabyte and this rides over the LAN on every poll.
+MAX_FULL = 4000
 
 
 @dataclass(slots=True)
@@ -33,6 +36,9 @@ class Tool:
     name: str
     detail: str
     succeeded: bool = True
+    # The whole call and the whole answer, for when a dot is not enough.
+    call: str = ""
+    result: str = ""
 
 
 @dataclass(slots=True)
@@ -167,44 +173,61 @@ def _scan(path: Path, window: int) -> list[Turn]:
     """
     turns: list[Turn] = []
     ran: list[tuple[str, Tool]] = []
-    failed: set[str] = set()
+    answers: dict[str, tuple[str, bool]] = {}
     for raw in _tail_lines(path, window):
         entry = _parse(raw)
         if entry is None or entry.get("type") not in ("user", "assistant"):
             continue
-        failed |= _failures(entry)
+        answers.update(_answers(entry))
         ran.extend(_tools_of(entry))
         text = _text_of(entry)
         if text is None:
             continue
         turns.append(Turn(role=entry["type"], text=text, timestamp=entry.get("timestamp", ""),
-                          tools=_settle(ran, failed)))
+                          tools=_settle(ran, answers)))
         ran = []
     if ran:
-        turns.append(Turn(role="assistant", text="", timestamp="", tools=_settle(ran, failed)))
+        turns.append(Turn(role="assistant", text="", timestamp="", tools=_settle(ran, answers)))
     return turns
 
 
-def _settle(ran: list[tuple[str, Tool]], failed: set[str]) -> list[Tool]:
-    """A result arrives after the call that asked for it, so failure is known only by now."""
+def _settle(ran: list[tuple[str, Tool]], answers: dict[str, tuple[str, bool]]) -> list[Tool]:
+    """A result arrives after the call that asked for it, so it is known only by now."""
     settled = []
     for tool_id, tool in ran:
-        tool.succeeded = tool_id not in failed
+        result, failed = answers.get(tool_id, ("", False))
+        tool.succeeded = not failed
+        tool.result = result
         settled.append(tool)
     return settled
 
 
-def _failures(entry: dict) -> set[str]:
+def _answers(entry: dict) -> dict[str, tuple[str, bool]]:
     """Tool results come back as a user entry; the id is what ties one to its call."""
     content = entry.get("message", {}).get("content")
     if entry.get("type") != "user" or not isinstance(content, list):
-        return set()
-    return {
-        block["tool_use_id"]
-        for block in content
-        if isinstance(block, dict) and block.get("type") == "tool_result"
-        and block.get("is_error") and block.get("tool_use_id")
-    }
+        return {}
+    answers = {}
+    for block in content:
+        if not isinstance(block, dict) or block.get("type") != "tool_result":
+            continue
+        if tool_id := block.get("tool_use_id"):
+            answers[tool_id] = (_result_text(block.get("content")), bool(block.get("is_error")))
+    return answers
+
+
+def _result_text(content: object) -> str:
+    """A result is a string, or the blocks a tool answered with. Images have no text to show."""
+    if isinstance(content, str):
+        return content[:MAX_FULL]
+    if isinstance(content, list):
+        parts = [
+            block.get("text", "")
+            for block in content
+            if isinstance(block, dict) and block.get("type") == "text"
+        ]
+        return "\n".join(p for p in parts if p)[:MAX_FULL]
+    return ""
 
 
 def _tools_of(entry: dict) -> list[tuple[str, Tool]]:
@@ -212,10 +235,21 @@ def _tools_of(entry: dict) -> list[tuple[str, Tool]]:
     if entry.get("type") != "assistant" or not isinstance(content, list):
         return []
     return [
-        (block.get("id", ""), Tool(name=block.get("name", "tool"), detail=_detail(block)))
+        (
+            block.get("id", ""),
+            Tool(name=block.get("name", "tool"), detail=_detail(block), call=_call(block)),
+        )
         for block in content
         if isinstance(block, dict) and block.get("type") == "tool_use"
     ]
+
+
+def _call(block: dict) -> str:
+    """The whole input, laid out to be read rather than parsed."""
+    supplied = block.get("input")
+    if not isinstance(supplied, dict) or not supplied:
+        return ""
+    return json.dumps(supplied, indent=2, ensure_ascii=False)[:MAX_FULL]
 
 
 def _detail(block: dict) -> str:

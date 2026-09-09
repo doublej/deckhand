@@ -70,11 +70,27 @@ public struct Tool: Codable, Hashable, Sendable, Identifiable {
     public let name: String
     public let detail: String
     public let succeeded: Bool
+    /// The whole call and the whole answer, for when a dot and a line are not enough.
+    public var call: String = ""
+    public var result: String = ""
 
-    public init(name: String, detail: String, succeeded: Bool = true) {
+    public init(name: String, detail: String, succeeded: Bool = true,
+                call: String = "", result: String = "") {
         self.name = name
         self.detail = detail
         self.succeeded = succeeded
+        self.call = call
+        self.result = result
+    }
+
+    /// Same tolerance as `Turn`: a daemon a version behind sends neither of the last two.
+    public init(from decoder: Decoder) throws {
+        let box = try decoder.container(keyedBy: CodingKeys.self)
+        name = try box.decode(String.self, forKey: .name)
+        detail = try box.decode(String.self, forKey: .detail)
+        succeeded = try box.decodeIfPresent(Bool.self, forKey: .succeeded) ?? true
+        call = try box.decodeIfPresent(String.self, forKey: .call) ?? ""
+        result = try box.decodeIfPresent(String.self, forKey: .result) ?? ""
     }
 
     /// Stable enough for a list that is rebuilt every few seconds from the same transcript.
@@ -129,7 +145,16 @@ public struct Health: Codable, Hashable, Sendable {
 /// What a session has been doing since you last spoke to it.
 public struct Summary: Codable, Hashable, Sendable {
     public let summary: String?
+    /// The first line of it: what you need to know or do, short enough for a list row.
+    public var headline: String?
     public let error: String?
+
+    public init(from decoder: Decoder) throws {
+        let box = try decoder.container(keyedBy: CodingKeys.self)
+        summary = try box.decodeIfPresent(String.self, forKey: .summary)
+        headline = try box.decodeIfPresent(String.self, forKey: .headline)
+        error = try box.decodeIfPresent(String.self, forKey: .error)
+    }
 }
 
 public enum DeckhandError: Error, Equatable, Sendable {
