@@ -77,7 +77,7 @@ def test_focus_asks_iterm_for_that_pane(token, monkeypatch):
 
 
 def test_upload_answers_with_what_utt_heard(token, monkeypatch):
-    monkeypatch.setattr(app_module.transcribe, "transcribe", lambda clip: ("Testing, one, two.", None))
+    monkeypatch.setattr(app_module.transcribe, "transcribe", lambda clip, hints: ("Testing, one, two.", None))
     r = client(token).post(
         f"/sessions/{SID}/audio", files={"file": ("clip.m4a", b"audio bytes", "audio/m4a")}
     )
@@ -86,7 +86,7 @@ def test_upload_answers_with_what_utt_heard(token, monkeypatch):
 
 
 def test_a_clip_is_kept_even_when_utt_is_off(token, monkeypatch):
-    monkeypatch.setattr(app_module.transcribe, "transcribe", lambda clip: (None, "utt is off"))
+    monkeypatch.setattr(app_module.transcribe, "transcribe", lambda clip, hints: (None, "utt is off"))
     body = client(token).post(
         f"/sessions/{SID}/audio", files={"file": ("clip.m4a", b"audio bytes", "audio/m4a")}
     ).json()
@@ -97,7 +97,7 @@ def test_a_clip_is_kept_even_when_utt_is_off(token, monkeypatch):
 
 def test_a_clip_can_be_transcribed_without_being_delivered(token, monkeypatch):
     """Reading it first is the whole point: nothing reaches the session until the person says."""
-    monkeypatch.setattr(app_module.transcribe, "transcribe", lambda _clip: ("read me first", None))
+    monkeypatch.setattr(app_module.transcribe, "transcribe", lambda _clip, _hints: ("read me first", None))
     delivered = []
     monkeypatch.setattr(app_module.deliver, "deliver", lambda *a, **k: delivered.append(a))
     answer = client(token).post(

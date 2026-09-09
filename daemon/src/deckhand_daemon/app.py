@@ -5,11 +5,12 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Body, Depends, FastAPI, Header, HTTPException, Query, UploadFile
 
-from . import __version__, config, deliver, sessions, summarize, transcribe, transcripts
+from . import __version__, config, deliver, plugin, sessions, summarize, transcribe, transcripts
 from .log import log
 
 AUDIO_SUFFIXES = {".m4a", ".caf", ".wav", ".mp3", ".aac", ".mp4", ".ogg", ".flac", ".webm"}
@@ -20,7 +21,17 @@ def require_token(x_deckhand_token: str = Header(default="")) -> None:
         raise HTTPException(status_code=401, detail="bad token")
 
 
-app = FastAPI(title="Deckhand", version=__version__)
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    """Deckhand's page inside utt, put there fresh on every start: it is what survives utt
+    being reinstalled or the folder being cleared, and it costs one file write."""
+    plugin.install()
+    watcher = asyncio.create_task(plugin.watch())
+    yield
+    watcher.cancel()
+
+
+app = FastAPI(title="Deckhand", version=__version__, lifespan=lifespan)
 
 
 async def _live_session(session_id: str) -> sessions.Session:
@@ -61,6 +72,9 @@ def list_sessions() -> dict:
     if _last_listing != (len(live), status):
         _last_listing = (len(live), status)
         log.info("listing changed: %d sessions, iterm %s", len(live), status)
+        # The phone asks for this every few seconds anyway, so the plugin page gets a live
+        # count for free rather than the daemon paying for one of its own.
+        plugin.status(sessions=f"{len(live)} live")
     return {"sessions": [s.to_json() for s in live], "iterm": status}
 
 
@@ -92,7 +106,7 @@ def focus_session(session_id: str) -> dict:
 async def upload_audio(
     session_id: str,
     file: UploadFile,
-    route: str = Query(default="auto", description="auto, keyboard or socket"),
+    route: str | None = Query(default=None, description="auto, keyboard or socket"),
     deliver_now: bool = Query(
         default=True,
         alias="deliver",
@@ -113,11 +127,14 @@ async def upload_audio(
     path = config.audio_dir(session_id) / f"{stamp}-{uuid.uuid4().hex[:8]}{suffix}"
     path.write_bytes(body)
     log.info("clip for %s: %d bytes", session.name, len(body))
-    text, error = await asyncio.to_thread(transcribe.transcribe, path)
+    hints = transcribe.hints_for(session.name, session.cwd)
+    text, error = await asyncio.to_thread(transcribe.transcribe, path, hints)
     log.info("transcript for %s: %s", session.name, error or repr(text))
+    plugin.status(lastClip=f"{session.name}, {error or 'heard'}")
     taken, delivery_error = None, None
-    if text and deliver_now:
-        taken, delivery_error = await asyncio.to_thread(deliver.deliver, session, text, route)
+    if text and deliver_now and plugin.delivers():
+        taken, delivery_error = await asyncio.to_thread(
+            deliver.deliver, session, text, route or plugin.route())
         log.info("delivery to %s: %s", session.name, delivery_error or f"{taken} took it")
     return {
         "path": str(path),
@@ -135,11 +152,12 @@ async def upload_audio(
 async def say(
     session_id: str,
     text: str = Body(embed=True),
-    route: str = Query(default="auto", description="auto, keyboard or socket"),
+    route: str | None = Query(default=None, description="auto, keyboard or socket"),
 ) -> dict:
     """Put words into a session. The other half of an upload the person asked to read first."""
     session = await _live_session(session_id)
-    taken, error = await asyncio.to_thread(deliver.deliver, session, text, route)
+    taken, error = await asyncio.to_thread(
+        deliver.deliver, session, text, route or plugin.route())
     log.info("delivery to %s: %s", session.name, error or f"{taken} took it")
     return {"delivered": taken is not None, "delivered_by": taken, "delivery_error": error}
 

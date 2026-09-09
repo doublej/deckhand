@@ -1,138 +1,119 @@
 import json
-import subprocess
+import threading
+import time
+from pathlib import Path
 
-from deckhand_daemon import transcribe
+import pytest
 
-
-def test_the_environment_wins_over_a_1password_read(monkeypatch):
-    monkeypatch.setattr(transcribe, "_token", None)
-    monkeypatch.setenv("UTT_SECRET", "from-env")
-    assert transcribe.token() == "from-env"
+from deckhand_daemon import plugin, transcribe
 
 
-def test_the_token_comes_from_onenv_when_the_environment_is_bare(monkeypatch, tmp_path):
-    monkeypatch.setattr(transcribe, "_token", None)
-    monkeypatch.delenv("UTT_SECRET", raising=False)
-    monkeypatch.setenv("DECKHAND_DATA_DIR", str(tmp_path / "empty"))
-    seen = {}
-
-    def fake_run(cmd, **kwargs):
-        seen["cmd"] = cmd
-        return subprocess.CompletedProcess(cmd, 0, stdout="from-1password\n", stderr="")
-
-    monkeypatch.setattr(transcribe.subprocess, "run", fake_run)
-    assert transcribe.token() == "from-1password"
-    assert seen["cmd"] == ["onenv", "get", "deckhand", "UTT_SECRET"]
+@pytest.fixture
+def jobs(tmp_path, monkeypatch):
+    """utt's side of the lane: the folder it watches, made the way utt makes it."""
+    monkeypatch.setenv("DECKHAND_PLUGIN_DIR", str(tmp_path))
+    directory = plugin.jobs_dir()
+    directory.mkdir()
+    monkeypatch.setattr(transcribe, "POLL", 0.01)
+    return directory
 
 
-def test_no_token_means_a_message_not_a_crash(monkeypatch, tmp_path):
-    monkeypatch.setattr(transcribe, "_token", None)
-    monkeypatch.delenv("UTT_SECRET", raising=False)
-    monkeypatch.setenv("DECKHAND_DATA_DIR", str(tmp_path / "empty"))
-    monkeypatch.setattr(
-        transcribe.subprocess,
-        "run",
-        lambda cmd, **kw: subprocess.CompletedProcess(cmd, 1, stdout="", stderr="no such item"),
-    )
-    assert transcribe.transcribe(tmp_path / "clip.m4a") == (
+def fake_utt(jobs, answer: dict, deadline: float = 5.0):
+    """Answers the first finished clip, exactly as the guide describes: pick up the audio,
+    write the answer beside it, delete the audio and the hints."""
+
+    def work():
+        stop = time.monotonic() + deadline
+        while time.monotonic() < stop:
+            for clip in jobs.glob("*.wav"):
+                clip.with_suffix(".json").write_text(json.dumps(answer))
+                clip.unlink()
+                return
+            time.sleep(0.01)
+
+    thread = threading.Thread(target=work, daemon=True)
+    thread.start()
+    return thread
+
+
+def test_a_clip_becomes_text(jobs):
+    fake_utt(jobs, {"text": "  put the kettle on  "})
+    assert transcribe.transcribe(_clip(jobs)) == ("put the kettle on", None)
+
+
+def test_the_answer_is_cleaned_up_afterwards(jobs):
+    """The audio is utt's to delete; the answer file is ours, and a folder that only grows is
+    a second copy of everything ever said."""
+    fake_utt(jobs, {"text": "hello"})
+    transcribe.transcribe(_clip(jobs))
+    assert list(jobs.iterdir()) == []
+
+
+def test_nothing_is_visible_to_utt_until_it_is_complete(jobs, monkeypatch):
+    """The rename is the whole contract. utt picks up finished audio extensions, so the clip
+    must be whole before it wears one — and the hints must already be there, because a hints
+    file written afterwards is one utt has run past. Watching the folder would race; this
+    asks the rename itself what the world looked like when it happened."""
+    at_rename: dict = {}
+    real = Path.rename
+
+    def record(self, target):
+        at_rename["name"] = self.name
+        at_rename["bytes"] = self.stat().st_size
+        at_rename["hints"] = [p.name for p in self.parent.glob("*.hints.json")]
+        return real(self, target)
+
+    monkeypatch.setattr(Path, "rename", record)
+    fake_utt(jobs, {"text": "done"})
+    transcribe.transcribe(_clip(jobs), ["deckhand", "TUI"])
+    assert at_rename["name"].endswith(".wav.part")
+    assert at_rename["bytes"] == len(b"RIFF....WAVE")
+    assert at_rename["hints"], "the hints were written after the audio became visible"
+
+
+def test_an_error_from_utt_is_passed_on_as_it_is(jobs):
+    fake_utt(jobs, {"error": "Could not transcribe that clip."})
+    assert transcribe.transcribe(_clip(jobs)) == (None, "Could not transcribe that clip.")
+
+
+def test_an_empty_answer_is_reported_as_nothing_heard(jobs):
+    """utt answers with an empty string for silence. A blank line is not a transcript."""
+    fake_utt(jobs, {"text": "   "})
+    assert transcribe.transcribe(_clip(jobs)) == (None, "nothing recognisable in that clip")
+
+
+def test_a_closed_utt_is_named_as_the_cause(tmp_path, monkeypatch):
+    """No jobs folder means utt has never run here — the app is shut, not broken."""
+    monkeypatch.setenv("DECKHAND_PLUGIN_DIR", str(tmp_path))
+    clip = tmp_path / "clip.wav"
+    clip.write_bytes(b"RIFF")
+    assert transcribe.transcribe(clip) == (
         None,
-        "no utt token on this Mac — run `just sync-secrets`",
+        "utt is not running on the Mac — open utt and try again",
     )
 
 
-def test_onenv_hanging_under_launchd_is_survivable(monkeypatch, tmp_path):
-    """1Password cannot ask for a fingerprint from a launchd agent, so the read times out."""
-    monkeypatch.setattr(transcribe, "_token", None)
-    monkeypatch.delenv("UTT_SECRET", raising=False)
-    monkeypatch.setenv("DECKHAND_DATA_DIR", str(tmp_path / "empty"))
-
-    def hang(cmd, **kwargs):
-        raise subprocess.TimeoutExpired(cmd, 10)
-
-    monkeypatch.setattr(transcribe.subprocess, "run", hang)
-    assert transcribe.token() is None
-
-
-def test_the_materialised_file_is_used_before_1password(monkeypatch, tmp_path):
-    monkeypatch.setattr(transcribe, "_token", None)
-    monkeypatch.delenv("UTT_SECRET", raising=False)
-    data = tmp_path / "data"
-    data.mkdir()
-    (data / "utt-token").write_text("from-file\n")
-    monkeypatch.setenv("DECKHAND_DATA_DIR", str(data))
-    monkeypatch.setattr(transcribe.subprocess, "run", lambda *a, **k: 1 / 0)
-    assert transcribe.token() == "from-file"
-
-
-def test_every_recorded_format_maps_to_a_decoder():
-    assert transcribe.CONTENT_TYPES[".m4a"] == "audio/mp4"
-    assert transcribe.CONTENT_TYPES[".wav"] == "audio/wav"
-
-
-def test_an_empty_answer_is_reported_as_nothing_heard(monkeypatch, tmp_path):
-    """utt answers 200 with an empty string when the clip is silence."""
-    import urllib.request
-
-    monkeypatch.setattr(transcribe, "_token", "t")
-    clip = tmp_path / "clip.m4a"
+def test_a_format_utt_cannot_open_is_refused_before_the_wait(jobs):
+    """The extension is how AVFoundation picks its reader, so an unopenable one is a 3 minute
+    wait for an answer that will never come."""
+    clip = jobs.parent / "clip.webm"
     clip.write_bytes(b"x")
-    monkeypatch.setattr(
-        urllib.request, "urlopen", lambda *a, **k: _Response(b'{"text": "   "}')
-    )
-    assert transcribe.transcribe(clip) == (None, "nothing recognisable in that clip")
+    assert transcribe.transcribe(clip) == (None, "utt cannot open .webm files")
 
 
-def test_a_closed_utt_is_named_as_the_cause(monkeypatch, tmp_path):
-    """Errno 61 on the port means nobody is listening: the app is shut, not broken."""
-    import urllib.error
-    import urllib.request
-
-    monkeypatch.setattr(transcribe, "_token", "t")
-    clip = tmp_path / "clip.m4a"
-    clip.write_bytes(b"x")
-
-    def refused(*_a, **_k):
-        raise urllib.error.URLError(ConnectionRefusedError(61, "Connection refused"))
-
-    monkeypatch.setattr(urllib.request, "urlopen", refused)
-    text, error = transcribe.transcribe(clip)
+def test_silence_from_utt_gives_up_rather_than_hanging(jobs, monkeypatch):
+    monkeypatch.setattr(transcribe, "TIMEOUT", 0.05)
+    text, error = transcribe.transcribe(_clip(jobs))
     assert text is None
-    assert error == "utt is not running on the Mac — open utt and try again"
+    assert "did not answer" in error
 
 
-def test_a_rejected_token_falls_back_to_the_one_utt_holds(monkeypatch, tmp_path):
-    """utt re-mints its token when its API is toggled; 1Password's copy goes stale."""
-    import urllib.error
-    import urllib.request
-
-    settings = tmp_path / "settings.json"
-    settings.write_text(json.dumps({"api": {"enabled": True, "token": "the-live-one"}}))
-    monkeypatch.setattr(transcribe, "UTT_SETTINGS", settings)
-    monkeypatch.setattr(transcribe, "_token", "the-stale-one")
-    clip = tmp_path / "clip.m4a"
-    clip.write_bytes(b"x")
-    seen: list[str] = []
-
-    def answer(request, *_a, **_k):
-        seen.append(request.headers["Authorization"])
-        if request.headers["Authorization"].endswith("the-stale-one"):
-            raise urllib.error.HTTPError(transcribe.UTT_URL, 401, "no", {}, None)
-        return _Response(b'{"text": "second time lucky"}')
-
-    monkeypatch.setattr(urllib.request, "urlopen", answer)
-    assert transcribe.transcribe(clip) == ("second time lucky", None)
-    assert seen == ["Bearer the-stale-one", "Bearer the-live-one"]
+def test_the_hints_are_what_this_session_is_working_on(jobs):
+    hints = transcribe.hints_for("warm-okapi", "/Users/jj/dev/web/shop")
+    assert {"deckhand", "warm", "okapi", "shop", "web"} <= set(hints)
 
 
-class _Response:
-    def __init__(self, body: bytes):
-        self._body = body
-
-    def read(self) -> bytes:
-        return self._body
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *_):
-        return False
+def _clip(jobs):
+    clip = jobs.parent / "clip.wav"
+    clip.write_bytes(b"RIFF....WAVE")
+    return clip

@@ -64,3 +64,9 @@ def claude_home(tmp_path, monkeypatch):
 @pytest.fixture
 def token(claude_home):
     return config.token()
+
+
+@pytest.fixture(autouse=True)
+def keep_utts_plugin_folder_clean(tmp_path, monkeypatch):
+    """A test run must not install a plugin page into the utt a person is using."""
+    monkeypatch.setenv("DECKHAND_PLUGIN_DIR", str(tmp_path / "plugins"))
