@@ -18,16 +18,15 @@ controls the daemon.
 - Daemon: Python 3.13, FastAPI, uv. Port **4180**, binds `0.0.0.0`, launchd agent
   `com.jurrejan.deckhand`. Logs to `~/Library/Logs/Deckhand/deckhand.log`, which is what
   Console.app shows in its sidebar (`just logs` to follow it).
-- Transcription: utt's local API on `127.0.0.1:8756`, on-device, nothing leaves the Mac.
-  It has to be switched on in utt: `api.enabled` in
-  `~/Library/Application Support/dev.jurrejan.utt/settings.json`. Editing that file does not
-  start the listener — utt reads it at launch, so the app has to be relaunched (or the switch
-  flipped in its Settings UI). `access: "thisMac"` binds loopback only, and utt's version
-  string says nothing about whether the build has the API at all.
+- Transcription: utt, on-device, over the **plugin file lane** — the clip is written into
+  `~/Library/Application Support/dev.jurrejan.utt/plugins/deckhand.jobs/` and utt writes the
+  text beside it. No listener, no token, nothing on the network, and it works whether or not
+  utt's HTTP API is switched on. `plugins/deckhand.json` is the manifest, rewritten at every
+  start-up; `deckhand.values.json` carries what the person set on the page, and
+  `deckhand.action.json` which button they pressed.
 - Summaries: the Claude Agent SDK, sonnet at low effort, one turn, no tools.
 - Menu bar app (`menubar/`, target `DeckhandMenu`): start, stop, restart, copy the token,
   open the log. `just menubar`.
-- Secrets: onenv namespace **deckhand**, key `UTT_SECRET` (utt's bearer token).
 - App: Swift 6.2, SwiftUI, iOS 18. `DeckhandKit` (SwiftPM library) holds the models, the HTTP
   client and the design layer so they are testable on the Mac; the app target comes from
   XcodeGen.
@@ -58,7 +57,8 @@ Sources/DeckhandKit/Design/
 daemon/src/deckhand_daemon/
   sessions.py     # which Claude sessions are alive, and their iTerm pane
   transcripts.py  # the last rounds, and the activity blob a summary is written from
-  transcribe.py   # utt turns a clip into text
+  transcribe.py   # utt turns a clip into text, through its jobs folder
+  plugin.py       # Deckhand's page inside utt: the manifest, its settings, its buttons
   deliver.py      # the text goes into the session's own peer socket
   summarize.py    # what happened since you last spoke, via the Claude Agent SDK
   app.py          # the endpoints
@@ -100,16 +100,22 @@ unauthenticated route; everything else needs the `x-deckhand-token` header, and 
   backs off for a minute so a real outage cannot starve the event loop, and the `iterm` field
   still says what is wrong. This matters for more than window titles: without a pane there is no
   keyboard, and delivery falls back to the peer socket.
-- **utt's bearer token can be replaced out from under the copy in 1Password**, and then every
-  clip comes back 401 with "The token is in utt's settings" — accurate, and confusing, because
-  a token *was* sent. Two things replace it: the "New" button on utt's API settings card, and
-  "Reset to defaults", which wipes the token so the next switch-on mints a fresh one. Toggling
-  the API off and on does **not** re-mint (verified: the value survived a toggle unchanged).
-  onenv stays the source of truth, but a rejected token is retried once against utt's own
-  `api.token`, and the log says when that happens.
-- **onenv cannot run under launchd** either: 1Password has no way to ask for a fingerprint, so
-  the read hangs and times out. `just sync-secrets` materialises `deckhand/UTT_SECRET` into
-  `~/Library/Application Support/Deckhand/utt-token` (0600) and the daemon reads that.
+- **The clip must be whole before it is audio.** utt picks up finished audio extensions from
+  the jobs folder, so a clip is written as `<name>.wav.part` and only then renamed — skip the
+  rename and utt reads the file mid-write. `<name>.hints.json` goes in *before* the rename, or
+  it is a hints file utt has already run past. The extension has to match the bytes:
+  AVFoundation picks its reader from the extension, so a wav named `.m4a` fails to open
+  however correct it is. utt deletes the audio and the hints; the answer file is ours to remove.
+- **Hints are the cheapest accuracy in the system.** Every clip was dictated at a named session
+  working in a known folder, so the vocabulary is known before the clip is even recorded
+  (`transcribe.hints_for`). utt only lets a hint displace text that is already nearly it and
+  starts with the same letter, so the list cannot rewrite a sentence: it catches "cockwheel" →
+  "cogwheel", "Tu Y" → "TUI", "deck hand" → "deckhand". It cannot fix an ordinary word misheard
+  as another ordinary word ("previous tree" for "previous three" stays wrong).
+- **The daemon no longer holds a token of utt's.** It used to read one from onenv, materialise
+  it to a 0600 file for launchd, and fall back to utt's own `settings.json` on a 401. The file
+  lane removed all three: `needsApi` is false, so utt hands out nothing and there is nothing to
+  go stale. `just sync-secrets` is gone with it.
 - Anything the summariser or the transcriber needs must be reachable without a person present.
   The summariser passes `setting_sources=[]` for the same reason it is fast: loading the user
   settings starts every configured MCP server, which cost more than a minute.
@@ -125,8 +131,8 @@ unauthenticated route; everything else needs the `x-deckhand-token` header, and 
 - ATS: the app talks plain HTTP to a `.local` name, which needs `NSAllowsLocalNetworking`
   plus `NSLocalNetworkUsageDescription` (both in `project.yml`, not a checked-in plist).
 - **Installing on a phone** (`just device`, `just phone="Pocketline Swing" device`) takes four
-  things, and the error message names whichever is missing: Xcode signed in as
-  `jurrejan@gmail.com` (team KA6433FU8U); `-allowProvisioningDeviceRegistration` alongside
+  things, and the error message names whichever is missing: Xcode signed in to the account for
+  team KA6433FU8U; `-allowProvisioningDeviceRegistration` alongside
   `-allowProvisioningUpdates`, or a phone that is not already in the team's wildcard profile is
   refused with "isn't registered in your developer account"; an **unlocked** phone, or the
   developer disk image will not mount; and, the first time a phone gets a build from this team,
