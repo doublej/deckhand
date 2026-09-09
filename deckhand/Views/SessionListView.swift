@@ -216,7 +216,7 @@ struct SessionListView: View {
                     .lineLimit(1)
             }
             Spacer(minLength: Spacing.extraSmall)
-            StatePill(model.connection.pill)
+            StateWord(model.connection.state)
             Button("Hidden sessions", systemImage: model.showsHidden ? "eye" : "eye.slash") {
                 model.showsHidden.toggle()
             }

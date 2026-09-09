@@ -18,6 +18,7 @@ from . import (
     config,
     deliver,
     files,
+    nudge,
     plugin,
     push,
     readable,
@@ -42,7 +43,8 @@ async def lifespan(_: FastAPI):
     """Deckhand's page inside utt, put there fresh on every start: it is what survives utt
     being reinstalled or the folder being cleared, and it costs one file write."""
     plugin.install()
-    watchers = [asyncio.create_task(plugin.watch()), asyncio.create_task(push.watch())]
+    watchers = [asyncio.create_task(plugin.watch()), asyncio.create_task(push.watch()),
+                asyncio.create_task(nudge.watch())]
     yield
     for watcher in watchers:
         watcher.cancel()
@@ -72,6 +74,8 @@ def health() -> dict:
         "name": "deckhand",
         "version": __version__,
         "host": config.base_url(),
+        # So the phone can turn a session's `localhost:5173` into something it can actually open.
+        "lan": config.lan_address(),
         "iterm": sessions.iterm_status(),
     }
 
@@ -176,6 +180,13 @@ def session_raw(session_id: str, limit: int = Query(default=1500, ge=1, le=4000)
     """
     _session_or_404(session_id)
     return {"lines": readable.plain_tail(session_id, limit)}
+
+
+@app.post("/sessions/{session_id}/queue/clear", dependencies=[Depends(require_token)])
+def clear_queue(session_id: str) -> dict:
+    """Draw a line under this session's inbox: whatever the lane still shows was never read."""
+    _session_or_404(session_id)
+    return {"cleared": asked.clear(session_id)}
 
 
 @app.post("/sessions/{session_id}/focus", dependencies=[Depends(require_token)])

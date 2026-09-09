@@ -64,12 +64,15 @@ Sources/DeckhandKit/Design/
   Palette, Typography, Spacing   # utt's tokens, copied
   DotMatrix.swift # the 6x6 geometry and the level curves; DotGlyph holds the shapes
   DotMark.swift   # a shape on the grid, and the wordmark
-  StatePill.swift # the four-letter state vocabulary, and a glyph on its tile
+  StateWord.swift # the four-letter state vocabulary, and a glyph on its tile
+  Links.swift     # addresses in what a session wrote, and what localhost means from a phone
   Chrome.swift    # Card, SettingsGroup, SettingRow, PageHeader
 daemon/src/deckhand_daemon/
   sessions.py     # which Claude sessions are alive, and their iTerm pane
   transcripts.py  # the last rounds, and the activity blob a summary is written from
   asked.py        # what the person asked for, and what is still in the session's inbox
+  readable.py     # the whole transcript as lines, for when the app's reading looks wrong
+  nudge.py        # asks a session that stopped about the asks still open on its list
   tasks.py        # the person's list of asks, and the only three tools that may change it
   files.py        # what the session touched that a person could open, and the permission
   push.py         # what the Lock Screen says, when it changes, and how it gets there
@@ -91,8 +94,9 @@ launchd/          # the agent plist, symlinked into ~/Library/LaunchAgents
 hold to talk → `POST /sessions/{id}/audio`, which answers with the transcript and whether it
 reached the session. `?deliver=false` transcribes without sending, for the review card, and
 `POST /sessions/{id}/say` sends the text once the person has read it.
-`GET /sessions/{id}/raw` hands back the transcript as written, for when the question is whether
-the app read it right. `GET /sessions/{id}/files` lists what the session touched that a phone can open and
+`GET /sessions/{id}/raw` hands back the transcript as readable lines — one per event, the syntax
+dropped — for when the question is whether the app read it right.
+`POST /sessions/{id}/queue/clear` draws a line under an inbox holding prompts nothing will read. `GET /sessions/{id}/files` lists what the session touched that a phone can open and
 `GET /sessions/{id}/file?path=` serves one. `POST /sessions/{id}/focus` brings that pane
 forward on the Mac. `/health` is the only
 unauthenticated route; everything else needs the `x-deckhand-token` header, and both
@@ -119,14 +123,28 @@ unauthenticated route; everything else needs the `x-deckhand-token` header, and 
   backs off for a minute so a real outage cannot starve the event loop, and the `iterm` field
   still says what is wrong. This matters for more than window titles: without a pane there is no
   keyboard, and delivery falls back to the peer socket.
-- **A message absorbed mid-turn is never written to the transcript.** Verified by replaying a
-  live session's `queue-operation` lane: every `remove` with reason `absorbed_mid_turn` had **no**
-  matching `user` entry anywhere after it, while each `dequeue` (picked up at the prompt) did. So
-  dropping an absorbed item from `asked.queued` made a prompt vanish from the phone seconds after
-  it was sent, with no trace in any view. Those items stay, marked `taken`; the phone shows them
-  as "picked up mid-run, so it is in no turn". There is also no way to make a session read its
-  inbox early — the queue drains when a turn ends — so the phone's "force" is Escape, and the
-  button says "Stop the run so it reads this" rather than pretending otherwise.
+- **A message absorbed mid-turn is a `queued_command` attachment, not a `user` entry.** It is
+  true that no `user` entry is ever written for one — but it is written down, as
+  `{"type":"attachment","attachment":{"type":"queued_command","prompt":…}}` at the moment it
+  arrived, which is the entry Claude Code renders as "The user sent a new message while you were
+  working". Measured on a live transcript: 149 of them, and **not one** also present as a user
+  entry, so `transcripts.absorbed` can read them as turns with no risk of showing anything twice.
+  Missing that is what made those messages look lost: `asked.queued` kept its own copy marked
+  `taken` and the phone drew them after the last turn, so three answered prompts sat at the foot
+  of the conversation looking like three nobody had got to. They are ordinary turns now, in the
+  place they arrived, and `asked.queued` returns only what is still in the inbox. There is still
+  no way to make a session read its inbox early — the queue drains when a turn ends — so the
+  phone's "force" is Escape, and the button says "Stop the run so it reads this".
+- **An inbox can hold prompts nothing will ever remove**: a session killed mid-queue leaves
+  enqueues with no matching removal, and a replay cannot tell that from a message still waiting.
+  `POST /sessions/{id}/queue/clear` writes a timestamp to `queue/<sessionId>.json` and the replay
+  starts after it. Claude Code's transcript is never touched — it is not this daemon's file.
+- **The idle check messages sessions on its own** (`nudge.py`). A session that has been quiet for
+  `SETTLE` with anything unfinished on its task list is asked, over the **socket** route so it
+  arrives labelled as another agent rather than as JJ typing, either to finish or to say why not.
+  Two guards against a daemon that will not let a session stop: the same list is never asked about
+  twice (fingerprint of ids and states), and never more often than `AGAIN` whatever the list does.
+  `DECKHAND_NUDGE=0` turns it off.
 - **The keyboard route's ctrl-U travels with the message.** Queued content written by Deckhand
   starts with `\x15`, so `asked._unwrap` strips control characters as well as the envelope tags.
 - **The session's inbox is a lane of its own.** Claude Code writes a `queue-operation` line
@@ -172,6 +190,16 @@ unauthenticated route; everything else needs the `x-deckhand-token` header, and 
   line is tens of thousands of points wide, and past that CoreText renders **nothing** — a black
   screen, no error, no warning. It is one wrapped `Text` per line in a `LazyVStack` now, and it
   says how many lines arrived so that empty never looks like broken again.
+- **No badges.** A state is the word alone — 9pt mono, tracked, in the state's colour, nothing
+  around it. It was a dot and a label inside a bordered capsule, ported from utt, and that shape
+  is not to appear in this app again: it reads as something you press, and each one sits beside
+  something you actually can. `StateWord` is the only place a state is drawn.
+- **An address a session wrote is a tap, and `localhost` is a question.** `Links` marks bare URLs
+  with `NSDataDetector` in both a turn and the summary's prose, leaving anything markdown already
+  linked alone. A local host has no meaning on a phone, so `LocalLinks` intercepts the tap and
+  offers the Mac instead — the address it reports for itself (`/health`'s `lan`, found by asking a
+  never-connected UDP socket which interface would carry a packet out) and the one this phone is
+  already reaching it on. Both, because neither is reliably the right one.
 - **The talk control is a mark and nothing else.** It floats over the pane rather than sitting
   under it, and the scrolling panes add `TalkMark.clearance` to the end of their content so
   nothing is stuck behind it. No bar, no ground, no resting label: a band of furniture across

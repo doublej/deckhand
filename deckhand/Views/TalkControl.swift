@@ -242,7 +242,7 @@ struct TalkMark: View {
 
     private func pill(_ word: String, tint: Color, action: (() -> Void)?) -> some View {
         Text(word)
-            .font(Typography.pill)
+            .font(Typography.state)
             .tracking(1.4)
             .foregroundStyle(tint)
             .lineLimit(1)

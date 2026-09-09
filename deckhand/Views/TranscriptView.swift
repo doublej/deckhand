@@ -29,19 +29,11 @@ struct TranscriptView: View {
                         }
                         .id(index)
                     }
-                    // Drawn as what they are: things you said. The session took them while it
-                    // was working and Claude Code wrote them down nowhere, so this card is the
-                    // only place they exist — but that is the app's problem, not yours, and a
-                    // note explaining it on every one of them explained nothing.
-                    ForEach(taken) { item in
-                        TurnCard(turn: Turn(role: "user", text: item.text, timestamp: ""),
-                                 showsRole: true)
-                    }
                     // Everything above has happened; this is the line it has reached.
                     if session.isBusy { ActiveLine(doing: doing).id("active") }
-                    if !waiting.isEmpty {
+                    if !queued.isEmpty {
                         VStack(alignment: .leading, spacing: Spacing.extraSmall) {
-                            ForEach(waiting) { item in
+                            ForEach(queued) { item in
                                 QueuedCard(
                                     text: item.text,
                                     // Nothing else will make it read this: the inbox is only
@@ -72,14 +64,10 @@ struct TranscriptView: View {
         }
     }
 
-    /// What you have said that the session has not picked up yet. Its own bookkeeping, read
-    /// off the transcript by the Mac — never inferred from the shape of the conversation.
+    /// What you have said that the session has not picked up yet, and only that. Its own
+    /// bookkeeping, read off the transcript by the Mac — never inferred from the conversation.
+    /// Anything it *has* picked up is a turn above, in the place it arrived.
     private var queued: [Queued] { model.queued[session.sessionId] ?? [] }
-    /// Read by the session but written nowhere: these are part of the conversation and appear in
-    /// no turn, which is the only reason they are shown at all.
-    private var taken: [Queued] { queued.filter { !$0.isWaiting } }
-    /// Still in the inbox. These are the ones that can be forced.
-    private var waiting: [Queued] { queued.filter(\.isWaiting) }
 
     private var nothingYet: some View {
         Text(model.connection.isHealthy ? "Nothing said yet in this session" : "Waiting for the Mac…")
@@ -92,7 +80,7 @@ struct TranscriptView: View {
     /// newer than anything the session has written down.
     private func scroll(_ proxy: ScrollViewProxy) {
         withAnimation {
-            if !waiting.isEmpty {
+            if !queued.isEmpty {
                 proxy.scrollTo("queued", anchor: .bottom)
             } else if session.isBusy {
                 proxy.scrollTo("active", anchor: .bottom)

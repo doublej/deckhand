@@ -23,10 +23,11 @@ def queue(operation, content=None, **kw):
 
 
 def test_what_is_still_in_the_inbox(claude_home):
-    """A message swallowed by the running turn is kept, because nothing else will ever show it.
+    """Only what is still there. A message the running turn swallowed has left the inbox.
 
-    Verified against a live transcript: an `absorbed_mid_turn` removal writes no user entry, so
-    forgetting it here is a prompt vanishing in front of the person who just sent it.
+    It is not lost by leaving: Claude Code files it as a `queued_command` attachment where it
+    arrived, and `transcripts.absorbed` reads it back as a turn. Keeping a second copy here put
+    answered prompts at the foot of the transcript, looking like ones nobody had got to.
     """
     write_transcript(
         claude_home,
@@ -37,10 +38,7 @@ def test_what_is_still_in_the_inbox(claude_home):
         ],
     )
 
-    assert asked.queued(SID) == [
-        {"text": "make the tabs bigger", "state": "taken"},
-        {"text": "and check the icon", "state": "waiting"},
-    ]
+    assert asked.queued(SID) == [{"text": "and check the icon"}]
 
 
 def test_a_message_picked_up_at_the_prompt_is_left_to_the_transcript(claude_home):
@@ -65,7 +63,7 @@ def test_a_drained_queue_is_empty(claude_home):
 def test_a_dequeue_takes_the_oldest_because_it_names_nothing(claude_home):
     write_transcript(claude_home, [queue("enqueue", "one"), queue("enqueue", "two"), queue("dequeue")])
 
-    assert asked.queued(SID) == [{"text": "two", "state": "waiting"}]
+    assert asked.queued(SID) == [{"text": "two"}]
 
 
 def test_the_envelope_comes_off_before_the_phone_sees_it(claude_home):
@@ -116,10 +114,11 @@ def test_claude_codes_own_notices_are_not_things_you_said(claude_home):
         ],
     )
 
-    assert asked.queued(SID) == [{"text": "the thing I actually said", "state": "waiting"}]
+    assert asked.queued(SID) == [{"text": "the thing I actually said"}]
 
 
-def test_only_the_last_few_absorbed_messages_are_kept(claude_home):
+def test_absorbed_messages_leave_the_inbox_however_many_there_are(claude_home):
+    """The inbox is what has not been read. A run of absorbed messages empties it, not fills it."""
     entries = []
     for n in range(6):
         entries += [queue("enqueue", f"ask {n}"), queue("remove", f"ask {n}",
@@ -127,9 +126,32 @@ def test_only_the_last_few_absorbed_messages_are_kept(claude_home):
     entries.append(queue("enqueue", "still waiting"))
     write_transcript(claude_home, entries)
 
-    assert asked.queued(SID) == [
-        {"text": "ask 3", "state": "taken"},
-        {"text": "ask 4", "state": "taken"},
-        {"text": "ask 5", "state": "taken"},
-        {"text": "still waiting", "state": "waiting"},
-    ]
+    assert asked.queued(SID) == [{"text": "still waiting"}]
+
+
+def test_clearing_the_inbox_forgets_what_the_lane_still_shows(claude_home):
+    """A session killed mid-queue leaves enqueues nothing will ever remove.
+
+    The transcript is not touched — it is Claude Code's, and rewriting it is not this daemon's
+    business. A line is drawn beside it and the replay starts after the line.
+    """
+    write_transcript(claude_home, [queue("enqueue", "left over from a dead session")])
+    assert asked.queued(SID) == [{"text": "left over from a dead session"}]
+
+    asked.clear(SID)
+    assert asked.queued(SID) == []
+
+
+def test_a_prompt_sent_after_the_line_still_counts(claude_home):
+    """The line is a moment, not a switch: the inbox goes on working after it."""
+    write_transcript(claude_home, [queue("enqueue", "stale", timestamp="2020-01-01T00:00:00.000Z")])
+    asked.clear(SID)
+    write_transcript(
+        claude_home,
+        [
+            queue("enqueue", "stale", timestamp="2020-01-01T00:00:00.000Z"),
+            queue("enqueue", "fresh", timestamp="2099-01-01T00:00:00.000Z"),
+        ],
+    )
+
+    assert asked.queued(SID) == [{"text": "fresh"}]

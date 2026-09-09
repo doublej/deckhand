@@ -18,6 +18,12 @@ from pathlib import Path
 TAIL_WINDOWS = (512 * 1024, 4 * 1024 * 1024, 32 * 1024 * 1024)
 MAX_TEXT = 4000
 _NOISE = re.compile(r"<(system-reminder|command-message|command-name|command-args)>.*?</\1>", re.DOTALL)
+# The envelope a queued message travels in: one session addressing another, or the daemon saying
+# who spoke. Tags only — whatever they wrap is the message.
+_WRAPPER = re.compile(r"</?[a-z][\w-]*(?:\s[^>]*)?>", re.IGNORECASE)
+# Not everything that reaches a session is a person. Claude Code queues its own notices — a
+# finished background task, a reminder — and those are machinery, not something anybody said.
+MACHINE = re.compile(r"^\s*<\s*(?:task-notification|system-reminder|local-command-\w+)\b", re.IGNORECASE)
 
 
 # The input field worth showing for each tool, in the order the phone would want to read it.
@@ -88,8 +94,45 @@ def text_of(entry: dict) -> str | None:
         parts = [b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text"]
     else:
         return None
-    text = _NOISE.sub("", "\n".join(p for p in parts if p)).strip()
+    text = _NOISE.sub("", "\n".join(p for p in parts if p))
+    # The keyboard route types ctrl-U before the words to clear whatever was half-written in the
+    # prompt, and that control character is part of the entry Claude Code writes down.
+    text = "".join(c for c in text if c.isprintable() or c.isspace()).strip()
     return text[:MAX_TEXT] if text else None
+
+
+def unwrap(text: str) -> str:
+    """The words themselves, out of whatever envelope carried them to the session.
+
+    Deckhand's own socket route labels what it delivers, and a message from another session
+    arrives inside a tag. Neither is what the person said, and neither belongs on the phone.
+    """
+    body = _WRAPPER.sub("", text)
+    # Control characters and all: the keyboard route types ctrl-U before the words to clear
+    # whatever was half-written in the prompt, and that ctrl-U travels with the message.
+    body = "".join(c for c in body if c.isprintable() or c.isspace()).strip()
+    _, marker, spoken = body.partition("transcribed:")
+    return " ".join((spoken if marker else body).split())[:MAX_TEXT]
+
+
+def absorbed(entry: dict) -> str | None:
+    """Something said to a session that was already working, out of the entry that records it.
+
+    A message that arrives mid-run never becomes a `user` entry — it is handed straight to the
+    running turn and written down as a `queued_command` attachment instead. So it *is* in the
+    transcript, at the moment it arrived, under a type nothing here was reading. Missing that is
+    what made those messages look lost: the phone kept its own copy and showed it at the end of
+    the conversation, where three answered prompts read as three that had gone unread.
+    """
+    if entry.get("type") != "attachment":
+        return None
+    attachment = entry.get("attachment")
+    if not isinstance(attachment, dict) or attachment.get("type") != "queued_command":
+        return None
+    prompt = attachment.get("prompt")
+    if not isinstance(prompt, str) or MACHINE.match(prompt):
+        return None
+    return unwrap(prompt) or None
 
 
 def activity_since_last_user(session_id: str, cap: int = 12_000) -> str:
@@ -171,13 +214,22 @@ def _scan(path: Path, window: int) -> list[Turn]:
     to say, so a run of twenty of them is one row under one message rather than twenty entries
     of its own. A run still in flight at the end of the file gets a turn with no words, which
     is exactly what it is: the session is working and has not spoken yet.
+
+    Anything said to the session mid-run is a turn too, in the place it arrived — see `absorbed`.
     """
     turns: list[Turn] = []
     ran: list[tuple[str, Tool]] = []
     answers: dict[str, tuple[str, bool]] = {}
     for raw in tail_lines(path, window):
         entry = parse_line(raw)
-        if entry is None or entry.get("type") not in ("user", "assistant"):
+        if entry is None:
+            continue
+        if (interjection := absorbed(entry)) is not None:
+            # No tools hung on it: a mid-run message lands inside somebody else's run, and
+            # splitting that run in two around it would cut it off from its own results.
+            turns.append(Turn(role="user", text=interjection, timestamp=entry.get("timestamp", "")))
+            continue
+        if entry.get("type") not in ("user", "assistant"):
             continue
         answers.update(_answers(entry))
         ran.extend(_tools_of(entry))

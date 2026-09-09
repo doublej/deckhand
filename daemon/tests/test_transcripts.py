@@ -148,3 +148,77 @@ def test_a_tool_nobody_has_a_field_for_still_shows_something(claude_home):
         assistant([{"type": "text", "text": "done"}]),
     ])
     assert transcripts.read_turns(SID)[-1].tools[0].detail == "a value"
+
+
+def queued_command(prompt, origin=None, **kw):
+    """How Claude Code files something said to a session that was already working."""
+    return {
+        "type": "attachment",
+        "attachment": {"type": "queued_command", "prompt": prompt,
+                       "origin": origin or {"kind": "human"}},
+        "timestamp": "2026-09-09T10:00:05Z",
+        **kw,
+    }
+
+
+def test_a_message_that_arrived_mid_run_is_a_turn_where_it_arrived(claude_home):
+    """The one entry that made prompts look unread.
+
+    Something said to a busy session never becomes a `user` entry — it is handed to the running
+    turn and written down as a `queued_command` attachment. Read from a live transcript: 149 of
+    them, and not one also present as a user entry, so this is the only place those words are.
+    """
+    write_transcript(
+        claude_home,
+        [
+            user("start on the tabs"),
+            assistant([{"type": "text", "text": "On it"}]),
+            queued_command("and check the icon while you are in there"),
+            assistant([{"type": "text", "text": "Both done"}]),
+        ],
+    )
+
+    turns = transcripts.read_turns(SID)
+    assert [(t.role, t.text) for t in turns] == [
+        ("user", "start on the tabs"),
+        ("assistant", "On it"),
+        ("user", "and check the icon while you are in there"),
+        ("assistant", "Both done"),
+    ]
+
+
+def test_the_envelope_and_the_machinery_come_off_a_mid_run_message(claude_home):
+    """Same rules as the inbox: notices are not somebody speaking, and ctrl-U is not a word."""
+    notice = "<task-notification>\n<task-id>bpy63zyfu</task-id>\ndone\n</task-notification>"
+    write_transcript(
+        claude_home,
+        [
+            queued_command(notice),
+            queued_command("\x15Spoken by JJ into the deckhand app, transcribed:\n\n  ship   it\n"),
+        ],
+    )
+
+    assert [(t.role, t.text) for t in transcripts.read_turns(SID)] == [("user", "ship it")]
+
+
+def test_a_mid_run_message_does_not_cut_a_tool_run_off_from_its_results(claude_home):
+    """It lands inside somebody else's run, so the run stays whole and settles as it would have."""
+    write_transcript(
+        claude_home,
+        [
+            assistant([{"type": "tool_use", "id": "t1", "name": "Bash",
+                        "input": {"command": "pytest -q"}}]),
+            queued_command("actually run the UI tests too"),
+            {"type": "user", "message": {"content": [
+                {"type": "tool_result", "tool_use_id": "t1", "content": "90 passed"}]}},
+            assistant([{"type": "text", "text": "Green"}]),
+        ],
+    )
+
+    turns = transcripts.read_turns(SID)
+    assert [(t.role, t.text) for t in turns] == [
+        ("user", "actually run the UI tests too"),
+        ("assistant", "Green"),
+    ]
+    assert turns[0].tools == []
+    assert [(t.name, t.result) for t in turns[1].tools] == [("Bash", "90 passed")]

@@ -71,7 +71,7 @@ struct SessionRow: View {
                 .foregroundStyle(Palette.textPrimary)
                 .lineLimit(1)
             Spacer(minLength: Spacing.extraSmall)
-            StatePill(talk.isRecording ? .rec : talk.busy ? .wait : session.isBusy ? .busy : .idle)
+            StateWord(talk.isRecording ? .rec : talk.busy ? .wait : session.isBusy ? .busy : .idle)
         }
     }
 }

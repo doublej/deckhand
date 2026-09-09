@@ -56,28 +56,24 @@ public struct Rounds: Codable, Hashable, Sendable {
     }
 }
 
-/// One thing you have said that has not come back as a turn, and where it stands.
+/// One thing you have said that is still sitting in the session's inbox, unread.
 ///
-/// `taken` is not a nicety. A message a running turn swallows leaves the inbox without ever
-/// being written to the transcript, so a queued line that simply disappeared was a message with
-/// no trace anywhere — which is exactly how it looked from the phone.
+/// Only that. A message the session has already taken is not here — it is a turn, in the place
+/// it arrived, because Claude Code files a mid-run message as an attachment rather than as a
+/// user entry and the Mac reads those now. Keeping a copy here as well is what put three
+/// answered prompts at the foot of the transcript looking like three nobody had got to.
 public struct Queued: Codable, Hashable, Sendable, Identifiable {
     public let text: String
-    public let state: String
 
-    public var id: String { "\(state)-\(text)" }
-    /// Still in the inbox. The session has not read it, and will not until its turn ends.
-    public var isWaiting: Bool { state == "waiting" }
+    public var id: String { text }
 
-    public init(text: String, state: String = "waiting") {
+    public init(text: String) {
         self.text = text
-        self.state = state
     }
 
     public init(from decoder: Decoder) throws {
         let box = try decoder.container(keyedBy: CodingKeys.self)
         text = try box.decodeIfPresent(String.self, forKey: .text) ?? ""
-        state = try box.decodeIfPresent(String.self, forKey: .state) ?? "waiting"
     }
 }
 

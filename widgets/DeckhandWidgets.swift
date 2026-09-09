@@ -46,7 +46,7 @@ struct DeckWidget: Widget {
                 .padding(.leading, Spacing.extraSmall)
         }
         DynamicIslandExpandedRegion(.trailing) {
-            StatePill(state.waiting > 0 ? .idle : .busy)
+            StateWord(state.waiting > 0 ? .idle : .busy)
                 .padding(.trailing, Spacing.extraSmall)
         }
         DynamicIslandExpandedRegion(.bottom) {
@@ -67,7 +67,7 @@ private struct LockScreen: View {
             Waiting(state: state, compact: false)
             Spacer(minLength: 0)
             VStack(alignment: .trailing, spacing: Spacing.xxs) {
-                StatePill(state.waiting > 0 ? .idle : .busy)
+                StateWord(state.waiting > 0 ? .idle : .busy)
                 Text(mac)
                     .font(Typography.hint)
                     .foregroundStyle(Palette.textTertiary)

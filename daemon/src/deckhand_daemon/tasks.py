@@ -40,6 +40,11 @@ def load(session_id: str) -> list[dict]:
     return _read(session_id)["tasks"]
 
 
+def outstanding(session_id: str) -> list[dict]:
+    """The asks that are not finished. What a session going quiet still owes, in one call."""
+    return [task for task in load(session_id) if task["state"] != "done"]
+
+
 def render(session_id: str) -> str:
     """The list as the model is shown it: the id it must use, the box, and the ask.
 

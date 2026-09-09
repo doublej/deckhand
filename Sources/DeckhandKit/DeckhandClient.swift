@@ -146,6 +146,12 @@ public struct DeckhandClient: Sendable {
         _ = try await send(req, body: try JSONEncoder().encode(["name": name]))
     }
 
+    /// Forget whatever the session's inbox still claims to hold. Nothing in Claude Code's own
+    /// transcript is touched: the Mac draws a line beside it and reads the lane from there.
+    public func clearQueue(of sessionId: String) async throws {
+        _ = try await send(request(.post, "sessions/\(sessionId)/queue/clear"))
+    }
+
     /// Bring the session's iTerm pane to the front on the Mac.
     public func focus(_ sessionId: String) async throws {
         _ = try await send(request(.post, "sessions/\(sessionId)/focus"))

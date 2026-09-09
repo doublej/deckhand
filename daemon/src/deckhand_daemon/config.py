@@ -57,3 +57,21 @@ def token() -> str:
 def base_url() -> str:
     """The URL to type into the app. .local name over an IP: it survives DHCP."""
     return f"http://{socket.gethostname()}:{PORT}"
+
+
+def lan_address() -> str:
+    """This Mac's address on the network, for rewriting a localhost link into a reachable one.
+
+    A session writes `http://localhost:5173` because that is true where it is running. On a phone
+    it is true of the phone, which is running nothing. Asking a UDP socket which interface would
+    carry a packet out is the one way to get this that needs no name to resolve — the socket is
+    never connected and nothing is sent.
+    """
+    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        probe.connect(("192.0.2.1", 9))  # TEST-NET-1: routable to nowhere, so nothing leaves
+        return probe.getsockname()[0]
+    except OSError:
+        return ""
+    finally:
+        probe.close()

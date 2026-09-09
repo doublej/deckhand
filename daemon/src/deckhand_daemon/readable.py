@@ -17,6 +17,7 @@ import json
 
 from .transcripts import (
     TAIL_WINDOWS,
+    absorbed,
     describe,
     parse_line,
     tail_lines,
@@ -31,7 +32,9 @@ MAX_LINES = 1_500
 # Entries that are Claude Code talking to itself about the session rather than anything that
 # happened in it. They are in the file, they are not events, and one per turn is noise.
 # `attachment` is the biggest of them by a mile — 654 of the 1,300 entries in one real day —
-# and it is Claude Code stapling context onto a turn, not a thing that happened.
+# and it is Claude Code stapling context onto a turn, not a thing that happened. The exception is
+# the one attachment that *is* a thing that happened: a message that arrived mid-run, caught
+# above by `absorbed` before this list is consulted.
 DULL = {"last-prompt", "custom-title", "agent-name", "mode", "permission-mode", "atis-latch",
         "bridge-session", "file-history-snapshot", "file-history-delta", "attachment"}
 
@@ -52,9 +55,11 @@ def plain_tail(session_id: str, limit: int = MAX_LINES) -> list[str]:
 def _lines_of(entry: dict) -> list[str]:
     """One entry, as none, one or several lines. A reply and the tools it ran are several."""
     kind = entry.get("type")
+    clock = _clock(entry)
+    if (interjection := absorbed(entry)) is not None:
+        return [f"{clock} YOU {_flat(interjection)}"]
     if kind in DULL:
         return []
-    clock = _clock(entry)
     if kind == "user":
         return _said(clock, entry)
     if kind == "assistant":

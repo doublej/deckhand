@@ -170,7 +170,7 @@ private struct Column: View {
                     .tracking(1)
                     .foregroundStyle(Palette.textSecondary)
             }
-            StatePill(isRecording ? .rec : busy ? .wait : session.isBusy ? .busy : .idle)
+            StateWord(isRecording ? .rec : busy ? .wait : session.isBusy ? .busy : .idle)
         }
         .padding(.horizontal, Spacing.extraSmall)
         .padding(.vertical, 6)

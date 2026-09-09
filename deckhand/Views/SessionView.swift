@@ -49,6 +49,7 @@ struct SessionView: View {
         // that already named the page — two rows of chrome before a word of content. The
         // chevron moved into the header and the band went with it.
         .toolbar(.hidden, for: .navigationBar)
+        .modifier(LocalLinks(mac: model.macAddress, paired: model.settings.host))
         .sheet(isPresented: $reading) { RawView(model: model, session: session) }
         // A name is the one thing here you type rather than press, and it is short enough that
         // a whole screen for it would be more ceremony than the thing deserves.
@@ -144,7 +145,7 @@ struct SessionView: View {
                     .lineLimit(1)
             }
             Spacer(minLength: Spacing.extraSmall)
-            StatePill(session.isBusy ? .busy : .idle)
+            StateWord(session.isBusy ? .busy : .idle)
             controls
         }
         .padding(.leading, Spacing.extraSmall)
@@ -171,6 +172,12 @@ struct SessionView: View {
             // Always reachable, not only when something looks wrong: every other view here is
             // a reading of that file, and this is the file.
             Button("Raw transcript", systemImage: "doc.plaintext") { reading = true }
+            // For prompts that outlived the session that was going to read them: a session
+            // killed mid-queue leaves its enqueues with nothing to remove them.
+            Button("Clear queued prompts", systemImage: "tray") {
+                Task { await model.clearQueue(for: session) }
+            }
+            .disabled((model.queued[session.sessionId] ?? []).isEmpty)
             Divider()
             ForEach(Control.allCases, id: \.self) { action in
                 Button(action.label, systemImage: action.symbol, role: role(action)) {

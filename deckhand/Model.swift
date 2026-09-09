@@ -23,7 +23,7 @@ enum Connection: Equatable {
     var isHealthy: Bool { if case .connected = self { true } else { false } }
 
     /// The same four-letter vocabulary utt uses, so the two apps say a state the same way.
-    var pill: PillState {
+    var state: RunState {
         switch self {
         case .unpaired: .off
         case .checking: .wait
@@ -60,6 +60,9 @@ final class AppModel {
     /// The session whose page is open. The rail lights exactly one row, the way utt does.
     var current: String?
     var connection: Connection = .unpaired
+    /// The Mac's own address on the network, as the Mac reports it. What a session's `localhost`
+    /// means to anything that is not the Mac — this phone included.
+    var macAddress: String?
     var status: String?
     /// What you just said, per session, waiting for the real transcript to catch up. It reads
     /// as a turn in the conversation because that is what it is — the session simply has not
@@ -140,6 +143,7 @@ final class AppModel {
             let found = try await client.sessions()
             sessions = found
             connection = .connected(iterm: health.iterm ?? "ok")
+            macAddress = health.lan
             logger.info("listed \(found.count) sessions")
         } catch {
             connection = .failed(reason(error))
@@ -174,6 +178,20 @@ final class AppModel {
             self.status = session.isBusy
                 ? "\(session.name) will be \(wanted) when it finishes this turn"
                 : "\(session.name) is now \(wanted)"
+        }
+    }
+
+    /// Throw away whatever the session's inbox still claims to hold.
+    ///
+    /// For prompts that outlived the session that was going to read them: killed mid-queue, the
+    /// enqueues stay in the transcript with nothing to remove them, and the replay cannot tell
+    /// that from a message still waiting.
+    func clearQueue(for session: Session) async {
+        guard let client = settings.client() else { return }
+        await run {
+            try await client.clearQueue(of: session.sessionId)
+            self.queued[session.sessionId] = []
+            self.status = "Cleared \(session.name)'s inbox"
         }
     }
 
@@ -250,6 +268,7 @@ final class AppModel {
         do {
             let health = try await client.health()
             connection = .connected(iterm: health.iterm ?? "ok")
+            macAddress = health.lan
             status = "\(health.name) \(health.version) at \(health.host)"
         } catch {
             connection = .failed(reason(error))

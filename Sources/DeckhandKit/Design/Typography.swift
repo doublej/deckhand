@@ -19,7 +19,7 @@ public enum Typography {
     public static let cardLabel = Font.system(size: 11, weight: .semibold)
     public static let mono = Font.system(size: 12, weight: .regular, design: .monospaced)
     /// The pill, and anything that borrows its voice: 9pt mono semibold, tracked 1.4.
-    public static let pill = Font.system(size: 9, weight: .semibold, design: .monospaced)
+    public static let state = Font.system(size: 9, weight: .semibold, design: .monospaced)
     /// The eyebrow on a turn card: YOU / CLAUDE.
     public static let eyebrow = Font.system(size: 9, weight: .semibold, design: .monospaced)
 }

@@ -16,7 +16,7 @@ struct TurnCard: View {
                     .tracking(1)
                     .foregroundStyle(turn.isUser ? Palette.tint : Palette.textTertiary)
             }
-            Text(turn.text)
+            Text(Links.marked(turn.text))
                 .font(.system(size: 13))
                 .foregroundStyle(Palette.textPrimary)
                 .textSelection(.enabled)
@@ -57,7 +57,7 @@ struct QueuedCard: View {
                     .font(Typography.hint)
                     .foregroundStyle(Palette.textTertiary)
                     .lineLimit(1)
-                StatePill(.wait)
+                StateWord(.wait)
             }
             Text(text)
                 .font(.system(size: 13))

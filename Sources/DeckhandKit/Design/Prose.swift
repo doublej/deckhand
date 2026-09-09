@@ -78,13 +78,15 @@ public struct Prose: View {
             interpretedSyntax: .inlineOnlyPreservingWhitespace
         )
         guard var parsed = try? AttributedString(markdown: text, options: options) else {
-            return AttributedString(text)
+            return Links.marked(text)
         }
         for run in parsed.runs where run.inlinePresentationIntent == .code {
             parsed[run.range].font = Typography.mono
             parsed[run.range].foregroundColor = Palette.tint
         }
-        return parsed
+        // A summary names addresses the way a person would, bare rather than in brackets, so
+        // markdown alone leaves the useful half of them dead.
+        return Links.linked(parsed)
     }
 
     enum Block: Equatable {
