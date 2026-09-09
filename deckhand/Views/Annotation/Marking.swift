@@ -16,6 +16,8 @@ struct Marking: View {
     @Binding var markup: Markup
     /// Whether the freehand layer has the touches. A mode, not a second picture.
     let pencilling: Bool
+    /// Lent straight through to the remark, which is the only field on this picture.
+    var say: Dictation?
     /// The place whose words are being written. A tap drops the pin and opens this straight away: a
     /// numbered marker with nothing said about it is a question nobody asked.
     @State private var writing: Pin?
@@ -29,7 +31,8 @@ struct Marking: View {
             .sheet(item: $writing) { pin in
                 PinWords(place: place(of: pin),
                          words: said(at: pin),
-                         keep: { say($0, at: pin) },
+                         say: say,
+                         keep: { wrote($0, at: pin) },
                          drop: { remove(pin) })
             }
     }
@@ -51,7 +54,9 @@ struct Marking: View {
         markup.pins.first { $0.id == pin.id }?.words ?? ""
     }
 
-    private func say(_ words: String, at pin: Pin) {
+    /// Not `say`, which is now the microphone this view lends the remark: one of the two had to
+    /// give, and a method and a property of the same name reading differently is how.
+    private func wrote(_ words: String, at pin: Pin) {
         guard let index = markup.pins.firstIndex(where: { $0.id == pin.id }) else { return }
         markup.pins[index].words = words
         writing = nil

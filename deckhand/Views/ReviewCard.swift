@@ -34,6 +34,10 @@ struct ReviewCard: View {
     /// What it takes to say the rest of it, or nil where there is no recorder to lend — a deck
     /// column, which has no room for another control either. See `SayMore`.
     var more: SayMore?
+    /// What it takes to say something into the editor, which is not the same move as `more`: that
+    /// one hands another clip to the Mac and lays the words under what the card holds, chain notes
+    /// and all; this one fills in a box on a sheet. Nil wherever `more` is, and for the same reason.
+    var say: Dictation?
     @State private var picked: PhotosPickerItem?
     @State private var editing = false
     @Environment(\.accent) private var accent
@@ -76,7 +80,7 @@ struct ReviewCard: View {
                           compact: compact)
         }
         .sheet(isPresented: $editing) {
-            Editor(words: words, target: target) { edited in
+            Editor(words: words, target: target, say: say) { edited in
                 draft = edited
                 editing = false
             }
@@ -197,9 +201,14 @@ private struct Attach: View {
 /// sentence ran on, and the fix is two words. The card is far too small a place to make that
 /// fix — so the edit is a page of its own, opened focused with the keyboard already up, which
 /// is the only arrangement where correcting one word is faster than saying the whole thing again.
+///
+/// And the mark is here too, under the field, because this is the page you reach *because* a word
+/// came back wrong: half of what happens here is a correction typed, and the other half is another
+/// sentence that is easier said. It lands under what is in the box and never over it.
 private struct Editor: View {
     let words: String
     let target: String
+    var say: Dictation?
     let keep: (String) -> Void
     @State private var edited: String = ""
     @FocusState private var typing: Bool
@@ -214,6 +223,18 @@ private struct Editor: View {
                 .padding(.horizontal, Spacing.small)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Palette.surfaceGround)
+                // Above the keyboard rather than in the toolbar: a 44pt capsule does not fit in a
+                // navigation bar beside Cancel and Done, and this is the one control here your
+                // thumb is already resting on. A blank line between the halves, because two things
+                // said one after the other are two paragraphs and not one long sentence.
+                .safeAreaInset(edge: .bottom) {
+                    if let say {
+                        SayInto(say: say, text: $edited, gap: "\n\n")
+                            .padding(.horizontal, Spacing.medium)
+                            .padding(.bottom, Spacing.extraSmall)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
                 .navigationTitle("→ \(target)")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {

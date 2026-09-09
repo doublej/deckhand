@@ -114,9 +114,19 @@ struct DeckView: View {
             state: state,
             review: model.review[session.sessionId],
             filtered: model.reviewFiltered[session.sessionId],
+            say: say(for: session),
             send: { text in Task { await model.send(text, to: session) } },
             discard: { model.discard(for: session) }
         ).accessibilityIdentifier("deck-column")
+    }
+
+    /// The deck's own recorder, lent to the editor behind a column's Edit — which is a full sheet
+    /// even here, and the one place in landscape with room for a control. The column itself has
+    /// none: 240pt of width is the whole reason its card is the compact one.
+    private func say(for session: Session) -> Dictation {
+        Dictation(recorder: recorder, mode: model.preferences.talkMode) {
+            await model.dictated($0, for: session)
+        }
     }
 
     private func flip(_ session: Session) {
@@ -143,6 +153,8 @@ private struct Column: View {
     /// What the chain changed about those words, and what it will do to them if they go as
     /// they stand.
     let filtered: Filtered?
+    /// Handed straight through to the card, which hands it to the editor behind Edit.
+    let say: Dictation?
     let send: (String) -> Void
     let discard: () -> Void
     @Environment(\.accent) private var accent
@@ -164,7 +176,8 @@ private struct Column: View {
                     send: { send($0) },
                     discard: discard,
                     filtered: filtered,
-                    compact: true
+                    compact: true,
+                    say: say
                 )
                 .padding(Spacing.xxs)
             }

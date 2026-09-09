@@ -13,6 +13,9 @@ import SwiftUI
 struct SessionFilters: View {
     @Bindable var model: AppModel
     let session: Session
+    /// The session page's own recorder, lent so that a setting can be said rather than typed.
+    /// Nil where there is nothing to lend, and then the fields are typed the way they always were.
+    var say: Dictation?
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -124,16 +127,28 @@ struct SessionFilters: View {
                     .tint(Palette.tint)
             }
         case .pairs:
-            Pairs(label: field.label, hint: field.hint, rows: rows(field, in: row))
+            Pairs(label: field.label, hint: field.hint, rows: rows(field, in: row), say: say)
         case .text, .number:
-            SettingRow(field.label, detail: field.hint) {
-                TextField(field.label, text: typed(field, in: row))
-                    .keyboardType(field.kind == .number ? .decimalPad : .default)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .multilineTextAlignment(.trailing)
-                    .font(Typography.mono)
-                    .frame(maxWidth: 150)
+            box(field, in: row)
+        }
+    }
+
+    /// A setting you type, and the mark beside it where saying it would work.
+    ///
+    /// Words only. A number said out loud comes back as a word — "five" for 5 — and this field
+    /// stores what it holds as a number, so a spoken one is a setting silently lost. A field
+    /// dictation cannot fill does not offer to be dictated into.
+    private func box(_ field: FilterField, in row: FilterRow.ID) -> some View {
+        SettingRow(field.label, detail: field.hint) {
+            TextField(field.label, text: typed(field, in: row))
+                .keyboardType(field.kind == .number ? .decimalPad : .default)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .multilineTextAlignment(.trailing)
+                .font(Typography.mono)
+                .frame(maxWidth: 150)
+            if field.kind == .text, let say {
+                SayInto(say: say, text: typed(field, in: row), compact: true)
             }
         }
     }

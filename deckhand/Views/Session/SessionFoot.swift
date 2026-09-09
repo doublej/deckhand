@@ -63,7 +63,12 @@ struct SessionFoot: View {
                               mode: model.preferences.talkMode,
                               heard: { clip, said in
                                   await model.append(clip: clip, to: session, beneath: said)
-                              })
+                              }),
+                // And again for the editor behind Edit, which is a field rather than the card:
+                // the same recorder, a clip that is only ever turned into words.
+                say: Dictation(recorder: recorder,
+                               mode: model.preferences.talkMode,
+                               words: { await model.dictated($0, for: session) })
             )
             .frame(maxWidth: .infinity)
             .shadow(color: .black.opacity(0.18), radius: 10, y: 3)

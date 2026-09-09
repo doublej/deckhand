@@ -15,7 +15,6 @@ struct SessionView: View {
     @State private var renaming = false
     @State private var reading = false
     @State private var filtering = false
-    @State private var wantedName = ""
     @Environment(\.dismiss) private var dismiss
 
     /// Four things you want on arriving, and they want different layouts: the briefing wants
@@ -36,13 +35,21 @@ struct SessionView: View {
     /// this is the view that puts it there, and a view never sees what it hands its own children.
     private var accent: Color { Palette.accent(recording: recorder.isRecording) }
 
+    /// What this page lends its sheets so a field on one can be spoken into: the page's own
+    /// recorder, never one of theirs. A sheet that made its own would record while this page stayed
+    /// teal, and a sheet rebuilt mid-clip — which a rotation is — would drop it.
+    private var say: Dictation {
+        Dictation(recorder: recorder, mode: model.preferences.talkMode) {
+            await model.dictated($0, for: session)
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             SessionHead(model: model,
                         session: session,
                         confirming: $confirming,
                         renaming: $renaming,
-                        wantedName: $wantedName,
                         reading: $reading,
                         filtering: $filtering)
             pane
@@ -68,17 +75,15 @@ struct SessionView: View {
         .toolbar(.hidden, for: .navigationBar)
         .modifier(LocalLinks(mac: model.macAddress, paired: model.settings.host))
         .sheet(isPresented: $reading) { RawView(model: model, session: session) }
-        .sheet(isPresented: $filtering) { SessionFilters(model: model, session: session) }
-        // A name is the one thing here you type rather than press, and it is short enough that
-        // a whole screen for it would be more ceremony than the thing deserves.
-        .alert("Rename \(session.name)", isPresented: $renaming) {
-            TextField("Name", text: $wantedName)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-            Button("Rename") { Task { await model.rename(session, to: wantedName) } }
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            Text("Runs Claude Code's own /rename in its pane on the Mac.")
+        .sheet(isPresented: $filtering) {
+            SessionFilters(model: model, session: session, say: say)
+        }
+        // A sheet rather than the alert this was, because an alert holds a field and buttons and
+        // nothing in between — and what a name needs beside it is the mark. See `Renaming`.
+        .sheet(isPresented: $renaming) {
+            Renaming(session: session, say: say) { wanted in
+                Task { await model.rename(session, to: wanted) }
+            }
         }
         .confirmationDialog(
             "Clear \(session.name)?",

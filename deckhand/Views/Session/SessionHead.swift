@@ -16,7 +16,6 @@ struct SessionHead: View {
     let session: Session
     @Binding var confirming: Control?
     @Binding var renaming: Bool
-    @Binding var wantedName: String
     @Binding var reading: Bool
     @Binding var filtering: Bool
     /// The page's colour, which goes utt orange while the mark at the foot of it is open. Read
@@ -76,10 +75,9 @@ struct SessionHead: View {
                 Task { await model.focus(session) }
             }
             .disabled(hasNoPane)
-            Button("Rename…", systemImage: "text.cursor") {
-                wantedName = session.name
-                renaming = true
-            }
+            // The sheet seeds itself from the name this session has now, so there is no draft
+            // for the page to hold on its behalf.
+            Button("Rename…", systemImage: "text.cursor") { renaming = true }
             .disabled(hasNoPane)
             // What the Mac does to words on their way into this session — this session's own
             // setting rather than the Mac's, because what you want done to words going into one

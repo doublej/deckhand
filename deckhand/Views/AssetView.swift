@@ -24,6 +24,10 @@ struct AssetView: View {
     @State private var pencilling = false
     /// Sent, so the marks are the review card's now and must not be written back on the way out.
     @State private var sent = false
+    /// This sheet's own, and the session page's is two sheets away and unreachable. One control
+    /// uses it — the mark under a pin's remark — and this is the surface that outlives the remark
+    /// being opened, closed and opened again, which is what a recorder has to do.
+    @State private var recorder = Recorder()
     @Environment(\.dismiss) private var dismiss
 
     /// A file that has arrived and been read as what it is.
@@ -60,13 +64,22 @@ struct AssetView: View {
         .onDisappear { discard() }
     }
 
+    /// What a pin's remark is lent so it can be said out loud. Complaining about a screenshot is
+    /// the thing on this phone most worth saying rather than typing: you are holding the picture
+    /// and pointing at it, and the remark is one sentence.
+    private var say: Dictation {
+        Dictation(recorder: recorder, mode: model.preferences.talkMode) {
+            await model.dictated($0, for: session)
+        }
+    }
+
     @ViewBuilder private var content: some View {
         switch ready {
         case .picture(let image):
             // Zoomable, because half of what a session makes is a screenshot of something
             // small in the corner of something large — and markable, because pointing at the
             // small thing beats describing where it is.
-            Marking(picture: image, markup: $markup, pencilling: pencilling)
+            Marking(picture: image, markup: $markup, pencilling: pencilling, say: say)
         case .words(let text):
             ScrollView {
                 words(text)

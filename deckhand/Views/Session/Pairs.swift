@@ -10,6 +10,8 @@ struct Pairs: View {
     let label: String
     let hint: String
     @Binding var rows: [[String]]
+    /// Lent to the left-hand side of each row, and to that side only. See `row(_:)`.
+    var say: Dictation?
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.xxs) {
@@ -30,9 +32,19 @@ struct Pairs: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    /// The left side can be said and the right side cannot, which is the honest arrangement rather
+    /// than a missing control. The left side is the word the transcriber produced — "cockwheel",
+    /// "deck hand" — and saying it into the box is how you capture exactly what it does to you,
+    /// letter for letter. The right side is the spelling it will not give you, which is the whole
+    /// reason the row exists; it has to be typed.
+    ///
+    /// One limit falls out of that, and it closes itself: a word this chain already swaps comes
+    /// back swapped, so you cannot capture it by speaking — and a row for a word already being
+    /// fixed is a row nobody needs.
     private func row(_ spot: Int) -> some View {
         HStack(spacing: Spacing.extraSmall) {
             TextField("from", text: side(spot, 0))
+            if let say { SayInto(say: say, text: side(spot, 0), compact: true) }
             Image(systemName: "arrow.right")
                 .font(.system(size: 9))
                 .foregroundStyle(Palette.textTertiary)

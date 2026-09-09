@@ -30,10 +30,14 @@ extension AppModel {
     /// one thing that must not happen is a sentence you spoke vanishing because you then said
     /// another. Underneath keeps the order you said things in, and the blank line makes the two
     /// read as two paragraphs rather than as one run-on.
+    ///
+    /// The joining itself is `Underneath.words`, over in DeckhandKit where `just test` can reach
+    /// it: every field in this app that can be spoken into goes through the same three lines, and
+    /// they are the three lines that lose somebody's work when they are wrong.
     func append(_ prose: String, to session: Session) {
-        let said = review[session.sessionId]?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        review[session.sessionId] = said.isEmpty ? prose : "\(said)\n\n\(prose)"
+        review[session.sessionId] = Underneath.words(prose,
+                                                    under: review[session.sessionId] ?? "",
+                                                    gap: "\n\n")
     }
 
     /// Another clip, transcribed and laid under the words the card is already holding.
