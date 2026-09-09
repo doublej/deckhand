@@ -18,9 +18,14 @@ def jobs(tmp_path, monkeypatch):
     return directory
 
 
-def fake_utt(jobs, answer: dict, deadline: float = 5.0):
+def fake_utt(jobs, answer: dict, deadline: float = 30.0):
     """Answers the first finished clip, exactly as the guide describes: pick up the audio,
-    write the answer beside it, delete the audio and the hints."""
+    write the answer beside it, delete the audio and the hints.
+
+    The deadline only stops a leaked thread outliving the run — it is not what the test is
+    measuring, and it must stay well clear of `transcribe.TIMEOUT` (180s) or the fake is the one
+    that gives up. At five seconds it did exactly that, once, on a Mac busy writing briefings.
+    """
 
     def work():
         stop = time.monotonic() + deadline

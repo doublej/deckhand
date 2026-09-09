@@ -11,9 +11,13 @@ import SwiftUI
 /// and knows nothing about a line that begins with `- `.
 public struct Prose: View {
     private let blocks: [Block]
+    /// Deck size: the same four things in the landscape column's own small type. A briefing set
+    /// at reading size in a 240pt column is two paragraphs and no column left.
+    private let compact: Bool
 
-    public init(_ text: String) {
+    public init(_ text: String, compact: Bool = false) {
         blocks = Block.parse(text)
+        self.compact = compact
     }
 
     public var body: some View {
@@ -34,13 +38,20 @@ public struct Prose: View {
         case .bullet(let text): bullet(text)
         case .paragraph(let text):
             Text(inline(text))
-                .font(lead ? Typography.lead : Typography.prose)
+                .font(paragraphFont(lead: lead))
                 .foregroundStyle(lead ? Palette.textPrimary : Palette.textSecondary)
                 // Roughly 1.45x the type size. Text set solid reads as a wall; this is the
                 // single biggest thing separating a page you read from a page you skim past.
-                .lineSpacing(lead ? 7 : 6)
-                .padding(.bottom, lead ? Spacing.large : Spacing.medium)
+                .lineSpacing(compact ? 3 : (lead ? 7 : 6))
+                .padding(.bottom, compact ? Spacing.extraSmall : (lead ? Spacing.large : Spacing.medium))
         }
+    }
+
+    /// The lead is set larger than the body, and in a deck column both drop a long way — but
+    /// the *ratio* holds, because that jump is what makes the first line read first.
+    private func paragraphFont(lead: Bool) -> Font {
+        if compact { return .system(size: lead ? 11 : 9) }
+        return lead ? Typography.lead : Typography.prose
     }
 
     private func heading(_ text: String) -> some View {
@@ -52,8 +63,8 @@ public struct Prose: View {
             // The air above a heading is what separates one section from the last. It is
             // deliberately much larger than the gap between the lines inside a section —
             // that difference is the only thing telling you where a section begins.
-            .padding(.top, Spacing.extraLarge)
-            .padding(.bottom, Spacing.small)
+            .padding(.top, compact ? Spacing.small : Spacing.extraLarge)
+            .padding(.bottom, compact ? 2 : Spacing.small)
     }
 
     private func bullet(_ text: String) -> some View {
@@ -61,14 +72,14 @@ public struct Prose: View {
             // A dot from the same grid the marks are drawn on, not a typographic bullet.
             Circle()
                 .fill(Palette.tint)
-                .frame(width: 4, height: 4)
+                .frame(width: compact ? 3 : 4, height: compact ? 3 : 4)
                 .offset(y: -1)
             Text(inline(text))
-                .font(Typography.prose)
+                .font(compact ? .system(size: 9) : Typography.prose)
                 .foregroundStyle(Palette.textPrimary)
-                .lineSpacing(5)
+                .lineSpacing(compact ? 2 : 5)
         }
-        .padding(.vertical, Spacing.extraSmall)
+        .padding(.vertical, compact ? 2 : Spacing.extraSmall)
     }
 
     /// Bold and code, via SwiftUI's own parser; code additionally gets the mono face, which

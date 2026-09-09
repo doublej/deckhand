@@ -32,10 +32,13 @@ struct SessionListView: View {
             }
             .padding(.horizontal, Self.gutter)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .background(Palette.lcdGround)
-            // The whole glass, not the safe area. This screen is a terminal and a terminal runs
-            // to its own edges; the rows keep the page's one gutter and nothing else.
-            .ignoresSafeArea()
+            // The ground runs to the glass; what is written on it does not. A terminal fills
+            // its screen, but the first line of one is not printed under the clock — this used
+            // to ignore the safe area for the whole page, which put SESSIONS behind the time
+            // and the wordmark on the home indicator. Ignoring it for the ink was never the
+            // point; ignoring it for the ground is, and the inset is the phone's own, so it is
+            // right on every one of them rather than right on the one I looked at.
+            .background(Palette.lcdGround.ignoresSafeArea())
             .environment(\.colorScheme, .dark)
             .navigationDestination(item: $chosen) { SessionView(model: model, opened: $0) }
             .toolbar(.hidden, for: .navigationBar)
@@ -226,9 +229,9 @@ struct SessionListView: View {
         .font(.system(size: 12, weight: .semibold))
         .foregroundStyle(Palette.textTertiary)
         .padding(.horizontal, Spacing.small)
-        .padding(.top, Spacing.medium)
-        // Clear of the home indicator, since the screen itself no longer is.
-        .padding(.bottom, Spacing.medium)
+        // Even, so the mark sits in the middle of the band rather than at the foot of it. The
+        // home indicator is the safe area's job now, not this padding's.
+        .padding(.vertical, Spacing.small)
     }
 }
 

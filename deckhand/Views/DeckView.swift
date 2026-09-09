@@ -9,6 +9,9 @@ struct DeckView: View {
     @Bindable var model: AppModel
     @State private var recorder = Recorder()
     @State private var active: String?
+    /// Columns showing the briefing rather than the conversation. Per column, not per deck:
+    /// the reason to have both is to keep one project's brief up while another one runs.
+    @State private var briefed: Set<String> = []
 
     /// Below this a column is a stripe, not a transcript. Past it the deck scrolls sideways.
     private static let minColumnWidth: CGFloat = 240
@@ -27,6 +30,9 @@ struct DeckView: View {
             while !Task.isCancelled {
                 await model.refreshSessions()
                 await model.loadDeck()
+                // One call off the Mac's disk for every column's brief. No model waits on it
+                // and no column pays for one, so it rides along with the transcripts.
+                await model.loadBriefings()
                 try? await Task.sleep(for: .seconds(6))
             }
         }
@@ -97,11 +103,22 @@ struct DeckView: View {
         Column(
             session: session,
             turns: model.deckTurns[session.sessionId] ?? [],
+            brief: model.summaries[session.sessionId],
+            briefed: briefed.contains(session.sessionId),
+            flip: { flip(session) },
             state: state,
             review: model.review[session.sessionId],
             send: { text in Task { await model.send(text, to: session) } },
             discard: { model.discard(for: session) }
         ).accessibilityIdentifier("deck-column")
+    }
+
+    private func flip(_ session: Session) {
+        if briefed.contains(session.sessionId) {
+            briefed.remove(session.sessionId)
+        } else {
+            briefed.insert(session.sessionId)
+        }
     }
 }
 
@@ -109,6 +126,11 @@ struct DeckView: View {
 private struct Column: View {
     let session: Session
     let turns: [Turn]
+    /// The last briefing the Mac wrote for this session. Nil until it has written one.
+    let brief: String?
+    /// Whether this column is showing that briefing instead of the conversation.
+    let briefed: Bool
+    let flip: () -> Void
     let state: TalkState
     /// Held for reading, if this column is the one that just heard something.
     let review: String?
@@ -122,17 +144,7 @@ private struct Column: View {
         VStack(alignment: .leading, spacing: 0) {
             header
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: Spacing.extraSmall) {
-                    if turns.isEmpty {
-                        Text("reading…")
-                            .font(.system(size: 9))
-                            .foregroundStyle(Palette.textTertiary)
-                    }
-                    ForEach(Array(turns.enumerated()), id: \.offset) { index, turn in
-                        DeckTurn(turn: turn, showsRole: index == 0 || turns[index - 1].role != turn.role)
-                    }
-                }
-                .padding(Spacing.extraSmall)
+                if briefed { briefing } else { conversation }
             }
             .scrollDisabled(isRecording)
             if let review {
@@ -155,6 +167,35 @@ private struct Column: View {
         }
     }
 
+    private var conversation: some View {
+        LazyVStack(alignment: .leading, spacing: Spacing.extraSmall) {
+            if turns.isEmpty {
+                Text("reading…")
+                    .font(.system(size: 9))
+                    .foregroundStyle(Palette.textTertiary)
+            }
+            ForEach(Array(turns.enumerated()), id: \.offset) { index, turn in
+                DeckTurn(turn: turn, showsRole: index == 0 || turns[index - 1].role != turn.role)
+            }
+        }
+        .padding(Spacing.extraSmall)
+    }
+
+    /// The Mac writes these on its own cycle, so a column can show one without asking for it.
+    private var briefing: some View {
+        Group {
+            if let brief {
+                Prose(brief, compact: true)
+            } else {
+                Text("no briefing written yet")
+                    .font(.system(size: 9))
+                    .foregroundStyle(Palette.textTertiary)
+            }
+        }
+        .padding(Spacing.extraSmall)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     private var header: some View {
         HStack(spacing: Spacing.extraSmall) {
             GlyphTile(DotGlyph.forName(session.name), size: 20, prominent: isRecording)
@@ -163,6 +204,14 @@ private struct Column: View {
                 .foregroundStyle(Palette.textPrimary)
                 .lineLimit(1)
             Spacer(minLength: 0)
+            // Says what it will show you, not what you are looking at: every other word in
+            // this app's chrome is a thing you can press, and so is this one.
+            Button(briefed ? "LIVE" : "BRIEF", action: flip)
+                .buttonStyle(.plain)
+                .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                .tracking(1)
+                .foregroundStyle(briefed ? Palette.tint : Palette.textTertiary)
+                .accessibilityIdentifier("deck-flip")
             if state.canCancel {
                 Button("CANCEL", action: state.cancel)
                     .buttonStyle(.plain)
