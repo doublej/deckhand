@@ -8,7 +8,7 @@ Importing this is also what fills the register — each built-in filter declares
 module, so the import list below is the only thing that has to change to add one.
 """
 
-from . import words  # noqa: F401  -- imported for the register it fills on the way past
+from . import crafting, words  # noqa: F401  -- imported for the register they fill on the way past
 from .config import load, path, save
 from .kinds import Field, Filter, Outcome, Prompt, Verdict
 from .registry import known, register

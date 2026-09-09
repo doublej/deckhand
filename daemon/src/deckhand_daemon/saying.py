@@ -154,14 +154,23 @@ async def say(
     text: str = Body(embed=True),
     images: Annotated[list[str] | None, Body(embed=True)] = None,
     route: str | None = Query(default=None, description="auto, keyboard or socket"),
+    prepared: bool = Query(
+        default=False,
+        description="true when these words were already shown on the card, chain included",
+    ),
 ) -> dict:
     """Put words into a session. The other half of an upload the person asked to read first."""
     session = await live_session(session_id)
     chosen = route or plugin.route()
     kept = _kept_images(session_id, images or [])
+    # Words the person has already read on the card are the words, and the chain does not get a
+    # second go at them. Not an optimisation: the first filter that rewrites rather than swaps —
+    # prompt crafting — is not idempotent, and running it on its own output rewrites a prompt
+    # twice. It also contradicts the card to change anything after somebody has approved it.
     # The words are filtered before the attachments are named: a replacement list is aimed at
     # what a person said, and a path is not something they said.
-    checked = await _filtered(session, text, chosen, "typed", kept)
+    checked = (filters.Outcome(text=text) if prepared
+               else await _filtered(session, text, chosen, "typed", kept))
     taken, error = None, checked.reason or None
     if checked.delivered:
         said = deliver.with_images(checked.text, kept)

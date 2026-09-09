@@ -99,9 +99,15 @@ public struct DeckhandClient: Sendable {
         _ text: String,
         to sessionId: String,
         route: DeliveryRoute,
-        images: [String] = []
+        images: [String] = [],
+        prepared: Bool = false
     ) async throws -> Delivery {
-        var req = request(.post, "sessions/\(sessionId)/say?route=\(route.rawValue)")
+        // `prepared` says these words have already been through the Mac's filter chain and were
+        // read on the card. Not an optimisation: prompt crafting rewrites rather than swaps, so a
+        // second pass rewrites a prompt twice — and changing anything after somebody approved it
+        // on the card would make the card a liar about what it sent.
+        var req = request(.post,
+                          "sessions/\(sessionId)/say?route=\(route.rawValue)&prepared=\(prepared)")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.timeoutInterval = 30
         struct Said: Encodable {

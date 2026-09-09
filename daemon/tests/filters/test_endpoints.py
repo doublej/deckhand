@@ -185,3 +185,27 @@ def test_a_clip_is_filtered_too_and_the_transcript_still_says_what_was_heard(tok
     assert seen["text"] == "the deckhand"
     assert body["transcript"] == "the deck hand"
     assert body["notes"] == ['swapped "deck hand" for "deckhand"']
+
+
+def test_words_the_person_has_already_read_are_not_filtered_again(token, monkeypatch):
+    """`prepared=true` is what the phone sends after the card has shown the prepared words.
+
+    Not an optimisation. Prompt crafting rewrites rather than swaps, so running it on its own
+    output rewrites a prompt twice — and changing anything after somebody has approved it on the
+    card contradicts the card. Proved with the word filter because it is the one that is easy to
+    see: the swap happens without the flag and does not happen with it.
+    """
+    seen = {}
+    monkeypatch.setattr(
+        deliver_module, "deliver",
+        lambda session, text, route: (seen.update(text=text), ("keyboard", None))[1],
+    )
+    c = client(token)
+    c.put("/filters", json={"steps": [
+        {"filter": "words", "settings": {"pairs": [["deck hand", "deckhand"]]}}]})
+
+    c.post(f"/sessions/{SID}/say", json={"text": "the deck hand is here"})
+    assert seen["text"] == "the deckhand is here"
+
+    c.post(f"/sessions/{SID}/say?prepared=true", json={"text": "the deck hand is here"})
+    assert seen["text"] == "the deck hand is here"
