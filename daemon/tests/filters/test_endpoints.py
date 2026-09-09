@@ -19,32 +19,69 @@ def client(token):
     return c
 
 
-def test_the_phone_is_told_what_filters_exist_and_what_it_saved(token):
-    c = client(token)
-    offered = c.get("/filters").json()
+OTHER = "bbbb1111-2222-3333-4444-555566667777"
+
+
+def test_what_this_mac_can_do_is_global_and_carries_no_chain(token):
+    """A filter is what the Mac has; a chain is what one terminal does with it."""
+    offered = client(token).get("/filters").json()
+
     assert "words" in [f["name"] for f in offered["known"]]
-    assert offered["steps"] == []
+    assert "steps" not in offered
+
+
+def test_one_terminals_chain_round_trips(token):
+    c = client(token)
+    assert c.get(f"/sessions/{SID}/filters").json() == {
+        "session": "warm-okapi", "known": c.get("/filters").json()["known"], "steps": []}
 
     chain = [{"filter": "words", "settings": {"pairs": [["deck hand", "deckhand"]]}}]
-    saved = c.put("/filters", json={"steps": chain}).json()["steps"]
+    saved = c.put(f"/sessions/{SID}/filters", json={"steps": chain}).json()
 
-    assert saved == [{"filter": "words", "on": True, "settings": {"pairs": [["deck hand", "deckhand"]]}}]
-    assert c.get("/filters").json()["steps"] == saved
+    assert saved == {"session": "warm-okapi", "steps": [
+        {"filter": "words", "on": True, "settings": {"pairs": [["deck hand", "deckhand"]]}}]}
+    assert c.get(f"/sessions/{SID}/filters").json()["steps"] == saved["steps"]
+    # And it is that terminal's alone.
+    assert c.get(f"/sessions/{OTHER}/filters").json()["steps"] == []
 
 
 def test_a_chain_naming_a_filter_that_does_not_exist_is_refused(token):
-    answer = client(token).put("/filters", json={"steps": [{"filter": "translate"}]})
+    c = client(token)
+    answer = c.put(f"/sessions/{SID}/filters", json={"steps": [{"filter": "translate"}]})
 
     assert answer.status_code == 400
     assert "translate" in answer.json()["detail"]
     # Nothing was written: a chain is saved whole or not at all.
-    assert client(token).get("/filters").json()["steps"] == []
+    assert c.get(f"/sessions/{SID}/filters").json()["steps"] == []
+
+
+def test_a_terminal_that_is_not_running_has_no_chain_to_read_or_set(token):
+    """Per-session like every other per-session route, and the id is the only handle there is."""
+    dead = "cccc1111-2222-3333-4444-555566667777"
+    c = client(token)
+
+    assert c.get(f"/sessions/{dead}/filters").status_code == 404
+    assert c.put(f"/sessions/{dead}/filters", json={"steps": []}).status_code == 404
 
 
 def test_filters_need_the_token_like_everything_else(claude_home):
     anon = TestClient(app)
     assert anon.get("/filters").status_code == 401
-    assert anon.put("/filters", json={"steps": []}).status_code == 401
+    assert anon.get(f"/sessions/{SID}/filters").status_code == 401
+    assert anon.put(f"/sessions/{SID}/filters", json={"steps": []}).status_code == 401
+
+
+def test_a_rename_carries_the_chain_onto_the_new_name(token, monkeypatch):
+    """A chain that vanished on /rename would be the same bug as a star that did."""
+    monkeypatch.setattr(deliver_module, "rename", lambda session, name: None)
+    c = client(token)
+    c.put(f"/sessions/{SID}/filters", json={"steps": [{"filter": "words"}]})
+
+    answer = c.post(f"/sessions/{SID}/name", json={"name": "bright-heron"}).json()
+
+    assert answer == {"renamed": "bright-heron", "was": "warm-okapi", "carried_filters": True}
+    assert filters.load("bright-heron") == [{"filter": "words", "on": True, "settings": {}}]
+    assert filters.load("warm-okapi") == []
 
 
 def test_the_words_that_reach_a_session_are_the_filtered_ones(token, monkeypatch):
@@ -54,7 +91,7 @@ def test_the_words_that_reach_a_session_are_the_filtered_ones(token, monkeypatch
         lambda session, text, route: (seen.update(text=text), ("keyboard", None))[1],
     )
     c = client(token)
-    c.put("/filters", json={"steps": [
+    c.put(f"/sessions/{SID}/filters", json={"steps": [
         {"filter": "words", "settings": {"pairs": [["deck hand", "deckhand"]]}}]})
 
     answer = c.post(f"/sessions/{SID}/say", json={"text": "the deck hand is broken"}).json()
@@ -74,7 +111,7 @@ def test_a_stopped_prompt_never_reaches_the_session(token, monkeypatch):
                        apply=lambda p, s: filters.Verdict(note="already logged as #12", stop=True)),
     )
     c = client(token)
-    c.put("/filters", json={"steps": [{"filter": "gate"}]})
+    c.put(f"/sessions/{SID}/filters", json={"steps": [{"filter": "gate"}]})
 
     answer = c.post(f"/sessions/{SID}/say", json={"text": "log the crash"}).json()
 
@@ -95,7 +132,7 @@ def test_a_filter_is_told_which_session_and_how_the_words_arrived(token, monkeyp
                        apply=lambda p, s: seen.append(p) or filters.Verdict()),
     )
     c = client(token)
-    c.put("/filters", json={"steps": [{"filter": "probe"}]})
+    c.put(f"/sessions/{SID}/filters", json={"steps": [{"filter": "probe"}]})
 
     c.post(f"/sessions/{SID}/audio", files={"file": ("clip.m4a", b"x" * 64, "audio/m4a")})
     c.post(f"/sessions/{SID}/say?route=socket", json={"text": "typed"})
@@ -112,7 +149,7 @@ def test_a_clip_read_first_shows_what_will_be_sent(token, monkeypatch):
     delivered = []
     monkeypatch.setattr(deliver_module, "deliver", lambda *a: delivered.append(a))
     c = client(token)
-    c.put("/filters", json={"steps": [
+    c.put(f"/sessions/{SID}/filters", json={"steps": [
         {"filter": "words", "settings": {"pairs": [["deck hand", "deckhand"]]}}]})
 
     body = c.post(
@@ -156,7 +193,7 @@ def test_a_clip_the_chain_will_refuse_says_so_before_it_is_sent(token, monkeypat
                        apply=lambda p, s: filters.Verdict(note="already logged as #12", stop=True)),
     )
     c = client(token)
-    c.put("/filters", json={"steps": [{"filter": "gate"}]})
+    c.put(f"/sessions/{SID}/filters", json={"steps": [{"filter": "gate"}]})
 
     body = c.post(
         f"/sessions/{SID}/audio?deliver=false", files={"file": ("clip.m4a", b"x" * 64, "audio/m4a")}
@@ -175,7 +212,7 @@ def test_a_clip_is_filtered_too_and_the_transcript_still_says_what_was_heard(tok
         lambda session, text, route: (seen.update(text=text), ("socket", None))[1],
     )
     c = client(token)
-    c.put("/filters", json={"steps": [
+    c.put(f"/sessions/{SID}/filters", json={"steps": [
         {"filter": "words", "settings": {"pairs": [["deck hand", "deckhand"]]}}]})
 
     body = c.post(
@@ -201,7 +238,7 @@ def test_words_the_person_has_already_read_are_not_filtered_again(token, monkeyp
         lambda session, text, route: (seen.update(text=text), ("keyboard", None))[1],
     )
     c = client(token)
-    c.put("/filters", json={"steps": [
+    c.put(f"/sessions/{SID}/filters", json={"steps": [
         {"filter": "words", "settings": {"pairs": [["deck hand", "deckhand"]]}}]})
 
     c.post(f"/sessions/{SID}/say", json={"text": "the deck hand is here"})

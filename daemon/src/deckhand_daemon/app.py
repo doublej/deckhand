@@ -14,6 +14,7 @@ from . import (
     config,
     deliver,
     files,
+    filters,
     nudge,
     plugin,
     push,
@@ -205,7 +206,11 @@ async def rename_session(session_id: str, name: str = Body(embed=True)) -> dict:
     error = await asyncio.to_thread(deliver.rename, session, name)
     if error:
         raise HTTPException(status_code=409, detail=error)
-    return {"renamed": deliver.clean_name(name), "was": session.name}
+    # A filter chain is filed under the session's name, so it has to be carried across exactly as
+    # the phone carries a star. Done now rather than when the rename lands: a busy session runs
+    # the command when its turn ends, and the phone moves its own favourites on the same optimism.
+    carried = filters.renamed(session.name, deliver.clean_name(name))
+    return {"renamed": deliver.clean_name(name), "was": session.name, "carried_filters": carried}
 
 @app.post("/live/token", dependencies=[Depends(require_token)])
 def live_token(token: str = Body(embed=True), kind: str = Body(embed=True)) -> dict:

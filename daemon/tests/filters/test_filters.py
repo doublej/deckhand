@@ -1,5 +1,4 @@
 import asyncio
-import json
 
 import pytest
 
@@ -29,25 +28,30 @@ def marker(name, *, adds="", note="", stop=False, boom=False, seen=None):
     return registry.register(filters.Filter(name=name, title=name, summary=name, apply=apply))
 
 
-def said(text="hello", **rest):
-    return filters.Prompt(text=text, session_id="aaaa", **rest)
+# Which terminal the words were spoken at. A chain belongs to one, so every test that saves a
+# chain and then runs one has to agree on whose chain it is.
+TERMINAL = "warm-okapi"
+
+
+def said(text="hello", terminal=TERMINAL, **rest):
+    return filters.Prompt(text=text, session_id="aaaa", session_name=terminal, **rest)
 
 
 def test_the_chain_runs_in_the_order_it_is_written(chain):
     marker("a", adds="+a")
     marker("b", adds="+b")
 
-    config.save([{"filter": "a"}, {"filter": "b"}])
+    config.save(TERMINAL, [{"filter": "a"}, {"filter": "b"}])
     assert run(filters.run(said("x"))).text == "x+a+b"
 
-    config.save([{"filter": "b"}, {"filter": "a"}])
+    config.save(TERMINAL, [{"filter": "b"}, {"filter": "a"}])
     assert run(filters.run(said("x"))).text == "x+b+a"
 
 
 def test_a_step_that_is_off_is_stepped_over(chain):
     marker("a", adds="+a")
     marker("b", adds="+b")
-    config.save([{"filter": "a", "on": False}, {"filter": "b"}])
+    config.save(TERMINAL, [{"filter": "a", "on": False}, {"filter": "b"}])
 
     assert run(filters.run(said("x"))).text == "x+b"
 
@@ -57,7 +61,7 @@ def test_a_stop_ends_the_chain_and_says_why(chain):
     marker("first", adds="+first", seen=ran)
     marker("gate", note="already logged as #12", stop=True, seen=ran)
     marker("never", adds="+never", seen=ran)
-    config.save([{"filter": "first"}, {"filter": "gate"}, {"filter": "never"}])
+    config.save(TERMINAL, [{"filter": "first"}, {"filter": "gate"}, {"filter": "never"}])
 
     outcome = run(filters.run(said("x")))
 
@@ -71,7 +75,7 @@ def test_a_stop_ends_the_chain_and_says_why(chain):
 def test_a_stop_with_nothing_to_say_still_gets_a_reason(chain):
     """A message that vanishes without a reason is the bug the whole chain exists to avoid."""
     marker("mute", stop=True)
-    config.save([{"filter": "mute"}])
+    config.save(TERMINAL, [{"filter": "mute"}])
 
     assert run(filters.run(said("x"))).reason == "mute stopped it"
 
@@ -79,7 +83,7 @@ def test_a_stop_with_nothing_to_say_still_gets_a_reason(chain):
 def test_a_filter_that_raises_is_survived_and_the_words_go_through(chain):
     marker("boom", boom=True)
     marker("after", adds="+after")
-    config.save([{"filter": "boom"}, {"filter": "after"}])
+    config.save(TERMINAL, [{"filter": "boom"}, {"filter": "after"}])
 
     outcome = run(filters.run(said("what I actually said")))
 
@@ -90,7 +94,7 @@ def test_a_filter_that_raises_is_survived_and_the_words_go_through(chain):
 
 def test_a_filter_that_answers_with_nonsense_is_treated_as_broken(chain):
     registry.register(filters.Filter(name="odd", title="odd", summary="odd", apply=lambda p, s: None))
-    config.save([{"filter": "odd"}])
+    config.save(TERMINAL, [{"filter": "odd"}])
 
     outcome = run(filters.run(said("x")))
 
@@ -104,7 +108,7 @@ def test_an_async_filter_is_awaited(chain):
         return filters.Verdict(text=prompt.text.upper(), note="shouted it")
 
     registry.register(filters.Filter(name="slow", title="slow", summary="slow", apply=slowly))
-    config.save([{"filter": "slow"}])
+    config.save(TERMINAL, [{"filter": "slow"}])
 
     outcome = run(filters.run(said("quiet")))
 
@@ -114,7 +118,7 @@ def test_an_async_filter_is_awaited(chain):
 
 def test_a_chain_naming_a_filter_this_mac_no_longer_has_is_noted_not_fatal(chain):
     marker("real", adds="+real")
-    config.save([{"filter": "ghost"}, {"filter": "real"}])
+    config.save(TERMINAL, [{"filter": "ghost"}, {"filter": "real"}])
 
     outcome = run(filters.run(said("x")))
 
@@ -124,7 +128,7 @@ def test_a_chain_naming_a_filter_this_mac_no_longer_has_is_noted_not_fatal(chain
 
 def test_one_filter_can_appear_twice_with_different_settings(chain):
     registry.register(words.WORDS)
-    config.save([
+    config.save(TERMINAL, [
         {"filter": "words", "settings": {"pairs": [["deck hand", "deckhand"]]}},
         {"filter": "words", "settings": {"pairs": [["tu y", "TUI"]]}},
     ])
@@ -135,31 +139,31 @@ def test_one_filter_can_appear_twice_with_different_settings(chain):
     assert outcome.notes == ['swapped "deck hand" for "deckhand"', 'swapped "tu y" for "TUI"']
 
 
-# --- the saved chain -------------------------------------------------------------------------
-
-
-def test_a_chain_nobody_has_saved_is_empty(chain):
-    assert config.load() == []
+# --- whose chain it is ------------------------------------------------------------------------
 
 
 def test_a_corrupt_chain_loads_as_empty_rather_than_stopping_anyone_speaking(chain):
     config.path().write_text("{this was half written when the Mac went to sleep")
 
-    assert config.load() == []
+    assert config.load(TERMINAL) == []
     assert run(filters.run(said("x"))).text == "x"
 
 
-def test_a_chain_that_is_the_wrong_shape_loads_as_empty(chain):
-    config.path().write_text(json.dumps({"steps": "words"}))
+def test_a_chain_is_one_terminals_and_not_anothers(chain):
+    """The whole point of the change: the same words go through different steps per terminal."""
+    marker("a", adds="+a")
+    config.save(TERMINAL, [{"filter": "a"}])
 
-    assert config.load() == []
+    assert run(filters.run(said("x"))).text == "x+a"
+    assert run(filters.run(said("x", terminal="cold-otter"))).text == "x"
+    assert config.load("cold-otter") == []
 
 
-def test_saving_fills_in_what_a_step_left_out(chain):
-    saved = config.save([{"filter": "words"}, {"filter": "", "on": True}])
+def test_a_prompt_with_no_terminal_behind_it_filters_through_nothing(chain):
+    marker("a", adds="+a")
+    config.save(TERMINAL, [{"filter": "a"}])
 
-    assert saved == [{"filter": "words", "on": True, "settings": {}}]
-    assert config.load() == saved
+    assert run(filters.run(said("x", terminal=""))).text == "x"
 
 
 # --- the word filter -------------------------------------------------------------------------
