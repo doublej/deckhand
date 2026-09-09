@@ -28,6 +28,8 @@ struct FilesView: View {
             .padding(.bottom, Spacing.extraLarge)
         }
         .frame(maxHeight: .infinity)
+        // Room at the end for the bar that floats over this.
+        .contentMargins(.bottom, TalkMark.clearance, for: .scrollContent)
         // Asked for once, when the tab is opened. Nobody watches a file list change, and it
         // is a transcript scan on the Mac rather than a field on the session.
         .task { await model.loadFiles(for: session) }

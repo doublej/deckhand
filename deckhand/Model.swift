@@ -52,7 +52,7 @@ final class AppModel {
     var assets: [String: [Asset]] = [:]
     /// What you have said to each session that it has not picked up yet. The session's own
     /// inbox, read off its transcript — not a guess made from the shape of the conversation.
-    var queued: [String: [String]] = [:]
+    var queued: [String: [Queued]] = [:]
     /// What each session's briefings have cost the Mac since it last started.
     var spend: [String: Spend] = [:]
     /// Sessions whose summary is being written right now, so the screen can say so.

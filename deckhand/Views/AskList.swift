@@ -9,14 +9,24 @@ import SwiftUI
 struct AskList: View {
     let asks: [Ask]
 
+    /// How many of them a page shows. The Mac keeps the whole history — the agent is not allowed
+    /// to trim it, because a list that trims itself is a list that forgets — so the cut is made
+    /// here, where it is a question about a screen rather than about the record.
+    private static let shown = 8
+
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.small) {
             Text("WHAT YOU ASKED FOR")
                 .font(Typography.eyebrow)
                 .tracking(1)
                 .foregroundStyle(Palette.textTertiary)
+            if asks.count > Self.shown {
+                Text("\(asks.count - Self.shown) older, on the Mac")
+                    .font(Typography.hint)
+                    .foregroundStyle(Palette.textTertiary)
+            }
             VStack(alignment: .leading, spacing: Spacing.small) {
-                ForEach(asks) { ask in
+                ForEach(asks.suffix(Self.shown)) { ask in
                     HStack(alignment: .firstTextBaseline, spacing: Spacing.small) {
                         AskDot(state: ask.progress)
                         Text(ask.text)
@@ -77,9 +87,12 @@ struct AskDot: View {
 struct AskDots: View {
     let asks: [Ask]
 
+    /// A row is narrower than a page, so it shows fewer. Same reasoning as `AskList.shown`.
+    private static let shown = 12
+
     var body: some View {
         HStack(spacing: 4) {
-            ForEach(asks) { ask in AskDot(state: ask.progress, size: 9) }
+            ForEach(asks.suffix(Self.shown)) { ask in AskDot(state: ask.progress, size: 9) }
         }
         .accessibilityElement()
         .accessibilityLabel("\(asks.filter { $0.progress == .done }.count) of \(asks.count) done")

@@ -70,6 +70,7 @@ daemon/src/deckhand_daemon/
   sessions.py     # which Claude sessions are alive, and their iTerm pane
   transcripts.py  # the last rounds, and the activity blob a summary is written from
   asked.py        # what the person asked for, and what is still in the session's inbox
+  tasks.py        # the person's list of asks, and the only three tools that may change it
   files.py        # what the session touched that a person could open, and the permission
   push.py         # what the Lock Screen says, when it changes, and how it gets there
   transcribe.py   # utt turns a clip into text, through its jobs folder
@@ -90,7 +91,8 @@ launchd/          # the agent plist, symlinked into ~/Library/LaunchAgents
 hold to talk → `POST /sessions/{id}/audio`, which answers with the transcript and whether it
 reached the session. `?deliver=false` transcribes without sending, for the review card, and
 `POST /sessions/{id}/say` sends the text once the person has read it.
-`GET /sessions/{id}/files` lists what the session touched that a phone can open and
+`GET /sessions/{id}/raw` hands back the transcript as written, for when the question is whether
+the app read it right. `GET /sessions/{id}/files` lists what the session touched that a phone can open and
 `GET /sessions/{id}/file?path=` serves one. `POST /sessions/{id}/focus` brings that pane
 forward on the Mac. `/health` is the only
 unauthenticated route; everything else needs the `x-deckhand-token` header, and both
@@ -117,6 +119,16 @@ unauthenticated route; everything else needs the `x-deckhand-token` header, and 
   backs off for a minute so a real outage cannot starve the event loop, and the `iterm` field
   still says what is wrong. This matters for more than window titles: without a pane there is no
   keyboard, and delivery falls back to the peer socket.
+- **A message absorbed mid-turn is never written to the transcript.** Verified by replaying a
+  live session's `queue-operation` lane: every `remove` with reason `absorbed_mid_turn` had **no**
+  matching `user` entry anywhere after it, while each `dequeue` (picked up at the prompt) did. So
+  dropping an absorbed item from `asked.queued` made a prompt vanish from the phone seconds after
+  it was sent, with no trace in any view. Those items stay, marked `taken`; the phone shows them
+  as "picked up mid-run, so it is in no turn". There is also no way to make a session read its
+  inbox early — the queue drains when a turn ends — so the phone's "force" is Escape, and the
+  button says "Stop the run so it reads this" rather than pretending otherwise.
+- **The keyboard route's ctrl-U travels with the message.** Queued content written by Deckhand
+  starts with `\x15`, so `asked._unwrap` strips control characters as well as the envelope tags.
 - **The session's inbox is a lane of its own.** Claude Code writes a `queue-operation` line
   (`enqueue` / `dequeue` / `remove` / `popAll`) every time something joins or leaves a session's
   message queue, and `asked.queued` replays it. This is the only honest answer to "has it seen
@@ -134,6 +146,24 @@ unauthenticated route; everything else needs the `x-deckhand-token` header, and 
   a turn on a busy session — the usage of a request in flight is not written until the assistant
   entry it produced lands — and it will not match a statusline counting against the model's full
   window rather than this setting.
+- **The task list is the Mac's, not the model's.** It lives in
+  `~/Library/Application Support/Deckhand/tasks/<sessionId>.json` and the summariser changes it
+  only through three in-process SDK tools (`add_task`, `set_task_state`, `drop_task`) bound to one
+  session's file. Written as part of the briefing it was a *new* list every run, which is how the
+  shape of it kept changing. The model is handed the list with its ids and may not reword,
+  renumber or re-order it; `drop_task` needs a reason and warns, because it is the only operation
+  that loses something. Trimming is not the agent's job either: `MAX_KEPT` is a ceiling on a file
+  and the phone decides how many to show (`AskList.shown`). This needs more than one turn, so the
+  run is `max_turns=16` with `permission_mode="bypassPermissions"` — safe only because those three
+  functions are the entire tool surface and nobody is at the daemon to answer a prompt.
+- **A gesture on a list row has to share the touch.** The sessions row has three jobs on one
+  touch: tap to open, press to talk, swipe to star. `highPriorityGesture` and `ExclusiveGesture`
+  both take the touch and broke the tap *and* the swipe; a `Button` takes it the other way and the
+  press never fires; a `DragGesture` sequenced after the long press is read as the start of a
+  swipe. What works is the plainest thing: not a `Button`, `.onLongPressGesture` for the press
+  (with `onPressingChanged` for hold-to-talk's release, which is why there is no drag in it) and
+  `.onTapGesture` for the tap, whose meaning `TalkControl.tapped` decides. `UITests` holds all
+  three down, including that a press must not open the session.
 - **Never call a public type `Context` in DeckhandKit.** Inside a `UIViewRepresentable`,
   `Context` is already a typealias for `UIViewRepresentableContext<Self>`, so a module-level
   `Context` imported beside SwiftUI silently breaks the conformance of anything spelling

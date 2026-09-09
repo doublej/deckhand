@@ -11,9 +11,13 @@ import SwiftUI
 struct SessionListView: View {
     @Bindable var model: AppModel
     @State private var showSettings = false
+    @State private var recorder = Recorder()
+    /// Which session the microphone is open for, if any. One recorder, many rows.
+    @State private var talking: String?
     /// Pushed by hand rather than by a NavigationLink: a link inside a List draws the system's
     /// disclosure chevron outside the row's own fill, which broke the one edge this page has.
     @State private var chosen: Session?
+    @Environment(\.scenePhase) private var phase
 
     /// Everything on this page starts at the same left edge. A row's own padding is what its
     /// fill bleeds past that edge by, so the head, the group labels and a row's glyph line up
@@ -23,16 +27,17 @@ struct SessionListView: View {
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 0) {
-                head
                 groups
                 foot
             }
             .padding(.horizontal, Self.gutter)
-            .padding(.bottom, Spacing.small)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .background(Palette.lcdGround)
+            // The whole glass, not the safe area. This screen is a terminal and a terminal runs
+            // to its own edges; the rows keep the page's one gutter and nothing else.
+            .ignoresSafeArea()
             .environment(\.colorScheme, .dark)
-            .navigationDestination(item: $chosen) { SessionView(model: model, session: $0) }
+            .navigationDestination(item: $chosen) { SessionView(model: model, opened: $0) }
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showSettings) { SettingsView(model: model) }
         }
@@ -41,6 +46,13 @@ struct SessionListView: View {
                 await model.refreshSessions()
                 try? await Task.sleep(for: .seconds(4))
             }
+        }
+        // Coming back to the app is the one moment the four-second loop cannot cover: it was
+        // suspended while you were away, so what is on screen is as old as your trip — and a
+        // session that compacted while you were gone is exactly what you came back to see.
+        .onChange(of: phase) { _, now in
+            guard now == .active else { return }
+            Task { await model.refreshSessions() }
         }
         // Its own loop, slower than the listing's: a headline is a model reading a transcript,
         // not a field on the session. Prefetching them here also means a session you then open
@@ -51,27 +63,6 @@ struct SessionListView: View {
                 try? await Task.sleep(for: .seconds(45))
             }
         }
-    }
-
-    /// One line: the mark, whatever is wrong, and the state. It is the least important thing
-    /// on the page and it is sized like it.
-    private var head: some View {
-        HStack(spacing: Spacing.extraSmall) {
-            DotMark(DotGlyph.anchor, size: 20, hotCore: 0.3)
-            // The pill says which state it is in; this says why, and only when that adds
-            // something. A line reading "Error" under a pill reading ERR is the pill twice.
-            if let reason {
-                Text(reason)
-                    .font(Typography.hint)
-                    .foregroundStyle(Palette.textTertiary)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: Spacing.extraSmall)
-            StatePill(model.connection.pill)
-        }
-        .padding(.horizontal, Spacing.small)
-        .padding(.top, Spacing.extraSmall)
-        .padding(.bottom, Spacing.large)
     }
 
     /// What the pill cannot carry: the reason. Nothing at all when the Mac is simply there.
@@ -133,20 +124,66 @@ struct SessionListView: View {
         }
     }
 
+    /// Tap a row to open it, hold one to talk to it without opening it at all — which is the
+    /// whole point of a list of six sessions: answering the one that needs a word is a press,
+    /// not a page. What it heard appears under the row it was said to.
     private func row(_ session: Session) -> some View {
         let hidden = model.preferences.isHidden(session.name)
-        return Button { chosen = session } label: {
-            SessionRow(
-                session: session,
-                current: model.current == session.sessionId,
-                headline: model.headlines[session.sessionId],
-                asks: model.tasks[session.sessionId] ?? []
+        return VStack(spacing: Spacing.xxs) {
+            TalkControl(
+                recorder: recorder,
+                mode: model.preferences.talkMode,
+                isMine: talking == session.sessionId,
+                pressToStart: true,
+                onTap: { chosen = session },
+                onStart: { startTalking(to: session) },
+                onClip: { await heard($0, for: session) },
+                content: { open(session, $0) }
             )
+            review(for: session)
         }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("session-row")
         .swipeActions(edge: .leading) { star(session) }
         .swipeActions(edge: .trailing) { hide(session, hidden) }
+    }
+
+    private func startTalking(to session: Session) {
+        talking = session.sessionId
+        model.status = "Recording for \(session.name)"
+    }
+
+    private func heard(_ clip: URL, for session: Session) async {
+        await model.upload(clip: clip, to: session)
+        talking = nil
+    }
+
+    /// The row, and every tap on it. Deliberately not a `Button`: a button takes the touch
+    /// before the press that starts talking ever sees it. What a tap means is the talk
+    /// control's to say — open this session, or send what it just heard.
+    private func open(_ session: Session, _ talk: TalkState) -> some View {
+        SessionRow(
+            session: session,
+            current: model.current == session.sessionId,
+            headline: model.headlines[session.sessionId],
+            asks: model.tasks[session.sessionId] ?? [],
+            talk: talk
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityIdentifier("session-row")
+    }
+
+    /// What it heard, under the row it was heard for. Sitting anywhere else it would be a card
+    /// that names a session rather than one belonging to it.
+    @ViewBuilder private func review(for session: Session) -> some View {
+        if let text = model.review[session.sessionId] {
+            ReviewCard(
+                text: text,
+                target: session.name,
+                send: { Task { await model.send(text, to: session) } },
+                discard: { model.discard(for: session) },
+                compact: true
+            )
+        }
     }
 
     private func star(_ session: Session) -> some View {
@@ -162,12 +199,20 @@ struct SessionListView: View {
         .tint(Palette.lcdGround)
     }
 
-    /// The other thin line. Settings are a place you go once; they do not need to look like
-    /// anything from here.
+    /// The one thin line on the page, and now the only chrome on it: the mark, whatever is
+    /// wrong, the daemon's state, and the two places you can go. It was two lines, one at each
+    /// end, and the top one spent a band of the screen saying what this one already says.
     private var foot: some View {
-        HStack(spacing: Spacing.medium) {
+        HStack(spacing: Spacing.small) {
             Wordmark()
-            Spacer(minLength: 0)
+            if let reason {
+                Text(reason)
+                    .font(Typography.hint)
+                    .foregroundStyle(Palette.textTertiary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: Spacing.extraSmall)
+            StatePill(model.connection.pill)
             Button("Hidden sessions", systemImage: model.showsHidden ? "eye" : "eye.slash") {
                 model.showsHidden.toggle()
             }
@@ -178,6 +223,8 @@ struct SessionListView: View {
         .foregroundStyle(Palette.textTertiary)
         .padding(.horizontal, Spacing.small)
         .padding(.top, Spacing.medium)
+        // Clear of the home indicator, since the screen itself no longer is.
+        .padding(.bottom, Spacing.medium)
     }
 }
 
@@ -187,69 +234,5 @@ private extension View {
         listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
             .listRowInsets(EdgeInsets())
-    }
-}
-
-/// One session as a rail row: its glyph, its name, what it needs from you, and how far it has
-/// got through what you asked.
-///
-/// The headline is the row. It is written to about twelve words, but a model writing prose is
-/// not a layout engine — so the row gives it three lines and real leading rather than clipping
-/// the one sentence the page exists to show.
-private struct SessionRow: View {
-    let session: Session
-    let current: Bool
-    /// What this session needs from you, in one line. Absent until the Mac has read it.
-    let headline: String?
-    /// What you have asked it for, as one dot each. Empty until the Mac has read it.
-    let asks: [Ask]
-
-    var body: some View {
-        HStack(alignment: .top, spacing: Spacing.small) {
-            GlyphTile(DotGlyph.forName(session.name), size: 32, prominent: current)
-            VStack(alignment: .leading, spacing: Spacing.xxs) {
-                title
-                // The row is worth its extra height only when there is something in it; a
-                // placeholder saying "reading…" on six rows at once is worse than nothing.
-                if let headline {
-                    Text(headline)
-                        .font(Typography.subtitle)
-                        .foregroundStyle(Palette.textSecondary)
-                        .lineSpacing(3)
-                        .lineLimit(3)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                if !asks.isEmpty {
-                    AskDots(asks: asks).padding(.top, 2)
-                }
-                // How full its context is, as the shape alone: the number belongs on the
-                // session's own page, and what a row needs to say is "this one is nearly
-                // out of room" without spending a line on it.
-                if let context = session.context {
-                    Meter(context.share, tint: Palette.pressure(context.pressure), thickness: 2)
-                        .padding(.top, Spacing.xxs)
-                }
-            }
-        }
-        .padding(Spacing.small)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: Radius.medium, style: .continuous)
-                .fill(Color.primary.opacity(current ? 0.11 : 0.045))
-        )
-        .contentShape(.rect)
-    }
-
-    /// The name and the state on one baseline, so the headline below them has the full width.
-    private var title: some View {
-        HStack(alignment: .firstTextBaseline, spacing: Spacing.extraSmall) {
-            Text(session.name)
-                .font(Typography.primaryRow)
-                .fontWeight(current ? .semibold : .medium)
-                .foregroundStyle(Palette.textPrimary)
-                .lineLimit(1)
-            Spacer(minLength: Spacing.extraSmall)
-            StatePill(session.isBusy ? .busy : .idle)
-        }
     }
 }

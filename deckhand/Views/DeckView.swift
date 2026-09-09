@@ -2,7 +2,9 @@ import DeckhandKit
 import SwiftUI
 
 /// Landscape: every favourite as a column on the warm ground, transcripts in small type, and
-/// holding a whole column talks to that session. Nothing to aim at — the column is the button.
+/// pressing a whole column talks to that session. Nothing to aim at — the column is the button,
+/// which is also why nothing here starts on a tap: a column is far too big a thing to arm by
+/// brushing it.
 struct DeckView: View {
     @Bindable var model: AppModel
     @State private var recorder = Recorder()
@@ -12,12 +14,15 @@ struct DeckView: View {
     private static let minColumnWidth: CGFloat = 240
 
     var body: some View {
-        VStack(spacing: 0) {
-            head
+        Group {
             if model.deckSessions.isEmpty { placeholder } else { columns }
         }
         .background(Palette.lcdGround)
         .environment(\.colorScheme, .dark)
+        // Every edge, including the one the island is on: the deck is a wall of terminals and
+        // a band of chrome across the top of it was a band of transcript not being read. Each
+        // column says its own name and its own state, which is what the bar was for.
+        .ignoresSafeArea()
         .task {
             while !Task.isCancelled {
                 await model.refreshSessions()
@@ -27,28 +32,19 @@ struct DeckView: View {
         }
     }
 
-    private var head: some View {
-        HStack(spacing: Spacing.small) {
-            DotMark(DotGlyph.anchor, size: 24, tint: Palette.tint)
-            Text(model.connection.label)
-                .font(Typography.hint)
-                .foregroundStyle(Palette.textSecondary)
-                .lineLimit(1)
-            Spacer(minLength: 0)
-            StatePill(model.connection.pill)
-        }
-        .padding(.horizontal, Spacing.small)
-        .padding(.vertical, Spacing.extraSmall)
-    }
-
+    /// With no bar to carry it, this is the only place left that can say the Mac is missing —
+    /// and "star a session" is a lie when the truth is that nothing can be reached.
     private var placeholder: some View {
         VStack {
             Spacer()
-            Text("Star a session in portrait to put it on the deck")
+            Text(model.connection.isHealthy
+                 ? "Star a session in portrait to put it on the deck"
+                 : model.connection.label)
                 .font(Typography.railRow)
                 .foregroundStyle(Palette.textSecondary)
             Spacer()
         }
+        .frame(maxWidth: .infinity)
     }
 
     private var columns: some View {
@@ -85,22 +81,27 @@ struct DeckView: View {
             recorder: recorder,
             mode: model.preferences.talkMode,
             isMine: active == session.sessionId,
+            pressToStart: true,
             onStart: { startTalking(to: session) },
-            onClip: { clip in
-                await model.upload(clip: clip, to: session)
-                active = nil
-            },
-            content: { state in
-                Column(
-                    session: session,
-                    turns: model.deckTurns[session.sessionId] ?? [],
-                    state: state,
-                    review: model.review[session.sessionId],
-                    send: { text in Task { await model.send(text, to: session) } },
-                    discard: { model.discard(for: session) }
-                ).accessibilityIdentifier("deck-column")
-            }
+            onClip: { await heard($0, for: session) },
+            content: { conversation(of: session, $0) }
         )
+    }
+
+    private func heard(_ clip: URL, for session: Session) async {
+        await model.upload(clip: clip, to: session)
+        active = nil
+    }
+
+    private func conversation(of session: Session, _ state: TalkState) -> some View {
+        Column(
+            session: session,
+            turns: model.deckTurns[session.sessionId] ?? [],
+            state: state,
+            review: model.review[session.sessionId],
+            send: { text in Task { await model.send(text, to: session) } },
+            discard: { model.discard(for: session) }
+        ).accessibilityIdentifier("deck-column")
     }
 }
 

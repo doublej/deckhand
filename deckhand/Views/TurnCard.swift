@@ -53,7 +53,10 @@ struct TurnCard: View {
 /// way to use this app; the only confusing part was having no way to tell that from having
 /// sent nothing at all.
 struct QueuedCard: View {
-    let text: String
+    let item: Queued
+    /// Stops the run so the session reads this next. Absent when there is no run to stop, or
+    /// when the session already took it.
+    let force: (() -> Void)?
 
     var body: some View {
         Card(spacing: Spacing.xxs) {
@@ -63,15 +66,25 @@ struct QueuedCard: View {
                     .tracking(1)
                     .foregroundStyle(Palette.tint)
                 Spacer(minLength: 0)
-                Text("in its inbox, not picked up yet")
+                Text(item.line)
                     .font(Typography.hint)
                     .foregroundStyle(Palette.textTertiary)
-                StatePill(.wait)
+                    .lineLimit(1)
+                StatePill(item.isWaiting ? .wait : .busy)
             }
-            Text(text)
+            Text(item.text)
                 .font(.system(size: 13))
                 .foregroundStyle(Palette.textPrimary)
                 .textSelection(.enabled)
+            if let force {
+                // The honest label. There is no way to make a session read its inbox early —
+                // the inbox is drained when the turn ends — so this ends the turn, and says so.
+                Button("Stop the run so it reads this", systemImage: "forward.end", action: force)
+                    .buttonStyle(.plain)
+                    .font(Typography.hint)
+                    .foregroundStyle(Palette.tint)
+                    .padding(.top, Spacing.xxs)
+            }
         }
         .overlay(alignment: .leading) {
             // Dashed, where a turn's rail is solid: the same voice, not yet in the record.

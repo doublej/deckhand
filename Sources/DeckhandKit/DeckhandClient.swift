@@ -77,6 +77,14 @@ public struct DeckhandClient: Sendable {
         try await get("sessions/\(sessionId)/turns?limit=\(limit)")
     }
 
+    /// The transcript exactly as Claude Code wrote it. Every other reading is an interpretation
+    /// of this, which is what makes it worth having on the phone at all.
+    public func raw(of sessionId: String, limit: Int = 400) async throws -> String {
+        struct Raw: Codable { var text: String = "" }
+        let answer: Raw = try await get("sessions/\(sessionId)/raw?limit=\(limit)")
+        return answer.text
+    }
+
     /// Put words into a session. The other half of an upload the person asked to read first.
     public func say(_ text: String, to sessionId: String, route: DeliveryRoute) async throws -> Delivery {
         var req = request(.post, "sessions/\(sessionId)/say?route=\(route.rawValue)")

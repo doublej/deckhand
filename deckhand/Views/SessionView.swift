@@ -5,12 +5,15 @@ import SwiftUI
 /// hold to answer. Light ground — the rail is the only dark surface in the language.
 struct SessionView: View {
     @Bindable var model: AppModel
-    let session: Session
+    /// Which session this page is. Identity only — everything else is read from the listing,
+    /// which is still refreshing behind this page.
+    let opened: Session
     @State private var recorder = Recorder()
     @State private var showing: Pane = .summary
     /// Set while the one control that cannot be undone waits to be confirmed.
     @State private var confirming: Control?
     @State private var renaming = false
+    @State private var reading = false
     @State private var wantedName = ""
     @Environment(\.dismiss) private var dismiss
 
@@ -21,19 +24,23 @@ struct SessionView: View {
         case summary = "Summary", transcript = "Transcript", files = "Files"
     }
 
+    /// The session as the Mac last described it, not as it was when the page opened. A compact,
+    /// a rename or a run starting all happen while you are looking at this, and the figures
+    /// under the header were frozen at whatever they said on arrival.
+    private var session: Session {
+        model.sessions.first { $0.sessionId == opened.sessionId } ?? opened
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             header
             fullness
-            switch showing {
-            case .summary: BriefingView(model: model, session: session)
-            case .transcript: TranscriptView(model: model, session: session)
-            case .files: FilesView(model: model, session: session)
-            }
-            // One slot, two things: the button you hold, or what it heard waiting to be sent.
-            // Never both — while there is something to answer, that is the only thing the
-            // foot of the page is for.
-            if model.review[session.sessionId] != nil { review } else { talk }
+            pane
+                // Over the content, not under it. Stacked below, the bar took a band off every
+                // tab to offer one button; floating, it costs the page nothing and the panes
+                // add its height to the end of their own content so anything can be read out
+                // from under it.
+                .overlay(alignment: .bottom) { foot }
             tabs
         }
         .animation(.snappy(duration: 0.22), value: model.review[session.sessionId])
@@ -42,6 +49,7 @@ struct SessionView: View {
         // that already named the page — two rows of chrome before a word of content. The
         // chevron moved into the header and the band went with it.
         .toolbar(.hidden, for: .navigationBar)
+        .sheet(isPresented: $reading) { RawView(model: model, session: session) }
         // A name is the one thing here you type rather than press, and it is short enough that
         // a whole screen for it would be more ceremony than the thing deserves.
         .alert("Rename \(session.name)", isPresented: $renaming) {
@@ -95,6 +103,24 @@ struct SessionView: View {
         }
     }
 
+    @ViewBuilder private var pane: some View {
+        switch showing {
+        case .summary: BriefingView(model: model, session: session)
+        case .transcript: TranscriptView(model: model, session: session)
+        case .files: FilesView(model: model, session: session)
+        }
+    }
+
+    /// One slot, two things: the button you talk through, or what it heard waiting to be sent.
+    /// Never both — while there is something to answer, that is all this slot is for.
+    private var foot: some View {
+        Group {
+            if model.review[session.sessionId] != nil { review } else { talk }
+        }
+        .padding(.horizontal, Spacing.small)
+        .padding(.bottom, Spacing.extraSmall)
+    }
+
     private var header: some View {
         HStack(spacing: Spacing.extraSmall) {
             Button { dismiss() } label: {
@@ -142,6 +168,9 @@ struct SessionView: View {
                 wantedName = session.name
                 renaming = true
             }
+            // Always reachable, not only when something looks wrong: every other view here is
+            // a reading of that file, and this is the file.
+            Button("Raw transcript", systemImage: "doc.plaintext") { reading = true }
             Divider()
             ForEach(Control.allCases, id: \.self) { action in
                 Button(action.label, systemImage: action.symbol, role: role(action)) {
@@ -247,10 +276,8 @@ struct SessionView: View {
                 send: { Task { await model.send(text, to: session) } },
                 discard: { model.discard(for: session) }
             )
-            .padding(Spacing.small)
             .frame(maxWidth: .infinity)
-            .background(Palette.surfaceGround)
-            .overlay(alignment: .top) { Divider() }
+            .shadow(color: .black.opacity(0.18), radius: 10, y: 3)
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }

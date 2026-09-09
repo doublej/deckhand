@@ -1,8 +1,8 @@
 import DeckhandKit
 import SwiftUI
 
-/// The conversation, pinned to its newest line, with anything you have said that the session
-/// has not picked up yet sitting below it.
+/// The conversation, pinned to its newest line, with anything you have said that has not come
+/// back as a turn sitting below it.
 ///
 /// Two lists on purpose. A turn is in the session's history; a queued line is in its inbox and
 /// appears nowhere in the transcript until the session absorbs it — which is exactly why
@@ -35,8 +35,15 @@ struct TranscriptView: View {
                     // they are: after the last thing it said, waiting to be read.
                     if !queued.isEmpty {
                         VStack(alignment: .leading, spacing: Spacing.extraSmall) {
-                            ForEach(Array(queued.enumerated()), id: \.offset) { _, text in
-                                QueuedCard(text: text)
+                            ForEach(queued) { item in
+                                QueuedCard(
+                                    item: item,
+                                    // Nothing else will make it read this: the inbox is only
+                                    // drained when a turn ends, so forcing it is ending the turn.
+                                    force: item.isWaiting && session.isBusy
+                                        ? { Task { await model.control(.cancel, of: session) } }
+                                        : nil
+                                )
                             }
                         }
                         .id("queued")
@@ -45,6 +52,9 @@ struct TranscriptView: View {
                 .padding(.horizontal, Spacing.medium)
                 .padding(.bottom, Spacing.medium)
             }
+            // Room at the end for the bar that floats over this: without it the newest line
+            // lands behind the button, which is exactly the line you came to read.
+            .contentMargins(.bottom, TalkMark.clearance, for: .scrollContent)
             // Always the newest line. This once skipped the first load, to stop the summary
             // card at the top of the list being scrolled away before it could be read — the
             // summary has its own tab now, so the transcript can go back to doing the one
@@ -57,7 +67,7 @@ struct TranscriptView: View {
 
     /// What you have said that the session has not picked up yet. Its own bookkeeping, read
     /// off the transcript by the Mac — never inferred from the shape of the conversation.
-    private var queued: [String] { model.queued[session.sessionId] ?? [] }
+    private var queued: [Queued] { model.queued[session.sessionId] ?? [] }
 
     private var nothingYet: some View {
         Text(model.connection.isHealthy ? "Nothing said yet in this session" : "Waiting for the Mac…")
@@ -99,5 +109,39 @@ struct TranscriptView: View {
     /// queue below, which says so itself — this is the other half: picked up, being worked on.
     private var awaiting: PillState? {
         session.isBusy ? .busy : nil
+    }
+}
+
+/// The transcript exactly as Claude Code wrote it, newest at the end.
+///
+/// Everything else in this app is a reading of this file — turns, tool traces, the inbox replay
+/// — so when one of those looks wrong, this is the only way to tell from a phone whether the app
+/// is wrong or the session is. It opens at the bottom, which is where the news is.
+struct RawView: View {
+    @Bindable var model: AppModel
+    let session: Session
+    @State private var text: String?
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView([.horizontal, .vertical]) {
+                Text(text ?? "Reading the transcript…")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(Palette.textPrimary)
+                    .textSelection(.enabled)
+                    .padding(Spacing.small)
+            }
+            .defaultScrollAnchor(.bottom)
+            .background(Palette.surfaceGround)
+            .navigationTitle("\(session.name) raw")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Close") { dismiss() }.tint(Palette.tint)
+                }
+            }
+        }
+        .task { text = await model.raw(for: session) ?? "Nothing came back from the Mac" }
     }
 }

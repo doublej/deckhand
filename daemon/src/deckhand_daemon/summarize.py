@@ -11,14 +11,15 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import re
 import time
 
+from . import tasks
 from .log import log
 
 MODEL = "claude-sonnet-5"
 TIMEOUT = 60
 TTL = 120
+MAX_TURNS = 16
 MAX_ENTRIES = 32
 SYSTEM_PROMPT = """You are writing the briefing a developer reads on their phone when they
 come back to a Claude Code session they left running. They have been away and they want to know
@@ -63,51 +64,25 @@ strings. Use **bold** once or twice at most, for the thing that would change wha
 a failure, a decision waiting on them, a question the session asked. If the session is blocked
 or asking something, that belongs in the opening sentences, not in a bullet at the bottom.
 
-TASKS. After the briefing, on a line of its own, write `:tasks` and then one line for each
-thing this person has asked this session for, oldest first. This is their list, not yours: it
-comes from what they asked for in their own words, shortened to a few. Never break an ask down
-into steps, never merge two asks into one, and never add a task they did not ask for — not a
-step you decided to take, not a check you ran, not something that seemed like a good idea.
+THE LIST. Separately from the briefing, this person keeps a list of the things they have asked
+this session for. You do not write that list out, and nothing about it goes in the briefing. It is
+shown to you below with an id on every line, and you change it only by calling these:
 
-Each line is a box and the ask, and the box is the only thing you have to judge:
+  add_task(text)              an ask of theirs that is not in the list yet
+  set_task_state(id, state)   todo (nothing done yet) / doing (started) / done (finished)
+  drop_task(id, reason)       only when they withdrew it — it warns, and the entry is lost
 
-  - [ ]   nothing has been done about it yet
-  - [~]   work has started on it and it is not finished
-  - [x]   finished, and nothing about it is still open
+These are rules, not preferences:
 
-So a list looks like this, and like nothing else:
+  - Only their asks, in their own words, shortened to a few. Never a step you decided to take,
+    never a check you ran, never two of their asks merged, never one broken into steps.
+  - Never add what is already there. The list is in front of you.
+  - Never reword, renumber or re-order what is there. The ids are the list's memory, and the
+    person reads this list across days.
+  - Finished is `done`, never dropped.
+  - Work through the list once, then write the briefing.
 
-  :tasks
-  - [x] delete the menu bar app
-  - [~] the files tab
-  - [ ] privacy policy URL
-
-Nothing else goes on these lines: no status words, no explanations, no dates, no `code` or
-**bold**. At most twelve, and if they have asked for nothing, write `:tasks` and stop.
-Everything above `:tasks` is the briefing and follows the format above; nothing below it is."""
-
-# `- [x] the ask`, in the three states the person cares about.
-TASK_LINE = re.compile(r"^\s*[-*]?\s*\[([ x~×✓])\]\s*(.+?)\s*$", re.IGNORECASE)
-TASK_STATES = {" ": "todo", "~": "doing", "x": "done", "×": "done", "✓": "done"}
-MARKER = ":tasks"
-MAX_TASKS = 12
-
-
-def split_tasks(summary: str | None) -> tuple[str | None, list[dict]]:
-    """The briefing and the task list, which arrive as one answer and are two things.
-
-    One model run writes both: the transcript it needs to read to say what happened is the
-    same transcript the list comes out of, so asking twice would be paying twice for one read.
-    """
-    if not summary or MARKER not in summary:
-        return summary, []
-    prose, _, block = summary.partition(MARKER)
-    tasks = []
-    for line in block.splitlines():
-        if match := TASK_LINE.match(line):
-            box, text = match.group(1).lower(), match.group(2)
-            tasks.append({"text": text, "state": TASK_STATES.get(box, "todo")})
-    return prose.strip() or None, tasks[:MAX_TASKS]
+Answer with the briefing alone: the tool calls are the list, the answer is the prose."""
 
 
 def headline(summary: str | None) -> str | None:
@@ -181,19 +156,27 @@ async def summarize(
     if not activity.strip() and not asks.strip():
         return None, None
     blob = f"{asks}\n\nSINCE THEY LAST SPOKE\n{activity}" if asks.strip() else activity
+    # Keyed on the transcript alone, not on the list. The list changes *because* of a run, so
+    # including it would make every run pay for a second one that finds nothing to change.
     key = (session_id, hashlib.sha256(blob.encode()).hexdigest())
     cached = _cached(key)
     if cached:
         return cached, None
-    summary, error, usage = await _run(blob)
+    summary, error, usage = await _run(f"THE LIST SO FAR\n{tasks.render(session_id)}\n\n{blob}",
+                                      session_id)
     _count(session_id, usage)
     if summary:
         _store(key, summary)
     return summary, error
 
 
-async def _run(activity: str) -> tuple[str | None, str | None, dict | None]:
-    """One turn, no tools, low effort. Every expected failure comes back as a sentence."""
+async def _run(activity: str, session_id: str) -> tuple[str | None, str | None, dict | None]:
+    """Low effort, and the only tools it has are the three that manage this session's list.
+
+    Every expected failure comes back as a sentence. `bypassPermissions` is safe precisely
+    because of how short that list of tools is: three in-process functions that write one JSON
+    file belonging to this session. There is nobody at the daemon to answer a prompt.
+    """
     try:
         from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKError, ResultMessage, query
     except ImportError:
@@ -203,9 +186,12 @@ async def _run(activity: str) -> tuple[str | None, str | None, dict | None]:
     options = ClaudeAgentOptions(
         model=MODEL,
         system_prompt=SYSTEM_PROMPT,
-        tools=[],
-        allowed_tools=[],
-        max_turns=1,
+        mcp_servers={"tasks": tasks.server(session_id)},
+        allowed_tools=list(tasks.TOOLS),
+        permission_mode="bypassPermissions",
+        # Enough turns to work through a list and then write: one call per change, and a dozen
+        # changes at once only happens on a session nobody has looked at all day.
+        max_turns=MAX_TURNS,
         effort="low",
         # No setting sources: loading the user's config would start every MCP server the
         # person has configured, which took longer than the whole summary is worth.

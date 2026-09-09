@@ -15,6 +15,18 @@ extension AppModel {
         }
     }
 
+    /// The transcript as Claude Code wrote it. Not kept on the model: it is large, it is asked
+    /// for by hand, and nothing else in the app wants it.
+    func raw(for session: Session) async -> String? {
+        guard let client = settings.client() else { return nil }
+        do {
+            return try await client.raw(of: session.sessionId)
+        } catch {
+            status = "Could not read \(session.name)'s transcript"
+            return nil
+        }
+    }
+
     /// The landscape deck watches several sessions at once, so it fetches them together.
     func loadDeck(limit: Int = 6) async {
         guard let client = settings.client() else { return }

@@ -21,6 +21,7 @@ from . import (
     push,
     sessions,
     summarize,
+    tasks,
     transcribe,
     transcripts,
 )
@@ -106,9 +107,11 @@ async def session_summary(session_id: str) -> dict:
     session = await _live_session(session_id)
     activity = await asyncio.to_thread(transcripts.activity_since_last_user, session_id)
     asks = await asyncio.to_thread(asked.asks_of, session_id)
-    text, error = await summarize.summarize(session_id, activity, asks)
-    briefing, tasks = summarize.split_tasks(text)
-    told = error or f"{len(text or '')} chars, {len(tasks)} tasks"
+    briefing, error = await summarize.summarize(session_id, activity, asks)
+    # The list is not in the answer: the model changed it with tools while it was reading, and
+    # this is the file it changed. One run, two outputs, and only one of them is prose.
+    listed = tasks.load(session_id)
+    told = error or f"{len(briefing or '')} chars, {len(listed)} tasks"
     log.info("summary for %s: %s", session.name, told)
     whole = summarize.spent()
     if whole["runs"]:
@@ -116,7 +119,7 @@ async def session_summary(session_id: str) -> dict:
     return {
         "summary": briefing,
         "headline": summarize.headline(briefing),
-        "tasks": tasks,
+        "tasks": listed,
         # What writing these has cost since the daemon started. Everything else here is
         # free — utt transcribes on this Mac and reads the transcripts off disk — so this
         # one number is the whole of what Deckhand spends.
@@ -160,6 +163,13 @@ def session_turns(session_id: str, limit: int = Query(default=8, ge=1, le=50)) -
         # message sent mid-turn is not a turn until the session absorbs it.
         "queued": asked.queued(session_id),
     }
+
+
+@app.get("/sessions/{session_id}/raw", dependencies=[Depends(require_token)])
+def session_raw(session_id: str, limit: int = Query(default=400, ge=1, le=2000)) -> dict:
+    """The transcript as written, for when the question is whether the app read it right."""
+    _session_or_404(session_id)
+    return {"text": transcripts.raw_tail(session_id, limit)}
 
 
 @app.post("/sessions/{session_id}/focus", dependencies=[Depends(require_token)])

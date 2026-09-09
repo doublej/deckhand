@@ -32,6 +32,19 @@ final class DeckLoopTests: XCTestCase {
         }
     }
 
+    /// A press is how you talk to a session without opening it, so a press must not open it:
+    /// a row is a button, and a button fires on release however long the finger was down.
+    func testHoldingARowTalksToItRatherThanOpeningIt() throws {
+        let app = try launch()
+        let firstSession = app.descendants(matching: .any).matching(identifier: "session-row").firstMatch
+        XCTAssertTrue(firstSession.waitForExistence(timeout: 20), "the deck stayed empty")
+
+        firstSession.press(forDuration: 1.2)
+        let talk = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'TO TALK'")).firstMatch
+        XCTAssertFalse(talk.waitForExistence(timeout: 3), "a press on a row opened the session")
+        XCTAssertTrue(firstSession.exists, "the sessions list went away")
+    }
+
     func testTheConnectionIsAlwaysStated() throws {
         let app = try launch()
         // Whatever happens, the bar says something: connected, reaching, or why not.
