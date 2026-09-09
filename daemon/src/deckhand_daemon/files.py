@@ -27,9 +27,15 @@ SUFFIXES = {suffix: kind for kind, suffixes in KINDS.items() for suffix in suffi
 # A run of path characters ending in one of those extensions. Run against the raw JSONL rather
 # than the parsed entries: a path is worth showing whether it was an argument, something that
 # came back from a tool, or a name written in a sentence.
-PATTERN = re.compile(
-    r"[\w./~-]*\.(?:" + "|".join(s[1:] for s in SUFFIXES) + r")\b", re.IGNORECASE
-)
+# Two patterns rather than one, and the reason is a measured 70x. A single
+# `[\w./~-]*\.(?:png|...)` puts `.` inside the greedy prefix *and* after it, so the engine
+# restarts that run at every offset of a run and backtracks through it — quadratic in the length
+# of every path-shaped blob in the file. Against this session's 4 MB window it cost 1.36 seconds,
+# which is the whole of what made the Files tab slow. Finding the runs first and looking for the
+# suffix only inside one is linear, and matches exactly what the single pattern matched: every
+# prefix of a run that ends in a known extension.
+RUN = re.compile(r"[\w./~-]+")
+ENDING = re.compile(r"\.(?:" + "|".join(s[1:] for s in SUFFIXES) + r")\b", re.IGNORECASE)
 # Machinery, not work. A phone showing 200 files out of node_modules shows nothing.
 SKIP = {".git", "node_modules", ".venv", "__pycache__", ".build", ".mypy_cache", "DerivedData"}
 MAX_FILES = 60
@@ -77,11 +83,19 @@ def allowed(session_id: str, cwd: str, wanted: str) -> Path | None:
     return None
 
 
+def _runs(text: str) -> list[str]:
+    """Every path-shaped prefix in one line: a run of path characters cut at a known extension."""
+    out = []
+    for run in RUN.finditer(text):
+        found = run.group(0)
+        out.extend(found[:end.end()] for end in ENDING.finditer(found))
+    return out
+
+
 def _candidates(text: str, cwd: str) -> list[Path]:
     """Every path-shaped run in one line, resolved the way the session would have meant it."""
     out = []
-    for match in PATTERN.finditer(text):
-        raw = match.group(0)
+    for raw in _runs(text):
         if raw.startswith("~"):
             found = Path.home() / raw[2:] if raw.startswith("~/") else Path(raw)
         else:
