@@ -9,14 +9,14 @@ struct TalkControl<Content: View>: View {
     let isMine: Bool
     let onStart: () -> Void
     let onClip: (URL) async -> Void
-    @ViewBuilder let content: (Bool, Bool) -> Content
+    @ViewBuilder let content: (TalkState) -> Content
 
     @State private var busy = false
 
     private var isRecording: Bool { recorder.isRecording && isMine }
 
     var body: some View {
-        content(isRecording, busy)
+        content(TalkState(isRecording: isRecording, busy: busy, mode: mode, cancel: cancel))
             .contentShape(.rect)
             .modifier(TalkGesture(mode: mode, isRecording: isRecording, start: start, stop: stop))
     }
@@ -27,6 +27,13 @@ struct TalkControl<Content: View>: View {
         Task { _ = await recorder.start() }
     }
 
+    /// Throw the clip away without transcribing it. Holding has its own way out — let go and
+    /// say nothing — but a tap-to-talk recording would otherwise have no way back.
+    private func cancel() {
+        guard isRecording else { return }
+        recorder.discard()
+    }
+
     private func stop() {
         guard let clip = recorder.stop() else { return }
         busy = true
@@ -35,6 +42,17 @@ struct TalkControl<Content: View>: View {
             busy = false
         }
     }
+}
+
+/// What a talk control is doing, and the one thing its content can ask it to do.
+struct TalkState {
+    let isRecording: Bool
+    let busy: Bool
+    let mode: TalkMode
+    let cancel: () -> Void
+
+    /// Only tap-to-talk needs an escape: releasing a hold is already one.
+    var canCancel: Bool { isRecording && mode == .toggle }
 }
 
 /// Hold means press and release. Tap means one tap to start, another to send.
@@ -70,10 +88,10 @@ private struct TalkGesture: ViewModifier {
 /// dims between words — recording is utt's job in every plugin, so it wears utt's colour.
 /// The label says exactly what a press will do.
 struct TalkMark: View {
-    let mode: TalkMode
-    let isRecording: Bool
-    let busy: Bool
+    let state: TalkState
     let level: Double
+
+    private var isRecording: Bool { state.isRecording }
 
     var body: some View {
         VStack(spacing: Spacing.extraSmall) {
@@ -89,10 +107,19 @@ struct TalkMark: View {
                 RoundedRectangle(cornerRadius: Radius.extraLarge, style: .continuous)
                     .fill(Palette.lcdGround)
             )
-            Text(label)
-                .font(Typography.pill)
-                .tracking(1.4)
-                .foregroundStyle(isRecording ? Palette.recording : Palette.textTertiary)
+            HStack(spacing: Spacing.small) {
+                Text(label)
+                    .font(Typography.pill)
+                    .tracking(1.4)
+                    .foregroundStyle(isRecording ? Palette.recording : Palette.textTertiary)
+                if state.canCancel {
+                    Button("CANCEL", action: state.cancel)
+                        .buttonStyle(.plain)
+                        .font(Typography.pill)
+                        .tracking(1.4)
+                        .foregroundStyle(Palette.textSecondary)
+                }
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, Spacing.medium)
@@ -100,8 +127,8 @@ struct TalkMark: View {
     }
 
     private var label: String {
-        if busy { return "SENDING" }
-        if isRecording { return mode == .hold ? "RELEASE TO SEND" : "TAP TO SEND" }
-        return mode == .hold ? "HOLD TO TALK" : "TAP TO TALK"
+        if state.busy { return "SENDING" }
+        if isRecording { return state.mode == .hold ? "RELEASE TO SEND" : "TAP TO SEND" }
+        return state.mode == .hold ? "HOLD TO TALK" : "TAP TO TALK"
     }
 }

@@ -35,6 +35,15 @@ public struct DeckhandClient: Sendable {
         return body["turns"] ?? []
     }
 
+    /// Put words into a session. The other half of an upload the person asked to read first.
+    public func say(_ text: String, to sessionId: String, route: DeliveryRoute) async throws -> Delivery {
+        var req = request(.post, "sessions/\(sessionId)/say?route=\(route.rawValue)")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.timeoutInterval = 30
+        let body = try JSONEncoder().encode(["text": text])
+        return try decode(try await send(req, body: body))
+    }
+
     /// Bring the session's iTerm pane to the front on the Mac.
     public func focus(_ sessionId: String) async throws {
         _ = try await send(request(.post, "sessions/\(sessionId)/focus"))
@@ -44,10 +53,12 @@ public struct DeckhandClient: Sendable {
     public func upload(
         clip: URL,
         to sessionId: String,
-        route: DeliveryRoute = .auto
+        route: DeliveryRoute = .auto,
+        deliver: Bool = true
     ) async throws -> UploadReceipt {
         let boundary = "deckhand.\(UUID().uuidString)"
-        var req = request(.post, "sessions/\(sessionId)/audio?route=\(route.rawValue)")
+        let query = "route=\(route.rawValue)&deliver=\(deliver)"
+        var req = request(.post, "sessions/\(sessionId)/audio?\(query)")
         req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         // The Mac transcribes before answering, and utt's first request loads the model.
         req.timeoutInterval = 200

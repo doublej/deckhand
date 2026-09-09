@@ -7,7 +7,7 @@ import time
 import uuid
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, UploadFile
+from fastapi import Body, Depends, FastAPI, Header, HTTPException, Query, UploadFile
 
 from . import __version__, config, deliver, sessions, summarize, transcribe, transcripts
 from .log import log
@@ -93,6 +93,11 @@ async def upload_audio(
     session_id: str,
     file: UploadFile,
     route: str = Query(default="auto", description="auto, keyboard or socket"),
+    deliver_now: bool = Query(
+        default=True,
+        alias="deliver",
+        description="false to transcribe only, when the person wants to read it first",
+    ),
 ) -> dict:
     """Speaking to a session: the clip lands on the Mac and utt turns it into text."""
     session = await _live_session(session_id)
@@ -111,7 +116,7 @@ async def upload_audio(
     text, error = await asyncio.to_thread(transcribe.transcribe, path)
     log.info("transcript for %s: %s", session.name, error or repr(text))
     taken, delivery_error = None, None
-    if text:
+    if text and deliver_now:
         taken, delivery_error = await asyncio.to_thread(deliver.deliver, session, text, route)
         log.info("delivery to %s: %s", session.name, delivery_error or f"{taken} took it")
     return {
@@ -124,6 +129,19 @@ async def upload_audio(
         "delivered_by": taken,
         "delivery_error": delivery_error,
     }
+
+
+@app.post("/sessions/{session_id}/say", dependencies=[Depends(require_token)])
+async def say(
+    session_id: str,
+    text: str = Body(embed=True),
+    route: str = Query(default="auto", description="auto, keyboard or socket"),
+) -> dict:
+    """Put words into a session. The other half of an upload the person asked to read first."""
+    session = await _live_session(session_id)
+    taken, error = await asyncio.to_thread(deliver.deliver, session, text, route)
+    log.info("delivery to %s: %s", session.name, error or f"{taken} took it")
+    return {"delivered": taken is not None, "delivered_by": taken, "delivery_error": error}
 
 
 def main() -> None:

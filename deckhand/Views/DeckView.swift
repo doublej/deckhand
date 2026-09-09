@@ -90,12 +90,14 @@ struct DeckView: View {
                 await model.upload(clip: clip, to: session)
                 active = nil
             },
-            content: { isRecording, busy in
+            content: { state in
                 Column(
                     session: session,
                     turns: model.deckTurns[session.sessionId] ?? [],
-                    isRecording: isRecording,
-                    busy: busy
+                    state: state,
+                    review: model.review[session.sessionId],
+                    send: { text in Task { await model.send(text, to: session) } },
+                    discard: { model.discard(for: session) }
                 ).accessibilityIdentifier("deck-column")
             }
         )
@@ -106,8 +108,14 @@ struct DeckView: View {
 private struct Column: View {
     let session: Session
     let turns: [Turn]
-    let isRecording: Bool
-    let busy: Bool
+    let state: TalkState
+    /// Held for reading, if this column is the one that just heard something.
+    let review: String?
+    let send: (String) -> Void
+    let discard: () -> Void
+
+    private var isRecording: Bool { state.isRecording }
+    private var busy: Bool { state.busy }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -126,6 +134,16 @@ private struct Column: View {
                 .padding(Spacing.extraSmall)
             }
             .scrollDisabled(isRecording)
+            if let review {
+                ReviewCard(
+                    text: review,
+                    target: session.name,
+                    send: { send(review) },
+                    discard: discard,
+                    compact: true
+                )
+                .padding(Spacing.xxs)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Color.primary.opacity(isRecording ? 0.10 : 0.04))
@@ -144,6 +162,13 @@ private struct Column: View {
                 .foregroundStyle(Palette.textPrimary)
                 .lineLimit(1)
             Spacer(minLength: 0)
+            if state.canCancel {
+                Button("CANCEL", action: state.cancel)
+                    .buttonStyle(.plain)
+                    .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                    .tracking(1)
+                    .foregroundStyle(Palette.textSecondary)
+            }
             StatePill(isRecording ? .rec : busy ? .wait : session.isBusy ? .busy : .idle)
         }
         .padding(.horizontal, Spacing.extraSmall)

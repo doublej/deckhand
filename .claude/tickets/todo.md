@@ -26,9 +26,8 @@ phone. Ticked items are verified, not just written.
 ## Next
 - [ ] Route per session rather than globally. Some sessions want the keyboard's authority,
       others are fine as a peer — right now it is one choice for all of them.
-- [ ] **Send-on-release vs confirm-before-send.** Today the transcript goes straight in on
-      release. Speaking into a busy session is not undoable, so decide whether the phone should
-      show the text for approval first — a toggle next to hold/tap is the obvious shape.
+- [x] **Confirm before sending**, on by default and a toggle in Settings. The card is utt's
+      review HUD: the transcript, where it is going, Send and Discard.
 - [x] **The route is a setting**, not a guess: Auto, Keyboard or Socket, in Settings, and the
       phone says which one took each message.
 - [ ] Guard against pid reuse before delivering. The key file carries `procStart`, which is how

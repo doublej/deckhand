@@ -65,12 +65,14 @@ struct SessionView: View {
                         TurnCard(turn: turn, showsRole: startsRun(index)).id(index)
                     }
                     pending
+                    reviewCard
                 }
                 .padding(.horizontal, Spacing.medium)
                 .padding(.bottom, Spacing.medium)
             }
             .onChange(of: model.turns.count) { scroll(proxy) }
             .onChange(of: model.pending[session.sessionId]) { scroll(proxy) }
+            .onChange(of: model.review[session.sessionId]) { scroll(proxy) }
         }
     }
 
@@ -110,10 +112,7 @@ struct SessionView: View {
             isMine: true,
             onStart: { model.status = "Recording for \(session.name)" },
             onClip: { await model.upload(clip: $0, to: session) },
-            content: { isRecording, busy in
-                TalkMark(mode: model.preferences.talkMode, isRecording: isRecording, busy: busy,
-                         level: recorder.level)
-            }
+            content: { TalkMark(state: $0, level: recorder.level) }
         )
     }
 
@@ -121,11 +120,26 @@ struct SessionView: View {
     /// anything the session has written down.
     private func scroll(_ proxy: ScrollViewProxy) {
         withAnimation {
-            if model.pending[session.sessionId] != nil {
+            if model.review[session.sessionId] != nil {
+                proxy.scrollTo("review", anchor: .bottom)
+            } else if model.pending[session.sessionId] != nil {
                 proxy.scrollTo("pending", anchor: .bottom)
             } else {
                 proxy.scrollTo(model.turns.count - 1, anchor: .bottom)
             }
+        }
+    }
+
+    /// Held for reading. It sits at the foot of the transcript, where it will sit once sent.
+    @ViewBuilder private var reviewCard: some View {
+        if let text = model.review[session.sessionId] {
+            ReviewCard(
+                text: text,
+                target: session.name,
+                send: { Task { await model.send(text, to: session) } },
+                discard: { model.discard(for: session) }
+            )
+            .id("review")
         }
     }
 

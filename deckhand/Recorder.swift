@@ -23,6 +23,7 @@ final class Recorder {
             recorder.record()
             self.recorder = recorder
             isRecording = true
+            OrientationLock.hold()
             meter()
             return nil
         } catch {
@@ -56,6 +57,12 @@ final class Recorder {
         }
     }
 
+    /// Stops and throws the clip away. Nothing is transcribed and nothing is sent.
+    func discard() {
+        guard let clip = stop() else { return }
+        try? FileManager.default.removeItem(at: clip)
+    }
+
     /// Stops and hands back the clip, or nil when nothing usable was recorded.
     /// Anything under 0.3 s is a tap, and the transcription engine rejects those.
     func stop() -> URL? {
@@ -63,6 +70,7 @@ final class Recorder {
         let tooShort = recorder.currentTime < 0.3
         recorder.stop()
         isRecording = false
+        OrientationLock.release()
         metering?.cancel()
         metering = nil
         level = 0

@@ -79,6 +79,11 @@ struct SettingsView: View {
 
     private var route: some View {
         SettingsGroup("How it goes in") {
+            SettingRow("Read it first", detail: "Hold the transcript so you can send or discard it. Off sends the moment it comes back.") {
+                Toggle("Read it first", isOn: confirms)
+                    .labelsHidden()
+                    .tint(Palette.tint)
+            }
             SettingRow("Route", detail: model.preferences.route.explanation) {
                 Picker("Route", selection: routeChoice) {
                     ForEach(DeliveryRoute.allCases, id: \.self) { Text($0.label).tag($0) }
@@ -118,6 +123,10 @@ struct SettingsView: View {
 
     private var talkMode: Binding<TalkMode> {
         Binding(get: { model.preferences.talkMode }, set: { model.setTalkMode($0) })
+    }
+
+    private var confirms: Binding<Bool> {
+        Binding(get: { model.preferences.confirms }, set: { model.setConfirms($0) })
     }
 
     private var routeChoice: Binding<DeliveryRoute> {

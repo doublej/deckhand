@@ -73,7 +73,8 @@ launchd/          # the agent plist, symlinked into ~/Library/LaunchAgents
 
 `GET /sessions` → tap a row → `GET /sessions/{id}/turns` and `GET /sessions/{id}/summary` →
 hold to talk → `POST /sessions/{id}/audio`, which answers with the transcript and whether it
-reached the session.
+reached the session. `?deliver=false` transcribes without sending, for the review card, and
+`POST /sessions/{id}/say` sends the text once the person has read it.
 `POST /sessions/{id}/focus` brings that pane forward on the Mac. `/health` is the only
 unauthenticated route; everything else needs the `x-deckhand-token` header, and both
 `/health` and `/sessions` carry an `iterm` field saying whether pane data is trustworthy.
@@ -134,6 +135,12 @@ unauthenticated route; everything else needs the `x-deckhand-token` header, and 
 - `xcrun devicectl device process launch ... -- -deckhand.host <host> -deckhand.token <token>`
   starts the app already paired; the model writes launch-argument settings back to defaults, so
   the pairing survives a cold start. The `--` matters: devicectl eats the flags without it.
+- **Reading it first is on by default.** Speaking into a busy session cannot be undone, so the
+  transcript is held in a card — utt's own review HUD, minus the keycaps a phone has no use for
+  — until it is sent or discarded. Off in Settings sends the moment the words come back.
+- **Recording pins the phone's orientation** (`OrientationLock`, and the one reason this app has
+  a UIApplicationDelegate). Portrait and landscape are two different screens here, so a rotation
+  swaps the view holding the recorder and the clip goes with it.
 - **The route is the person's choice**, in Settings, and `POST /sessions/{id}/audio?route=`
   carries it: `auto` (keyboard when there is a pane, socket when there is not), `keyboard`, or
   `socket`. `keyboard` never silently falls back to the socket — choosing it is choosing whose

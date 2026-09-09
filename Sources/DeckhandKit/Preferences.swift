@@ -41,17 +41,22 @@ public struct Preferences: Equatable, Sendable {
     public var hidden: Set<String>
     public var talkMode: TalkMode
     public var route: DeliveryRoute
+    /// Read the transcript before it goes in. Speaking into a busy session is not undoable,
+    /// so this is on until someone decides they would rather it were not.
+    public var confirms: Bool
 
     public init(
         favorites: Set<String> = [],
         hidden: Set<String> = [],
         talkMode: TalkMode = .hold,
-        route: DeliveryRoute = .auto
+        route: DeliveryRoute = .auto,
+        confirms: Bool = true
     ) {
         self.favorites = favorites
         self.hidden = hidden
         self.talkMode = talkMode
         self.route = route
+        self.confirms = confirms
     }
 
     public func isFavorite(_ name: String) -> Bool { favorites.contains(name) }
@@ -76,13 +81,15 @@ public struct Preferences: Equatable, Sendable {
     private static let hiddenKey = "deckhand.hidden"
     private static let modeKey = "deckhand.talkMode"
     private static let routeKey = "deckhand.route"
+    private static let confirmsKey = "deckhand.confirms"
 
     public static func load(from defaults: UserDefaults = .standard) -> Preferences {
         Preferences(
             favorites: Set(defaults.stringArray(forKey: favoritesKey) ?? []),
             hidden: Set(defaults.stringArray(forKey: hiddenKey) ?? []),
             talkMode: TalkMode(rawValue: defaults.string(forKey: modeKey) ?? "") ?? .hold,
-            route: DeliveryRoute(rawValue: defaults.string(forKey: routeKey) ?? "") ?? .auto
+            route: DeliveryRoute(rawValue: defaults.string(forKey: routeKey) ?? "") ?? .auto,
+            confirms: defaults.object(forKey: confirmsKey) as? Bool ?? true
         )
     }
 
@@ -91,5 +98,6 @@ public struct Preferences: Equatable, Sendable {
         defaults.set(Array(hidden), forKey: Self.hiddenKey)
         defaults.set(talkMode.rawValue, forKey: Self.modeKey)
         defaults.set(route.rawValue, forKey: Self.routeKey)
+        defaults.set(confirms, forKey: Self.confirmsKey)
     }
 }

@@ -58,7 +58,37 @@ struct ClientTests {
         #expect(text.contains("filename=\"clip.m4a\""))
         #expect(text.contains("pretend audio"))
         #expect(StubProtocol.lastRequest?.url?.path == "/sessions/sid/audio")
-        #expect(StubProtocol.lastRequest?.url?.query == "route=auto")
+        #expect(StubProtocol.lastRequest?.url?.query == "route=auto&deliver=true")
+    }
+
+    @Test("a clip can be transcribed without being delivered")
+    func holdsForReview() async throws {
+        let clip = FileManager.default.temporaryDirectory.appendingPathComponent("clip.m4a")
+        try Data("pretend audio".utf8).write(to: clip)
+        StubProtocol.respond(with: Data("""
+        {"path":"/tmp/x.m4a","bytes":13,"received_at":1.0,"transcript":"read me first",
+         "transcript_error":null,"delivered":false,"delivered_by":null,"delivery_error":null}
+        """.utf8), status: 201)
+
+        let receipt = try await client().upload(clip: clip, to: "sid", deliver: false)
+        #expect(receipt.transcript == "read me first")
+        #expect(!receipt.delivered)
+        #expect(StubProtocol.lastRequest?.url?.query == "route=auto&deliver=false")
+    }
+
+    @Test("saying something sends the text and reports which route took it")
+    func saysText() async throws {
+        StubProtocol.respond(with: Data("""
+        {"delivered":true,"delivered_by":"keyboard","delivery_error":null}
+        """.utf8), status: 200)
+
+        let sent = try await client().say("run the tests", to: "sid", route: .keyboard)
+        #expect(sent.delivered)
+        #expect(sent.deliveredBy == "keyboard")
+        #expect(StubProtocol.lastRequest?.url?.path == "/sessions/sid/say")
+        #expect(StubProtocol.lastRequest?.url?.query == "route=keyboard")
+        let body = try #require(StubProtocol.lastBody)
+        #expect(try #require(String(bytes: body, encoding: .utf8)).contains("run the tests"))
     }
 
     @Test("a bad token surfaces as unauthorized, a dead session as notLive")

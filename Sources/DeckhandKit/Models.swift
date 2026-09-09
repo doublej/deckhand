@@ -51,6 +51,13 @@ public struct Turn: Codable, Hashable, Sendable {
     public var isUser: Bool { role == "user" }
 }
 
+/// What became of a line of text handed to a session.
+public struct Delivery: Codable, Hashable, Sendable {
+    public let delivered: Bool
+    public let deliveredBy: String?
+    public let deliveryError: String?
+}
+
 /// What the Mac wrote to disk for an uploaded clip. `transcript` stays nil until phase two.
 public struct UploadReceipt: Codable, Hashable, Sendable {
     public let path: String

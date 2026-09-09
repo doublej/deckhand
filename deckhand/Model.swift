@@ -53,6 +53,8 @@ final class AppModel {
     /// as a turn in the conversation because that is what it is — the session simply has not
     /// written it down yet.
     var pending: [String: String] = [:]
+    /// Transcribed, held, and waiting to be read before it goes anywhere.
+    var review: [String: String] = [:]
     var showsHidden = false
 
     private let logger = Logger(subsystem: "com.jj.Deckhand", category: "app")
@@ -99,6 +101,11 @@ final class AppModel {
 
     func setTalkMode(_ mode: TalkMode) {
         preferences.talkMode = mode
+        preferences.save()
+    }
+
+    func setConfirms(_ confirms: Bool) {
+        preferences.confirms = confirms
         preferences.save()
     }
 
@@ -177,19 +184,55 @@ final class AppModel {
 
     func upload(clip: URL, to session: Session) async {
         guard let client = settings.client() else { return }
-        status = "Sending to \(session.name)…"
+        let confirms = preferences.confirms
+        status = confirms ? "Transcribing…" : "Sending to \(session.name)…"
         logger.info("uploading clip for \(session.name, privacy: .public)")
         await run {
             let receipt = try await client.upload(
                 clip: clip,
                 to: session.sessionId,
-                route: self.preferences.route
+                route: self.preferences.route,
+                deliver: !confirms
             )
-            self.pending[session.sessionId] = receipt.delivered ? receipt.transcript : nil
-            self.status = Self.outcome(of: receipt, to: session)
             self.logger.info("transcript: \(receipt.transcript ?? "none", privacy: .public)")
             try? FileManager.default.removeItem(at: clip)
+            self.received(receipt, for: session, confirms: confirms)
         }
+    }
+
+    /// Either it is already on its way, or it is waiting to be read first.
+    private func received(_ receipt: UploadReceipt, for session: Session, confirms: Bool) {
+        guard let text = receipt.transcript, confirms else {
+            pending[session.sessionId] = receipt.delivered ? receipt.transcript : nil
+            status = Self.outcome(of: receipt, to: session)
+            return
+        }
+        review[session.sessionId] = text
+        status = "Read it, then send it"
+    }
+
+    /// Sends what was held for review. The words move from "waiting on you" to "waiting on
+    /// the session", which is the same card in two different states.
+    func send(_ text: String, to session: Session) async {
+        guard let client = settings.client() else { return }
+        review[session.sessionId] = nil
+        pending[session.sessionId] = text
+        status = "Sending to \(session.name)…"
+        await run {
+            let sent = try await client.say(text, to: session.sessionId, route: self.preferences.route)
+            guard sent.delivered else {
+                self.pending[session.sessionId] = nil
+                self.review[session.sessionId] = text
+                self.status = sent.deliveryError ?? "\(session.name) did not take it"
+                return
+            }
+            self.status = "Sent to \(session.name) by \(sent.deliveredBy ?? "the Mac")"
+        }
+    }
+
+    func discard(for session: Session) {
+        review[session.sessionId] = nil
+        status = "Discarded"
     }
 
     /// What actually happened to the clip, in the order the person cares about it.

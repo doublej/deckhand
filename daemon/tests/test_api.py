@@ -93,3 +93,33 @@ def test_a_clip_is_kept_even_when_utt_is_off(token, monkeypatch):
     assert body["transcript"] is None
     assert body["transcript_error"] == "utt is off"
     assert Path(body["path"]).read_bytes() == b"audio bytes"
+
+
+def test_a_clip_can_be_transcribed_without_being_delivered(token, monkeypatch):
+    """Reading it first is the whole point: nothing reaches the session until the person says."""
+    monkeypatch.setattr(app_module.transcribe, "transcribe", lambda _clip: ("read me first", None))
+    delivered = []
+    monkeypatch.setattr(app_module.deliver, "deliver", lambda *a, **k: delivered.append(a))
+    answer = client(token).post(
+        f"/sessions/{SID}/audio?deliver=false",
+        files={"file": ("clip.m4a", b"x" * 64, "audio/mp4")},
+    )
+    assert answer.status_code == 201
+    body = answer.json()
+    assert body["transcript"] == "read me first"
+    assert body["delivered"] is False
+    assert delivered == []
+
+
+def test_say_puts_the_words_in_and_names_the_route(token, monkeypatch):
+    seen = {}
+
+    def deliver(session, text, route):
+        seen.update(text=text, route=route)
+        return "keyboard", None
+
+    monkeypatch.setattr(app_module.deliver, "deliver", deliver)
+    answer = client(token).post(f"/sessions/{SID}/say?route=keyboard", json={"text": "run the tests"})
+    assert answer.status_code == 200
+    assert answer.json() == {"delivered": True, "delivered_by": "keyboard", "delivery_error": None}
+    assert seen == {"text": "run the tests", "route": "keyboard"}
