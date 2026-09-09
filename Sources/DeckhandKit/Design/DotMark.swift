@@ -126,6 +126,8 @@ public struct DotMark: View {
 public struct Wordmark: View {
     private let text: String
     private let size: CGFloat
+    /// The period is the accent, so it travels with the screen the mark is standing on.
+    @Environment(\.accent) private var accent
 
     public init(_ text: String = "deckhand", size: CGFloat = 13) {
         self.text = text
@@ -140,7 +142,7 @@ public struct Wordmark: View {
                 .foregroundStyle(.primary)
             Text(".")
                 .font(.system(size: size, weight: .bold, design: .monospaced))
-                .foregroundStyle(Palette.tint)
+                .foregroundStyle(accent)
         }
         .accessibilityElement()
         .accessibilityLabel(text)

@@ -10,6 +10,7 @@ import SwiftUI
 struct ToolTrace: View {
     let tools: [Tool]
     @State private var depth: Depth = .dots
+    @Environment(\.accent) private var accent
 
     enum Depth {
         case dots, list, everything
@@ -127,7 +128,7 @@ struct ToolTrace: View {
         guard tool.succeeded else { return Palette.lcdRed }
         switch tool.kind {
         case .reading: return Palette.textTertiary
-        case .changing: return Palette.tint
+        case .changing: return accent
         case .running: return Palette.lcdGreen
         case .asking: return Palette.lcdYellow
         case .other: return Palette.textTertiary

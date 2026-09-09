@@ -22,6 +22,11 @@ struct DeckView: View {
         }
         .background(Palette.lcdGround)
         .environment(\.colorScheme, .dark)
+        // The whole deck goes utt orange while a column is listening, not only that column: one
+        // decision, made here, that every accent inside the deck reads out of the environment.
+        // It is the recorder's own state, so the deck is teal again the instant the clip is sent,
+        // thrown away, refused or interrupted.
+        .accent(Palette.accent(recording: recorder.isRecording))
         // Every edge, including the one the island is on: the deck is a wall of terminals and
         // a band of chrome across the top of it was a band of transcript not being read. Each
         // column says its own name and its own state, which is what the bar was for.
@@ -140,6 +145,7 @@ private struct Column: View {
     let filtered: Filtered?
     let send: (String) -> Void
     let discard: () -> Void
+    @Environment(\.accent) private var accent
 
     private var isRecording: Bool { state.isRecording }
     private var busy: Bool { state.busy }
@@ -215,7 +221,7 @@ private struct Column: View {
                 .buttonStyle(.plain)
                 .font(.system(size: 8, weight: .semibold, design: .monospaced))
                 .tracking(1)
-                .foregroundStyle(briefed ? Palette.tint : Palette.textTertiary)
+                .foregroundStyle(briefed ? accent : Palette.textTertiary)
                 .accessibilityIdentifier("deck-flip")
             if state.canCancel {
                 Button("CANCEL", action: state.cancel)
@@ -236,6 +242,7 @@ private struct Column: View {
 private struct DeckTurn: View {
     let turn: Turn
     let showsRole: Bool
+    @Environment(\.accent) private var accent
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -243,7 +250,7 @@ private struct DeckTurn: View {
                 Text(turn.isUser ? "YOU" : "CLAUDE")
                     .font(.system(size: 8, weight: .semibold, design: .monospaced))
                     .tracking(1)
-                    .foregroundStyle(turn.isUser ? Palette.tint : Palette.textTertiary)
+                    .foregroundStyle(turn.isUser ? accent : Palette.textTertiary)
             }
             Text(turn.text)
                 .font(.system(size: 9))

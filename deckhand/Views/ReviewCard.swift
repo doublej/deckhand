@@ -33,6 +33,7 @@ struct ReviewCard: View {
     var unattach: ((Snap) -> Void)?
     @State private var picked: PhotosPickerItem?
     @State private var editing = false
+    @Environment(\.accent) private var accent
     /// The words as they stand. Seeded from what was heard and kept across an edit, so opening
     /// the editor twice does not throw away the first correction.
     @State private var draft: String?
@@ -75,11 +76,11 @@ struct ReviewCard: View {
                 Button("Edit") { editing = true }
                     .buttonStyle(.plain)
                     .font(Typography.hint)
-                    .foregroundStyle(Palette.tint)
+                    .foregroundStyle(accent)
                 Button("Send") { send(words) }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
-                    .tint(Palette.tint)
+                    .tint(accent)
             }
         }
         .sheet(isPresented: $editing) {
@@ -96,7 +97,7 @@ struct ReviewCard: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: Radius.medium, style: .continuous)
-                .strokeBorder(Palette.tint.opacity(0.4), lineWidth: 1)
+                .strokeBorder(accent.opacity(0.4), lineWidth: 1)
         )
     }
 
@@ -128,7 +129,7 @@ struct ReviewCard: View {
                 Spacer(minLength: 0)
             }
             .font(Typography.hint)
-            .foregroundStyle(Palette.tint)
+            .foregroundStyle(accent)
             // The picker hands back an item, not bytes; the bytes come over a moment later.
             .onChange(of: picked) { _, item in
                 guard let item else { return }

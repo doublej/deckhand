@@ -78,13 +78,18 @@ final class AppModel {
     /// Pictures pinned to those words, per session, until they are sent or discarded.
     var attached: [String: [Snap]] = [:]
     var showsHidden = false
-    /// Everything the Mac can do to words on their way in, as the Mac describes it. The phone
-    /// holds no list of its own: `Filtering.swift` is the whole of what it knows about filters.
+    /// Everything the Mac can do to words on their way in, as the Mac describes it. Global,
+    /// because what this Mac *can* do genuinely is: only the chain is per session. The phone
+    /// holds no list of its own — `Filtering.swift` is the whole of what it knows about filters.
     var knownFilters: [Filter] = []
-    /// The chain, in the order it runs. One step per filter, the off ones included, so the
-    /// settings screen has something to draw for a filter nobody has switched on yet.
+    /// The chain being edited, in the order it runs. One step per filter, the off ones included,
+    /// so the page has something to draw for a filter nobody has switched on yet.
     var filterChain: [FilterRow] = []
-    /// Edited and not yet sent. The save happens on the way out of Settings rather than on each
+    /// Whose chain that is. A chain belongs to one terminal now, the page is one session's page,
+    /// and one is open at a time — so this is the loaded one rather than a cache of all of them.
+    /// The Mac is the source of truth either way, and it is one request away.
+    var filterSession: Session?
+    /// Edited and not yet sent. The save happens on the way off the page rather than on each
     /// change, because a text field changes on every letter.
     var filtersDirty = false
 

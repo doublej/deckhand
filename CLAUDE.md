@@ -48,7 +48,11 @@ controlled from its own page inside utt.
   values are copied from there, never re-picked, so a change in utt is a diff here and not a
   redesign. The one thing that is Deckhand's own is `Palette.tint` (#3EAFB4) and its mark, an
   anchor on the same 6×6 dot grid utt's own mark lives on. Recording is the single exception:
-  it goes utt orange, because recording is utt's job in every plugin. The hold-to-talk mark
+  it goes utt orange, because recording is utt's job in every plugin — and that exception is the
+  whole screen's, not one mark's. An accent is read out of the environment (`\.accent`, in
+  `Design/Accent.swift`) and a screen that can record sets it once at its top from its own
+  recorder, so the rail, the session page and the deck all turn orange together and a view
+  written later follows without knowing what a microphone is. The hold-to-talk mark
   runs `DotMatrixDriver`, utt's shared clock, so it is never still: six seconds a pattern in
   silence, down to a tenth of a second at full voice, and the glow follows the phone's own
   input meter while you hold it.

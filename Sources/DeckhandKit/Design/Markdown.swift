@@ -147,16 +147,16 @@ public struct Markdown: View {
     }
 }
 
-// MARK: - the inline half
+// MARK: - the inline half, shared with Prose
 
-/// Bold and `code` inside a line of any block.
+/// Bold and `code` inside a line, in either renderer.
 ///
-/// This is ``Prose``'s own inline pass, deliberately kept as a second copy rather than extracted
-/// into something both call. Not because sharing would be wrong — it would be the better shape —
-/// but because `Prose` is being edited by somebody else as this is written, and a twelve-line
-/// copy is cheaper than a clobbered file. The rule it copies is the one that matters and the one
-/// to keep in step: inline code is set to the size of the text around it, never to a fixed mono
-/// size, because the same 12pt filename is too big in a bullet and too small in a heading.
+/// Lifted out of ``Prose`` rather than copied: it is the one piece the two genuinely have in
+/// common, and the rule it carries must not be able to change in one renderer and not the other.
+/// That rule is `size` — inline code is set to the size of the text around it, never to a fixed
+/// mono size, because the same 12pt filename is too large inside a bullet and too small inside a
+/// heading. `Prose`'s four-block contract is the thing that may not be widened, and this is not
+/// part of it.
 enum Inline {
     static func styled(_ text: String, at size: CGFloat) -> AttributedString {
         let options = AttributedString.MarkdownParsingOptions(

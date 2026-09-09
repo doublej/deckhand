@@ -30,12 +30,16 @@ extension AppModel {
         let wanted = name.collapsed
         guard !wanted.isEmpty, wanted != session.name else { return }
         await run {
-            try await client.rename(session.sessionId, to: wanted)
+            // The Mac carries the filter chain, because the chain is filed under the name and the
+            // phone never holds one. Both halves move on the same optimism: a busy session runs
+            // the command when its turn ends, and the star moves now either way.
+            let carried = try await client.rename(session.sessionId, to: wanted)
             self.preferences.renamed(from: session.name, to: wanted)
             self.preferences.save()
-            self.status = session.isBusy
+            let when = session.isBusy
                 ? "\(session.name) will be \(wanted) when it finishes this turn"
                 : "\(session.name) is now \(wanted)"
+            self.status = carried ? "\(when) · filters moved with it" : when
         }
     }
 

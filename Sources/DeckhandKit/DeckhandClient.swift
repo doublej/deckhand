@@ -134,25 +134,6 @@ public struct DeckhandClient: Sendable {
         return kept.path
     }
 
-    /// What this Mac can do to words on their way in, and the chain it is running now.
-    ///
-    /// `known` is the description the settings screen draws itself from — the phone holds no
-    /// list of filters, which is what lets a filter added on the Mac appear here without a build.
-    public func filters() async throws -> (known: [Filter], steps: [FilterStep]) {
-        let offered: FilterOffer = try literally(try await send(request(.get, "filters")))
-        return (offered.known, offered.steps)
-    }
-
-    /// Save the chain, and take the Mac's own reading of it back. What it answers with is what
-    /// it will run, so the screen follows that rather than what it just sent.
-    public func saveFilters(_ steps: [FilterStep]) async throws -> [FilterStep] {
-        var req = request(.put, "filters")
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let body = try JSONEncoder().encode(FilterChain(steps: steps))
-        let saved: FilterChain = try literally(try await send(req, body: body))
-        return saved.steps
-    }
-
     /// Hand the Mac a token it can push a Lock Screen update to.
     ///
     /// Two kinds, and the daemon needs both. An `activity` token updates the card that is
@@ -173,10 +154,16 @@ public struct DeckhandClient: Sendable {
     }
 
     /// Give the session a new display name, by running Claude Code's own `/rename` in its pane.
-    public func rename(_ sessionId: String, to name: String) async throws {
+    ///
+    /// Answers whether its filter chain came with it. A chain is filed under the name, so the Mac
+    /// is the only thing that can move one — and the phone says it happened, because a chain left
+    /// behind at the old name is the same bug as a star that does not follow a rename.
+    public func rename(_ sessionId: String, to name: String) async throws -> Bool {
         var req = request(.post, "sessions/\(sessionId)/name")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        _ = try await send(req, body: try JSONEncoder().encode(["name": name]))
+        let body = try JSONEncoder().encode(["name": name])
+        let done: Renaming = try decode(try await send(req, body: body))
+        return done.carriedFilters
     }
 
     /// Forget whatever the session's inbox still claims to hold. Nothing in Claude Code's own
@@ -209,9 +196,16 @@ public struct DeckhandClient: Sendable {
 
     // MARK: - plumbing
 
-    private enum Method: String { case get = "GET", post = "POST", put = "PUT" }
+    // Whatever one of this type's other files reaches for is internal rather than private:
+    // `DeckhandClient+Filters.swift` and `Artifacts.swift` are this same type in another file, and
+    // a private member is private to its *file*, not to its type. Which members that is grows as
+    // those files do, so the rule is written here rather than a list that goes stale — and none of
+    // it leaves the module either way. Do not tidy one back to private: the error lands in the
+    // other file, not in this one.
 
-    private func request(_ method: Method, _ path: String) -> URLRequest {
+    enum Method: String { case get = "GET", post = "POST", put = "PUT" }
+
+    func request(_ method: Method, _ path: String) -> URLRequest {
         var req = URLRequest(url: URL(string: path, relativeTo: baseURL) ?? baseURL)
         req.httpMethod = method.rawValue
         req.setValue(token, forHTTPHeaderField: "x-deckhand-token")
@@ -223,7 +217,7 @@ public struct DeckhandClient: Sendable {
         try decode(try await send(request(.get, path)))
     }
 
-    private func send(_ req: URLRequest, body: Data? = nil) async throws -> Data {
+    func send(_ req: URLRequest, body: Data? = nil) async throws -> Data {
         let (data, response): (Data, URLResponse)
         if let body {
             (data, response) = try await urlSession.upload(for: req, from: body)
@@ -243,16 +237,6 @@ public struct DeckhandClient: Sendable {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         return try decoder.decode(T.self, from: data)
-    }
-
-    /// The same decode with the keys left exactly as they arrived.
-    ///
-    /// `.convertFromSnakeCase` rewrites the keys of a dictionary as well as those of a struct,
-    /// and a step's `settings` is a dictionary the filter owns: a filter taking `max_words` would
-    /// be handed back `maxWords`, which is a setting it has never heard of. Nothing on the
-    /// filters wire is snake case, so there is nothing to convert either.
-    private func literally<T: Decodable>(_ data: Data) throws -> T {
-        try JSONDecoder().decode(T.self, from: data)
     }
 
     private func multipart(boundary: String, clip: URL) throws -> Data {
@@ -287,5 +271,20 @@ private struct SessionList: Decodable {
 private extension Data {
     mutating func append(_ text: String) {
         append(Data(text.utf8))
+    }
+}
+
+/// What the Mac says about a rename. Tolerant of a daemon that does not file chains by name yet:
+/// no key means nothing was carried, which is the truth on that Mac.
+private struct Renaming: Decodable {
+    var carriedFilters = false
+
+    enum CodingKeys: String, CodingKey {
+        case carriedFilters
+    }
+
+    init(from decoder: Decoder) throws {
+        let box = try decoder.container(keyedBy: CodingKeys.self)
+        carriedFilters = try box.decodeIfPresent(Bool.self, forKey: .carriedFilters) ?? false
     }
 }

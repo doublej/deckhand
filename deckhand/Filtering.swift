@@ -13,39 +13,48 @@ struct Filtered: Equatable {
     var refusal: String?
 }
 
-/// The chain of steps the Mac runs over words on their way into a session, from this side of it.
+/// The chain of steps the Mac runs over words on their way into one session, from this side of it.
 ///
 /// Nothing here names a filter or knows what one does, and that is the design rather than an
 /// omission: the Mac sends what it has and what each one takes, this builds a chain out of it,
 /// and a filter added on the Mac needs no build of the app. Split from `Model.swift` the way
 /// `Reading.swift` and `Controlling.swift` are — one job, one file, and that file was at its size.
 ///
+/// A chain belongs to one terminal rather than to the Mac. What this Mac *can* do is still global,
+/// which is why `knownFilters` is: only which of them run, in what order, on what settings, is a
+/// property of the session you are talking to.
+///
 /// Everything is addressed by a row's id rather than by its filter's name. The same filter may be
 /// in the chain twice with different settings, and by name the second one would be invisible to
 /// every edit on this page.
 @MainActor
 extension AppModel {
-    /// Everything the Mac offers and the chain it is running, as one list the screen can reorder.
-    func loadFilters() async {
+    /// Everything the Mac offers and the chain this session is running, as one list the page can
+    /// reorder. Always off the Mac: it is one request, it is the source of truth, and a chain
+    /// cached per session would be a second place for the answer to be wrong.
+    func loadFilters(for session: Session) async {
         guard let client = settings.client() else { return }
-        guard let offered = try? await client.filters() else { return }
+        filterSession = session
+        guard let offered = try? await client.filters(of: session.sessionId) else { return }
         knownFilters = offered.known
         filterChain = FilterRow.chain(offered.steps, over: offered.known)
         filtersDirty = false
     }
 
-    /// Saved on the way out of Settings, not as it is typed. A text field changes on every
-    /// letter — one sentence into the Mac's own plugin page was forty-odd writes in four seconds
-    /// — and a PUT per letter would be that again over the network.
+    /// Saved on the way off the page, not as it is typed. A text field changes on every letter —
+    /// one sentence into the Mac's own plugin page was forty-odd writes in four seconds — and a
+    /// PUT per letter would be that again over the network.
     ///
     /// What comes back is what the Mac will actually run, so the screen follows that rather than
     /// what it just sent. A save it refuses says which filter this Mac does not have.
     func saveFilters() async {
-        guard filtersDirty, let client = settings.client() else { return }
+        guard filtersDirty, let client = settings.client(), let session = filterSession else {
+            return
+        }
         filtersDirty = false
         let sending = filterChain.map(\.step)
         await run {
-            let saved = try await client.saveFilters(sending)
+            let saved = try await client.saveFilters(sending, of: session.sessionId)
             self.filterChain = FilterRow.chain(saved, over: self.knownFilters)
         }
     }

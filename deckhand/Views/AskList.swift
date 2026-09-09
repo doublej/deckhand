@@ -52,6 +52,7 @@ struct AskList: View {
 struct AskDot: View {
     let state: Ask.State
     var size: CGFloat = 11
+    @Environment(\.accent) private var accent
 
     var body: some View {
         RoundedRectangle(cornerRadius: size * 0.22, style: .continuous)
@@ -69,7 +70,7 @@ struct AskDot: View {
 
     private var edge: Color {
         switch state {
-        case .done: Palette.tint
+        case .done: accent
         case .doing: Palette.lcdYellow
         case .todo: Palette.textTertiary
         }

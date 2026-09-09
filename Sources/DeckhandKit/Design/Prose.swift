@@ -37,7 +37,7 @@ public struct Prose: View {
         case .heading(let text): heading(text)
         case .bullet(let text): bullet(text)
         case .paragraph(let text):
-            Text(inline(text, at: lead ? leadSize : bodySize))
+            Text(Inline.styled(text, at: lead ? leadSize : bodySize))
                 .font(paragraphFont(lead: lead))
                 .foregroundStyle(lead ? Palette.textPrimary : Palette.textSecondary)
                 // Roughly 1.45x the type size. Text set solid reads as a wall; this is the
@@ -68,7 +68,7 @@ public struct Prose: View {
     }
 
     private func heading(_ text: String) -> some View {
-        Text(inline(text, at: headingSize))
+        Text(Inline.styled(text, at: headingSize))
             .font(.system(size: headingSize, weight: .semibold, design: .monospaced))
             .tracking(1)
             .foregroundStyle(Palette.textTertiary)
@@ -87,38 +87,12 @@ public struct Prose: View {
                 .fill(Palette.tint)
                 .frame(width: compact ? 3 : 4, height: compact ? 3 : 4)
                 .offset(y: -1)
-            Text(inline(text, at: bodySize))
+            Text(Inline.styled(text, at: bodySize))
                 .font(.system(size: bodySize))
                 .foregroundStyle(Palette.textPrimary)
                 .lineSpacing(compact ? 2 : 5)
         }
         .padding(.vertical, compact ? 2 : Spacing.extraSmall)
-    }
-
-    /// Bold and code, via SwiftUI's own parser; code additionally gets the mono face, which
-    /// `AttributedString` marks but does not style.
-    ///
-    /// `size` is the size of the text this run sits inside, and inline code is set to it rather
-    /// than to a size of its own. A fixed mono size cannot be right in two places at once — a
-    /// deck column and a full-width briefing are 9pt and 14pt apart — and a filename that
-    /// outgrows its own sentence is what made a page of these look thrown together.
-    private func inline(_ text: String, at size: CGFloat) -> AttributedString {
-        let options = AttributedString.MarkdownParsingOptions(
-            interpretedSyntax: .inlineOnlyPreservingWhitespace
-        )
-        guard var parsed = try? AttributedString(markdown: text, options: options) else {
-            return Links.marked(text)
-        }
-        for run in parsed.runs where run.inlinePresentationIntent == .code {
-            // Half a point under the prose it sits in. A monospaced face at an identical point
-            // size still reads as larger — wider glyphs, taller x-height — so matching the
-            // numbers exactly does not match what the eye sees.
-            parsed[run.range].font = .system(size: size - 0.5, design: .monospaced)
-            parsed[run.range].foregroundColor = Palette.tint
-        }
-        // A summary names addresses the way a person would, bare rather than in brackets, so
-        // markdown alone leaves the useful half of them dead.
-        return Links.linked(parsed)
     }
 
     enum Block: Equatable {

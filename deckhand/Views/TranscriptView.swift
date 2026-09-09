@@ -124,6 +124,7 @@ struct RawView: View {
     @State private var lines: [String] = []
     @State private var read = false
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accent) private var accent
 
     var body: some View {
         NavigationStack {
@@ -146,7 +147,7 @@ struct RawView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Close") { dismiss() }.tint(Palette.tint)
+                    Button("Close") { dismiss() }.tint(accent)
                 }
             }
         }

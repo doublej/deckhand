@@ -95,36 +95,52 @@ struct ClientTests {
         #expect(try #require(String(bytes: body, encoding: .utf8)).contains("run the tests"))
     }
 
-    @Test("the filters arrive with the keys the filters own untouched")
+    @Test("one session's filters arrive with the keys the filters own untouched")
     func decodesFilters() async throws {
+        // The session's own route carries `known` as well as the chain, so the page it draws is
+        // one request. The extra `session` key is the Mac naming the terminal it filed this under.
         StubProtocol.respond(with: Data("""
-        {"known":[{"name":"words","title":"Word replacement","summary":"Swaps words",
+        {"session":"warm-okapi",
+         "known":[{"name":"words","title":"Word replacement","summary":"Swaps words",
                    "fields":[{"key":"pairs","label":"Replacements","kind":"pairs",
                               "default":[],"hint":""}]}],
          "steps":[{"filter":"words","on":true,"settings":{"max_words":12}}]}
         """.utf8))
-        let offered = try await client().filters()
+        let offered = try await client().filters(of: "sid")
         #expect(offered.known.first?.fields.first?.kind == .pairs)
         // The one way this breaks: the snake-case key strategy reaching a dictionary the filter
         // owns. `max_words` is the filter's own word and has to come back as it left.
         #expect(offered.steps.first?.settings["max_words"] == .int(12))
-        #expect(StubProtocol.lastRequest?.url?.path == "/filters")
+        #expect(StubProtocol.lastRequest?.url?.path == "/sessions/sid/filters")
     }
 
-    @Test("saving the chain PUTs it and reads back what the Mac will actually run")
+    @Test("saving a session's chain PUTs it and reads back what the Mac will actually run")
     func savesFilters() async throws {
         StubProtocol.respond(with: Data("""
-        {"steps":[{"filter":"words","on":false,"settings":{}}]}
+        {"session":"warm-okapi","steps":[{"filter":"words","on":false,"settings":{}}]}
         """.utf8))
         let step = FilterStep(filter: "words", isOn: true, settings: ["max_words": .int(12)])
-        let saved = try await client().saveFilters([step])
+        let saved = try await client().saveFilters([step], of: "sid")
         #expect(saved.first?.isOn == false)
         #expect(StubProtocol.lastRequest?.httpMethod == "PUT")
-        #expect(StubProtocol.lastRequest?.url?.path == "/filters")
+        #expect(StubProtocol.lastRequest?.url?.path == "/sessions/sid/filters")
         let body = try #require(StubProtocol.lastBody)
         let text = try #require(String(bytes: body, encoding: .utf8))
         #expect(text.contains("\"max_words\":12"))
         #expect(text.contains("\"on\":true"))
+    }
+
+    @Test("a rename says whether the chain came with it")
+    func carriesTheChainOnRename() async throws {
+        StubProtocol.respond(with: Data("""
+        {"renamed":"cold-otter","was":"warm-okapi","carried_filters":true}
+        """.utf8))
+        #expect(try await client().rename("sid", to: "cold-otter"))
+        #expect(StubProtocol.lastRequest?.url?.path == "/sessions/sid/name")
+        // A Mac that does not file chains by name yet says nothing, and nothing is the truth
+        // there — not an error, and not a claim that something moved.
+        StubProtocol.respond(with: Data(#"{"renamed":"cold-otter","was":"warm-okapi"}"#.utf8))
+        #expect(try await client().rename("sid", to: "cold-otter") == false)
     }
 
     @Test("a bad token surfaces as unauthorized, a dead session as notLive")

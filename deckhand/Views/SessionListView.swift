@@ -19,6 +19,10 @@ struct SessionListView: View {
     @State private var chosen: Session?
     @Environment(\.scenePhase) private var phase
 
+    /// What this page's accents are drawn in. Read here rather than from the environment because
+    /// this is the view that puts it there, and a view never sees what it hands its own children.
+    private var accent: Color { Palette.accent(recording: recorder.isRecording) }
+
     /// Everything on this page starts at the same left edge. A row's own padding is what its
     /// fill bleeds past that edge by, so the head, the group labels and a row's glyph line up
     /// while the rows still read as objects sitting on the ground rather than text on it.
@@ -40,6 +44,11 @@ struct SessionListView: View {
             // right on every one of them rather than right on the one I looked at.
             .background(Palette.lcdGround.ignoresSafeArea())
             .environment(\.colorScheme, .dark)
+            // The whole rail goes utt orange while a row is listening, not only the row: one
+            // decision, made here, that every accent inside the page reads out of the
+            // environment. It is the recorder's own state, so the page is teal again the
+            // instant the clip is sent, thrown away, refused or interrupted.
+            .accent(accent)
             .navigationDestination(item: $chosen) { SessionView(model: model, opened: $0) }
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showSettings) { SettingsView(model: model) }
@@ -202,7 +211,7 @@ struct SessionListView: View {
                       systemImage: starred ? "star.slash" : "star") {
             model.toggleFavorite(session)
         }
-        .tint(Palette.tint)
+        .tint(accent)
     }
 
     private func hide(_ session: Session, _ hidden: Bool) -> some View {

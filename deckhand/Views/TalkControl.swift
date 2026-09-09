@@ -161,7 +161,9 @@ private struct TalkGesture: ViewModifier {
 
 /// The mark is the button, and it is the living one: utt's whole show, drifting slowly in
 /// Deckhand's teal at rest. While you talk it turns utt orange, speeds up with your voice and
-/// dims between words — recording is utt's job in every plugin, so it wears utt's colour.
+/// dims between words — recording is utt's job in every plugin, so it wears utt's colour. The
+/// colour is the screen's (`\.accent`) rather than one this mark picks, because the whole screen
+/// wears it: the mark speeding up is what is particular to the mark.
 ///
 /// At rest it is the only thing here: one mark, in the middle, over whatever you were reading.
 /// Nothing else — no bar, no label, no ground. Press it and the two things you can do slide out
@@ -174,6 +176,10 @@ struct TalkMark: View {
     /// Whether the words are held for reading before they go. It changes what a tap does, so it
     /// changes what the pill may promise: a tap that opens a review card has not sent anything.
     var confirms = true
+    /// The screen's accent, which is already the recording colour by the time this mark is open —
+    /// the page it floats over sets it from the same recorder. It used to switch on its own,
+    /// which is how the mark went orange on a page that stayed teal around it.
+    @Environment(\.accent) private var accent
 
     /// How much room a scrolling pane leaves at the end of its content for the mark to float
     /// over: the mark, its tile, and the air around it.
@@ -187,7 +193,7 @@ struct TalkMark: View {
             // does the same thing, and either is the obvious one to reach for.
             wing(label,
                  edge: .leading,
-                 tint: isRecording ? Palette.recording : Palette.textTertiary,
+                 tint: isRecording ? accent : Palette.textTertiary,
                  action: state.tapped)
             mark
             wing(state.canCancel ? "CANCEL" : nil, edge: .trailing, tint: Palette.textSecondary) {
@@ -204,7 +210,7 @@ struct TalkMark: View {
     private var mark: some View {
         DotMark.live(
             size: 40,
-            tint: isRecording ? Palette.recording : Palette.tint,
+            tint: accent,
             recording: isRecording,
             level: isRecording ? level : 0,
             hotCore: 0.3

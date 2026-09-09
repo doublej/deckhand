@@ -59,6 +59,9 @@ public struct GlyphTile: View {
     private let size: CGFloat
     private let prominent: Bool
     private let ground: Color?
+    /// The screen's accent, not Deckhand's teal: a tile on a screen being dictated into goes
+    /// utt orange with everything else on it, and the tile has no idea that is what happened.
+    @Environment(\.accent) private var accent
 
     public init(_ glyph: Set<Int>, size: CGFloat = 24, prominent: Bool = false, ground: Color? = nil) {
         self.glyph = glyph
@@ -68,11 +71,11 @@ public struct GlyphTile: View {
     }
 
     public var body: some View {
-        DotMark(glyph, size: size * 0.62, tint: prominent ? .white : Palette.tint)
+        DotMark(glyph, size: size * 0.62, tint: prominent ? .white : accent)
             .frame(width: size, height: size)
             .background(
                 RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
-                    .fill(prominent ? Palette.tint : ground ?? Palette.tileIdle)
+                    .fill(prominent ? accent : ground ?? Palette.tileIdle)
             )
             .accessibilityHidden(true)
     }

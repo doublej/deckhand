@@ -1,15 +1,45 @@
 import DeckhandKit
 import SwiftUI
 
-/// What the Mac does to words on their way into a session, in the order it does it.
+/// What the Mac does to words on their way into *this* session, in the order it does it.
 ///
-/// Nothing on this screen knows what a filter is. The Mac sends a name, a sentence and a list of
+/// Nothing on this page knows what a filter is. The Mac sends a name, a sentence and a list of
 /// fields with a kind each; this draws a switch per filter and a control per kind. That is the
 /// whole arrangement: a filter written on the Mac this afternoon is on this page this afternoon.
-struct FilterSettings: View {
+///
+/// It lives on the session rather than in global Settings because a chain belongs to a terminal.
+/// What you want done to words going into the project you are arguing with the build about is not
+/// what you want done to words going into the one you are writing prose in.
+struct SessionFilters: View {
     @Bindable var model: AppModel
+    let session: Session
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: Spacing.medium) {
+                    chain
+                    footline
+                }
+                .padding(Spacing.medium)
+            }
+            .background(Palette.surfaceGround)
+            .navigationTitle("On the way in")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }.tint(Palette.tint)
+                }
+            }
+        }
+        .task { await model.loadFilters(for: session) }
+        // Both ways off this page come through here — Done and a swipe down — and a save per
+        // keystroke is what the Mac's own plugin page learned not to do.
+        .onDisappear { Task { await model.saveFilters() } }
+    }
+
+    private var chain: some View {
         SettingsGroup("On the way in") {
             if model.filterChain.isEmpty {
                 SettingRow("Nothing", detail: empty) { EmptyView() }
@@ -18,10 +48,16 @@ struct FilterSettings: View {
                 filter(row)
             }
         }
-        .task { await model.loadFilters() }
-        // Both ways out of Settings come through here — Done and a swipe down — and a save per
-        // keystroke is what the Mac's own plugin page learned not to do.
-        .onDisappear { Task { await model.saveFilters() } }
+    }
+
+    /// Which terminal this is for, said out loud. The same chain used to be the Mac's and is now
+    /// one session's, and nobody should have to discover that by finding a different chain on the
+    /// next session down.
+    private var footline: some View {
+        Text("Runs for \(session.name) only. Another session has its own chain.")
+            .font(Typography.hint)
+            .foregroundStyle(Palette.textTertiary)
+            .padding(.horizontal, Spacing.xxs)
     }
 
     /// One filter: what it is, whether it runs, where it sits, and the fields it takes. The
@@ -65,8 +101,8 @@ struct FilterSettings: View {
         return filter.summary
     }
 
-    /// Up and down rather than a drag. The settings page is a card of rows, and `onMove` belongs
-    /// to a `List` — which this design does not use anywhere.
+    /// Up and down rather than a drag. This page is a card of rows, and `onMove` belongs to a
+    /// `List` — which this design does not use anywhere.
     private func move(_ row: FilterRow, by places: Int, symbol: String) -> some View {
         Button { model.shiftFilter(row.id, by: places) } label: {
             Image(systemName: symbol).font(.system(size: 11, weight: .semibold))
@@ -130,64 +166,5 @@ struct FilterSettings: View {
     private func rows(_ field: FilterField, in row: FilterRow.ID) -> Binding<[[String]]> {
         Binding(get: { model.value(of: field, in: row).rows },
                 set: { model.setValue(.rows($0), of: field.key, in: row) })
-    }
-}
-
-/// A replacement list: rows of two, a way to add one and a way to take one away.
-///
-/// Its own control for one reason — a pair does not fit in a text box, which is the whole reason
-/// the `pairs` kind exists. Full width rather than in a row's control slot: two fields and an
-/// arrow squeezed into the right-hand third of a row is not something anyone can type into.
-private struct Pairs: View {
-    let label: String
-    let hint: String
-    @Binding var rows: [[String]]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Spacing.xxs) {
-            Text(label).font(Typography.primaryRow)
-            if !hint.isEmpty {
-                Text(hint).font(Typography.hint).foregroundStyle(Palette.textTertiary)
-            }
-            // By index, because the rows are what is being edited: keyed by content, a row would
-            // change identity on every letter typed into it and lose the keyboard mid-word.
-            ForEach(rows.indices, id: \.self) { spot in
-                row(spot)
-            }
-            Button("Add a replacement") { rows.append(["", ""]) }
-                .buttonStyle(.plain)
-                .font(Typography.hint)
-                .foregroundStyle(Palette.tint)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func row(_ spot: Int) -> some View {
-        HStack(spacing: Spacing.extraSmall) {
-            TextField("from", text: side(spot, 0))
-            Image(systemName: "arrow.right")
-                .font(.system(size: 9))
-                .foregroundStyle(Palette.textTertiary)
-            TextField("to", text: side(spot, 1))
-            Button { rows.remove(at: spot) } label: {
-                Image(systemName: "minus.circle").font(.system(size: 13))
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(Palette.textTertiary)
-            .accessibilityLabel("Remove this replacement")
-        }
-        .font(Typography.mono)
-        .textInputAutocapitalization(.never)
-        .autocorrectionDisabled()
-    }
-
-    /// Guarded on both sides: a removal and the redraw that follows it are not one step, and an
-    /// index into a row that has just gone is the crash this kind of editor is known for.
-    private func side(_ spot: Int, _ half: Int) -> Binding<String> {
-        Binding(get: { rows.indices.contains(spot) ? rows[spot][half] : "" },
-                set: { typed in
-                    guard rows.indices.contains(spot) else { return }
-                    rows[spot][half] = typed
-                })
     }
 }

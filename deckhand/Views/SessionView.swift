@@ -14,6 +14,7 @@ struct SessionView: View {
     @State private var confirming: Control?
     @State private var renaming = false
     @State private var reading = false
+    @State private var filtering = false
     @State private var wantedName = ""
     @Environment(\.dismiss) private var dismiss
 
@@ -31,6 +32,10 @@ struct SessionView: View {
         model.sessions.first { $0.sessionId == opened.sessionId } ?? opened
     }
 
+    /// What this page's accents are drawn in. Read here rather than from the environment because
+    /// this is the view that puts it there, and a view never sees what it hands its own children.
+    private var accent: Color { Palette.accent(recording: recorder.isRecording) }
+
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -40,10 +45,17 @@ struct SessionView: View {
                 // tab to offer one button; floating, it costs the page nothing and the panes
                 // add its height to the end of their own content so anything can be read out
                 // from under it.
-                .overlay(alignment: .bottom) { foot }
+                .overlay(alignment: .bottom) {
+                    SessionFoot(model: model, session: session, recorder: recorder)
+                }
             tabs
         }
         .animation(.snappy(duration: 0.22), value: model.review[session.sessionId])
+        // The whole page goes utt orange while the mark at its foot is open, not only the mark:
+        // one decision, made here, that every accent inside the page reads out of the
+        // environment. It is the recorder's own state, so the page is teal again the instant the
+        // clip is sent, thrown away, refused or interrupted.
+        .accent(accent)
         .background(Palette.surfaceGround)
         // No navigation bar. It was a whole band holding one chevron, stacked above a header
         // that already named the page — two rows of chrome before a word of content. The
@@ -51,6 +63,7 @@ struct SessionView: View {
         .toolbar(.hidden, for: .navigationBar)
         .modifier(LocalLinks(mac: model.macAddress, paired: model.settings.host))
         .sheet(isPresented: $reading) { RawView(model: model, session: session) }
+        .sheet(isPresented: $filtering) { SessionFilters(model: model, session: session) }
         // A name is the one thing here you type rather than press, and it is short enough that
         // a whole screen for it would be more ceremony than the thing deserves.
         .alert("Rename \(session.name)", isPresented: $renaming) {
@@ -117,7 +130,7 @@ struct SessionView: View {
             Button { dismiss() } label: {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Palette.tint)
+                    .foregroundStyle(accent)
                     .frame(width: 28, height: 34)
                     .contentShape(.rect)
             }
@@ -155,9 +168,17 @@ struct SessionView: View {
             Button("Show on the Mac", systemImage: "display") {
                 Task { await model.focus(session) }
             }
+            .disabled(hasNoPane)
             Button("Rename…", systemImage: "text.cursor") {
                 wantedName = session.name
                 renaming = true
+            }
+            .disabled(hasNoPane)
+            // What the Mac does to words on their way into this session — this session's own
+            // setting rather than the Mac's, because what you want done to words going into one
+            // project is not what you want done to words going into another.
+            Button("Words on the way in…", systemImage: "line.3.horizontal.decrease") {
+                filtering = true
             }
             // Always reachable, not only when something looks wrong: every other view here is
             // a reading of that file, and this is the file.
@@ -173,6 +194,7 @@ struct SessionView: View {
                 Button(action.label, systemImage: action.symbol, role: role(action)) {
                     if action.asksFirst { confirming = action } else { send(action) }
                 }
+                .disabled(hasNoPane)
             }
         } label: {
             Image(systemName: "ellipsis.circle")
@@ -180,11 +202,18 @@ struct SessionView: View {
                 .frame(width: 28, height: 34)
                 .contentShape(.rect)
         }
-        .tint(Palette.tint)
-        .foregroundStyle(session.pane == nil ? Palette.textTertiary : Palette.tint)
-        .disabled(session.pane == nil)
-        .accessibilityLabel(session.pane == nil ? "No iTerm pane on the Mac" : "Session controls")
+        .tint(accent)
+        .foregroundStyle(accent)
+        .accessibilityLabel("Session controls")
     }
+
+    /// Whether the things in that menu which are keystrokes can work at all.
+    ///
+    /// It used to switch off the whole menu, which was right while every item in it was a
+    /// keystroke. Two of them never were — reading the transcript is a file on disk, clearing the
+    /// queue is a file the daemon writes — and the filter chain is a third. With iTerm unreachable
+    /// the menu was the only way to any of those, and the menu was the thing switched off.
+    private var hasNoPane: Bool { session.pane == nil }
 
     private func role(_ action: Control) -> ButtonRole? {
         action == .clear ? .destructive : nil
@@ -243,48 +272,9 @@ struct SessionView: View {
             .padding(.horizontal, Spacing.small)
             .padding(.vertical, 6)
             .background(
-                Capsule().fill(chosen ? Palette.tint.opacity(0.18) : .clear)
+                Capsule().fill(chosen ? accent.opacity(0.18) : .clear)
             )
             .contentShape(.rect)
     }
 
-    /// The mark is the button. utt's mark, because recording is utt's job — it takes the
-    /// recording tint and speeds up with the meter, exactly as it does in utt's own rail.
-    private var talk: some View {
-        TalkControl(
-            recorder: recorder,
-            mode: model.preferences.talkMode,
-            isMine: true,
-            onStart: { model.status = "Recording for \(session.name)" },
-            onClip: { await model.upload(clip: $0, to: session) },
-            content: {
-                TalkMark(state: $0,
-                         level: recorder.level,
-                         confirms: model.preferences.confirms)
-            }
-        )
-    }
-
-    /// Held for reading, over the top of whichever tab you were on — including the button you
-    /// were holding to record. Nothing else on the page can be acted on until this is answered,
-    /// so covering it is honest rather than rude: it was the foot of the transcript before,
-    /// which meant scrolling to reach the thing the app was waiting on.
-    @ViewBuilder private var review: some View {
-        if let text = model.review[session.sessionId] {
-            ReviewCard(
-                text: text,
-                target: session.name,
-                send: { edited in Task { await model.send(edited, to: session) } },
-                discard: { model.discard(for: session) },
-                filtered: model.reviewFiltered[session.sessionId],
-                snaps: model.snaps(for: session),
-                attach: { model.attach($0, to: session) },
-                paste: { model.attachFromClipboard(to: session) },
-                unattach: { model.unattach($0, from: session) }
-            )
-            .frame(maxWidth: .infinity)
-            .shadow(color: .black.opacity(0.18), radius: 10, y: 3)
-            .transition(.move(edge: .bottom).combined(with: .opacity))
-        }
-    }
 }
