@@ -22,9 +22,22 @@ public struct Session: Codable, Hashable, Identifiable, Sendable {
     /// How full its context window is. Absent from a daemon that predates it — the synthesised
     /// decoder reads an optional with `decodeIfPresent`, so a missing key is simply nil.
     public var context: ContextWindow?
+    /// How far this project has got with the pages it put on the phone: how many nobody has
+    /// answered yet, and how many have an answer beside them.
+    ///
+    /// Optional for exactly the reason `context` is, and not an `Int = 0`: the synthesised
+    /// decoder only tolerates a missing key for an optional, so a Mac that predates these is a
+    /// session with no pages rather than a listing that will not decode at all.
+    public var artifactsWaiting: Int?
+    public var artifactsAnswered: Int?
 
     public var id: String { sessionId }
     public var isBusy: Bool { status == "busy" }
+    /// Those two counts, in the form every screen wants them, so that nowhere has to spell out
+    /// what a Mac with nothing to say about pages means.
+    public var waitingPages: Int { artifactsWaiting ?? 0 }
+    public var answeredPages: Int { artifactsAnswered ?? 0 }
+    public var pages: Int { waitingPages + answeredPages }
     public var lastActive: Date { Date(timeIntervalSince1970: updatedAt) }
 
     /// Identity is the session, not its current state. Every refresh brings a new `updatedAt`

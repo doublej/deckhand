@@ -23,6 +23,17 @@ def test_the_newest_page_is_first(session, asking):
     assert [row["id"] for row in artifacts.listing(session)] == ["palette-pick", "which-branch"]
 
 
+def test_the_counts_are_what_is_waiting_and_what_has_been_answered(session, asking):
+    """What a row in the phone's overview says. Both have to agree with the listing beside it."""
+    assert artifacts.counted(session) == {"artifacts_waiting": 1, "artifacts_answered": 0}
+
+    (asking.parent / "palette-pick.html").write_text("<title>Pick a palette</title>")
+    assert artifacts.counted(session) == {"artifacts_waiting": 2, "artifacts_answered": 0}
+
+    artifacts.answer(session, "which-branch", "develop")
+    assert artifacts.counted(session) == {"artifacts_waiting": 1, "artifacts_answered": 1}
+
+
 def test_a_page_with_no_title_or_no_sense_still_lists(session, asking):
     """An agent interrupted mid-`Write` must not be able to empty the phone's listing."""
     (asking.parent / "half-written.html").write_text("<!doctype html><head><tit")
@@ -47,6 +58,7 @@ def test_a_project_with_no_folder_has_no_artifacts_and_gains_no_folder(session, 
     """A session working in `/` or in `$HOME` must not turn the daemon into a file server."""
     assert artifacts.kept(session) is None
     assert artifacts.listing(session) == []
+    assert artifacts.counted(session) == {"artifacts_waiting": 0, "artifacts_answered": 0}
     assert artifacts.page(session, "which-branch") is None
     assert artifacts.answer(session, "which-branch", "develop") is None
     assert not (project / ".deckhand").exists()

@@ -16,6 +16,8 @@ struct SessionRow: View {
     let asks: [Ask]
     /// Whether this is the row the microphone is open for, and whether the clip is on its way.
     let talk: TalkState
+    /// The rail's accent, which is utt orange while any row on it is listening.
+    @Environment(\.accent) private var accent
 
     var body: some View {
         HStack(alignment: .top, spacing: Spacing.small) {
@@ -32,8 +34,8 @@ struct SessionRow: View {
                         .lineLimit(3)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                if !asks.isEmpty {
-                    AskDots(asks: asks).padding(.top, 2)
+                if !asks.isEmpty || session.pages > 0 {
+                    progress.padding(.top, 2)
                 }
                 // How full its context is, as the shape alone: the number belongs on the
                 // session's own page, and what a row needs to say is "this one is nearly
@@ -64,7 +66,56 @@ struct SessionRow: View {
         // Applied last so it carries the tile and the border with the words — fading only the
         // ink would leave a bright empty tile behind a dim name, which reads as a loading row.
         // Hit testing is unaffected by opacity, so a faded row is still as tappable as any.
-        .opacity(talk.isRecording || talk.busy || current ? 1 : session.contrast())
+        //
+        // A row with a page waiting on you keeps full contrast whatever the clock says, for the
+        // same reason a busy one does: the fade spends contrast on how long ago something
+        // happened, and a question nobody has answered has not happened yet. A session that
+        // stopped to ask you something this morning is the row you most need to see at six.
+        .opacity(talk.isRecording || talk.busy || current || session.waitingPages > 0
+                 ? 1 : session.contrast())
+    }
+
+    /// How far the two things you are in the middle of with this session have got: what you asked
+    /// it for, as one dot each, and the pages it asked you for, as the two numbers.
+    ///
+    /// One band, because they are the same question — what is still open between the two of you —
+    /// and a row has one place to answer it.
+    private var progress: some View {
+        HStack(spacing: Spacing.extraSmall) {
+            if !asks.isEmpty { AskDots(asks: asks) }
+            if session.pages > 0 { pages }
+        }
+    }
+
+    /// The pages as words where the asks are dots, and deliberately not a second run of dots.
+    ///
+    /// `AskDot` is a box you can tick and that is the one thing it means here; a second row of the
+    /// same mark standing for something else is what its own note warns against, and two runs of
+    /// identical marks in one band cannot be told apart without a label that costs more than the
+    /// words do. Both numbers, because "one waiting" and "one of six waiting" are different
+    /// situations and the row is the only place that can say which this is.
+    ///
+    /// The accent does the rest: nothing else in a row's words is ever this colour, so a page
+    /// waiting is the one thing on the rail that reads as addressed to you — and it says so
+    /// without a second state word beside the one the title already carries. Everything answered
+    /// goes quiet instead, which is the whole point of saying both.
+    private var pages: some View {
+        HStack(spacing: Spacing.xxs) {
+            Image(systemName: "doc.richtext")
+                .font(.system(size: 10, weight: .semibold))
+            Text(pagesLine)
+        }
+        .font(Typography.hint)
+        .foregroundStyle(session.waitingPages > 0 ? accent : Palette.textTertiary)
+        .accessibilityElement()
+        .accessibilityLabel(pagesLine)
+    }
+
+    private var pagesLine: String {
+        let noun = session.pages == 1 ? "page" : "pages"
+        return session.waitingPages > 0
+            ? "\(session.waitingPages) of \(session.pages) \(noun) waiting"
+            : "\(session.pages) \(noun) answered"
     }
 
     /// The name and the state on one baseline, so the headline below them has the full width.

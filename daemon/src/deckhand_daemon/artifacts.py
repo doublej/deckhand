@@ -93,6 +93,27 @@ def listing(session: sessions.Session) -> list[dict]:
     return sorted((row for row in rows if row), key=lambda row: row["modified"], reverse=True)
 
 
+def counted(session: sessions.Session) -> dict:
+    """The two numbers the session listing carries: pages still waiting, and pages answered.
+
+    Both, because the phone's overview says them the way it says how much of what you asked for
+    is done — one number alone turns "two of five answered" into "three", which is a worse thing
+    to read at a glance than either half. Spelled with the keys the row uses, so the listing can
+    merge this fragment the way it merges `context`.
+
+    On the listing rather than behind a request of its own, because the overview draws every
+    session at once: one call per row to find out whether a row has something to say is the shape
+    that makes a feature feel slow.
+
+    Counted off `listing` rather than off the folder, so the numbers a row promises are exactly
+    what the page tab will show. A file whose name is not a slug is not an artifact of this
+    session's, and counting one here would promise a page that does not list.
+    """
+    rows = listing(session)
+    answered = sum(1 for row in rows if row["answered"])
+    return {"artifacts_waiting": len(rows) - answered, "artifacts_answered": answered}
+
+
 def page(session: sessions.Session, artifact_id: str) -> str | None:
     """The page itself, as the phone will render it. None when there is no such artifact."""
     found = _file(session, artifact_id, ".html")

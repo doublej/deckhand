@@ -45,6 +45,20 @@ def test_a_project_with_nothing_to_ask_answers_with_an_empty_list(token, project
     assert client(token).get(f"/sessions/{SID}/artifacts").json() == {"artifacts": []}
 
 
+def test_the_session_listing_says_how_far_each_project_has_got_with_its_pages(token, asking):
+    """So the phone's overview can say it on a row without a request per session. The other live
+    session in the fixture works somewhere with no `.deckhand` folder, and says zero of each."""
+    (asking.parent / "palette-pick.html").write_text("<title>Pick a palette</title>")
+    (asking.parent / "palette-pick.answer.json").write_text('{"value": "teal"}')
+
+    live = {s["name"]: s for s in client(token).get("/sessions").json()["sessions"]}
+
+    assert live["warm-okapi"]["artifacts_waiting"] == 1
+    assert live["warm-okapi"]["artifacts_answered"] == 1
+    assert live["cold-otter"]["artifacts_waiting"] == 0
+    assert live["cold-otter"]["artifacts_answered"] == 0
+
+
 def test_the_page_is_served_as_html(token, asking):
     answer = client(token).get(f"/sessions/{SID}/artifacts/which-branch")
 

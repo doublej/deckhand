@@ -85,7 +85,13 @@ def list_sessions() -> dict:
     # attention wants to know which one is about to compact.
     window = sessions.context_window()
     listed = [
-        s.to_json() | {"context": {"used": sessions.context_used(s.session_id), "limit": window}}
+        s.to_json()
+        | {"context": {"used": sessions.context_used(s.session_id), "limit": window}}
+        # And how far the person has got with what it asked them: a page with no answer file
+        # beside it is the session stopped and waiting, which is the one thing on a row that is
+        # genuinely blocked on you. It travels with the listing rather than costing the phone a
+        # request per session to find out.
+        | artifacts.counted(s)
         for s in live
     ]
     return {"sessions": listed, "iterm": status}

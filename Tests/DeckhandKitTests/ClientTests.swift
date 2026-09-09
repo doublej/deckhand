@@ -25,8 +25,24 @@ struct ClientTests {
         #expect(first.folder == "the-ultimate-music-quiz")
         #expect(first.isBusy)
         #expect(first.pane?.tabId == "180")
+        // The fixture predates artifacts, which is the version-skew case: no keys, no pages.
+        #expect(first.waitingPages == 0)
+        #expect(first.pages == 0)
         #expect(StubProtocol.lastRequest?.value(forHTTPHeaderField: "x-deckhand-token") == "tok")
         #expect(StubProtocol.lastRequest?.url?.path == "/sessions")
+    }
+
+    @Test("a session says how many of its pages are waiting and how many are answered")
+    func decodesWaitingPages() async throws {
+        StubProtocol.respond(with: Data("""
+        {"sessions":[{"session_id":"sid","pid":1,"name":"warm-okapi","cwd":"/Users/jj/dev/shop",
+          "folder":"shop","status":"idle","updated_at":1.0,"tty":"ttys001","pane":null,
+          "artifacts_waiting":2,"artifacts_answered":4}]}
+        """.utf8))
+        let session = try #require(try await client().sessions().first)
+        #expect(session.waitingPages == 2)
+        #expect(session.answeredPages == 4)
+        #expect(session.pages == 6)
     }
 
     @Test("decodes a real /turns payload")

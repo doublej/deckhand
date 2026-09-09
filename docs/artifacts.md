@@ -88,6 +88,13 @@ Write the file, tell the person it is there, then read the answer:
 Nothing registers an artifact and nothing cleans one up. A page with no answer file beside it
 is open; a page with one has been answered and can be asked again by deleting the answer.
 
+An open page is also the one thing the phone says without being asked. The session listing carries
+`artifacts_waiting` and `artifacts_answered`, so the session's row on the overview says how far
+this project has got with its pages — "1 of 3 pages waiting" — beside how far it has got with what
+the person asked *it* for, and the session's summary offers the newest waiting page as the thing to
+press. An agent still tells the person it is there — a phone in a pocket says nothing — but nobody
+has to go looking through the list of pages to find it.
+
 ## The demo set
 
 Five pages under `demos/`, one per thing `consult-user-mcp` can ask, because that MCP is the

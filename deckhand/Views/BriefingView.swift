@@ -10,6 +10,15 @@ struct BriefingView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.extraLarge) {
+                // Above the briefing, unlike the checklist below it: a page with no answer
+                // beside it is the session stopped and waiting on a person, which is what to do
+                // right now. The prose is what it did before it stopped.
+                if let asking = waiting.first {
+                    WaitingPage(model: model,
+                                session: session,
+                                artifact: asking,
+                                more: waiting.count - 1)
+                }
                 prose
                 // Under the briefing, not above it: the first line of a briefing is what to do
                 // right now, and a checklist in front of that buries it.
@@ -35,6 +44,15 @@ struct BriefingView: View {
         .frame(maxHeight: .infinity)
         // Room at the end for the bar that floats over this.
         .contentMargins(.bottom, TalkMark.clearance, for: .scrollContent)
+        // The listing and not `session.waitingPages`, which is a number: a link has to know
+        // which page it opens and what that page is called. A directory listing on the Mac,
+        // asked for when the tab is opened, exactly as the page tab asks for it.
+        .task { await model.loadArtifacts(for: session) }
+    }
+
+    /// The pages this session is waiting on an answer for, newest first as the Mac sorted them.
+    private var waiting: [Artifact] {
+        (model.artifacts[session.sessionId] ?? []).filter { !$0.answered }
     }
 
     @ViewBuilder private var prose: some View {
