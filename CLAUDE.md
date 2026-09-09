@@ -24,10 +24,11 @@ controlled from its own page inside utt.
   utt's HTTP API is switched on. `plugins/deckhand.json` is the manifest, rewritten at every
   start-up; `deckhand.values.json` carries what the person set on the page, and
   `deckhand.action.json` which button they pressed.
-- Summaries: the Claude Agent SDK, sonnet at low effort, one turn, no tools. The same run
-  writes the person's own task list after a `:tasks` marker, so the list costs nothing on top
-  of the briefing. `/summary` reports what it spent; caching means a run bills a few hundred
-  tokens against fifty thousand read from cache, so the two are counted apart.
+- Summaries: the Claude Agent SDK, sonnet at low effort, with the three task tools and nothing
+  else. One run writes both the briefing and the person's list. The daemon owns the schedule:
+  briefings are files, one worker walks the sessions, and the phone only ever reads. `/summary`
+  reports what it spent; a run bills a few hundred tokens against fifty thousand read from
+  Anthropic's prompt cache, so the two are counted apart.
 - Lock Screen: a Live Activity (`widgets/`, target `DeckhandWidgets`) saying how many sessions
   have stopped and are waiting. The **Mac** drives it over APNs — a backgrounded app has no
   promise of running again — so the phone only hands over push tokens and the daemon does the
@@ -69,9 +70,11 @@ Sources/DeckhandKit/Design/
   Chrome.swift    # Card, SettingsGroup, SettingRow, PageHeader
 daemon/src/deckhand_daemon/
   sessions.py     # which Claude sessions are alive, and their iTerm pane
-  transcripts.py  # the last rounds, and the activity blob a summary is written from
-  asked.py        # what the person asked for, and what is still in the session's inbox
-  readable.py     # the whole transcript as lines, for when the app's reading looks wrong
+  reading/        # everything that reads a transcript and nothing that writes one
+    transcripts.py  # the last rounds, and the activity blob a summary is written from
+    asked.py        # what the person asked for, and what is still in the session's inbox
+    readable.py     # the whole transcript as lines, for when the app's reading looks wrong
+  briefings.py    # where briefings are kept, and the one worker that keeps them current
   nudge.py        # asks a session that stopped about the asks still open on its list
   tasks.py        # the person's list of asks, and the only three tools that may change it
   files.py        # what the session touched that a person could open, and the permission
@@ -94,6 +97,7 @@ launchd/          # the agent plist, symlinked into ~/Library/LaunchAgents
 hold to talk → `POST /sessions/{id}/audio`, which answers with the transcript and whether it
 reached the session. `?deliver=false` transcribes without sending, for the review card, and
 `POST /sessions/{id}/say` sends the text once the person has read it.
+`GET /briefings` hands back every live session's last briefing at once, off disk, for a cold start.
 `GET /sessions/{id}/raw` hands back the transcript as readable lines — one per event, the syntax
 dropped — for when the question is whether the app read it right.
 `POST /sessions/{id}/queue/clear` draws a line under an inbox holding prompts nothing will read. `GET /sessions/{id}/files` lists what the session touched that a phone can open and
@@ -139,6 +143,19 @@ unauthenticated route; everything else needs the `x-deckhand-token` header, and 
   enqueues with no matching removal, and a replay cannot tell that from a message still waiting.
   `POST /sessions/{id}/queue/clear` writes a timestamp to `queue/<sessionId>.json` and the replay
   starts after it. Claude Code's transcript is never touched — it is not this daemon's file.
+- **A briefing is a file, and the daemon decides when one is owed.** This was a dict in memory
+  with a two-minute TTL, which cost more than everything else in Deckhand put together: a session
+  that had done nothing since its last briefing still bought a model run every two minutes for as
+  long as anyone had the list on screen — the activity hash made a re-read free only *inside* the
+  TTL, and past it an unchanged transcript was a miss like any other. Nothing survived a restart
+  either, so a reinstalled app faced a rail of blank rows and paid for every one again.
+  `briefings.py` keeps the last one under `briefings/<sessionId>.json` and one worker walks the
+  live sessions. Two gates before a model is touched, cheapest first: the transcript's own mtime
+  (a session nobody has touched answers in a `stat`), then the activity hash (Claude Code appends
+  plenty — a mode change, an attachment — that nobody wants a briefing about). Reading
+  `/sessions/{id}/summary` never waits for a model: it answers off disk and **bumps** that session
+  to the front of the queue, so opening a project is what promotes it. `GET /briefings` hands back
+  every live session's last briefing in one call, which is what makes a cold start whole.
 - **The idle check messages sessions on its own** (`nudge.py`). A session that has been quiet for
   `SETTLE` with anything unfinished on its task list is asked, over the **socket** route so it
   arrives labelled as another agent rather than as JJ typing, either to finish or to say why not.

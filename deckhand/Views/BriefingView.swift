@@ -41,7 +41,8 @@ struct BriefingView: View {
         if let text = model.summaries[session.sessionId] {
             Prose(text)
         } else {
-            Text(model.summarising.contains(session.sessionId)
+            Text(model.waiting.contains(session.sessionId)
+                 || model.summarising.contains(session.sessionId)
                  ? "Reading what it did…"
                  : "Nothing yet")
                 .font(Typography.subtitle)

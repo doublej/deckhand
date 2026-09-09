@@ -57,6 +57,9 @@ final class AppModel {
     var spend: [String: Spend] = [:]
     /// Sessions whose summary is being written right now, so the screen can say so.
     var summarising: Set<String> = []
+    /// Sessions the Mac has never written a briefing for. Distinct from one that came back
+    /// empty, which is a session that has genuinely done nothing since you last spoke.
+    var waiting: Set<String> = []
     /// The session whose page is open. The rail lights exactly one row, the way utt does.
     var current: String?
     var connection: Connection = .unpaired
@@ -148,58 +151,6 @@ final class AppModel {
         } catch {
             connection = .failed(reason(error))
             logger.error("session refresh failed: \(String(describing: error))")
-        }
-    }
-
-    /// Stop, compact or clear. Nothing to fetch afterwards: the transcript poll picks up
-    /// whatever the session does about it, which is the honest picture either way.
-    func control(_ action: Control, of session: Session) async {
-        guard let client = settings.client() else { return }
-        await run {
-            try await client.control(action, of: session.sessionId)
-            self.status = "\(action.label) — sent to \(session.name)"
-            if action == .clear { self.turns = [] }
-        }
-    }
-
-    /// Rename a session on the Mac, and move what you had decided about it onto the new name.
-    ///
-    /// The listing catches up on its own once the session actually runs the command — which
-    /// for a busy one is when its turn ends, so the status line says it has been asked rather
-    /// than claiming it is done.
-    func rename(_ session: Session, to name: String) async {
-        guard let client = settings.client() else { return }
-        let wanted = name.collapsed
-        guard !wanted.isEmpty, wanted != session.name else { return }
-        await run {
-            try await client.rename(session.sessionId, to: wanted)
-            self.preferences.renamed(from: session.name, to: wanted)
-            self.preferences.save()
-            self.status = session.isBusy
-                ? "\(session.name) will be \(wanted) when it finishes this turn"
-                : "\(session.name) is now \(wanted)"
-        }
-    }
-
-    /// Throw away whatever the session's inbox still claims to hold.
-    ///
-    /// For prompts that outlived the session that was going to read them: killed mid-queue, the
-    /// enqueues stay in the transcript with nothing to remove them, and the replay cannot tell
-    /// that from a message still waiting.
-    func clearQueue(for session: Session) async {
-        guard let client = settings.client() else { return }
-        await run {
-            try await client.clearQueue(of: session.sessionId)
-            self.queued[session.sessionId] = []
-            self.status = "Cleared \(session.name)'s inbox"
-        }
-    }
-
-    func focus(_ session: Session) async {
-        guard let client = settings.client() else { return }
-        await run {
-            try await client.focus(session.sessionId)
-            self.status = "Focused \(session.name) on the Mac"
         }
     }
 

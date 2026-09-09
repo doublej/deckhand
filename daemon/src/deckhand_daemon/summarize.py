@@ -1,26 +1,21 @@
 """What a session did while you were away, in four sentences a phone can show.
 
-The transcript tail is far too long to read on a phone, so a small model reads it instead.
-The phone polls, so the same activity blob arrives again and again; a short-lived cache keyed
-on the blob's hash means only genuinely new activity costs a model run. Auth comes from the
-Claude Code keychain, which the SDK reaches through the `user` setting source — the daemon
-runs under launchd and has no API key.
+The transcript tail is far too long to read on a phone, so a small model reads it instead. This
+module is only the writing of one: when a briefing is worth writing, and where the last one is
+kept, is `briefings`. Auth comes from the Claude Code keychain, which the SDK reaches through
+the `user` setting source — the daemon runs under launchd and has no API key.
 """
 
 from __future__ import annotations
 
 import asyncio
-import hashlib
-import time
 
 from . import tasks
 from .log import log
 
 MODEL = "claude-sonnet-5"
 TIMEOUT = 60
-TTL = 120
 MAX_TURNS = 16
-MAX_ENTRIES = 32
 SYSTEM_PROMPT = """You are writing the briefing a developer reads on their phone when they
 come back to a Claude Code session they left running. They have been away and they want to know
 what happened, fast, on a screen the size of a hand.
@@ -100,9 +95,6 @@ def headline(summary: str | None) -> str | None:
     return None
 
 
-# (session_id, activity hash) -> (summary, written_at). Cleared by tests.
-_cache: dict[tuple[str, str], tuple[str, float]] = {}
-
 # What the briefings have cost since the daemon started, per session and in total. Kept in
 # memory on purpose: it answers "is this thing expensive?", which is a question about now.
 # A cache hit costs nothing and is counted as nothing, which is the point of the cache.
@@ -113,9 +105,9 @@ def spent(session_id: str | None = None) -> dict[str, int]:
     """What the briefings have cost: for one session, or every session added up.
 
     Three numbers, because three is what anyone would ask: how many were written, what they
-    were billed, and how much of the reading was already cached. Cache reads are counted apart
-    from the rest — they are most of the traffic and almost none of the cost, and adding them
-    in would make the whole thing look ten times more expensive than it is.
+    were billed, and how much of the reading Anthropic served from its own prompt cache. Those
+    reads are counted apart — they are most of the traffic and almost none of the cost, and
+    adding them in would make the whole thing look ten times more expensive than it is.
     """
     counts = _spent.get(session_id, {}) if session_id is not None else _total()
     return {
@@ -134,11 +126,7 @@ def _total() -> dict[str, int]:
 
 
 def _count(session_id: str, usage: dict | None) -> None:
-    """One run's usage, added to this session's running total.
-
-    Cache reads are the whole point of the cache, so they are not counted — what is counted is
-    what was actually asked of the model.
-    """
+    """One run's usage, added to this session's running total."""
     if not isinstance(usage, dict):
         return
     counts = _spent.setdefault(session_id, {})
@@ -156,17 +144,9 @@ async def summarize(
     if not activity.strip() and not asks.strip():
         return None, None
     blob = f"{asks}\n\nSINCE THEY LAST SPOKE\n{activity}" if asks.strip() else activity
-    # Keyed on the transcript alone, not on the list. The list changes *because* of a run, so
-    # including it would make every run pay for a second one that finds nothing to change.
-    key = (session_id, hashlib.sha256(blob.encode()).hexdigest())
-    cached = _cached(key)
-    if cached:
-        return cached, None
     summary, error, usage = await _run(f"THE LIST SO FAR\n{tasks.render(session_id)}\n\n{blob}",
                                       session_id)
     _count(session_id, usage)
-    if summary:
-        _store(key, summary)
     return summary, error
 
 
@@ -220,17 +200,3 @@ async def _run(activity: str, session_id: str) -> tuple[str | None, str | None, 
     except (ClaudeSDKError, OSError) as error:
         log.warning("summary failed: %s", error)
         return None, f"the model could not be reached: {error}", None
-
-
-def _cached(key: tuple[str, str]) -> str | None:
-    entry = _cache.get(key)
-    if not entry or time.monotonic() - entry[1] > TTL:
-        return None
-    return entry[0]
-
-
-def _store(key: tuple[str, str], summary: str) -> None:
-    """Drop the oldest entry when full — a phone watches a handful of sessions, not thousands."""
-    if len(_cache) >= MAX_ENTRIES:
-        del _cache[min(_cache, key=lambda k: _cache[k][1])]
-    _cache[key] = (summary, time.monotonic())

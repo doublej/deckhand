@@ -54,13 +54,13 @@ struct SessionListView: View {
             guard now == .active else { return }
             Task { await model.refreshSessions() }
         }
-        // Its own loop, slower than the listing's: a headline is a model reading a transcript,
-        // not a field on the session. Prefetching them here also means a session you then open
-        // already has its briefing written.
+        // Its own loop, and one call for every session rather than one each. The Mac writes
+        // these on its own cycle and keeps them on disk, so this reads rather than commissions:
+        // the first sweep after a cold start fills the whole rail and costs nothing.
         .task {
             while !Task.isCancelled {
-                await model.loadHeadlines()
-                try? await Task.sleep(for: .seconds(45))
+                await model.loadBriefings()
+                try? await Task.sleep(for: .seconds(12))
             }
         }
     }

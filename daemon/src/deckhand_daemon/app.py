@@ -14,21 +14,19 @@ from fastapi.responses import FileResponse
 
 from . import (
     __version__,
-    asked,
+    briefings,
     config,
     deliver,
     files,
     nudge,
     plugin,
     push,
-    readable,
     sessions,
     summarize,
-    tasks,
     transcribe,
-    transcripts,
 )
 from .log import log
+from .reading import asked, readable, transcripts
 
 AUDIO_SUFFIXES = {".m4a", ".caf", ".wav", ".mp3", ".aac", ".mp4", ".ogg", ".flac", ".webm"}
 
@@ -44,7 +42,7 @@ async def lifespan(_: FastAPI):
     being reinstalled or the folder being cleared, and it costs one file write."""
     plugin.install()
     watchers = [asyncio.create_task(plugin.watch()), asyncio.create_task(push.watch()),
-                asyncio.create_task(nudge.watch())]
+                asyncio.create_task(nudge.watch()), asyncio.create_task(briefings.watch())]
     yield
     for watcher in watchers:
         watcher.cancel()
@@ -109,29 +107,29 @@ def list_sessions() -> dict:
 
 @app.get("/sessions/{session_id}/summary", dependencies=[Depends(require_token)])
 async def session_summary(session_id: str) -> dict:
-    """What this session has been doing since the person last spoke to it."""
-    session = await _live_session(session_id)
-    activity = await asyncio.to_thread(transcripts.activity_since_last_user, session_id)
-    asks = await asyncio.to_thread(asked.asks_of, session_id)
-    briefing, error = await summarize.summarize(session_id, activity, asks)
-    # The list is not in the answer: the model changed it with tools while it was reading, and
-    # this is the file it changed. One run, two outputs, and only one of them is prose.
-    listed = tasks.load(session_id)
-    told = error or f"{len(briefing or '')} chars, {len(listed)} tasks"
-    log.info("summary for %s: %s", session.name, told)
+    """The last briefing written for this session, and this session to the front of the queue.
+
+    Never waits for a model. Opening a session is exactly when its briefing matters most and
+    exactly when there is least patience for a blank page, so the answer is the last true thing
+    said about it and the reading is what promotes it to be written about next.
+    """
+    await _live_session(session_id)
+    briefings.bump(session_id)
+    return briefings.of(session_id)
+
+
+@app.get("/briefings", dependencies=[Depends(require_token)])
+def all_briefings() -> dict:
+    """Every live session's last briefing, off disk, in one call.
+
+    This is what makes a cold start whole: a reinstalled app knows everything the Mac knew a
+    moment before, without buying a single briefing to find it out.
+    """
+    kept = {s.session_id: briefings.of(s.session_id) for s in sessions.live_sessions()}
     whole = summarize.spent()
     if whole["runs"]:
         plugin.status(briefings=f"{whole['runs']} written, {whole['tokens']:,} tokens")
-    return {
-        "summary": briefing,
-        "headline": summarize.headline(briefing),
-        "tasks": listed,
-        # What writing these has cost since the daemon started. Everything else here is
-        # free — utt transcribes on this Mac and reads the transcripts off disk — so this
-        # one number is the whole of what Deckhand spends.
-        "spent": summarize.spent(session_id),
-        "error": error,
-    }
+    return {"briefings": kept}
 
 
 @app.get("/sessions/{session_id}/files", dependencies=[Depends(require_token)])

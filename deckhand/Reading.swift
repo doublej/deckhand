@@ -38,39 +38,49 @@ extension AppModel {
         }
     }
 
-    /// Reads every listed session's headline, one at a time.
+    /// Every session's briefing, in one call, off the Mac's disk.
     ///
-    /// The Mac caches on what the session has actually done, so asking again about a session
-    /// that has been quiet costs a round trip and no model run. Sequential on purpose: six
-    /// sessions summarised at once is six models thinking, and the rail is not worth that.
-    func loadHeadlines() async {
-        for session in visibleSessions where !summarising.contains(session.sessionId) {
-            await loadSummary(for: session, announcing: false)
+    /// One request rather than one per session, and no model runs at all: the Mac writes these
+    /// on its own cycle and this only collects them. That is what makes the first sweep after a
+    /// cold start complete — a reinstalled app knows what the Mac knew a moment ago.
+    func loadBriefings() async {
+        guard let client = settings.client() else { return }
+        guard let written = try? await client.briefings() else { return }
+        for (sessionId, briefing) in written {
+            absorb(briefing, for: sessionId)
         }
     }
 
-    /// `announcing` is false for the rail's own sweep: six sessions taking turns to write the
-    /// status line would make it flicker through six messages nobody asked for.
+    /// One session's briefing, which also moves it to the front of the Mac's queue. Opening a
+    /// session is exactly when its briefing is worth more than any other's.
     func loadSummary(for session: Session, announcing: Bool = true) async {
         guard let client = settings.client() else { return }
         summarising.insert(session.sessionId)
         defer { summarising.remove(session.sessionId) }
         await run {
-            let summary = try await client.summary(of: session.sessionId)
-            if let error = summary.error, announcing {
-                self.status = error
-            }
-            // No summary and no error means the session has done nothing since you last spoke.
-            // Say that: a card that simply disappears reads as a failure.
-            self.summaries[session.sessionId] = summary.summary
-                ?? summary.error
-                ?? "Nothing since you last spoke"
-            self.headlines[session.sessionId] = summary.headline
-            // Only when there is one: a session whose summary came back without a list has
-            // not withdrawn the list it had, it simply had nothing new to say about it.
-            if !summary.tasks.isEmpty { self.tasks[session.sessionId] = summary.tasks }
-            self.spend[session.sessionId] = summary.spent
+            let briefing = try await client.summary(of: session.sessionId)
+            if let error = briefing.error, announcing { self.status = error }
+            self.absorb(briefing, for: session.sessionId)
         }
+    }
+
+    /// What a briefing changes on the model, from whichever call brought it.
+    private func absorb(_ briefing: Summary, for sessionId: String) {
+        // Never written and never blank are different things, and only one of them is news.
+        // A session the Mac has not got to yet keeps saying "reading", not "nothing happened".
+        if briefing.isUnwritten {
+            waiting.insert(sessionId)
+        } else {
+            waiting.remove(sessionId)
+            summaries[sessionId] = briefing.summary
+                ?? briefing.error
+                ?? "Nothing since you last spoke"
+            headlines[sessionId] = briefing.headline
+        }
+        // Only when there is one: a session whose briefing came back without a list has not
+        // withdrawn the list it had, it simply had nothing new to say about it.
+        if !briefing.tasks.isEmpty { tasks[sessionId] = briefing.tasks }
+        spend[sessionId] = briefing.spent
     }
 
     /// The files this session touched. Asked for when the tab is opened, not polled: it is a

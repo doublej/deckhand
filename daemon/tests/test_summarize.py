@@ -13,8 +13,8 @@ run = asyncio.run
 
 
 @pytest.fixture(autouse=True)
-def empty_cache(tmp_path, monkeypatch):
-    summarize_module._cache.clear()
+def own_data_dir(tmp_path, monkeypatch):
+    summarize_module._spent.clear()
     monkeypatch.setenv("DECKHAND_DATA_DIR", str(tmp_path / "data"))
 
 
@@ -57,13 +57,19 @@ def test_a_normal_run_returns_what_the_model_wrote(monkeypatch):
     assert "THE LIST SO FAR" in calls[0]
 
 
-def test_the_same_activity_is_summarised_once(monkeypatch):
+def test_asking_twice_runs_twice_because_deciding_is_not_this_module_s_job(monkeypatch):
+    """This writes a briefing when told to. Whether one is owed is `briefings._due`.
+
+    It used to hold a two-minute cache of its own, which meant a session that had done nothing
+    still bought a run every two minutes. The decision moved to the one place that can see the
+    transcript's mtime, and this became the plain thing it says it is.
+    """
     calls: list[str] = []
     monkeypatch.setattr(claude_agent_sdk, "query", answering("Edited two handlers.", calls))
     first = run(summarize("s1", ACTIVITY))
     second = run(summarize("s1", ACTIVITY))
     assert first == second
-    assert len(calls) == 1
+    assert len(calls) == 2
 
 
 def test_a_failing_sdk_becomes_a_message_not_a_crash(monkeypatch):

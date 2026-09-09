@@ -22,12 +22,20 @@ public struct DeckhandClient: Sendable {
     }
 
     /// What the session did since you last spoke. The Mac runs a small model to write it.
+    /// The last briefing the Mac wrote for this session, and a nudge to write the next one.
+    ///
+    /// It answers off disk, so no long timeout: the Mac never makes the phone wait for a model.
+    /// Asking is what moves this session to the front of the queue.
     public func summary(of sessionId: String) async throws -> Summary {
-        var req = request(.get, "sessions/\(sessionId)/summary")
-        // Longer than the daemon's own 60 s cap, so a slow model comes back as the daemon
-        // saying so rather than as the phone giving up on a Mac that is still writing.
-        req.timeoutInterval = 75
-        return try decode(try await send(req))
+        try decode(try await send(request(.get, "sessions/\(sessionId)/summary")))
+    }
+
+    /// Every live session's last briefing in one call, which is what makes a cold start whole:
+    /// a freshly installed app knows what the Mac knew, without buying any of it again.
+    public func briefings() async throws -> [String: Summary] {
+        struct Wrapper: Decodable { let briefings: [String: Summary] }
+        let wrapper: Wrapper = try decode(try await send(request(.get, "briefings")))
+        return wrapper.briefings
     }
 
     /// Everything this session touched that you could open and look at.

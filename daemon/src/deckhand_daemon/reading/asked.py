@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 
-from .config import data_dir
+from ..config import data_dir
 from .transcripts import (
     MACHINE,
     TAIL_WINDOWS,

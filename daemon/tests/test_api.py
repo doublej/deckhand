@@ -168,3 +168,29 @@ def test_a_file_that_is_not_an_image_is_refused(token):
         f"/sessions/{SID}/image", files={"file": ("notes.txt", b"hello", "text/plain")}
     )
     assert answer.status_code == 415
+
+
+def test_every_briefing_comes_back_in_one_call_without_a_model(token):
+    """The cold start: a reinstalled app is handed what the Mac already knew, for one request.
+
+    Nothing here can reach a model — the SDK is never touched — which is the guarantee that
+    matters. A blank rail after a reinstall used to be bought back one model run at a time.
+    """
+    from deckhand_daemon import briefings
+
+    briefings.save(SID, {"summary": "Built it", "headline": "Built it", "written_at": 1.0})
+
+    written = client(token).get("/briefings").json()["briefings"]
+
+    assert written[SID]["headline"] == "Built it"
+    assert written[SID]["writtenAt"] == 1.0
+    # Every live session is listed, written about or not, so the phone can tell the two apart.
+    assert set(written) == {s.session_id for s in sessions.live_sessions()}
+
+
+def test_reading_one_summary_moves_that_session_to_the_front_of_the_queue(token):
+    from deckhand_daemon import briefings
+
+    briefings._bumped.clear()
+    assert client(token).get(f"/sessions/{SID}/summary").status_code == 200
+    assert briefings._bumped == [SID]

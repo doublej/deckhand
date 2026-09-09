@@ -1,6 +1,6 @@
 import json
 
-from deckhand_daemon import transcripts
+from deckhand_daemon.reading import transcripts
 
 SID = "aaaa1111-2222-3333-4444-555566667777"
 

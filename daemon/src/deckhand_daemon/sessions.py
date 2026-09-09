@@ -16,7 +16,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from .log import log
-from .transcripts import TAIL_WINDOWS, parse_line, tail_lines, transcript_path
+from .reading.transcripts import TAIL_WINDOWS, parse_line, tail_lines, transcript_path
 
 PANE_TTL = 3.0  # seconds; one `it2` call costs ~0.5 s and the phone polls every few
 # When iTerm will not answer, every call costs the full timeout. Back off instead of paying

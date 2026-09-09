@@ -15,7 +15,7 @@ import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from .transcripts import TAIL_WINDOWS, tail_lines, transcript_path
+from .reading.transcripts import TAIL_WINDOWS, tail_lines, transcript_path
 
 KINDS = {
     "image": (".png", ".jpg", ".jpeg", ".gif", ".heic", ".webp", ".bmp", ".tiff"),

@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from deckhand_daemon import readable
+from deckhand_daemon.reading import readable
 
 SID = "aaaa1111-2222-3333-4444-555566667777"
 

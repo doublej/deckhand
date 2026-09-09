@@ -14,6 +14,11 @@ public struct Summary: Codable, Hashable, Sendable {
     /// What writing these has cost. Nothing else in Deckhand spends anything.
     public var spent: Spend?
     public let error: String?
+    /// When the Mac wrote this one. Absent means it has never written one for this session.
+    public var writtenAt: Double?
+    /// A newer one is owed and queued. Not "wrong": what is here is still the last true thing
+    /// said about the session, which is why it is shown rather than replaced with a spinner.
+    public var stale = false
 
     public init(from decoder: Decoder) throws {
         let box = try decoder.container(keyedBy: CodingKeys.self)
@@ -22,7 +27,13 @@ public struct Summary: Codable, Hashable, Sendable {
         tasks = try box.decodeIfPresent([Ask].self, forKey: .tasks) ?? []
         spent = try box.decodeIfPresent(Spend.self, forKey: .spent)
         error = try box.decodeIfPresent(String.self, forKey: .error)
+        writtenAt = try box.decodeIfPresent(Double.self, forKey: .writtenAt)
+        stale = try box.decodeIfPresent(Bool.self, forKey: .stale) ?? false
     }
+
+    /// True when the Mac has never written one. Different from an empty one, which means the
+    /// session has genuinely done nothing since you last spoke to it.
+    public var isUnwritten: Bool { writtenAt == nil }
 }
 
 /// What the briefings for one session have cost since the Mac last started.

@@ -21,8 +21,9 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import config, sessions, transcripts
+from . import config, sessions
 from .log import log
+from .reading import transcripts
 
 # Development, to match the app's `aps-environment`. A production-signed build talks to the
 # other host, and a token minted for one is rejected by the other.
