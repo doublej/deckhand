@@ -19,6 +19,9 @@ public struct Session: Codable, Hashable, Identifiable, Sendable {
     public let updatedAt: Double
     public let tty: String
     public let pane: Pane?
+    /// How full its context window is. Absent from a daemon that predates it — the synthesised
+    /// decoder reads an optional with `decodeIfPresent`, so a missing key is simply nil.
+    public var context: ContextWindow?
 
     public var id: String { sessionId }
     public var isBusy: Bool { status == "busy" }
@@ -33,6 +36,49 @@ public struct Session: Codable, Hashable, Identifiable, Sendable {
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(sessionId)
+    }
+}
+
+/// How much of a session's context window is gone.
+///
+/// Not `Context`: inside a `UIViewRepresentable` that name is already a typealias of SwiftUI's
+/// own, and a public type called `Context` in a module imported beside SwiftUI silently breaks
+/// the conformance of anything that spells its `makeUIView(context:)` the documented way.
+///
+/// The limit is the one Claude Code is actually configured to compact at on that Mac
+/// (`autoCompactWindow`), not the model's own ceiling: what matters is when *this* session
+/// will fold itself into a summary, which is a setting rather than a fact about the model.
+public struct ContextWindow: Codable, Hashable, Sendable {
+    public let used: Int
+    public let limit: Int
+
+    public init(used: Int, limit: Int) {
+        self.used = used
+        self.limit = limit
+    }
+
+    public var share: Double {
+        limit > 0 ? min(1, Double(used) / Double(limit)) : 0
+    }
+
+    /// "319k of 450k" — thousands, because nobody reads the last three digits of either.
+    public var line: String {
+        "\(Self.thousands(used)) of \(Self.thousands(limit))"
+    }
+
+    private static func thousands(_ count: Int) -> String {
+        count < 1000 ? "\(count)" : "\(count / 1000)k"
+    }
+
+    /// Three bands, because the only decision this drives is whether to do something about it.
+    public enum Pressure: Sendable { case easy, tight, full }
+
+    public var pressure: Pressure {
+        switch share {
+        case ..<0.75: .easy
+        case ..<0.9: .tight
+        default: .full
+        }
     }
 }
 

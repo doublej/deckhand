@@ -16,6 +16,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from .log import log
+from .transcripts import TAIL_WINDOWS, parse_line, tail_lines, transcript_path
 
 PANE_TTL = 3.0  # seconds; one `it2` call costs ~0.5 s and the phone polls every few
 # When iTerm will not answer, every call costs the full timeout. Back off instead of paying
@@ -186,3 +187,51 @@ def focus(session: Session) -> bool:
         check=False,
     )
     return r.returncode == 0
+
+
+# How far back to look for the last request's token usage. Small on purpose: it is the last
+# assistant entry in the file, and this is read for every session on every listing.
+USAGE_WINDOW = 256 * 1024
+# What Claude Code compacts at when nothing says otherwise. The real number is
+# `autoCompactWindow` in the person's own settings, which is what is read first — this is only
+# the floor under a machine that has never set one.
+DEFAULT_WINDOW = 200_000
+
+
+def context_used(session_id: str) -> int:
+    """How much of the context window the session's last request filled.
+
+    Every assistant entry carries the usage of the request that produced it, and the whole
+    prompt is what was billed as input: what was newly written, what was newly cached, and what
+    was read back from cache. Output is not in the window — it is what came out of it.
+
+    Read over a small window, because this is asked for every session on every listing and the
+    answer is always in the last few entries of the file.
+    """
+    path = transcript_path(session_id)
+    if path is None:
+        return 0
+    for window in (USAGE_WINDOW, TAIL_WINDOWS[1]):
+        for raw in reversed(tail_lines(path, window)):
+            entry = parse_line(raw)
+            if entry is None or entry.get("type") != "assistant" or entry.get("isSidechain"):
+                continue
+            usage = entry.get("message", {}).get("usage")
+            if isinstance(usage, dict):
+                return sum(
+                    value
+                    for key in ("input_tokens", "cache_creation_input_tokens",
+                                "cache_read_input_tokens")
+                    if isinstance(value := usage.get(key), int)
+                )
+    return 0
+
+
+def context_window() -> int:
+    """The limit this Mac is configured to compact at, out of Claude Code's own settings."""
+    settings = sessions_dir().parent / "settings.json"
+    try:
+        configured = json.loads(settings.read_text()).get("autoCompactWindow")
+    except (OSError, json.JSONDecodeError, AttributeError):
+        return DEFAULT_WINDOW
+    return configured if isinstance(configured, int) and configured > 0 else DEFAULT_WINDOW

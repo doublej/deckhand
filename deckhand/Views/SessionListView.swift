@@ -222,6 +222,13 @@ private struct SessionRow: View {
                 if !asks.isEmpty {
                     AskDots(asks: asks).padding(.top, 2)
                 }
+                // How full its context is, as the shape alone: the number belongs on the
+                // session's own page, and what a row needs to say is "this one is nearly
+                // out of room" without spending a line on it.
+                if let context = session.context {
+                    Meter(context.share, tint: Palette.pressure(context.pressure), thickness: 2)
+                        .padding(.top, Spacing.xxs)
+                }
             }
         }
         .padding(Spacing.small)

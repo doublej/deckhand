@@ -48,12 +48,7 @@ struct AssetView: View {
         case .picture(let image):
             // Zoomable, because half of what a session makes is a screenshot of something
             // small in the corner of something large.
-            ScrollView([.horizontal, .vertical]) {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxWidth: .infinity)
-            }
+            Zoomable(image: image)
         case .words(let text):
             ScrollView {
                 Text(text)
@@ -132,4 +127,96 @@ struct AssetView: View {
         if let local { try? FileManager.default.removeItem(at: local) }
         ready = nil
     }
+}
+
+/// A picture that fits the sheet and zooms.
+///
+/// This is UIScrollView's own job and it does the whole of it: fit on open, pinch to zoom,
+/// pan inside the picture, double tap in and out, and the bounce at the edges. A SwiftUI
+/// `ScrollView` was doing none of it — asked for both axes it proposes unbounded space, so
+/// `scaledToFit` had nothing to fit to and a screenshot drew at its full pixel size.
+struct Zoomable: UIViewRepresentable {
+    let image: UIImage
+
+    func makeUIView(context: Context) -> PictureScroll {
+        PictureScroll(image: image)
+    }
+
+    func updateUIView(_ view: PictureScroll, context: Context) {
+        view.show(image)
+    }
+}
+
+/// Its own delegate and its own layout: the fit has to be redone whenever the sheet changes
+/// size, and `layoutSubviews` is the only place that is reliably known.
+final class PictureScroll: UIScrollView, UIScrollViewDelegate {
+    private let picture = UIImageView()
+    /// The bounds the current fit was worked out for. Refitting on every layout pass would
+    /// throw away the zoom the person just pinched.
+    private var fittedFor: CGSize = .zero
+
+    init(image: UIImage) {
+        super.init(frame: .zero)
+        delegate = self
+        maximumZoomScale = 12
+        showsHorizontalScrollIndicator = false
+        showsVerticalScrollIndicator = false
+        backgroundColor = .clear
+        picture.contentMode = .scaleAspectFit
+        picture.image = image
+        addSubview(picture)
+        let twice = UITapGestureRecognizer(target: self, action: #selector(tappedTwice))
+        twice.numberOfTapsRequired = 2
+        addGestureRecognizer(twice)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("not from a nib") }
+
+    func show(_ image: UIImage) {
+        guard picture.image !== image else { return }
+        picture.image = image
+        fittedFor = .zero
+        setNeedsLayout()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        if bounds.size != fittedFor { fit() }
+        centre()
+    }
+
+    /// The picture is sized to the rectangle it actually fills, not to the whole sheet, so a
+    /// zoomed-in pan runs out at the edge of the image rather than in the letterboxing.
+    private func fit() {
+        guard let image = picture.image, bounds.width > 0, bounds.height > 0 else { return }
+        fittedFor = bounds.size
+        zoomScale = 1
+        let scale = min(bounds.width / image.size.width, bounds.height / image.size.height)
+        let fitted = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+        picture.frame = CGRect(origin: .zero, size: fitted)
+        contentSize = fitted
+    }
+
+    /// Kept in the middle while it is smaller than the sheet, which is most of the time.
+    private func centre() {
+        let sideways = max(0, (bounds.width - picture.frame.width) / 2)
+        let upright = max(0, (bounds.height - picture.frame.height) / 2)
+        contentInset = UIEdgeInsets(top: upright, left: sideways, bottom: upright, right: sideways)
+    }
+
+    @objc private func tappedTwice(_ tap: UITapGestureRecognizer) {
+        guard zoomScale <= minimumZoomScale else {
+            return setZoomScale(minimumZoomScale, animated: true)
+        }
+        // In on the spot that was tapped, not on the middle of the picture.
+        let spot = tap.location(in: picture)
+        let side = bounds.width / 3
+        zoom(to: CGRect(x: spot.x - side / 2, y: spot.y - side / 2, width: side, height: side),
+             animated: true)
+    }
+
+    func viewForZooming(in scrollView: UIScrollView) -> UIView? { picture }
+
+    func scrollViewDidZoom(_ scrollView: UIScrollView) { centre() }
 }

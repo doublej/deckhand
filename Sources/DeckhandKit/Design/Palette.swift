@@ -22,6 +22,16 @@ public enum Palette {
     public static let textPrimary = Color.primary
     public static let textSecondary = Color.secondary
     public static let textTertiary = Color.secondary.opacity(0.7)
+    /// How close to full reads as green, amber, red — the same three colours the LCD states
+    /// use, because it is the same question: is this fine, is it going, has it gone.
+    public static func pressure(_ level: ContextWindow.Pressure) -> Color {
+        switch level {
+        case .easy: tint
+        case .tight: lcdYellow
+        case .full: lcdRed
+        }
+    }
+
     /// The tile a glyph sits on when it is not the current one.
     public static let tileIdle = Color.primary.opacity(0.08)
 

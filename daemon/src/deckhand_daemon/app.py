@@ -89,7 +89,15 @@ def list_sessions() -> dict:
         # The phone asks for this every few seconds anyway, so the plugin page gets a live
         # count for free rather than the daemon paying for one of its own.
         plugin.status(sessions=f"{len(live)} live")
-    return {"sessions": [s.to_json() for s in live], "iterm": status}
+    # How full each one's context is. Read here rather than on the session record because it
+    # comes out of the transcript, not the registry — and a phone deciding which session needs
+    # attention wants to know which one is about to compact.
+    window = sessions.context_window()
+    listed = [
+        s.to_json() | {"context": {"used": sessions.context_used(s.session_id), "limit": window}}
+        for s in live
+    ]
+    return {"sessions": listed, "iterm": status}
 
 
 @app.get("/sessions/{session_id}/summary", dependencies=[Depends(require_token)])

@@ -131,3 +131,31 @@ public struct PageHeader<Trailing: View>: View {
         }
     }
 }
+
+/// A bar that says how full something is, and nothing else. No number of its own: whatever it
+/// measures says what it is beside it, or the bar is small enough that the shape is the message.
+public struct Meter: View {
+    private let share: Double
+    private let tint: Color
+    private let thickness: CGFloat
+
+    public init(_ share: Double, tint: Color, thickness: CGFloat = 3) {
+        self.share = min(max(share, 0), 1)
+        self.tint = tint
+        self.thickness = thickness
+    }
+
+    public var body: some View {
+        GeometryReader { space in
+            ZStack(alignment: .leading) {
+                Capsule().fill(tint.opacity(0.15))
+                Capsule()
+                    .fill(tint)
+                    .frame(width: max(thickness, space.size.width * share))
+            }
+        }
+        .frame(height: thickness)
+        .accessibilityElement()
+        .accessibilityLabel("\(Int(share * 100)) percent full")
+    }
+}

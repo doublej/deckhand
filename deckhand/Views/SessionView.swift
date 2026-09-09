@@ -22,6 +22,7 @@ struct SessionView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            fullness
             switch showing {
             case .summary: BriefingView(model: model, session: session)
             case .transcript: TranscriptView(model: model, session: session)
@@ -148,6 +149,22 @@ struct SessionView: View {
 
     private func send(_ action: Control) {
         Task { await model.control(action, of: session) }
+    }
+
+    /// How much of the window this session has left, on every tab: it is the one number that
+    /// changes what you would do next — compact it now, or carry on.
+    @ViewBuilder private var fullness: some View {
+        if let context = session.context {
+            HStack(spacing: Spacing.extraSmall) {
+                Meter(context.share, tint: Palette.pressure(context.pressure), thickness: 3)
+                Text(context.line)
+                    .font(Typography.hint)
+                    .monospacedDigit()
+                    .foregroundStyle(Palette.textTertiary)
+            }
+            .padding(.horizontal, Spacing.medium)
+            .padding(.bottom, Spacing.small)
+        }
     }
 
     private var subtitle: String {

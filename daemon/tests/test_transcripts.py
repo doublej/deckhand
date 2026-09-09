@@ -15,10 +15,13 @@ def user(text, **kw):
     return {"type": "user", "message": {"content": text}, "timestamp": "2026-09-09T10:00:00Z", **kw}
 
 
-def assistant(blocks, **kw):
+def assistant(blocks, message_usage=None, **kw):
+    message = {"content": blocks}
+    if message_usage is not None:
+        message["usage"] = message_usage
     return {
         "type": "assistant",
-        "message": {"content": blocks},
+        "message": message,
         "timestamp": "2026-09-09T10:00:01Z",
         **kw,
     }

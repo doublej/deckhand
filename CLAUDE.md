@@ -125,6 +125,17 @@ unauthenticated route; everything else needs the `x-deckhand-token` header, and 
   nothing happen used to read as having sent nothing. `dequeue` carries no content, so the
   replay pops the oldest; a `remove` naming something outside the tail window does the same,
   which is what lets a replay that began mid-queue still empty in the right order.
+- **How full a session's context is comes off its own transcript.** Every assistant entry
+  carries the usage of the request that produced it, and the window is what was billed as
+  input — `input_tokens` + `cache_creation_input_tokens` + `cache_read_input_tokens`. Output is
+  not in it. The limit is `autoCompactWindow` from `~/.claude/settings.json` (450k here), not
+  the model's own ceiling: what matters is when *this* Mac folds a session into a summary.
+  Read over a 256 KB tail, because it is asked for every session on every listing.
+- **Never call a public type `Context` in DeckhandKit.** Inside a `UIViewRepresentable`,
+  `Context` is already a typealias for `UIViewRepresentableContext<Self>`, so a module-level
+  `Context` imported beside SwiftUI silently breaks the conformance of anything spelling
+  `makeUIView(context:)` the documented way — the error names the representable, not the clash.
+  It is `ContextWindow`.
 - **Stop, compact and clear are keystrokes, not messages.** `deliver.control` sends Escape for
   a cancel and types `/compact` or `/clear` the same way a spoken line is typed. The peer socket
   cannot do any of them — it delivers a message and none of these is one — so a session with no

@@ -29,6 +29,7 @@ MAX_DETAIL = 140
 MAX_FULL = 4000
 
 
+
 @dataclass(slots=True)
 class Tool:
     """One thing the session ran, small enough to sit under a message as a dot."""
