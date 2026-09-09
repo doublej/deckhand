@@ -5,6 +5,11 @@ excluded:
   # every file is linted twice and its own .build/ derived sources are linted as if they were
   # ours — which is how a clean tree reports violations in generated code nobody wrote.
   - .worktrees
+  # The same thing again, one directory along: the harness puts an agent's worktree under
+  # `.claude/worktrees/` rather than `.worktrees/`, and `- .build` only ever meant this
+  # checkout's own. Measured: 28 violations, every one of them in another agent's
+  # `.build/**/DerivedSources`, on a tree whose own 176 files were clean.
+  - .claude
 
 function_body_length:
   warning: 20
