@@ -74,11 +74,14 @@ struct SayInto: View {
     /// teal: the page underneath is what turns orange, because that is the screen being recorded
     /// into, and a sheet that changed colour with it would leave nothing to notice.
     private func face(_ state: TalkState) -> some View {
-        word
-            .font(.system(size: 14))
+        word(state)
+            // 17pt, which is what the Done and Delete buttons at the top of the same sheet are
+            // set in. This was 14 and read as a smaller, denser control than the two it shares a
+            // page with — the same word at two sizes on one sheet is what made it look off.
+            .font(.system(size: 17))
             .foregroundStyle(state.isRecording || state.busy ? Color.white : Palette.tint)
             .lineLimit(1)
-            .padding(.horizontal, compact ? 0 : Spacing.small)
+            .padding(.horizontal, compact ? 0 : Spacing.medium)
             .frame(minWidth: compact ? Self.touch : 0, minHeight: Self.touch)
             .background(Capsule().fill(fill(state)))
             .contentShape(.capsule)
@@ -90,11 +93,15 @@ struct SayInto: View {
     /// A word where there is room for one, and the glyph alone in a row's control slot — which is
     /// already holding a field and has no width to spare. `ReviewCard`'s attach buttons make the
     /// same two shapes out of the same pair.
-    @ViewBuilder private var word: some View {
+    @ViewBuilder private func word(_ state: TalkState) -> some View {
+        let glyph = state.isRecording || state.busy ? "mic.fill" : "mic"
         if compact {
-            Image(systemName: "mic.fill").font(.system(size: 15, weight: .semibold))
+            Image(systemName: glyph).font(.system(size: 15, weight: .semibold))
         } else {
-            Label("Say", systemImage: "mic.fill")
+            // Outline while it waits, filled while it listens. A filled glyph sitting beside two
+            // plain toolbar words was a third weight on a sheet that only needs one, and the fill
+            // is worth more as the thing that changes than as the thing that is always there.
+            Label("Say", systemImage: glyph)
         }
     }
 
