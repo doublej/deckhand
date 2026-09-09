@@ -48,24 +48,35 @@ struct AskList: View {
 /// One ask as a box you can tick. Square on purpose: a round dot is what a tool call wears in
 /// the transcript, and two different things reading as the same mark is worse than either.
 ///
-/// Empty is not started, a small mark inside is under way, a filled one is done.
+/// The three states differ by **how much of the square is filled**, never by a second shape put
+/// inside the first. It used to be a rounded outline holding a smaller rounded rectangle, which
+/// at the 9pt size a row uses meant two corner radii under two points each and a 1.2pt border
+/// landing between pixels — a mark that read as a smudge rather than a box.
+///
+/// So: no radius at all, a 1pt border on the pixel grid, and integral geometry. Empty is not
+/// started, the left half filled is under way, solid is done.
 struct AskDot: View {
     let state: Ask.State
     var size: CGFloat = 11
     @Environment(\.accent) private var accent
 
     var body: some View {
-        RoundedRectangle(cornerRadius: size * 0.22, style: .continuous)
-            .strokeBorder(edge, lineWidth: 1.2)
-            .frame(width: size, height: size)
-            .overlay {
-                if state != .todo {
-                    RoundedRectangle(cornerRadius: size * 0.14, style: .continuous)
-                        .fill(edge)
-                        .frame(width: size * inside, height: size * inside)
+        ZStack(alignment: .leading) {
+            if state == .done {
+                // The fill *is* the square when it is done. Nothing is drawn on top of it, so
+                // there is no border sitting a fraction of a point outside a filled shape.
+                Rectangle().fill(edge)
+            } else {
+                Rectangle().strokeBorder(edge, lineWidth: 1)
+                // Half, rounded to a whole point so the edge of the fill lands where the pixels
+                // are. Under way is genuinely half a box rather than a smaller box.
+                if state == .doing {
+                    Rectangle().fill(edge).frame(width: (size / 2).rounded())
                 }
             }
-            .accessibilityHidden(true)
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
     }
 
     private var edge: Color {
@@ -74,12 +85,6 @@ struct AskDot: View {
         case .doing: Palette.lcdYellow
         case .todo: Palette.textTertiary
         }
-    }
-
-    /// Done fills the box; under way is a smaller mark in it, so the two differ by more than
-    /// colour alone.
-    private var inside: CGFloat {
-        state == .done ? 0.52 : 0.34
     }
 }
 
@@ -92,7 +97,7 @@ struct AskDots: View {
     private static let shown = 12
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: Spacing.xxs) {
             ForEach(asks.suffix(Self.shown)) { ask in AskDot(state: ask.progress, size: 9) }
         }
         .accessibilityElement()
