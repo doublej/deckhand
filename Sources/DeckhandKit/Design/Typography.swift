@@ -4,6 +4,11 @@ import SwiftUI
 public enum Typography {
     public static let pageTitle = Font.system(size: 20, weight: .semibold)
     public static let subtitle = Font.system(size: 12, weight: .regular)
+    /// The opening sentence of a briefing. Larger than anything around it because it is the
+    /// one line that has to survive being read at arm's length.
+    public static let lead = Font.system(size: 17, weight: .regular)
+    /// Body copy on a page given over to reading, as opposed to a row in a list.
+    public static let prose = Font.system(size: 14, weight: .regular)
     public static let primaryRow = Font.system(size: 14, weight: .regular)
     public static let hint = Font.system(size: 11, weight: .regular)
     public static let railRow = Font.system(size: 13, weight: .regular)

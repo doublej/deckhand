@@ -8,6 +8,7 @@ struct SessionView: View {
     let session: Session
     @State private var recorder = Recorder()
     @State private var showing: Pane = .summary
+    @Environment(\.dismiss) private var dismiss
 
     /// Two things you want on arriving, and they want opposite layouts: the briefing wants a
     /// page to itself, the transcript wants to be pinned to its newest line.
@@ -21,24 +22,19 @@ struct SessionView: View {
             case .summary: briefing
             case .transcript: transcript
             }
-            talk
+            // One slot, two things: the button you hold, or what it heard waiting to be sent.
+            // Never both — while there is something to answer, that is the only thing the
+            // foot of the page is for.
+            if model.review[session.sessionId] != nil { review } else { talk }
         }
+        .animation(.snappy(duration: 0.22), value: model.review[session.sessionId])
         .background(Palette.surfaceGround)
-        // The bar stays, emptied: the page names itself, but a phone still needs its back
-        // button and there is nowhere honest to put a second one.
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("Focus on Mac", systemImage: "macwindow") {
-                    Task { await model.focus(session) }
-                }
-                .disabled(session.pane == nil)
-                .tint(Palette.tint)
-            }
-        }
+        // No navigation bar. It was a whole band holding one chevron, stacked above a header
+        // that already named the page — two rows of chrome before a word of content. The
+        // chevron moved into the header and the band went with it. Swiping back still works.
+        .toolbar(.hidden, for: .navigationBar)
         // Anything waiting on you lives in the transcript, so do not leave it on a tab the
         // person is not looking at.
-        .onChange(of: model.review[session.sessionId]) { showing = .transcript }
         .onChange(of: model.pending[session.sessionId]) { showing = .transcript }
         .task {
             model.turns = []
@@ -56,15 +52,47 @@ struct SessionView: View {
     }
 
     private var header: some View {
-        PageHeader(
-            glyph: DotGlyph.forName(session.name),
-            title: session.name,
-            subtitle: subtitle
-        ) {
+        HStack(spacing: Spacing.extraSmall) {
+            Button { dismiss() } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Palette.tint)
+                    .frame(width: 28, height: 34)
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Sessions")
+            GlyphTile(DotGlyph.forName(session.name), size: 28, ground: Palette.lcdGround)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(session.name)
+                    .font(Typography.pageTitle)
+                    .foregroundStyle(Palette.textPrimary)
+                    .lineLimit(1)
+                Text(subtitle)
+                    .font(Typography.hint)
+                    .foregroundStyle(Palette.textSecondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: Spacing.extraSmall)
             StatePill(session.isBusy ? .busy : .idle)
+            Button {
+                Task { await model.focus(session) }
+            } label: {
+                Image(systemName: "macwindow")
+                    .font(.system(size: 14, weight: .semibold))
+                    .frame(width: 28, height: 34)
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .tint(Palette.tint)
+            .foregroundStyle(session.pane == nil ? Palette.textTertiary : Palette.tint)
+            .disabled(session.pane == nil)
+            .accessibilityLabel("Focus on Mac")
         }
-        .padding(.horizontal, Spacing.medium)
-        .padding(.bottom, Spacing.small)
+        .padding(.leading, Spacing.extraSmall)
+        .padding(.trailing, Spacing.small)
+        .padding(.top, Spacing.xxs)
+        .padding(.bottom, Spacing.extraSmall)
     }
 
     private var subtitle: String {
@@ -81,20 +109,17 @@ struct SessionView: View {
                         TurnCard(turn: turn, showsRole: startsRun(index)).id(index)
                     }
                     pending
-                    reviewCard
                 }
                 .padding(.horizontal, Spacing.medium)
                 .padding(.bottom, Spacing.medium)
             }
-            // Not on the first load: the summary is the top card, and scrolling to the
-            // newest turn the moment the transcript arrives is what put it off the screen
-            // before it could be read. New turns while you are watching still follow.
-            .onChange(of: model.turns.count) { was, _ in
-                guard was > 0 else { return }
-                scroll(proxy)
-            }
+            // Always the newest line. This once skipped the first load, to stop the summary
+            // card at the top of the list being scrolled away before it could be read — the
+            // summary has its own tab now, so the transcript can go back to doing the one
+            // thing a transcript should do.
+            .onChange(of: model.turns.count) { scroll(proxy) }
+            .onAppear { scroll(proxy) }
             .onChange(of: model.pending[session.sessionId]) { scroll(proxy) }
-            .onChange(of: model.review[session.sessionId]) { scroll(proxy) }
         }
     }
 
@@ -127,11 +152,14 @@ struct SessionView: View {
                 .tracking(1)
                 .foregroundStyle(chosen ? Palette.textPrimary : Palette.textTertiary)
             // The rule carries the state rather than a filled capsule: this sits directly
-            // under the page header and a second solid shape there fights it.
+            // under the page header and a second solid shape there fights it. It is sized to
+            // the word rather than to the space, which is the difference between a tab and
+            // something that reads as a progress bar.
             Capsule()
                 .fill(chosen ? Palette.tint : .clear)
                 .frame(height: 2)
         }
+        .fixedSize(horizontal: true, vertical: false)
         .contentShape(.rect)
     }
 
@@ -183,8 +211,11 @@ struct SessionView: View {
         }
     }
 
-    /// Held for reading. It sits at the foot of the transcript, where it will sit once sent.
-    @ViewBuilder private var reviewCard: some View {
+    /// Held for reading, over the top of whichever tab you were on — including the button you
+    /// were holding to record. Nothing else on the page can be acted on until this is answered,
+    /// so covering it is honest rather than rude: it was the foot of the transcript before,
+    /// which meant scrolling to reach the thing the app was waiting on.
+    @ViewBuilder private var review: some View {
         if let text = model.review[session.sessionId] {
             ReviewCard(
                 text: text,
@@ -192,7 +223,11 @@ struct SessionView: View {
                 send: { Task { await model.send(text, to: session) } },
                 discard: { model.discard(for: session) }
             )
-            .id("review")
+            .padding(Spacing.small)
+            .frame(maxWidth: .infinity)
+            .background(Palette.surfaceGround)
+            .overlay(alignment: .top) { Divider() }
+            .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }
 

@@ -55,3 +55,21 @@ struct ProseTests {
         ])
     }
 }
+
+@Suite("Comparing what was said with what came back")
+struct CollapsedTests {
+    @Test("whitespace is flattened, because the daemon flattens it on the way out")
+    func flattens() {
+        #expect("run   the\n\ttests".collapsed == "run the tests")
+        #expect("  leading and trailing  ".collapsed == "leading and trailing")
+    }
+
+    @Test("an attributed copy still contains what was said")
+    func attribution() {
+        // The socket route prefixes the words, so the turn that comes back is never equal to
+        // what was shown -- only ever a superstring of it once both are collapsed.
+        let said = "run the tests\nand report back"
+        let came = "JJ, spoken: run  the tests and report back"
+        #expect(came.collapsed.contains(said.collapsed))
+    }
+}

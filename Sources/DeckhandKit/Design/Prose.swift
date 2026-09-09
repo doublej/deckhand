@@ -18,22 +18,26 @@ public struct Prose: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
-                row(block)
+            ForEach(Array(blocks.enumerated()), id: \.offset) { index, block in
+                row(block, lead: index == 0)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    @ViewBuilder private func row(_ block: Block) -> some View {
+    /// `lead` is the first block, which the brief guarantees is the sentence that stands on
+    /// its own. It is set larger than everything under it: one big jump near the top does more
+    /// for a page than several small ones spread through it.
+    @ViewBuilder private func row(_ block: Block, lead: Bool) -> some View {
         switch block {
         case .heading(let text): heading(text)
         case .bullet(let text): bullet(text)
         case .paragraph(let text):
             Text(inline(text))
-                .font(Typography.subtitle)
-                .foregroundStyle(Palette.textPrimary)
-                .padding(.bottom, Spacing.extraSmall)
+                .font(lead ? Typography.lead : Typography.prose)
+                .foregroundStyle(lead ? Palette.textPrimary : Palette.textSecondary)
+                .lineSpacing(lead ? 3 : 2)
+                .padding(.bottom, lead ? Spacing.small : Spacing.extraSmall)
         }
     }
 
@@ -43,8 +47,11 @@ public struct Prose: View {
             .tracking(1)
             .foregroundStyle(Palette.textTertiary)
             .textCase(.uppercase)
-            .padding(.top, Spacing.medium)
-            .padding(.bottom, Spacing.xxs)
+            // The air above a heading is what separates one section from the last. It is
+            // deliberately much larger than the gap between the lines inside a section —
+            // that difference is the only thing telling you where a section begins.
+            .padding(.top, Spacing.large)
+            .padding(.bottom, Spacing.extraSmall)
     }
 
     private func bullet(_ text: String) -> some View {
@@ -55,10 +62,11 @@ public struct Prose: View {
                 .frame(width: 4, height: 4)
                 .offset(y: -1)
             Text(inline(text))
-                .font(Typography.subtitle)
+                .font(Typography.prose)
                 .foregroundStyle(Palette.textPrimary)
+                .lineSpacing(2)
         }
-        .padding(.vertical, Spacing.xxs)
+        .padding(.vertical, 3)
     }
 
     /// Bold and code, via SwiftUI's own parser; code additionally gets the mono face, which

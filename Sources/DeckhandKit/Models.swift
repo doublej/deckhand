@@ -92,3 +92,12 @@ public enum DeckhandError: Error, Equatable, Sendable {
     case http(Int, String)
     case badResponse
 }
+
+public extension String {
+    /// Runs of whitespace flattened to single spaces. The daemon does this to anything it
+    /// types or sends, so it is the only form in which what was said and what came back can
+    /// be compared.
+    var collapsed: String {
+        split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    }
+}

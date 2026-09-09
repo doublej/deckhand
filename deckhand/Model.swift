@@ -138,11 +138,24 @@ final class AppModel {
         guard let client = settings.client() else { return }
         await run {
             self.turns = try await client.turns(of: session.sessionId, limit: limit)
-            // The session has written it down: the optimistic copy has done its job.
-            if let waiting = self.pending[session.sessionId],
-               self.turns.contains(where: { $0.isUser && $0.text.contains(waiting) }) {
-                self.pending[session.sessionId] = nil
-            }
+            self.clearPendingIfWrittenDown(for: session)
+        }
+    }
+
+    /// The optimistic grey copy has done its job once the session has written the words down.
+    ///
+    /// It cannot be a plain `contains`: the daemon collapses runs of whitespace before it types
+    /// or sends, and the socket route wraps the words in an attribution, so what comes back is
+    /// never character-identical to what was shown. Comparing both sides collapsed is what
+    /// makes the two comparable at all — without it the grey line simply never went away.
+    private func clearPendingIfWrittenDown(for session: Session) {
+        guard let waiting = pending[session.sessionId] else { return }
+        let sent = waiting.collapsed
+        // A long dictation can be pushed out of the window by the replies it provokes, so the
+        // opening is enough to recognise it by.
+        let opening = String(sent.prefix(60))
+        if turns.contains(where: { $0.isUser && $0.text.collapsed.contains(opening) }) {
+            pending[session.sessionId] = nil
         }
     }
 
