@@ -24,9 +24,7 @@ struct TranscriptView: View {
                             // What it ran sits above what it said, in the order it happened.
                             if !turn.tools.isEmpty { ToolTrace(tools: turn.tools) }
                             if !turn.text.isEmpty {
-                                TurnCard(turn: turn,
-                                         showsRole: startsRun(index),
-                                         waiting: index == unanswered ? awaiting : nil)
+                                TurnCard(turn: turn, showsRole: startsRun(index))
                             }
                         }
                         .id(index)
@@ -37,9 +35,10 @@ struct TranscriptView: View {
                     // note explaining it on every one of them explained nothing.
                     ForEach(taken) { item in
                         TurnCard(turn: Turn(role: "user", text: item.text, timestamp: ""),
-                                 showsRole: true,
-                                 waiting: nil)
+                                 showsRole: true)
                     }
+                    // Everything above has happened; this is the line it has reached.
+                    if session.isBusy { ActiveLine(doing: doing).id("active") }
                     if !waiting.isEmpty {
                         VStack(alignment: .leading, spacing: Spacing.extraSmall) {
                             ForEach(waiting) { item in
@@ -68,6 +67,7 @@ struct TranscriptView: View {
             // thing a transcript should do.
             .onChange(of: model.turns.count) { scroll(proxy) }
             .onChange(of: queued.count) { scroll(proxy) }
+            .onChange(of: session.isBusy) { scroll(proxy) }
             .onAppear { scroll(proxy) }
         }
     }
@@ -92,10 +92,12 @@ struct TranscriptView: View {
     /// newer than anything the session has written down.
     private func scroll(_ proxy: ScrollViewProxy) {
         withAnimation {
-            if waiting.isEmpty {
-                proxy.scrollTo(model.turns.count - 1, anchor: .bottom)
-            } else {
+            if !waiting.isEmpty {
                 proxy.scrollTo("queued", anchor: .bottom)
+            } else if session.isBusy {
+                proxy.scrollTo("active", anchor: .bottom)
+            } else {
+                proxy.scrollTo(model.turns.count - 1, anchor: .bottom)
             }
         }
     }
@@ -106,21 +108,14 @@ struct TranscriptView: View {
         index == 0 || model.turns[index - 1].role != model.turns[index].role
     }
 
-    /// The last thing you said, when nothing has answered it yet.
+    /// The newest thing the session ran, when it has run anything since it last spoke.
     ///
-    /// Your words used to sit at the foot of the transcript in grey, which read as "not sent";
-    /// removing that left no way at all to tell a prompt still being worked on from one that
-    /// has been dealt with. This marks the message itself instead of inventing a second one.
-    private var unanswered: Int? {
-        guard let mine = model.turns.lastIndex(where: \.isUser) else { return nil }
-        let answered = model.turns[(mine + 1)...].contains { !$0.isUser && !$0.text.isEmpty }
-        return answered ? nil : mine
-    }
-
-    /// Only while it is actually working. Anything it has not picked up at all is in the
-    /// queue below, which says so itself — this is the other half: picked up, being worked on.
-    private var awaiting: PillState? {
-        session.isBusy ? .busy : nil
+    /// A run still in flight comes back as a wordless trailing turn carrying what it has run so
+    /// far, so the last tool of that turn is the step it is on. A turn with words is finished by
+    /// definition, and then it is thinking rather than running.
+    private var doing: Tool? {
+        guard let last = model.turns.last, last.text.isEmpty else { return nil }
+        return last.tools.last
     }
 }
 

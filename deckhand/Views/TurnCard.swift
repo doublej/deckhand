@@ -7,26 +7,14 @@ struct TurnCard: View {
     let turn: Turn
     /// False when the turn before this one was from the same speaker.
     let showsRole: Bool
-    /// Set on your last message while nothing has answered it: BUSY if the session is working
-    /// on it, WAIT if it has not picked it up yet.
-    var waiting: PillState?
 
     var body: some View {
         Card(spacing: Spacing.xxs) {
-            if showsRole || waiting != nil {
-                HStack(spacing: Spacing.extraSmall) {
-                    Text(turn.isUser ? "YOU" : "CLAUDE")
-                        .font(Typography.eyebrow)
-                        .tracking(1)
-                        .foregroundStyle(turn.isUser ? Palette.tint : Palette.textTertiary)
-                    Spacer(minLength: 0)
-                    if let waiting {
-                        Text(waiting == .busy ? "working on it" : "not picked up yet")
-                            .font(Typography.hint)
-                            .foregroundStyle(Palette.textTertiary)
-                        StatePill(waiting)
-                    }
-                }
+            if showsRole {
+                Text(turn.isUser ? "YOU" : "CLAUDE")
+                    .font(Typography.eyebrow)
+                    .tracking(1)
+                    .foregroundStyle(turn.isUser ? Palette.tint : Palette.textTertiary)
             }
             Text(turn.text)
                 .font(.system(size: 13))
@@ -92,5 +80,57 @@ struct QueuedCard: View {
                 .frame(width: 3)
                 .padding(.vertical, Spacing.extraSmall)
         }
+    }
+}
+
+/// Where the session is right now, at the live end of the transcript.
+///
+/// A transcript is a record of what has happened, and with a busy session the most useful line
+/// in it is the one that has not finished happening. This used to be a pill on your last
+/// message, which made it disappear the moment the session answered you and went off to run
+/// things — precisely when you most want to know it is still going, and on what.
+///
+/// No card: it sits in the gap after the last card, so the place the conversation has reached
+/// is the one thing on the screen that is not a card.
+struct ActiveLine: View {
+    /// The newest thing it ran, when it has run anything since it last spoke.
+    let doing: Tool?
+
+    var body: some View {
+        HStack(spacing: Spacing.extraSmall) {
+            // The one moving thing in the transcript, because the one thing it says is
+            // "still going". A phase animator rather than state and an `onAppear`: this sits
+            // in a lazy stack, and a pulse that has to be restarted by hand comes back dead.
+            Circle()
+                .fill(Palette.tint)
+                .frame(width: 6, height: 6)
+                .phaseAnimator([0.2, 1.0]) { dot, lit in dot.opacity(lit) }
+            Text("WORKING")
+                .font(Typography.eyebrow)
+                .tracking(1)
+                .foregroundStyle(Palette.tint)
+            Text(what)
+                .font(Typography.mono)
+                .foregroundStyle(Palette.textSecondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, Spacing.extraSmall)
+        .padding(.vertical, Spacing.extraSmall)
+        .background(
+            RoundedRectangle(cornerRadius: Radius.small, style: .continuous)
+                .fill(Palette.tint.opacity(0.07))
+        )
+        .accessibilityElement()
+        .accessibilityLabel("Working: \(what)")
+        .accessibilityIdentifier("active-line")
+    }
+
+    /// What it is on. A tool is the honest answer whenever there is one; the rest of the time it
+    /// is working out what to say, and there is no better word for that than thinking.
+    private var what: String {
+        guard let doing else { return "thinking" }
+        return doing.detail.isEmpty ? doing.name : "\(doing.name) \(doing.detail)"
     }
 }
