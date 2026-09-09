@@ -4,7 +4,7 @@ import Foundation
 public struct DeckhandClient: Sendable {
     public let baseURL: URL
     public let token: String
-    private let urlSession: URLSession
+    let urlSession: URLSession
 
     public init(baseURL: URL, token: String, urlSession: URLSession = .shared) {
         self.baseURL = baseURL
@@ -233,7 +233,7 @@ public struct DeckhandClient: Sendable {
         }
     }
 
-    private func decode<T: Decodable>(_ data: Data) throws -> T {
+    func decode<T: Decodable>(_ data: Data) throws -> T {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         return try decoder.decode(T.self, from: data)

@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ship 0.4.0</title>
+</head>
+<body>
+<main>
+  <p class="eyebrow" id="slug">ship-0-4-0</p>
+  <h1>Ship 0.4.0</h1>
+  <p class="eyebrow"><span id="count">1 of 4</span></p>
+  <div class="meter"><span id="bar" style="width: 25%"></span></div>
+
+  <section class="step" data-id="branch" data-kind="one">
+    <p class="lead">Where does the tag go?</p>
+    <div class="rows">
+      <label>
+        <span>develop<small>Integrate first, cut the release later.</small></span>
+        <input type="radio" name="branch" value="develop">
+      </label>
+      <label>
+        <span>main<small>Straight to trunk, tag on the merge commit.</small></span>
+        <input type="radio" name="branch" value="main">
+      </label>
+    </div>
+  </section>
+
+  <section class="step" data-id="gates" data-kind="many" hidden>
+    <p class="lead">Which gates do you want to watch run?</p>
+    <div class="rows">
+      <label>
+        <span>lint<small>SwiftLint, strict.</small></span>
+        <input type="checkbox" value="lint">
+      </label>
+      <label>
+        <span>test<small>The Swift tests.</small></span>
+        <input type="checkbox" value="test">
+      </label>
+      <label>
+        <span>daemon-test<small>pytest, in the daemon.</small></span>
+        <input type="checkbox" value="daemon-test">
+      </label>
+      <label>
+        <span>loc-check<small>No file over 300 lines.</small></span>
+        <input type="checkbox" value="loc-check">
+      </label>
+    </div>
+  </section>
+
+  <section class="step" data-id="message" data-kind="text" hidden>
+    <p class="lead">One line for the tag.</p>
+    <label class="eyebrow" for="message">Tag message</label>
+    <input id="message" type="text" placeholder="Artifacts: a page on the phone, answered by hand">
+  </section>
+
+  <section class="step" data-id="token" data-kind="text" hidden>
+    <p class="lead">The pairing token for the smoke test.</p>
+    <label class="eyebrow" for="token">Token</label>
+    <input id="token" type="password" autocomplete="off" spellcheck="false">
+    <p class="hint">Masked as you type, the way a hidden text question is. <code>just token</code>
+      prints it on the Mac.</p>
+  </section>
+
+  <div class="actions">
+    <button id="back" disabled>Back</button>
+    <button id="next" class="primary" disabled>Next</button>
+  </div>
+
+  <section id="loose" hidden>
+    <hr>
+    <p class="state">OFF</p>
+    <p class="hint">Opened outside Deckhand, so nothing is connected and an answer goes
+      nowhere. What it would have sent shows up here instead.</p>
+    <pre id="shape" hidden></pre>
+  </section>
+</main>
+
+<script>
+  const connected = Boolean(window.deckhand);
+  const steps = [...document.querySelectorAll(".step")];
+  const back = document.getElementById("back");
+  const next = document.getElementById("next");
+  const shape = document.getElementById("shape");
+  let at = 0;
+
+  // What one question has been answered with, or null for not yet. A multi-select question
+  // answers with an array and every other kind with a string — the same split `ask` makes.
+  function read(step) {
+    if (step.dataset.kind === "one") {
+      const picked = step.querySelector("input:checked");
+      return picked ? picked.value : null;
+    }
+    if (step.dataset.kind === "many") {
+      const picked = [...step.querySelectorAll("input:checked")].map((i) => i.value);
+      return picked.length ? picked : null;
+    }
+    const typed = step.querySelector("input").value.trim();
+    return typed === "" ? null : typed;
+  }
+
+  function show() {
+    steps.forEach((step, i) => { step.hidden = i !== at; });
+    document.getElementById("count").textContent = (at + 1) + " of " + steps.length;
+    document.getElementById("bar").style.width = ((at + 1) / steps.length * 100) + "%";
+    back.disabled = at === 0;
+    next.textContent = at === steps.length - 1 ? "Send" : "Next";
+    next.disabled = read(steps[at]) === null;
+  }
+
+  // The form's answer is a question-id → answer map, and completedCount says how many of them
+  // the person actually got through.
+  function answer() {
+    const value = { answer: {}, completedCount: 0 };
+    for (const step of steps) {
+      const given = read(step);
+      if (given !== null) value.answer[step.dataset.id] = given;
+    }
+    value.completedCount = Object.keys(value.answer).length;
+
+    if (!connected) {
+      shape.hidden = false;
+      shape.textContent = JSON.stringify(value, null, 2);
+      return;
+    }
+    window.deckhand.respond(value);
+    window.deckhand.close();
+  }
+
+  document.querySelector("main").addEventListener("input", show);
+  document.querySelector("main").addEventListener("change", show);
+  back.addEventListener("click", () => { at = Math.max(0, at - 1); show(); });
+  next.addEventListener("click", () => {
+    if (at === steps.length - 1) return answer();
+    at += 1;
+    show();
+  });
+  show();
+
+  // Last, so the page only claims to be connected once everything on it is wired. Opened in a
+  // plain browser there is no window.deckhand at all, and that has to read as a state of this
+  // page rather than as a page that failed to load.
+  if (connected) document.getElementById("slug").textContent = window.deckhand.artifact.id;
+  else document.getElementById("loose").hidden = false;
+</script>
+</body>
+</html>

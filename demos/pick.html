@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Which branch</title>
+</head>
+<body>
+<main>
+  <p class="eyebrow" id="slug">which-branch</p>
+  <h1>Where should the artifacts work land?</h1>
+  <p class="lead">Three agents have been working in worktrees off
+    <code>feature/artifacts</code>. I can merge it anywhere you say.</p>
+
+  <h2>Branch</h2>
+  <div class="rows">
+    <label>
+      <span>develop<small>Where the flow integrates. A release is cut from it later.</small></span>
+      <input type="radio" name="branch" value="develop">
+    </label>
+    <label>
+      <span>main<small>Trunk. A tag and a GitHub release follow straight away.</small></span>
+      <input type="radio" name="branch" value="main">
+    </label>
+    <label>
+      <span>feature/artifacts<small>Leave it. Nothing merges until you have read it.</small></span>
+      <input type="radio" name="branch" value="feature/artifacts">
+    </label>
+    <label>
+      <span>Somewhere else<small>Name it yourself.</small></span>
+      <input type="radio" name="branch" value="">
+    </label>
+  </div>
+
+  <input id="other" type="text" placeholder="Branch name" aria-label="Branch name" hidden>
+
+  <div class="actions">
+    <button id="send" class="primary" disabled>Send</button>
+  </div>
+
+  <section id="loose" hidden>
+    <hr>
+    <p class="state">OFF</p>
+    <p class="hint">Opened outside Deckhand, so nothing is connected and an answer goes
+      nowhere. What it would have sent shows up here instead.</p>
+    <pre id="shape" hidden></pre>
+  </section>
+</main>
+
+<script>
+  const connected = Boolean(window.deckhand);
+  const send = document.getElementById("send");
+  const other = document.getElementById("other");
+  const shape = document.getElementById("shape");
+
+  // A pick's own answer, or — when the last row is the one chosen — whatever was typed. The
+  // typed text *is* the answer: `ask` never hands back the literal "Other".
+  function chosen() {
+    const picked = document.querySelector("input[name=branch]:checked");
+    if (!picked) return "";
+    return picked.value || other.value.trim();
+  }
+
+  function refresh() {
+    const picked = document.querySelector("input[name=branch]:checked");
+    other.hidden = !picked || picked.value !== "";
+    if (!other.hidden) other.focus({ preventScroll: true });
+
+    const branch = chosen();
+    send.disabled = branch === "";
+    send.textContent = branch ? "Send " + branch : "Send";
+  }
+
+  document.querySelectorAll("input[name=branch]").forEach((r) => r.addEventListener("change", refresh));
+  other.addEventListener("input", refresh);
+  refresh();
+
+  send.addEventListener("click", () => {
+    const value = { answer: chosen() };
+    if (!connected) {
+      shape.hidden = false;
+      shape.textContent = JSON.stringify(value, null, 2);
+      return;
+    }
+    window.deckhand.respond(value);
+    window.deckhand.close();
+  });
+
+  // Last, so the page only claims to be connected once everything on it is wired. Opened in a
+  // plain browser there is no window.deckhand at all, and that has to read as a state of this
+  // page rather than as a page that failed to load.
+  if (connected) document.getElementById("slug").textContent = window.deckhand.artifact.id;
+  else document.getElementById("loose").hidden = false;
+</script>
+</body>
+</html>
