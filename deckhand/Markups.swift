@@ -49,7 +49,10 @@ extension AppModel {
             status = "Could not draw the marked copy of \(asset.name)"
             return
         }
-        add(Pin.prose(markup.pins, about: asset.name, at: asset.path), to: session)
+        // Underneath whatever was already said, never instead of it — `Appending.swift`, which
+        // is the one path that adds to a card rather than replacing what is in it. `Pin.prose`
+        // opens with a heading of its own, so the two read as two paragraphs.
+        append(Pin.prose(markup.pins, about: asset.name, at: asset.path), to: session)
         attach(snap, to: session)
         marked[asset.path] = nil
         status = landed(markup.pins.count, on: asset.name)
@@ -57,18 +60,6 @@ extension AppModel {
 
     func forget(markupOf asset: Asset) {
         marked[asset.path] = nil
-    }
-
-    /// Beneath whatever is already in the card, never instead of it.
-    ///
-    /// You dictate first and mark up second about as often as the other way round, and the one
-    /// thing that must not happen is a sentence you spoke vanishing because you then opened a
-    /// picture. Underneath keeps the order you said things in, and `Pin.prose` opens with a
-    /// heading of its own, so the two read as two paragraphs rather than as one run-on.
-    private func add(_ prose: String, to session: Session) {
-        let said = review[session.sessionId]?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        review[session.sessionId] = said.isEmpty ? prose : "\(said)\n\n\(prose)"
     }
 
     /// `.png` whatever the original was, because `Snap` PNG-encodes whatever picture it is handed

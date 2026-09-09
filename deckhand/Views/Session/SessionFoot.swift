@@ -54,7 +54,16 @@ struct SessionFoot: View {
                 snaps: model.snaps(for: session),
                 attach: { model.attach($0, to: session) },
                 paste: { model.attachFromClipboard(to: session) },
-                unattach: { model.unattach($0, from: session) }
+                unattach: { model.unattach($0, from: session) },
+                // The page's recorder again, and on purpose: the card is not allowed to make one
+                // of its own for the same reason this view is not. Half a thought is a common way
+                // to finish talking, and the whole point of the card is that the first half is
+                // still here while the second is being said.
+                more: SayMore(recorder: recorder,
+                              mode: model.preferences.talkMode,
+                              heard: { clip, said in
+                                  await model.append(clip: clip, to: session, beneath: said)
+                              })
             )
             .frame(maxWidth: .infinity)
             .shadow(color: .black.opacity(0.18), radius: 10, y: 3)

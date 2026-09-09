@@ -31,6 +31,9 @@ struct ReviewCard: View {
     var attach: ((Snap) -> Void)?
     var paste: (() -> Void)?
     var unattach: ((Snap) -> Void)?
+    /// What it takes to say the rest of it, or nil where there is no recorder to lend — a deck
+    /// column, which has no room for another control either. See `SayMore`.
+    var more: SayMore?
     @State private var picked: PhotosPickerItem?
     @State private var editing = false
     @Environment(\.accent) private var accent
@@ -77,6 +80,7 @@ struct ReviewCard: View {
                     .buttonStyle(.plain)
                     .font(Typography.hint)
                     .foregroundStyle(accent)
+                if let more { again(more) }
                 Button("Send") { send(words) }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
@@ -99,6 +103,35 @@ struct ReviewCard: View {
             RoundedRectangle(cornerRadius: Radius.medium, style: .continuous)
                 .strokeBorder(accent.opacity(0.4), lineWidth: 1)
         )
+    }
+
+    /// Say the rest of it, under the half already here.
+    ///
+    /// The same control as the mark that heard the first half, on the page's own recorder, so it
+    /// is the same gesture and the same hold-or-tap setting. It says nothing when it opens and
+    /// needs no colour of its own: the whole page is already going utt orange off that recorder,
+    /// because recording is the screen's colour here rather than one button's. The card does not
+    /// move while it listens — the words in it are the model's, not this view's — so a clip that
+    /// fails to record or transcribe costs nothing but saying it again.
+    ///
+    /// It hands up the words as they stand rather than what was heard, because a correction made
+    /// by hand first has to end up above the rest and not under it. They come back as the card's
+    /// own text, so the draft has done its job and goes.
+    private func again(_ more: SayMore) -> some View {
+        TalkControl(recorder: more.recorder,
+                    mode: more.mode,
+                    isMine: true,
+                    onStart: {},
+                    onClip: { clip in
+                        await more.heard(clip, words)
+                        draft = nil
+                    },
+                    content: { state in
+                        Label("Add", systemImage: state.isRecording ? "mic.fill" : "mic")
+                            .font(Typography.hint)
+                            .foregroundStyle(accent)
+                            .contentShape(.rect)
+                    })
     }
 
     /// A line under the words, quiet, and in a deck column too: there is no size of card on which
