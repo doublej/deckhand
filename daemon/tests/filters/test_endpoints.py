@@ -105,6 +105,67 @@ def test_a_filter_is_told_which_session_and_how_the_words_arrived(token, monkeyp
     assert (seen[0].session_id, seen[0].session_name) == (SID, "warm-okapi")
 
 
+def test_a_clip_read_first_shows_what_will_be_sent(token, monkeypatch):
+    """The card has an Edit button, so it has to show the words that are actually going in."""
+    monkeypatch.setattr(
+        transcribe_module, "transcribe", lambda clip, hints: ("the deck hand is broken", None))
+    delivered = []
+    monkeypatch.setattr(deliver_module, "deliver", lambda *a: delivered.append(a))
+    c = client(token)
+    c.put("/filters", json={"steps": [
+        {"filter": "words", "settings": {"pairs": [["deck hand", "deckhand"]]}}]})
+
+    body = c.post(
+        f"/sessions/{SID}/audio?deliver=false", files={"file": ("clip.m4a", b"x" * 64, "audio/m4a")}
+    ).json()
+
+    assert body["transcript"] == "the deck hand is broken"
+    assert body["prepared"] == "the deckhand is broken"
+    assert body["notes"] == ['swapped "deck hand" for "deckhand"']
+    # Read first means read first: the preview is not a delivery.
+    assert delivered == []
+    assert body["delivered"] is False
+
+
+def test_a_chain_that_changed_nothing_prepares_nothing(token, monkeypatch):
+    """Null rather than a copy, so the card shows the transcript it already has."""
+    monkeypatch.setattr(transcribe_module, "transcribe", lambda clip, hints: ("nothing to fix", None))
+    body = client(token).post(
+        f"/sessions/{SID}/audio?deliver=false", files={"file": ("clip.m4a", b"x" * 64, "audio/m4a")}
+    ).json()
+
+    assert body["transcript"] == "nothing to fix"
+    assert body["prepared"] is None
+
+
+def test_a_clip_utt_could_not_hear_prepares_nothing(token, monkeypatch):
+    monkeypatch.setattr(transcribe_module, "transcribe", lambda clip, hints: (None, "utt is off"))
+    body = client(token).post(
+        f"/sessions/{SID}/audio?deliver=false", files={"file": ("clip.m4a", b"x" * 64, "audio/m4a")}
+    ).json()
+
+    assert (body["transcript"], body["prepared"]) == (None, None)
+
+
+def test_a_clip_the_chain_will_refuse_says_so_before_it_is_sent(token, monkeypatch):
+    """Better on the card than after pressing Send, and it costs nothing to say it here."""
+    monkeypatch.setattr(transcribe_module, "transcribe", lambda clip, hints: ("log the crash", None))
+    monkeypatch.setitem(
+        filters.registry._known, "gate",
+        filters.Filter(name="gate", title="gate", summary="gate",
+                       apply=lambda p, s: filters.Verdict(note="already logged as #12", stop=True)),
+    )
+    c = client(token)
+    c.put("/filters", json={"steps": [{"filter": "gate"}]})
+
+    body = c.post(
+        f"/sessions/{SID}/audio?deliver=false", files={"file": ("clip.m4a", b"x" * 64, "audio/m4a")}
+    ).json()
+
+    assert body["stopped_by"] == "gate"
+    assert body["prepared"] is None
+
+
 def test_a_clip_is_filtered_too_and_the_transcript_still_says_what_was_heard(token, monkeypatch):
     monkeypatch.setattr(
         transcribe_module, "transcribe", lambda clip, hints: ("the deck hand", None))

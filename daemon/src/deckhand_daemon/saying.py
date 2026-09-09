@@ -96,6 +96,18 @@ async def upload_audio(
         else:
             delivery_error = checked.reason
             log.info("%s refused a clip for %s: %s", checked.stopped_by, session.name, checked.reason)
+    elif text:
+        # The card now shows the whole text with an Edit button, so what it shows is what the
+        # person believes they are sending: the chain runs here too and the words come back as
+        # `prepared`. Without this you dictate "deck hand", read "deck hand", press Send and the
+        # session receives "deckhand" — the swap was right and the card was lying.
+        #
+        # ponytail: the chain therefore runs twice for a clip that is read first — here, and
+        # again in `/say` when Send puts the words in. Free for word replacement, which is
+        # idempotent, and wrong for a translate or enhance filter, which would run on its own
+        # output. The fix when one of those lands is a flag on `/say` saying these words have
+        # already been through the chain. Nothing needs it yet, so nothing has it.
+        checked = await _filtered(session, text, route or plugin.route(), "spoken")
     return {
         "path": str(path),
         "bytes": len(body),
@@ -103,6 +115,9 @@ async def upload_audio(
         # What utt heard, not what the chain made of it. The notes say what was changed.
         "transcript": text,
         "transcript_error": error,
+        # What the chain made of it, and null when it left the words alone — so the card shows
+        # the transcript itself rather than a second copy of it under another name.
+        "prepared": checked.text if text and checked.text != text else None,
         "delivered": taken is not None,
         "delivered_by": taken,
         "delivery_error": delivery_error,
