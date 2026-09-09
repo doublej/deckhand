@@ -7,7 +7,7 @@ default:
     @echo "branch: $(git branch --show-current 2>/dev/null || echo 'n/a')"
 
 sim := "iPhone 17 Pro Max"
-phone := "iphone"
+phone := "Pocketline Swing"
 project := "-project Deckhand.xcodeproj -scheme Deckhand"
 
 [group('setup')]
@@ -65,6 +65,10 @@ sim: generate
     xcrun simctl launch booted dev.jurrejan.deckhand -deckhand.host 127.0.0.1:4180 -deckhand.token "$(just token)"
 
 # Build, install and start the app on the iPhone, already paired with this Mac.
+# `phone` is a device name out of `xcrun devicectl list devices` and has to be the phone
+# JJ is actually holding: two are paired here and the *other* one is named "iphone", an
+# iPhone 12 Pro deliberately behind on builds. Installing to the wrong one succeeds and
+# says "App installed", which is how a build lands where nobody is looking.
 # Needs Xcode signed in and the phone unlocked (the developer disk image will not
 
 # mount on a locked device).
