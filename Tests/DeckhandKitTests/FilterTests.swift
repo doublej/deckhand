@@ -162,6 +162,24 @@ struct FilterTests {
         #expect(older.words == "say it plainly")
     }
 
+    @Test("a preview knows it will be refused before anybody presses Send")
+    func readsARefusalOnThePreviewPath() throws {
+        // `?deliver=false`: nothing was delivered because nothing was meant to be, and the chain
+        // still ran. That is what lets the card say what Send is going to do rather than report it.
+        let preview: UploadReceipt = try decoded("""
+        {"path":"/tmp/x.m4a","bytes":13,"received_at":1.0,"transcript":"rm -rf the lot",
+         "prepared":null,"delivered":false,"delivered_by":null,
+         "delivery_error":"that reads like it deletes something",
+         "notes":[],"stopped_by":"guard"}
+        """)
+        #expect(preview.stoppedBy == "guard")
+        #expect(preview.deliveryError == "that reads like it deletes something")
+        // The words are still here — the whole point of holding them is that they can be edited
+        // and tried again, so `words` must not come back empty on a refusal.
+        #expect(preview.words == "rm -rf the lot")
+        #expect(!preview.went)
+    }
+
     @Test("a filter's refusal is not a delivery, whatever else the Mac says")
     func readsARefusal() throws {
         let said: Delivery = try decoded("""

@@ -13,12 +13,16 @@ struct ReviewCard: View {
     /// were heard: what utt returns is a first draft, and the point of holding it is to fix it.
     let send: (String) -> Void
     let discard: () -> Void
-    /// What a filter on the Mac did to these words on their way here, when it did something.
+    /// What the chain on the Mac did to these words on the way here, and what it will do to them
+    /// if they are sent as they stand. One value rather than two strings, because they come off
+    /// one response and a card showing one without the other would be the bug either way.
     ///
-    /// The card shows the prepared words rather than what was heard, because those are what the
-    /// session will be handed — and a word differing silently from the one that was spoken is a
-    /// card lying about the thing it exists to confirm. This line is how it does not.
-    var note: String?
+    /// The card shows the prepared words, because those are what the session will be handed — and
+    /// a word differing silently from the one that was spoken is a card lying about the thing it
+    /// exists to confirm. These two lines are how it does not. Send stays pressable even when the
+    /// chain will refuse: a greyed-out button with no sentence beside it leaves somebody holding
+    /// words with no way to find out why, which is the worse half of this problem.
+    var filtered: Filtered?
     /// Small enough for a deck column, which has no room for a full card.
     var compact = false
     /// What is already pinned to these words, and the two ways to pin another. Left out where
@@ -52,13 +56,11 @@ struct ReviewCard: View {
             .scrollBounceBehavior(.basedOnSize)
             // Under the words, quiet, and in a deck column too: there is no size of card on which
             // it is acceptable to show somebody a word they did not say without saying so.
-            if let note {
-                Text(note)
-                    .font(Typography.hint)
-                    .foregroundStyle(Palette.textTertiary)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            if let note = filtered?.note { aside(note, in: Palette.textTertiary) }
+            // The colour is the whole of the difference, as everywhere else in this app: the words
+            // alone in the state's own colour, never a label inside a capsule that reads as
+            // something you press — and there is a real button an inch below this one.
+            if let refusal = filtered?.refusal { aside(refusal, in: Palette.lcdRed) }
             if !snaps.isEmpty { pinned }
             HStack(spacing: Spacing.extraSmall) {
                 Text("→ \(target)")
@@ -96,6 +98,16 @@ struct ReviewCard: View {
             RoundedRectangle(cornerRadius: Radius.medium, style: .continuous)
                 .strokeBorder(Palette.tint.opacity(0.4), lineWidth: 1)
         )
+    }
+
+    /// A line under the words, quiet, and in a deck column too: there is no size of card on which
+    /// it is acceptable to show somebody a word they did not say without saying so.
+    private func aside(_ words: String, in colour: Color) -> some View {
+        Text(words)
+            .font(Typography.hint)
+            .foregroundStyle(colour)
+            .lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     /// The two ways a picture gets in, above the words they will go with. Both are always

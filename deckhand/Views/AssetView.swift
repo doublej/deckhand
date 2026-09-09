@@ -17,6 +17,13 @@ struct AssetView: View {
     @State private var failed: String?
     /// The downloaded file, kept only so it can be deleted again.
     @State private var local: URL?
+    /// What has been marked on the picture, seeded from whatever was marked last time and kept
+    /// when the sheet closes. Here rather than inside `Marking` because the toolbar is here, and
+    /// the toolbar is what has to know whether there is anything to send.
+    @State private var markup = Markup()
+    @State private var pencilling = false
+    /// Sent, so the marks are the review card's now and must not be written back on the way out.
+    @State private var sent = false
     @Environment(\.dismiss) private var dismiss
 
     /// A file that has arrived and been read as what it is.
@@ -34,7 +41,17 @@ struct AssetView: View {
                 .navigationTitle(asset.name)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
+                    ToolbarItemGroup(placement: .topBarLeading) {
+                        marking
+                        formatting
+                    }
+                    ToolbarItemGroup(placement: .topBarTrailing) {
+                        if !markup.isEmpty {
+                            Button("Send") { hand() }
+                                .buttonStyle(.borderedProminent)
+                                .controlSize(.small)
+                                .tint(Palette.tint)
+                        }
                         Button("Close") { dismiss() }.tint(Palette.tint)
                     }
                 }
@@ -47,14 +64,12 @@ struct AssetView: View {
         switch ready {
         case .picture(let image):
             // Zoomable, because half of what a session makes is a screenshot of something
-            // small in the corner of something large.
-            Zoomable(image: image)
+            // small in the corner of something large — and markable, because pointing at the
+            // small thing beats describing where it is.
+            Marking(picture: image, markup: $markup, pencilling: pencilling)
         case .words(let text):
             ScrollView {
-                Text(text)
-                    .font(Typography.mono)
-                    .foregroundStyle(Palette.textPrimary)
-                    .textSelection(.enabled)
+                words(text)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(Spacing.medium)
             }
@@ -62,6 +77,68 @@ struct AssetView: View {
             VideoPlayer(player: player)
         case nil:
             waiting
+        }
+    }
+
+    /// Two ways of reading the same file, and the source is still one of them.
+    ///
+    /// A `report.md` is written to be read, so it opens formatted — but the source is what you
+    /// want the moment the rendering is the thing in question, or you need to copy a fenced
+    /// command out of it, and selection lives on the source view for exactly that reason. A long
+    /// press inside a sideways-scrolling code block would be fighting the scroll.
+    @ViewBuilder private func words(_ text: String) -> some View {
+        if asset.isMarkdown, model.preferences.formatsMarkdown {
+            Markdown(text)
+        } else {
+            Text(text)
+                .font(Typography.mono)
+                .foregroundStyle(Palette.textPrimary)
+                .textSelection(.enabled)
+        }
+    }
+
+    /// Markdown is the one text file with two ways of reading it, so it is the one that gets a
+    /// switch. `.txt`, `.json` and `.log` arrive through the same case and there is nothing in
+    /// any of them a document view would do differently.
+    ///
+    /// Tinted when the formatting is on, the way the pencil beside it is tinted when it is armed.
+    /// No label and nothing around it: one glyph that says which of the two you are looking at.
+    @ViewBuilder private var formatting: some View {
+        if case .words = ready, asset.isMarkdown {
+            let formatted = model.preferences.formatsMarkdown
+            Button {
+                setFormatted(!formatted)
+            } label: {
+                Image(systemName: "textformat")
+            }
+            .tint(formatted ? Palette.tint : Palette.textSecondary)
+            .accessibilityLabel(formatted ? "Show the source" : "Show it formatted")
+        }
+    }
+
+    /// Written straight through to the app's preferences rather than held in this sheet, because
+    /// it is a reading preference and not a property of this file: the next report opens the way
+    /// you left the last one.
+    private func setFormatted(_ formats: Bool) {
+        model.preferences.formatsMarkdown = formats
+        model.preferences.save()
+    }
+
+    /// Only a picture can be marked, so only a picture gets a pencil — and a Discard, which is the
+    /// only way marks go away without being sent: closing the sheet keeps them.
+    @ViewBuilder private var marking: some View {
+        if case .picture = ready {
+            Button {
+                pencilling.toggle()
+            } label: {
+                Image(systemName: pencilling ? "pencil.tip.crop.circle.fill"
+                                             : "pencil.tip.crop.circle")
+            }
+            .tint(pencilling ? Palette.tint : Palette.textSecondary)
+            .accessibilityLabel("Draw on the picture")
+            if !markup.isEmpty {
+                Button("Discard") { forget() }.tint(Palette.textSecondary)
+            }
         }
     }
 
@@ -89,6 +166,9 @@ struct AssetView: View {
             let file = try await model.download(asset, in: session)
             local = file
             ready = try open(file)
+            // Kept until sent or thrown away: the same picture opened again comes back with its
+            // pins on it, which is the difference between marking one up and having to start over.
+            markup = model.markup(of: asset)
         } catch {
             failed = reason(error)
         }
@@ -123,100 +203,35 @@ struct AssetView: View {
         }
     }
 
+    /// One piece of feedback: the flattened copy, the numbered remarks under it, and then the
+    /// marks are gone — they were only ever being held until this.
+    private func hand() {
+        guard case .picture(let image) = ready, !markup.isEmpty else { return }
+        model.feedback(markup, of: asset, picture: image, in: session)
+        sent = true
+        dismiss()
+    }
+
+    /// Thrown away on purpose, which is the only thing that stops them being kept.
+    private func forget() {
+        markup = Markup()
+        model.forget(markupOf: asset)
+    }
+
     private func discard() {
+        keep()
         if let local { try? FileManager.default.removeItem(at: local) }
         ready = nil
     }
-}
 
-/// A picture that fits the sheet and zooms.
-///
-/// This is UIScrollView's own job and it does the whole of it: fit on open, pinch to zoom,
-/// pan inside the picture, double tap in and out, and the bounce at the edges. A SwiftUI
-/// `ScrollView` was doing none of it — asked for both axes it proposes unbounded space, so
-/// `scaledToFit` had nothing to fit to and a screenshot drew at its full pixel size.
-struct Zoomable: UIViewRepresentable {
-    let image: UIImage
-
-    func makeUIView(context: Context) -> PictureScroll {
-        PictureScroll(image: image)
-    }
-
-    func updateUIView(_ view: PictureScroll, context: Context) {
-        view.show(image)
-    }
-}
-
-/// Its own delegate and its own layout: the fit has to be redone whenever the sheet changes
-/// size, and `layoutSubviews` is the only place that is reliably known.
-final class PictureScroll: UIScrollView, UIScrollViewDelegate {
-    private let picture = UIImageView()
-    /// The bounds the current fit was worked out for. Refitting on every layout pass would
-    /// throw away the zoom the person just pinched.
-    private var fittedFor: CGSize = .zero
-
-    init(image: UIImage) {
-        super.init(frame: .zero)
-        delegate = self
-        maximumZoomScale = 12
-        showsHorizontalScrollIndicator = false
-        showsVerticalScrollIndicator = false
-        backgroundColor = .clear
-        picture.contentMode = .scaleAspectFit
-        picture.image = image
-        addSubview(picture)
-        let twice = UITapGestureRecognizer(target: self, action: #selector(tappedTwice))
-        twice.numberOfTapsRequired = 2
-        addGestureRecognizer(twice)
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("not from a nib") }
-
-    func show(_ image: UIImage) {
-        guard picture.image !== image else { return }
-        picture.image = image
-        fittedFor = .zero
-        setNeedsLayout()
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        if bounds.size != fittedFor { fit() }
-        centre()
-    }
-
-    /// The picture is sized to the rectangle it actually fills, not to the whole sheet, so a
-    /// zoomed-in pan runs out at the edge of the image rather than in the letterboxing.
-    private func fit() {
-        guard let image = picture.image, bounds.width > 0, bounds.height > 0 else { return }
-        fittedFor = bounds.size
-        zoomScale = 1
-        let scale = min(bounds.width / image.size.width, bounds.height / image.size.height)
-        let fitted = CGSize(width: image.size.width * scale, height: image.size.height * scale)
-        picture.frame = CGRect(origin: .zero, size: fitted)
-        contentSize = fitted
-    }
-
-    /// Kept in the middle while it is smaller than the sheet, which is most of the time.
-    private func centre() {
-        let sideways = max(0, (bounds.width - picture.frame.width) / 2)
-        let upright = max(0, (bounds.height - picture.frame.height) / 2)
-        contentInset = UIEdgeInsets(top: upright, left: sideways, bottom: upright, right: sideways)
-    }
-
-    @objc private func tappedTwice(_ tap: UITapGestureRecognizer) {
-        guard zoomScale <= minimumZoomScale else {
-            return setZoomScale(minimumZoomScale, animated: true)
+    /// What survives the sheet closing. An emptied markup is forgotten rather than kept, or
+    /// deleting the last pin and closing would bring the first one back on the next open.
+    private func keep() {
+        guard !sent, case .picture = ready else { return }
+        if markup.isEmpty {
+            model.forget(markupOf: asset)
+        } else {
+            model.keep(markup, of: asset)
         }
-        // In on the spot that was tapped, not on the middle of the picture.
-        let spot = tap.location(in: picture)
-        let side = bounds.width / 3
-        zoom(to: CGRect(x: spot.x - side / 2, y: spot.y - side / 2, width: side, height: side),
-             animated: true)
     }
-
-    func viewForZooming(in scrollView: UIScrollView) -> UIView? { picture }
-
-    func scrollViewDidZoom(_ scrollView: UIScrollView) { centre() }
 }

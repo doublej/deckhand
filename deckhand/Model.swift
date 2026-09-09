@@ -72,10 +72,9 @@ final class AppModel {
     /// written it down yet.
     /// Transcribed, held, and waiting to be read before it goes anywhere.
     var review: [String: String] = [:]
-    /// What a filter wanted said about the words in that card. Written only through `hold`, so a
-    /// note can never outlive the words it was about — last clip's note under this clip's text
-    /// would be worse than saying nothing at all.
-    var reviewNotes: [String: [String]] = [:]
+    /// What the chain said about the words in that card: what it changed, and whether it is going
+    /// to refuse them. Written only through `hold`, so neither can outlive the words it was about.
+    var reviewFiltered: [String: Filtered] = [:]
     /// Pictures pinned to those words, per session, until they are sent or discarded.
     var attached: [String: [Snap]] = [:]
     var showsHidden = false
@@ -189,16 +188,12 @@ final class AppModel {
     }
 
     /// Either it is already on its way, or it is waiting to be read first.
+    ///
+    /// Words are held for two reasons and they meet here: because reading first is the setting,
+    /// and because a filter refused them — a refusal on the way out is still words that exist and
+    /// were said to nobody, and the card is the one place in this app that can hold those.
     private func received(_ receipt: UploadReceipt, for session: Session, confirms: Bool) {
-        // A filter refused it: the words are held rather than reported and let go of. The review
-        // card is the one place in this app where words exist and have not been sent, and it can
-        // be edited — which is the only useful answer to a filter that will not pass something.
-        if let text = receipt.words, receipt.stoppedBy != nil {
-            hold(text, for: session, notes: receipt.notes)
-            status = outcome(of: receipt, to: session)
-            return
-        }
-        guard let text = receipt.words, confirms else {
+        guard let text = receipt.words, confirms || receipt.stoppedBy != nil else {
             status = outcome(of: receipt, to: session)
             // Fetch rather than fake it: the words are in the session's own transcript within
             // a moment, and showing them from there means they are shown once, in order, and
@@ -206,11 +201,15 @@ final class AppModel {
             if receipt.went { Task { await self.loadTurns(for: session) } }
             return
         }
-        // What the chain made of them, not what utt heard, and the chain's own note with it: a
-        // word the card shows differing silently from the word that was spoken is the lie this
-        // card exists to prevent.
-        hold(text, for: session, notes: receipt.notes)
-        status = "Read it, then send it"
+        // What the chain made of them, not what utt heard, and what the chain said about them
+        // alongside: a word the card shows differing silently from the word that was spoken is
+        // the lie this card exists to prevent.
+        hold(text,
+             for: session,
+             notes: receipt.notes,
+             stoppedBy: receipt.stoppedBy,
+             because: receipt.deliveryError)
+        status = outcome(of: receipt, to: session, held: confirms)
     }
 
     /// Sending what was held for review lives in `Snaps.swift`: the words may have pictures
@@ -224,13 +223,20 @@ final class AppModel {
 
     /// What actually happened to the clip, in the order the person cares about it. A filter
     /// refusing it comes first: that is the one outcome that looks like success from the outside.
-    func outcome(of receipt: UploadReceipt, to session: Session) -> String {
+    ///
+    /// `held` is the difference between a refusal that has happened and one that is coming. On
+    /// the preview path nothing was delivered because nothing was meant to be, so "not sent" is
+    /// true and useless; what is worth saying is what Send is about to do.
+    func outcome(of receipt: UploadReceipt, to session: Session, held: Bool = false) -> String {
         guard receipt.transcript != nil else {
             return receipt.transcriptError ?? "Sent \(receipt.bytes / 1024) KB, no transcript"
         }
         if let refused = receipt.stoppedBy {
-            return stopped(by: refused, because: receipt.deliveryError, notes: receipt.notes)
+            return held
+                ? said("Read it — \(title(of: refused)) will not pass it", notes: receipt.notes)
+                : stopped(by: refused, because: receipt.deliveryError, notes: receipt.notes)
         }
+        if held { return "Read it, then send it" }
         if receipt.delivered {
             return said("Sent to \(session.name) by \(receipt.deliveredBy ?? "the Mac")",
                         notes: receipt.notes)

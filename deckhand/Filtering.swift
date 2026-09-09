@@ -1,6 +1,18 @@
 import DeckhandKit
 import Foundation
 
+/// What the chain had to say about the words sitting in the review card.
+///
+/// Both halves come off the preview response, which is the point of it: `?deliver=false` runs the
+/// chain without delivering anything, so the card can say what was changed *and* that Send is
+/// going to be refused before anybody presses it, rather than after.
+struct Filtered: Equatable {
+    /// What the chain changed on the way here, as one quiet line. Nil when it changed nothing.
+    var note: String?
+    /// What will happen when Send is pressed, when what will happen is nothing. Nil otherwise.
+    var refusal: String?
+}
+
 /// The chain of steps the Mac runs over words on their way into a session, from this side of it.
 ///
 /// Nothing here names a filter or knows what one does, and that is the design rather than an
@@ -90,22 +102,38 @@ extension AppModel {
 
     // MARK: - what a filter wants said
 
-    /// Words waiting to be read, and anything a filter wants said about them. The one way into
-    /// the review card, so a note cannot outlive the words it was written about.
+    /// Words waiting to be read, and everything the chain wanted said about them. The one way
+    /// into the review card, so neither line can outlive the words it was written about — last
+    /// clip's note under this clip's text would be worse than saying nothing at all.
     ///
     /// `Markups.swift` adds prose to text already held, which is a different move: it changes
-    /// what is in the card and the note still describes how those words were prepared.
-    func hold(_ text: String?, for session: Session, notes: [String] = []) {
+    /// what is in the card, and what the chain said about those words still stands.
+    func hold(
+        _ text: String?,
+        for session: Session,
+        notes: [String] = [],
+        stoppedBy: String? = nil,
+        because reason: String? = nil
+    ) {
         review[session.sessionId] = text
-        reviewNotes[session.sessionId] = text == nil ? nil : notes
+        reviewFiltered[session.sessionId] = text == nil ? nil : Filtered(
+            note: notes.isEmpty ? nil : notes.joined(separator: " · "),
+            refusal: stoppedBy.map { refusal(by: $0, because: reason) }
+        )
     }
 
-    /// What the card says under the words, when a filter changed them. One quiet line: the words
-    /// on screen are not quite the words that were spoken, and nobody should have to work that
-    /// out by rereading them.
-    func reviewNote(for session: Session) -> String? {
-        let notes = reviewNotes[session.sessionId] ?? []
-        return notes.isEmpty ? nil : notes.joined(separator: " · ")
+    /// A refusal that has not happened yet. Present tense on purpose: Send stays pressable, and
+    /// this is what pressing it will do. A greyed-out button with no sentence beside it is the
+    /// worse version of this — it leaves somebody holding words and no way to learn why.
+    func refusal(by filter: String, because reason: String?) -> String {
+        guard let reason, !reason.isEmpty else { return "\(title(of: filter)) will refuse this" }
+        return "\(title(of: filter)) will refuse this: \(reason)"
+    }
+
+    /// A filter by the name it goes by on screen. `stoppedBy` carries the wire name, and "words
+    /// stopped it" is not a sentence anybody wants to read about their own message.
+    func title(of filter: String) -> String {
+        knownFilters.first { $0.name == filter }?.title ?? filter
     }
 
     /// One line for the status strip: what happened, then anything a filter wanted to add. The
@@ -120,11 +148,10 @@ extension AppModel {
     /// stopped it" is not a sentence anybody wants to read about their own message. The reason
     /// comes in the ordinary `delivery_error`, and it is the half that says what to do about it.
     func stopped(by name: String, because reason: String?, notes: [String]) -> String {
-        let title = knownFilters.first { $0.name == name }?.title ?? name
         guard let reason, !reason.isEmpty else {
-            return said("Not sent — \(title) stopped it", notes: notes)
+            return said("Not sent — \(title(of: name)) stopped it", notes: notes)
         }
-        return said("Not sent — \(title): \(reason)", notes: notes)
+        return said("Not sent — \(title(of: name)): \(reason)", notes: notes)
     }
 
     private func index(of id: FilterRow.ID) -> Int? {

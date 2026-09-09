@@ -112,16 +112,6 @@ struct SessionView: View {
         }
     }
 
-    /// One slot, two things: the button you talk through, or what it heard waiting to be sent.
-    /// Never both — while there is something to answer, that is all this slot is for.
-    private var foot: some View {
-        Group {
-            if model.review[session.sessionId] != nil { review } else { talk }
-        }
-        .padding(.horizontal, Spacing.small)
-        .padding(.bottom, Spacing.extraSmall)
-    }
-
     private var header: some View {
         HStack(spacing: Spacing.extraSmall) {
             Button { dismiss() } label: {
@@ -286,7 +276,7 @@ struct SessionView: View {
                 target: session.name,
                 send: { edited in Task { await model.send(edited, to: session) } },
                 discard: { model.discard(for: session) },
-                note: model.reviewNote(for: session),
+                filtered: model.reviewFiltered[session.sessionId],
                 snaps: model.snaps(for: session),
                 attach: { model.attach($0, to: session) },
                 paste: { model.attachFromClipboard(to: session) },

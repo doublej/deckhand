@@ -68,10 +68,13 @@ extension AppModel {
         status = pinned.isEmpty ? "Sending to \(session.name)…" : "Sending the pictures first…"
         await run {
             let paths = try await self.keep(pinned, for: session, with: client)
+            // Always prepared: every caller of this is a review card, so these words have been
+            // on screen and the chain has already had its turn at them.
             let sent = try await client.say(text,
                                             to: session.sessionId,
                                             route: self.preferences.route,
-                                            images: paths)
+                                            images: paths,
+                                            prepared: true)
             guard self.went(sent, saying: text, to: session) else { return }
             await self.loadTurns(for: session)
         }
@@ -85,7 +88,11 @@ extension AppModel {
     /// card rather than being reported and let go of. The status line says which of the two.
     private func went(_ sent: Delivery, saying text: String, to session: Session) -> Bool {
         guard sent.went else {
-            hold(text, for: session, notes: sent.notes)
+            hold(text,
+                 for: session,
+                 notes: sent.notes,
+                 stoppedBy: sent.stoppedBy,
+                 because: sent.deliveryError)
             status = sent.stoppedBy
                 .map { stopped(by: $0, because: sent.deliveryError, notes: sent.notes) }
                 ?? sent.deliveryError

@@ -44,19 +44,28 @@ public struct Preferences: Equatable, Sendable {
     /// Read the transcript before it goes in. Speaking into a busy session is not undoable,
     /// so this is on until someone decides they would rather it were not.
     public var confirms: Bool
+    /// Show a markdown file as a document rather than as its source.
+    ///
+    /// On, because the reason to open a `report.md` on a phone is to read it. It lives here
+    /// rather than per file because it is a reading preference and not a property of any one
+    /// file — so the next report opens in whatever was last chosen, which is the answer you
+    /// wanted both times.
+    public var formatsMarkdown: Bool
 
     public init(
         favorites: Set<String> = [],
         hidden: Set<String> = [],
         talkMode: TalkMode = .hold,
         route: DeliveryRoute = .auto,
-        confirms: Bool = true
+        confirms: Bool = true,
+        formatsMarkdown: Bool = true
     ) {
         self.favorites = favorites
         self.hidden = hidden
         self.talkMode = talkMode
         self.route = route
         self.confirms = confirms
+        self.formatsMarkdown = formatsMarkdown
     }
 
     public func isFavorite(_ name: String) -> Bool { favorites.contains(name) }
@@ -92,6 +101,7 @@ public struct Preferences: Equatable, Sendable {
     private static let modeKey = "deckhand.talkMode"
     private static let routeKey = "deckhand.route"
     private static let confirmsKey = "deckhand.confirms"
+    private static let formatsKey = "deckhand.formatsMarkdown"
 
     public static func load(from defaults: UserDefaults = .standard) -> Preferences {
         Preferences(
@@ -99,7 +109,10 @@ public struct Preferences: Equatable, Sendable {
             hidden: Set(defaults.stringArray(forKey: hiddenKey) ?? []),
             talkMode: TalkMode(rawValue: defaults.string(forKey: modeKey) ?? "") ?? .hold,
             route: DeliveryRoute(rawValue: defaults.string(forKey: routeKey) ?? "") ?? .auto,
-            confirms: defaults.object(forKey: confirmsKey) as? Bool ?? true
+            confirms: defaults.object(forKey: confirmsKey) as? Bool ?? true,
+            // `object(forKey:)` rather than `bool(forKey:)`, because a missing key reads as
+            // false and the default here is on.
+            formatsMarkdown: defaults.object(forKey: formatsKey) as? Bool ?? true
         )
     }
 
@@ -109,5 +122,6 @@ public struct Preferences: Equatable, Sendable {
         defaults.set(talkMode.rawValue, forKey: Self.modeKey)
         defaults.set(route.rawValue, forKey: Self.routeKey)
         defaults.set(confirms, forKey: Self.confirmsKey)
+        defaults.set(formatsMarkdown, forKey: Self.formatsKey)
     }
 }

@@ -51,6 +51,20 @@ struct PreferencesTests {
         #expect(loaded.talkMode == .toggle)
     }
 
+    @Test("the markdown reading choice is remembered, and on until it is turned off")
+    func markdownFormatting() throws {
+        let defaults = try #require(UserDefaults(suiteName: "deckhand.prefs.\(UUID().uuidString)"))
+        // Nothing saved yet: a report opens formatted, because reading it is why you opened it.
+        #expect(Preferences.load(from: defaults).formatsMarkdown)
+
+        var prefs = Preferences()
+        prefs.formatsMarkdown = false
+        prefs.save(to: defaults)
+        // And off stays off. `bool(forKey:)` would read a missing key as false and put the
+        // default out of reach, which is why the load goes through `object(forKey:)`.
+        #expect(Preferences.load(from: defaults).formatsMarkdown == false)
+    }
+
     @Test("hiding a session drops it from favourites, since it cannot be both")
     func hidingClearsFavourite() {
         var prefs = Preferences(favorites: ["utt"])
