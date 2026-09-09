@@ -43,7 +43,7 @@ def test_turns_come_from_the_transcript(token, claude_home):
         json.dumps({"type": "user", "message": {"content": "ping"}, "timestamp": "t"}) + "\n"
     )
     turns = client(token).get(f"/sessions/{SID}/turns?limit=4").json()["turns"]
-    assert turns == [{"role": "user", "text": "ping", "timestamp": "t"}]
+    assert turns == [{"role": "user", "text": "ping", "timestamp": "t", "tools": []}]
 
 
 def test_audio_upload_lands_on_the_mac(token):

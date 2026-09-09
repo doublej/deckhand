@@ -76,4 +76,42 @@ def test_unknown_session_has_no_transcript(claude_home):
 def test_words_buried_under_a_long_tool_run_are_still_found(claude_home):
     tool_call = assistant([{"type": "tool_use", "name": "Bash", "input": {"command": "x" * 900}}])
     write_transcript(claude_home, [user("said this before the tool storm")] + [tool_call] * 1200)
-    assert [t.text for t in transcripts.read_turns(SID, limit=2)] == ["said this before the tool storm"]
+    turns = transcripts.read_turns(SID, limit=2)
+    assert turns[0].text == "said this before the tool storm"
+    # The run is still going and the session has not spoken since, so the last turn has no
+    # words -- which is the honest reading of a session mid-tool-storm, not an empty message.
+    assert turns[-1].text == ""
+    assert turns[-1].tools, "a run in flight should still say that it is running"
+
+
+def test_what_it_ran_is_attached_to_what_it_said_next(claude_home):
+    write_transcript(claude_home, [
+        user("check the build"),
+        assistant([{"type": "tool_use", "id": "t1", "name": "Bash",
+                    "input": {"command": "just  build"}}]),
+        {"type": "user", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": "t1", "content": "ok"}]},
+         "timestamp": "2026-09-09T10:00:02Z"},
+        assistant([{"type": "tool_use", "id": "t2", "name": "Read",
+                    "input": {"file_path": "/tmp/x.swift"}}]),
+        {"type": "user", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": "t2", "is_error": True, "content": "no"}]},
+         "timestamp": "2026-09-09T10:00:03Z"},
+        assistant([{"type": "text", "text": "the build is green"}]),
+    ])
+    turns = transcripts.read_turns(SID)
+    # Twenty calls should not become twenty entries: they belong to the message they led to.
+    assert [t.text for t in turns] == ["check the build", "the build is green"]
+    ran = turns[-1].tools
+    assert [(t.name, t.detail, t.succeeded) for t in ran] == [
+        ("Bash", "just build", True),
+        ("Read", "/tmp/x.swift", False),
+    ]
+
+
+def test_a_tool_nobody_has_a_field_for_still_shows_something(claude_home):
+    write_transcript(claude_home, [
+        assistant([{"type": "tool_use", "id": "t1", "name": "Odd", "input": {"whatever": "a value"}}]),
+        assistant([{"type": "text", "text": "done"}]),
+    ])
+    assert transcripts.read_turns(SID)[-1].tools[0].detail == "a value"

@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import os
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 # A session deep in a tool run can push its last words far back, so widen until turns appear.
@@ -20,11 +20,29 @@ MAX_TEXT = 4000
 _NOISE = re.compile(r"<(system-reminder|command-message|command-name|command-args)>.*?</\1>", re.DOTALL)
 
 
+# The input field worth showing for each tool, in the order the phone would want to read it.
+# Anything not listed falls back to the first short string in the input.
+TOOL_DETAIL = ("command", "file_path", "pattern", "path", "description", "prompt", "url", "query")
+MAX_DETAIL = 140
+
+
+@dataclass(slots=True)
+class Tool:
+    """One thing the session ran, small enough to sit under a message as a dot."""
+
+    name: str
+    detail: str
+    succeeded: bool = True
+
+
 @dataclass(slots=True)
 class Turn:
     role: str
     text: str
     timestamp: str
+    # What the session ran on the way to saying this. Attached to the message that follows
+    # them, because that is where they read as "how it got here" rather than as noise.
+    tools: list[Tool] = field(default_factory=list)
 
     def to_json(self) -> dict:
         return asdict(self)
@@ -140,16 +158,76 @@ def _parse(raw: bytes) -> dict | None:
 
 
 def _scan(path: Path, window: int) -> list[Turn]:
-    """Parse the conversation turns in the last `window` bytes of the transcript."""
+    """Parse the conversation turns in the last `window` bytes, with what was run between them.
+
+    Tool calls are collected as they appear and handed to the next message that has something
+    to say, so a run of twenty of them is one row under one message rather than twenty entries
+    of its own. A run still in flight at the end of the file gets a turn with no words, which
+    is exactly what it is: the session is working and has not spoken yet.
+    """
     turns: list[Turn] = []
+    ran: list[tuple[str, Tool]] = []
+    failed: set[str] = set()
     for raw in _tail_lines(path, window):
         entry = _parse(raw)
-        if entry is None:
+        if entry is None or entry.get("type") not in ("user", "assistant"):
             continue
-        if entry.get("type") not in ("user", "assistant"):
-            continue
+        failed |= _failures(entry)
+        ran.extend(_tools_of(entry))
         text = _text_of(entry)
         if text is None:
             continue
-        turns.append(Turn(role=entry["type"], text=text, timestamp=entry.get("timestamp", "")))
+        turns.append(Turn(role=entry["type"], text=text, timestamp=entry.get("timestamp", ""),
+                          tools=_settle(ran, failed)))
+        ran = []
+    if ran:
+        turns.append(Turn(role="assistant", text="", timestamp="", tools=_settle(ran, failed)))
     return turns
+
+
+def _settle(ran: list[tuple[str, Tool]], failed: set[str]) -> list[Tool]:
+    """A result arrives after the call that asked for it, so failure is known only by now."""
+    settled = []
+    for tool_id, tool in ran:
+        tool.succeeded = tool_id not in failed
+        settled.append(tool)
+    return settled
+
+
+def _failures(entry: dict) -> set[str]:
+    """Tool results come back as a user entry; the id is what ties one to its call."""
+    content = entry.get("message", {}).get("content")
+    if entry.get("type") != "user" or not isinstance(content, list):
+        return set()
+    return {
+        block["tool_use_id"]
+        for block in content
+        if isinstance(block, dict) and block.get("type") == "tool_result"
+        and block.get("is_error") and block.get("tool_use_id")
+    }
+
+
+def _tools_of(entry: dict) -> list[tuple[str, Tool]]:
+    content = entry.get("message", {}).get("content")
+    if entry.get("type") != "assistant" or not isinstance(content, list):
+        return []
+    return [
+        (block.get("id", ""), Tool(name=block.get("name", "tool"), detail=_detail(block)))
+        for block in content
+        if isinstance(block, dict) and block.get("type") == "tool_use"
+    ]
+
+
+def _detail(block: dict) -> str:
+    """The one input worth reading: the command, the file, the pattern it searched for."""
+    supplied = block.get("input")
+    if not isinstance(supplied, dict):
+        return ""
+    for key in TOOL_DETAIL:
+        value = supplied.get(key)
+        if isinstance(value, str) and value.strip():
+            return " ".join(value.split())[:MAX_DETAIL]
+    for value in supplied.values():
+        if isinstance(value, str) and value.strip():
+            return " ".join(value.split())[:MAX_DETAIL]
+    return ""

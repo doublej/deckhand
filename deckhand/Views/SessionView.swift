@@ -17,7 +17,6 @@ struct SessionView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            tabs
             switch showing {
             case .summary: briefing
             case .transcript: transcript
@@ -26,6 +25,7 @@ struct SessionView: View {
             // Never both — while there is something to answer, that is the only thing the
             // foot of the page is for.
             if model.review[session.sessionId] != nil { review } else { talk }
+            tabs
         }
         .animation(.snappy(duration: 0.22), value: model.review[session.sessionId])
         .background(Palette.surfaceGround)
@@ -106,7 +106,17 @@ struct SessionView: View {
                 LazyVStack(alignment: .leading, spacing: Spacing.extraSmall) {
                     if model.turns.isEmpty { nothingYet }
                     ForEach(Array(model.turns.enumerated()), id: \.offset) { index, turn in
-                        TurnCard(turn: turn, showsRole: startsRun(index)).id(index)
+                        // The id goes on the pair, not the card: a turn that is only a tool
+                        // run has no card, and scrolling to the newest turn has to land on
+                        // it anyway — silently it would not scroll at all.
+                        VStack(alignment: .leading, spacing: Spacing.xxs) {
+                            // What it ran sits above what it said, in the order it happened.
+                            if !turn.tools.isEmpty { ToolTrace(tools: turn.tools) }
+                            if !turn.text.isEmpty {
+                                TurnCard(turn: turn, showsRole: startsRun(index))
+                            }
+                        }
+                        .id(index)
                     }
                     pending
                 }
@@ -130,8 +140,11 @@ struct SessionView: View {
             .padding(.vertical, Spacing.small)
     }
 
+    /// At the foot of the page, not under the title. Up there it sat a few points beneath the
+    /// folder and the timestamp and read as a third line of the same block; down here it is
+    /// plainly a control, and the header goes back to being only the header.
     private var tabs: some View {
-        HStack(spacing: Spacing.medium) {
+        HStack(spacing: Spacing.xxs) {
             ForEach(Pane.allCases, id: \.self) { pane in
                 Button { showing = pane } label: { tab(pane) }
                     .buttonStyle(.plain)
@@ -140,27 +153,24 @@ struct SessionView: View {
             Spacer(minLength: 0)
             if model.summarising.contains(session.sessionId) { ProgressView().controlSize(.mini) }
         }
-        .padding(.horizontal, Spacing.medium)
-        .padding(.bottom, Spacing.extraSmall)
+        .padding(.horizontal, Spacing.small)
+        .padding(.vertical, Spacing.extraSmall)
+        .overlay(alignment: .top) { Divider() }
     }
 
+    /// The chosen one wears a pill, which is the word this language already uses for state.
     private func tab(_ pane: Pane) -> some View {
         let chosen = showing == pane
-        return VStack(spacing: Spacing.xxs) {
-            Text(pane.rawValue.uppercased())
-                .font(Typography.eyebrow)
-                .tracking(1)
-                .foregroundStyle(chosen ? Palette.textPrimary : Palette.textTertiary)
-            // The rule carries the state rather than a filled capsule: this sits directly
-            // under the page header and a second solid shape there fights it. It is sized to
-            // the word rather than to the space, which is the difference between a tab and
-            // something that reads as a progress bar.
-            Capsule()
-                .fill(chosen ? Palette.tint : .clear)
-                .frame(height: 2)
-        }
-        .fixedSize(horizontal: true, vertical: false)
-        .contentShape(.rect)
+        return Text(pane.rawValue.uppercased())
+            .font(Typography.eyebrow)
+            .tracking(1)
+            .foregroundStyle(chosen ? Palette.textPrimary : Palette.textTertiary)
+            .padding(.horizontal, Spacing.small)
+            .padding(.vertical, 6)
+            .background(
+                Capsule().fill(chosen ? Palette.tint.opacity(0.18) : .clear)
+            )
+            .contentShape(.rect)
     }
 
     /// What it did while you were away, with the whole page to say it in.
@@ -179,7 +189,10 @@ struct SessionView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, Spacing.medium)
-            .padding(.bottom, Spacing.medium)
+            // The opening sentence needs room above it or it reads as a caption stuck to the
+            // header rather than the first thing on a page.
+            .padding(.top, Spacing.large)
+            .padding(.bottom, Spacing.extraLarge)
         }
         .frame(maxHeight: .infinity)
     }

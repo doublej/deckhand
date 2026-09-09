@@ -41,14 +41,60 @@ public struct Turn: Codable, Hashable, Sendable {
     public let role: String
     public let text: String
     public let timestamp: String
+    /// What the session ran on its way to saying this. Empty for anything you said.
+    public var tools: [Tool] = []
 
-    public init(role: String, text: String, timestamp: String) {
+    public init(role: String, text: String, timestamp: String, tools: [Tool] = []) {
         self.role = role
         self.text = text
         self.timestamp = timestamp
+        self.tools = tools
+    }
+
+    /// Tolerant of a daemon that predates tool traces. The phone and the Mac are updated
+    /// separately — the Mac by a git pull, the phone by a rebuild — so they are routinely a
+    /// version apart, and a key one of them has not heard of must not cost the whole payload.
+    public init(from decoder: Decoder) throws {
+        let box = try decoder.container(keyedBy: CodingKeys.self)
+        role = try box.decode(String.self, forKey: .role)
+        text = try box.decode(String.self, forKey: .text)
+        timestamp = try box.decode(String.self, forKey: .timestamp)
+        tools = try box.decodeIfPresent([Tool].self, forKey: .tools) ?? []
     }
 
     public var isUser: Bool { role == "user" }
+}
+
+/// One thing a session ran. Small on purpose: a dot until you ask for more.
+public struct Tool: Codable, Hashable, Sendable, Identifiable {
+    public let name: String
+    public let detail: String
+    public let succeeded: Bool
+
+    public init(name: String, detail: String, succeeded: Bool = true) {
+        self.name = name
+        self.detail = detail
+        self.succeeded = succeeded
+    }
+
+    /// Stable enough for a list that is rebuilt every few seconds from the same transcript.
+    public var id: String { "\(name)\(detail)\(succeeded)" }
+
+    /// What a tool does, which is the only thing a single dot has room to say. Reading,
+    /// changing and running are worth telling apart at a glance; the exact tool is a tap away.
+    public enum Kind: Sendable {
+        case reading, changing, running, asking, other
+    }
+
+    public var kind: Kind {
+        switch name {
+        case "Read", "Grep", "Glob", "NotebookRead": .reading
+        case "Edit", "Write", "NotebookEdit", "MultiEdit": .changing
+        case "Bash", "BashOutput", "KillBash": .running
+        case "Task", "Agent", "WebFetch", "WebSearch", "AskUserQuestion": .asking
+        default: .other
+        }
+    }
 }
 
 /// What became of a line of text handed to a session.

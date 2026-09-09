@@ -36,8 +36,10 @@ public struct Prose: View {
             Text(inline(text))
                 .font(lead ? Typography.lead : Typography.prose)
                 .foregroundStyle(lead ? Palette.textPrimary : Palette.textSecondary)
-                .lineSpacing(lead ? 3 : 2)
-                .padding(.bottom, lead ? Spacing.small : Spacing.extraSmall)
+                // Roughly 1.45x the type size. Text set solid reads as a wall; this is the
+                // single biggest thing separating a page you read from a page you skim past.
+                .lineSpacing(lead ? 7 : 6)
+                .padding(.bottom, lead ? Spacing.large : Spacing.medium)
         }
     }
 
@@ -50,8 +52,8 @@ public struct Prose: View {
             // The air above a heading is what separates one section from the last. It is
             // deliberately much larger than the gap between the lines inside a section —
             // that difference is the only thing telling you where a section begins.
-            .padding(.top, Spacing.large)
-            .padding(.bottom, Spacing.extraSmall)
+            .padding(.top, Spacing.extraLarge)
+            .padding(.bottom, Spacing.small)
     }
 
     private func bullet(_ text: String) -> some View {
@@ -64,9 +66,9 @@ public struct Prose: View {
             Text(inline(text))
                 .font(Typography.prose)
                 .foregroundStyle(Palette.textPrimary)
-                .lineSpacing(2)
+                .lineSpacing(5)
         }
-        .padding(.vertical, 3)
+        .padding(.vertical, Spacing.extraSmall)
     }
 
     /// Bold and code, via SwiftUI's own parser; code additionally gets the mono face, which

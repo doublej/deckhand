@@ -73,3 +73,29 @@ struct CollapsedTests {
         #expect(came.collapsed.contains(said.collapsed))
     }
 }
+
+@Suite("Turns from a daemon a version behind")
+struct TurnDecodingTests {
+    @Test("a payload with no tool traces still decodes")
+    func olderDaemon() throws {
+        // The Mac is updated by a git pull and the phone by a rebuild, so the two are
+        // routinely a version apart. A key one of them has not heard of must not cost the
+        // whole transcript.
+        let json = #"{"role":"assistant","text":"done","timestamp":"t"}"#
+        let turn = try JSONDecoder().decode(Turn.self, from: Data(json.utf8))
+        #expect(turn.tools.isEmpty)
+        #expect(turn.text == "done")
+    }
+
+    @Test("and one with them keeps what it was told")
+    func newerDaemon() throws {
+        let json = """
+            {"role":"assistant","text":"done","timestamp":"t",
+             "tools":[{"name":"Bash","detail":"just build","succeeded":false}]}
+            """
+        let turn = try JSONDecoder().decode(Turn.self, from: Data(json.utf8))
+        #expect(turn.tools.first?.name == "Bash")
+        #expect(turn.tools.first?.succeeded == false)
+        #expect(turn.tools.first?.kind == .running)
+    }
+}
