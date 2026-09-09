@@ -17,6 +17,9 @@ struct SessionListView: View {
     /// Pushed by hand rather than by a NavigationLink: a link inside a List draws the system's
     /// disclosure chevron outside the row's own fill, which broke the one edge this page has.
     @State private var chosen: Session?
+    /// Which pinned picture is being marked up, and whose card it is pinned to — the rail can be
+    /// holding a card for more than one session, so the picture alone does not say.
+    @State private var marking: Pinned?
     @Environment(\.scenePhase) private var phase
 
     /// What this page's accents are drawn in. Read here rather than from the environment because
@@ -52,6 +55,9 @@ struct SessionListView: View {
             .navigationDestination(item: $chosen) { SessionView(model: model, opened: $0) }
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showSettings) { SettingsView(model: model) }
+            // On the page rather than on the row: a row is recycled as the listing refreshes, and
+            // a sheet presented from one goes with it.
+            .sheet(item: $marking) { SnapView(model: model, session: $0.session, snap: $0.snap) }
         }
         .task {
             while !Task.isCancelled {
@@ -198,7 +204,10 @@ struct SessionListView: View {
                 snaps: model.snaps(for: session),
                 attach: { model.attach($0, to: session) },
                 paste: { model.attachFromClipboard(to: session) },
-                unattach: { model.unattach($0, from: session) }
+                mark: { snap, said in
+                    model.settle(said, for: session)
+                    marking = Pinned(snap: snap, session: session)
+                }
             )
         }
     }

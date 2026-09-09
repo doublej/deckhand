@@ -13,6 +13,9 @@ struct SessionFoot: View {
     /// The page's own recorder, not one of this view's: the slot is rebuilt the moment something
     /// is held for reading, and a recorder rebuilt mid-clip is a clip on the floor.
     @Bindable var recorder: Recorder
+    /// Which pinned picture is being marked up, if any. Here rather than in the card because the
+    /// card holds no model and no session, and the marking sheet needs both.
+    @State private var marking: Pinned?
 
     var body: some View {
         Group {
@@ -20,6 +23,7 @@ struct SessionFoot: View {
         }
         .padding(.horizontal, Spacing.small)
         .padding(.bottom, Spacing.extraSmall)
+        .sheet(item: $marking) { SnapView(model: model, session: $0.session, snap: $0.snap) }
     }
 
     /// The mark is the button. utt's mark, because recording is utt's job — it takes the
@@ -54,7 +58,10 @@ struct SessionFoot: View {
                 snaps: model.snaps(for: session),
                 attach: { model.attach($0, to: session) },
                 paste: { model.attachFromClipboard(to: session) },
-                unattach: { model.unattach($0, from: session) },
+                mark: { snap, said in
+                    model.settle(said, for: session)
+                    marking = Pinned(snap: snap, session: session)
+                },
                 // The page's recorder again, and on purpose: the card is not allowed to make one
                 // of its own for the same reason this view is not. Half a thought is a common way
                 // to finish talking, and the whole point of the card is that the first half is

@@ -36,6 +36,19 @@ extension AppModel {
         review[session.sessionId] = said.isEmpty ? prose : "\(said)\n\n\(prose)"
     }
 
+    /// The words as they stand on screen, made the model's own before anything is laid under them.
+    ///
+    /// An edit made by hand lives in the card until Send — `review` still holds the transcript that
+    /// was corrected, and the card shows its own copy. So anything that adds words from outside the
+    /// card has to fold the correction in first, or the two diverge and the one that gets sent is
+    /// the one without the addition in it. `append(clip:to:beneath:)` does this inline for a second
+    /// clip; marking up a picture already pinned to the card needs it for the same reason, a moment
+    /// earlier: at the tap, so that closing the sheet without marking anything still leaves the
+    /// correction where it was.
+    func settle(_ said: String, for session: Session) {
+        review[session.sessionId] = said
+    }
+
     /// Another clip, transcribed and laid under the words the card is already holding.
     ///
     /// `said` is those words as they stand on screen, which is not always what is in `review`: an
