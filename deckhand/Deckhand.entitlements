@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- development, not production: this is a dev-signed build talking to APNs' sandbox
+	     host. A wildcard App ID cannot carry this key at all, which is why the bundle id
+	     had to become an explicit one. -->
+	<key>aps-environment</key>
+	<string>development</string>
+</dict>
+</plist>

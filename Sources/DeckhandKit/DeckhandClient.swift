@@ -44,6 +44,19 @@ public struct DeckhandClient: Sendable {
         return try decode(try await send(req, body: body))
     }
 
+    /// Hand the Mac a token it can push a Lock Screen update to.
+    ///
+    /// Two kinds, and the daemon needs both. An `activity` token updates the card that is
+    /// already on screen; a `start` token lets the daemon put a fresh one there when none is
+    /// running, which is the only way this survives the system ending one after a few hours,
+    /// or a reboot, or the app being force-quit.
+    public func register(pushToken: String, kind: String) async throws {
+        var req = request(.post, "live/token")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body = try JSONEncoder().encode(["token": pushToken, "kind": kind])
+        _ = try await send(req, body: body)
+    }
+
     /// Bring the session's iTerm pane to the front on the Mac.
     public func focus(_ sessionId: String) async throws {
         _ = try await send(request(.post, "sessions/\(sessionId)/focus"))

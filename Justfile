@@ -30,6 +30,17 @@ xcode: generate
 daemon:
     uv run --directory daemon deckhand-daemon
 
+# Copy the APNs signing key out of 1Password so the daemon can reach the Lock Screen.
+
+# onenv cannot run under launchd: 1Password has no way to ask for a fingerprint there.
+[group('setup')]
+sync-apns:
+    @mkdir -p ~/Library/Application\ Support/Deckhand
+    @onenv get deckhand APNS_KEY > ~/Library/Application\ Support/Deckhand/apns.p8
+    @onenv get deckhand APNS_KEY_ID > ~/Library/Application\ Support/Deckhand/apns-key-id
+    @chmod 600 ~/Library/Application\ Support/Deckhand/apns.p8 ~/Library/Application\ Support/Deckhand/apns-key-id
+    @echo 'push key written; restart the daemon to pick it up'
+
 # Follow the daemon log (the same file Console.app shows under ~/Library/Logs).
 [group('develop')]
 logs:
@@ -51,7 +62,7 @@ sim: generate
     xcodebuild {{ project }} -destination 'platform=iOS Simulator,name={{ sim }}' -configuration Debug build
     xcrun simctl boot '{{ sim }}' || true
     xcrun simctl install booted "$(xcodebuild {{ project }} -destination 'platform=iOS Simulator,name={{ sim }}' -showBuildSettings 2>/dev/null | awk -F' = ' '/ BUILT_PRODUCTS_DIR/ {print $2; exit}')/Deckhand.app"
-    xcrun simctl launch booted com.jj.Deckhand -deckhand.host 127.0.0.1:4180 -deckhand.token "$(just token)"
+    xcrun simctl launch booted dev.jurrejan.deckhand -deckhand.host 127.0.0.1:4180 -deckhand.token "$(just token)"
 
 # Build, install and start the app on the iPhone, already paired with this Mac.
 # Needs Xcode signed in and the phone unlocked (the developer disk image will not
@@ -61,7 +72,7 @@ sim: generate
 device: generate
     xcodebuild {{ project }} -destination 'generic/platform=iOS' -allowProvisioningUpdates -derivedDataPath .build/device build
     xcrun devicectl device install app --device '{{ phone }}' .build/device/Build/Products/Debug-iphoneos/Deckhand.app
-    xcrun devicectl device process launch --device '{{ phone }}' com.jj.Deckhand \
+    xcrun devicectl device process launch --device '{{ phone }}' dev.jurrejan.deckhand \
         -- -deckhand.host m2-2.local -deckhand.token "$(just token)"
 
 [group('quality')]

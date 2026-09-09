@@ -10,7 +10,17 @@ from pathlib import Path
 
 from fastapi import Body, Depends, FastAPI, Header, HTTPException, Query, UploadFile
 
-from . import __version__, config, deliver, plugin, sessions, summarize, transcribe, transcripts
+from . import (
+    __version__,
+    config,
+    deliver,
+    plugin,
+    push,
+    sessions,
+    summarize,
+    transcribe,
+    transcripts,
+)
 from .log import log
 
 AUDIO_SUFFIXES = {".m4a", ".caf", ".wav", ".mp3", ".aac", ".mp4", ".ogg", ".flac", ".webm"}
@@ -26,9 +36,10 @@ async def lifespan(_: FastAPI):
     """Deckhand's page inside utt, put there fresh on every start: it is what survives utt
     being reinstalled or the folder being cleared, and it costs one file write."""
     plugin.install()
-    watcher = asyncio.create_task(plugin.watch())
+    watchers = [asyncio.create_task(plugin.watch()), asyncio.create_task(push.watch())]
     yield
-    watcher.cancel()
+    for watcher in watchers:
+        watcher.cancel()
 
 
 app = FastAPI(title="Deckhand", version=__version__, lifespan=lifespan)
@@ -136,6 +147,7 @@ async def upload_audio(
         taken, delivery_error = await asyncio.to_thread(
             deliver.deliver, session, text, route or plugin.route())
         log.info("delivery to %s: %s", session.name, delivery_error or f"{taken} took it")
+        push.spoke_to(session_id)
     return {
         "path": str(path),
         "bytes": len(body),
@@ -159,7 +171,21 @@ async def say(
     taken, error = await asyncio.to_thread(
         deliver.deliver, session, text, route or plugin.route())
     log.info("delivery to %s: %s", session.name, error or f"{taken} took it")
+    push.spoke_to(session_id)
     return {"delivered": taken is not None, "delivered_by": taken, "delivery_error": error}
+
+
+@app.post("/live/token", dependencies=[Depends(require_token)])
+def live_token(token: str = Body(embed=True), kind: str = Body(embed=True)) -> dict:
+    """The phone hands over what the Mac needs to reach its Lock Screen.
+
+    Sent on every launch, because these change without warning and a stale one is a card that
+    silently stops updating.
+    """
+    if kind not in ("activity", "start"):
+        raise HTTPException(status_code=400, detail=f"no such token kind {kind!r}")
+    push.remember(token, kind)
+    return {"registered": kind}
 
 
 def main() -> None:

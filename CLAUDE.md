@@ -25,6 +25,11 @@ controlled from its own page inside utt.
   start-up; `deckhand.values.json` carries what the person set on the page, and
   `deckhand.action.json` which button they pressed.
 - Summaries: the Claude Agent SDK, sonnet at low effort, one turn, no tools.
+- Lock Screen: a Live Activity (`widgets/`, target `DeckhandWidgets`) saying how many sessions
+  have stopped and are waiting. The **Mac** drives it over APNs — a backgrounded app has no
+  promise of running again — so the phone only hands over push tokens and the daemon does the
+  sending (`push.py`). Bundle id is `dev.jurrejan.deckhand`, and it had to become explicit:
+  push cannot be enabled on a wildcard App ID.
 - The Mac-side UI is Deckhand's page inside utt (`plugin.py`): three settings, and buttons for
   copy the pairing code and open the log. Start and restart are utt's own Restart button, which
   reads live launchd state from `daemon.label`. `showsInMenuBar` puts the same status lines,
@@ -61,6 +66,7 @@ Sources/DeckhandKit/Design/
 daemon/src/deckhand_daemon/
   sessions.py     # which Claude sessions are alive, and their iTerm pane
   transcripts.py  # the last rounds, and the activity blob a summary is written from
+  push.py         # what the Lock Screen says, when it changes, and how it gets there
   transcribe.py   # utt turns a clip into text, through its jobs folder
   plugin.py       # Deckhand's page inside utt: the manifest, its settings, its buttons
   deliver.py      # the text goes into the session's own peer socket
@@ -127,6 +133,22 @@ unauthenticated route; everything else needs the `x-deckhand-token` header, and 
   with no handle on the far side, and utt 1.1.0 does not honour `confirms` from the menu, so it
   was one mis-click from the daemon being gone until someone opened a terminal. Stopping it for
   good is `just uninstall-agent`, which is the right place for that.
+- **The Lock Screen card is push-to-start, never started by the app.** Asking for one at launch
+  would park "Nothing waiting" on the Lock Screen for hours, which teaches you to ignore it. The
+  app hands over a `start` token and the daemon raises a card the moment a session goes
+  busy → idle; that transition is the only event here. A session already idle when the daemon
+  starts is not one, or every restart would announce old news.
+- **APNs needs a key the daemon cannot mint.** `just sync-apns` materialises `deckhand/APNS_KEY`
+  and `APNS_KEY_ID` out of 1Password, for the same launchd reason as ever. The key itself is
+  created by hand once in the developer portal (Keys → new key with APNs enabled). Without it
+  everything works up to the send and the log says `no push key on this Mac`.
+- **The APNs host must match the entitlement.** The app signs `aps-environment: development`, so
+  the daemon talks to `api.sandbox.push.apple.com`; a token minted for one host is refused by the
+  other. A TestFlight or App Store build flips both.
+- **`attributes-type` in the push payload is the Swift type's bare name** (`Deck`). Nothing
+  checks that the two still agree, so renaming the type in `LiveActivity.swift` silently breaks
+  push-to-start until `push.py` moves with it. The `ContentState` field names are the wire
+  format for the same reason — there is no Swift on the sending side.
 - **The plugin page needs utt 1.1.0 or newer.** Before that, utt dropped manifest keys that
   were not all-lowercase and said nothing, so `copyToken` and `openLog` never became buttons and
   only `stop` did — a page can be half-missing and look complete. 1.1.0's `isSafeKey` accepts

@@ -5,6 +5,7 @@ import SwiftUI
 struct DeckhandApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @State private var model = AppModel()
+    @State private var live = LiveUpdates()
 
     var body: some Scene {
         WindowGroup {
@@ -12,6 +13,14 @@ struct DeckhandApp: App {
             // meant to be the phone's own light one. Forcing dark made both the same surface.
             RootView(model: model)
                 .tint(Palette.tint)
+                // The Mac drives the Lock Screen card, not the app: a backgrounded app has no
+                // promise of running again soon. All this does is keep the Mac supplied with
+                // the tokens that let it, for as long as the app is alive.
+                .task {
+                    live.begin { hex, kind in
+                        try await model.settings.client()?.register(pushToken: hex, kind: kind)
+                    }
+                }
         }
     }
 }

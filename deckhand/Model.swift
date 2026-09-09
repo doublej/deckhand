@@ -57,7 +57,7 @@ final class AppModel {
     var review: [String: String] = [:]
     var showsHidden = false
 
-    private let logger = Logger(subsystem: "com.jj.Deckhand", category: "app")
+    private let logger = Logger(subsystem: "dev.jurrejan.deckhand", category: "app")
 
     init(settings: ServerSettings = .load(), preferences: Preferences = .load()) {
         self.settings = settings
