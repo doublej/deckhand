@@ -6,14 +6,46 @@ default:
     @echo ''
     @echo "branch: $(git branch --show-current 2>/dev/null || echo 'n/a')"
 
+sim := "iPhone 17 Pro Max"
+project := "-project Deckhand.xcodeproj -scheme Deckhand"
+
 [group('setup')]
 install:
     swift package resolve
+    uv sync --all-groups --directory daemon
     @command -v swiftlint >/dev/null 2>&1 || echo 'warn: swiftlint not installed — run: brew install swiftlint'
+    @command -v xcodegen >/dev/null 2>&1 || echo 'warn: xcodegen not installed — run: brew install xcodegen'
+
+[group('setup')]
+generate:
+    xcodegen generate
 
 [group('develop')]
-xcode:
-    open Package.swift
+xcode: generate
+    open Deckhand.xcodeproj
+
+# Run the Mac daemon in the foreground; it prints the address and token to pair with.
+[group('develop')]
+daemon:
+    uv run --directory daemon deckhand-daemon
+
+# The pairing token the app needs.
+[group('develop')]
+token:
+    @cat ~/Library/Application\ Support/Deckhand/token
+
+# Build and run the app in the simulator against a daemon on this Mac.
+[group('develop')]
+sim: generate
+    xcodebuild {{ project }} -destination 'platform=iOS Simulator,name={{ sim }}' -configuration Debug build
+    xcrun simctl boot '{{ sim }}' || true
+    xcrun simctl install booted "$(xcodebuild {{ project }} -destination 'platform=iOS Simulator,name={{ sim }}' -showBuildSettings 2>/dev/null | awk -F' = ' '/ BUILT_PRODUCTS_DIR/ {print $2; exit}')/Deckhand.app"
+    xcrun simctl launch booted com.jj.Deckhand -deckhand.host 127.0.0.1:4180 -deckhand.token "$(just token)"
+
+# Install on the iPhone. Needs Xcode signed in — see CLAUDE.md.
+[group('develop')]
+device: generate
+    xcodebuild {{ project }} -destination 'platform=iOS,name=Pocketline Swing' -allowProvisioningUpdates build
 
 [group('quality')]
 lint:
@@ -30,6 +62,20 @@ just-fmt-check:
 [group('quality')]
 test:
     swift test
+
+[group('quality')]
+daemon-test:
+    uv run --directory daemon pytest -q
+
+[group('quality')]
+daemon-lint:
+    uv run --directory daemon ruff check src tests
+
+# Drives the app in the simulator against a running daemon (`just daemon` first).
+[group('quality')]
+ui-test: generate
+    TEST_RUNNER_DECKHAND_TOKEN="$(just token)" TEST_RUNNER_DECKHAND_HOST=127.0.0.1:4180 \
+        xcodebuild test {{ project }} -destination 'platform=iOS Simulator,name={{ sim }}'
 
 [group('quality')]
 loc-check:
@@ -94,10 +140,15 @@ check:
     just build
     @echo '→ Running tests...'
     just test
+    @echo '→ Linting the daemon...'
+    just daemon-lint
+    @echo '→ Testing the daemon...'
+    just daemon-test
 
 [group('build')]
-build:
+build: generate
     swift build
+    xcodebuild {{ project }} -destination 'platform=iOS Simulator,name={{ sim }}' -configuration Debug build
 
 [group('build')]
 build-release:
@@ -126,3 +177,15 @@ update-scaffold *ARGS:
         exit 1
     fi
     python3 "$repo/tools/update_scaffold.py" {{ ARGS }}
+
+# Run the daemon at login, on port 4180.
+[group('ops')]
+install-agent:
+    ln -sf {{ justfile_directory() }}/launchd/com.jurrejan.deckhand.plist ~/Library/LaunchAgents/com.jurrejan.deckhand.plist
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.jurrejan.deckhand.plist
+    @sleep 1 && curl -sf http://127.0.0.1:4180/health && echo ' ← daemon is up'
+
+[group('ops')]
+uninstall-agent:
+    launchctl bootout gui/$(id -u)/com.jurrejan.deckhand || true
+    rm -f ~/Library/LaunchAgents/com.jurrejan.deckhand.plist

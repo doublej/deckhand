@@ -1,5 +1,17 @@
 {
-  "loc": { "warn": 300, "error": 400 },
-  "dir": { "max_files": 6 },
-  "globs": ["deckhand/**/*.swift", "Tests/**/*.swift"]
+  "loc": {
+    "warn": 300,
+    "error": 400
+  },
+  "dir": {
+    "max_files": 6
+  },
+  "globs": [
+    "deckhand/**/*.swift",
+    "Sources/**/*.swift",
+    "Tests/**/*.swift",
+    "UITests/**/*.swift",
+    "daemon/src/**/*.py",
+    "daemon/tests/**/*.py"
+  ]
 }
