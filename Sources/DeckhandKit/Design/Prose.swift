@@ -37,7 +37,7 @@ public struct Prose: View {
         case .heading(let text): heading(text)
         case .bullet(let text): bullet(text)
         case .paragraph(let text):
-            Text(inline(text))
+            Text(inline(text, at: lead ? leadSize : bodySize))
                 .font(paragraphFont(lead: lead))
                 .foregroundStyle(lead ? Palette.textPrimary : Palette.textSecondary)
                 // Roughly 1.45x the type size. Text set solid reads as a wall; this is the
@@ -47,16 +47,29 @@ public struct Prose: View {
         }
     }
 
-    /// The lead is set larger than the body, and in a deck column both drop a long way — but
-    /// the *ratio* holds, because that jump is what makes the first line read first.
+    /// Three sizes and no more, named once here so nothing downstream invents a fourth.
+    ///
+    /// Every size on the page is one of these or derived from one. It used to be that the body
+    /// came from here, inline code came from `Typography.mono` at its own fixed 12pt, and a
+    /// heading came from `Typography.eyebrow` at 9 — so a deck column set its prose at 9 and its
+    /// code at 12, and every `just check` in a sentence was a third larger than the sentence. In
+    /// a full-width briefing the same code was 12 against a 14pt body and came out *smaller*.
+    /// The mismatch ran in both directions at once, which is what read as randomness.
+    private var bodySize: CGFloat { compact ? 9 : 14 }
+    /// The one big jump on the page. It is what makes the first line read first, and it is the
+    /// only place a size difference is doing work rather than happening by accident.
+    private var leadSize: CGFloat { compact ? 11 : 17 }
+    /// Under the body, never level with it: a section marker that competes with the sentences
+    /// beneath it stops being a marker.
+    private var headingSize: CGFloat { compact ? 8 : 9 }
+
     private func paragraphFont(lead: Bool) -> Font {
-        if compact { return .system(size: lead ? 11 : 9) }
-        return lead ? Typography.lead : Typography.prose
+        .system(size: lead ? leadSize : bodySize)
     }
 
     private func heading(_ text: String) -> some View {
-        Text(inline(text))
-            .font(Typography.eyebrow)
+        Text(inline(text, at: headingSize))
+            .font(.system(size: headingSize, weight: .semibold, design: .monospaced))
             .tracking(1)
             .foregroundStyle(Palette.textTertiary)
             .textCase(.uppercase)
@@ -74,8 +87,8 @@ public struct Prose: View {
                 .fill(Palette.tint)
                 .frame(width: compact ? 3 : 4, height: compact ? 3 : 4)
                 .offset(y: -1)
-            Text(inline(text))
-                .font(compact ? .system(size: 9) : Typography.prose)
+            Text(inline(text, at: bodySize))
+                .font(.system(size: bodySize))
                 .foregroundStyle(Palette.textPrimary)
                 .lineSpacing(compact ? 2 : 5)
         }
@@ -84,7 +97,12 @@ public struct Prose: View {
 
     /// Bold and code, via SwiftUI's own parser; code additionally gets the mono face, which
     /// `AttributedString` marks but does not style.
-    private func inline(_ text: String) -> AttributedString {
+    ///
+    /// `size` is the size of the text this run sits inside, and inline code is set to it rather
+    /// than to a size of its own. A fixed mono size cannot be right in two places at once — a
+    /// deck column and a full-width briefing are 9pt and 14pt apart — and a filename that
+    /// outgrows its own sentence is what made a page of these look thrown together.
+    private func inline(_ text: String, at size: CGFloat) -> AttributedString {
         let options = AttributedString.MarkdownParsingOptions(
             interpretedSyntax: .inlineOnlyPreservingWhitespace
         )
@@ -92,7 +110,10 @@ public struct Prose: View {
             return Links.marked(text)
         }
         for run in parsed.runs where run.inlinePresentationIntent == .code {
-            parsed[run.range].font = Typography.mono
+            // Half a point under the prose it sits in. A monospaced face at an identical point
+            // size still reads as larger — wider glyphs, taller x-height — so matching the
+            // numbers exactly does not match what the eye sees.
+            parsed[run.range].font = .system(size: size - 0.5, design: .monospaced)
             parsed[run.range].foregroundColor = Palette.tint
         }
         // A summary names addresses the way a person would, bare rather than in brackets, so

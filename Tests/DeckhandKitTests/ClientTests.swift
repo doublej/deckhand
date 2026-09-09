@@ -88,7 +88,9 @@ struct ClientTests {
         #expect(sent.delivered)
         #expect(sent.deliveredBy == "keyboard")
         #expect(StubProtocol.lastRequest?.url?.path == "/sessions/sid/say")
-        #expect(StubProtocol.lastRequest?.url?.query == "route=keyboard")
+        // Unprepared by default: words that did not come off a review card have not been past
+        // the Mac's filter chain, so it still gets its turn at them.
+        #expect(StubProtocol.lastRequest?.url?.query == "route=keyboard&prepared=false")
         let body = try #require(StubProtocol.lastBody)
         #expect(try #require(String(bytes: body, encoding: .utf8)).contains("run the tests"))
     }

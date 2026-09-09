@@ -1,6 +1,10 @@
 excluded:
   - .build
   - Packages
+  # Parallel agent worktrees. A nested worktree is a second copy of the repo, so without this
+  # every file is linted twice and its own .build/ derived sources are linted as if they were
+  # ours — which is how a clean tree reports violations in generated code nobody wrote.
+  - .worktrees
 
 function_body_length:
   warning: 20
