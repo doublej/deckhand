@@ -30,11 +30,15 @@ struct SessionView: View {
         .task {
             model.turns = []
             model.current = session.sessionId
-            await model.loadSummary(for: session)
+            // Beside the transcript, not in front of it. The summariser thinks for ten
+            // seconds or more, and awaiting it here left the page empty for that long —
+            // then everything arrived at once and jumped to the newest turn.
+            async let written: Void = model.loadSummary(for: session)
             while !Task.isCancelled {
                 await model.loadTurns(for: session)
                 try? await Task.sleep(for: .seconds(5))
             }
+            await written
         }
     }
 
@@ -70,7 +74,13 @@ struct SessionView: View {
                 .padding(.horizontal, Spacing.medium)
                 .padding(.bottom, Spacing.medium)
             }
-            .onChange(of: model.turns.count) { scroll(proxy) }
+            // Not on the first load: the summary is the top card, and scrolling to the
+            // newest turn the moment the transcript arrives is what put it off the screen
+            // before it could be read. New turns while you are watching still follow.
+            .onChange(of: model.turns.count) { was, _ in
+                guard was > 0 else { return }
+                scroll(proxy)
+            }
             .onChange(of: model.pending[session.sessionId]) { scroll(proxy) }
             .onChange(of: model.review[session.sessionId]) { scroll(proxy) }
         }
