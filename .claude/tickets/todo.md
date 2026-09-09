@@ -14,27 +14,28 @@ phone. Ticked items are verified, not just written.
 - [x] One log file for Console.app; test runs stay out of it
 - [x] Menu bar app: start, stop, restart, copy token, open log
 - [x] Installed and running on the iPhone 12 Pro
-- [x] **The transcript reaches the session.** It goes into that session's own peer socket
-      (`messagingSocketPath`), auth line first, as a `user` frame with `priority: "next"`.
-      Proven by delivering into a real live session and watching it arrive, not only against
-      a test socket. The phone says "Sent to <name>", or why it did not land.
+- [x] **The transcript reaches the session as JJ's own words.** `it2 session run` types them
+      into the pane and presses return, so they arrive as a prompt from the person at the
+      machine. Proven end to end: a clip spoken on the phone appeared as a user turn in a live
+      session with no peer framing. The peer socket (`messagingSocketPath`, auth line, `user`
+      frame, `priority: "next"`) is the fallback when there is no pane.
+- [x] **Panes work under launchd.** The plist asked for `ProcessType: Background`, which
+      throttles the job so hard that a ~1 s `it2` call missed a 4 s timeout every time. Not an
+      approval wall, as assumed all day. 9/9 sessions resolve a pane now.
 
 ## Next
 - [ ] **Send-on-release vs confirm-before-send.** Today the transcript goes straight in on
       release. Speaking into a busy session is not undoable, so decide whether the phone should
       show the text for approval first — a toggle next to hold/tap is the obvious shape.
-- [ ] A delivered message arrives labelled as coming from another Claude session, not from JJ.
-      If the receiving session should treat it as its own user speaking, the frame needs
-      whatever marks a message as the operator's — worth reading Claude Code's peer protocol
-      before guessing.
+- [ ] The peer-socket fallback still arrives labelled as a message from another Claude session,
+      carrying none of JJ's authority. That wrapper is a deliberate control and should not be
+      defeated; the answer is to keep a pane available so the keyboard path is used. Watch how
+      often the fallback actually fires.
 - [ ] Guard against pid reuse before delivering. The key file carries `procStart`, which is how
       Claude Code itself avoids messaging a recycled pid; `deliver()` does not check it. Records
       are read fresh on every request today, so the window is small — it opens the moment
       anything caches them.
-- [ ] Panes under launchd. `it2` cannot get iTerm's Python API approval from a background
-      agent, so window/tab data and Focus on Mac are missing unless the daemon runs in a
-      terminal. Candidate fix: let the menu bar app (a real GUI app, which can hold the
-      permission) collect pane data and POST it to the daemon.
+
 - [ ] Summary latency is ~30 s cold. Cache is per activity blob; consider summarising on the
       Mac's own schedule so the phone reads a ready answer.
 - [ ] A column scrolls vertically now that a press has to settle before it records, but the

@@ -1,13 +1,14 @@
 import json
 import shutil
 import socket
+import subprocess
 import tempfile
 from pathlib import Path
 
 import pytest
 
 from deckhand_daemon import deliver
-from deckhand_daemon.sessions import Session
+from deckhand_daemon.sessions import Pane, Session
 
 
 @pytest.fixture
@@ -44,6 +45,38 @@ def session_for(socket_path: str, pid: int = 4242) -> Session:
         pane=None,
         socket_path=socket_path,
     )
+
+
+def a_pane() -> Pane:
+    return Pane(iterm_session_id="PANE-1", window_id="w", tab_id="t", title="deckhand")
+
+
+def test_a_session_with_a_pane_is_typed_into(inbox, claude_home, monkeypatch):
+    """The keyboard carries the person's authority; the socket says it is only a peer."""
+    typed: list[list[str]] = []
+
+    def run(argv, **_kwargs):
+        typed.append(argv)
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    monkeypatch.setattr(deliver.subprocess, "run", run)
+    session = session_for(inbox.getsockname())
+    session.pane = a_pane()
+    assert deliver.deliver(session, "  run  the tests  ") == (True, None)
+    assert typed == [["it2", "session", "run", "-s", "PANE-1", "run the tests"]]
+
+
+def test_a_pane_that_will_not_take_it_falls_back_to_the_socket(inbox, claude_home, monkeypatch):
+    """iTerm is not always answering — under launchd it never is."""
+    monkeypatch.setattr(
+        deliver.subprocess,
+        "run",
+        lambda argv, **_k: subprocess.CompletedProcess(argv, 1, "", "no such session"),
+    )
+    session = session_for(inbox.getsockname())
+    session.pane = a_pane()
+    assert deliver.deliver(session, "hello") == (True, None)
+    assert [f["type"] for f in read_frames(inbox)] == ["user"]
 
 
 def test_a_message_arrives_as_a_user_frame(inbox, claude_home):

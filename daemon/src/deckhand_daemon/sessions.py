@@ -21,6 +21,9 @@ PANE_TTL = 3.0  # seconds; one `it2` call costs ~0.5 s and the phone polls every
 # When iTerm will not answer, every call costs the full timeout. Back off instead of paying
 # that on each request: nothing about the answer changes in the next minute.
 PANE_RETRY_AFTER = 60.0
+# One call costs ~1 s from a terminal. The old 4 s was not enough headroom for a job launchd
+# had put in the slow lane, and every miss cost the pane data and the keyboard with it.
+PANE_TIMEOUT = 12
 _pane_cache: tuple[float, dict] = (0.0, {})
 _pane_error: str | None = None
 
@@ -101,7 +104,7 @@ def _fetch_panes() -> dict[str, Pane]:
             # iTerm2 asks for Python API approval the first time a new client connects;
             # until someone clicks it, this call blocks. Give up fast and list panes as
             # unknown rather than making the phone wait.
-            timeout=4,
+            timeout=PANE_TIMEOUT,
             check=False,
         )
     except subprocess.TimeoutExpired:

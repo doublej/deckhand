@@ -129,11 +129,14 @@ final class AppModel {
         defer { summarising.remove(session.sessionId) }
         await run {
             let summary = try await client.summary(of: session.sessionId)
-            if let text = summary.summary {
-                self.summaries[session.sessionId] = text
-            } else if let error = summary.error {
+            if let error = summary.error {
                 self.status = error
             }
+            // No summary and no error means the session has done nothing since you last spoke.
+            // Say that: a card that simply disappears reads as a failure.
+            self.summaries[session.sessionId] = summary.summary
+                ?? summary.error
+                ?? "Nothing since you last spoke"
         }
     }
 

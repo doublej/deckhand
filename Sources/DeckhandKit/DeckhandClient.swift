@@ -23,7 +23,11 @@ public struct DeckhandClient: Sendable {
 
     /// What the session did since you last spoke. The Mac runs a small model to write it.
     public func summary(of sessionId: String) async throws -> Summary {
-        try await get("sessions/\(sessionId)/summary")
+        var req = request(.get, "sessions/\(sessionId)/summary")
+        // Longer than the daemon's own 60 s cap, so a slow model comes back as the daemon
+        // saying so rather than as the phone giving up on a Mac that is still writing.
+        req.timeoutInterval = 75
+        return try decode(try await send(req))
     }
 
     public func turns(of sessionId: String, limit: Int = 8) async throws -> [Turn] {
