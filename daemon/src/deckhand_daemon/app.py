@@ -137,8 +137,9 @@ def session_file(session_id: str, path: str = Query(description="one of /files")
     found = files.allowed(session_id, session.cwd, path)
     if found is None:
         raise HTTPException(status_code=404, detail="that file is not in this session's transcript")
-    if found.stat().st_size > config.MAX_UPLOAD_BYTES:
-        raise HTTPException(status_code=413, detail="file larger than 32 MB")
+    size = found.stat().st_size
+    if size > config.MAX_FILE_BYTES:
+        raise HTTPException(status_code=413, detail=f"{size // 1024 // 1024} MB is too big to send")
     return FileResponse(found, filename=found.name)
 
 
@@ -159,6 +160,26 @@ def focus_session(session_id: str) -> dict:
     if not sessions.focus(session):
         raise HTTPException(status_code=409, detail="session has no iTerm pane")
     return {"focused": True}
+
+
+@app.post("/sessions/{session_id}/control", dependencies=[Depends(require_token)])
+async def control_session(
+    session_id: str,
+    action: str = Query(description="cancel, compact or clear"),
+) -> dict:
+    """The three things you do to a session rather than say to it.
+
+    `clear` throws away the conversation and cannot be undone, which is the phone's problem to
+    ask about — here it is one more thing typed into the pane, exactly as it would be by hand.
+    """
+    session = await _live_session(session_id)
+    if action not in deliver.CONTROLS:
+        raise HTTPException(status_code=400, detail=f"no such control {action!r}")
+    error = await asyncio.to_thread(deliver.control, session, action)
+    if error:
+        raise HTTPException(status_code=409, detail=error)
+    plugin.status(lastAction=f"{action} on {session.name}")
+    return {"sent": action}
 
 
 @app.post("/sessions/{session_id}/audio", dependencies=[Depends(require_token)], status_code=201)

@@ -39,6 +39,34 @@ PREAMBLE = "JJ, spoken:"
 
 ROUTES = ("auto", "keyboard", "socket")
 
+ESCAPE = "\x1b"
+# The three things you can do to a session that are not saying something to it. Each one is
+# keystrokes into its pane, because that is what they are when you are sitting at the machine:
+# there is no other way to interrupt a run, and a slash command is typed like any other line.
+CONTROLS = {
+    "cancel": (ESCAPE,),
+    "compact": (CLEAR_LINE + "/compact", RETURN),
+    "clear": (CLEAR_LINE + "/clear", RETURN),
+}
+
+
+def control(session: Session, action: str) -> str | None:
+    """Interrupt, compact or clear. Returns None on success, or why not.
+
+    The peer socket is no help here — it delivers a message, and none of these is a message.
+    A session with no pane simply cannot be controlled from the phone, and says so.
+    """
+    bursts = CONTROLS.get(action)
+    if bursts is None:
+        return f"no such control {action!r}"
+    if not session.pane:
+        return f"{session.name} has no iTerm pane — nothing to press keys in"
+    for burst in bursts:
+        if not _keystrokes(session.pane.iterm_session_id, burst):
+            return f"iTerm would not send {action} to {session.name}"
+    log.info("sent %s to %s", action, session.name)
+    return None
+
 
 def deliver(session: Session, text: str, route: str = "auto") -> tuple[str | None, str | None]:
     """Returns (route taken, error). Never raises: a session that has gone is not an exception.

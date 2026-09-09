@@ -136,6 +136,36 @@ public struct Tool: Codable, Hashable, Sendable, Identifiable {
     }
 }
 
+/// The three things you do *to* a session rather than say to it. Each is a keystroke in its
+/// pane on the Mac, exactly as it would be typed by hand.
+public enum Control: String, CaseIterable, Sendable {
+    /// Escape: stop what it is doing now.
+    case cancel
+    /// `/compact`: fold the conversation so far into a summary and carry on.
+    case compact
+    /// `/clear`: throw the conversation away. There is no undo, so the phone asks first.
+    case clear
+
+    public var label: String {
+        switch self {
+        case .cancel: "Stop this run"
+        case .compact: "Compact the conversation"
+        case .clear: "Clear the conversation"
+        }
+    }
+
+    public var symbol: String {
+        switch self {
+        case .cancel: "stop.circle"
+        case .compact: "arrow.down.right.and.arrow.up.left"
+        case .clear: "eraser"
+        }
+    }
+
+    /// True for the one that cannot be undone.
+    public var asksFirst: Bool { self == .clear }
+}
+
 /// What became of a line of text handed to a session.
 public struct Delivery: Codable, Hashable, Sendable {
     public let delivered: Bool
@@ -163,85 +193,6 @@ public struct Health: Codable, Hashable, Sendable {
     public let host: String
     /// "ok", or why the Mac cannot see iTerm panes right now.
     public let iterm: String?
-}
-
-/// What a session has been doing since you last spoke to it.
-public struct Summary: Codable, Hashable, Sendable {
-    public let summary: String?
-    /// The first line of it: what you need to know or do, short enough for a list row.
-    public var headline: String?
-    /// Everything you have asked this session for, and how far each one got.
-    public var tasks: [Ask] = []
-    /// What writing these has cost. Nothing else in Deckhand spends anything.
-    public var spent: Spend?
-    public let error: String?
-
-    public init(from decoder: Decoder) throws {
-        let box = try decoder.container(keyedBy: CodingKeys.self)
-        summary = try box.decodeIfPresent(String.self, forKey: .summary)
-        headline = try box.decodeIfPresent(String.self, forKey: .headline)
-        tasks = try box.decodeIfPresent([Ask].self, forKey: .tasks) ?? []
-        spent = try box.decodeIfPresent(Spend.self, forKey: .spent)
-        error = try box.decodeIfPresent(String.self, forKey: .error)
-    }
-}
-
-/// What the briefings for one session have cost since the Mac last started.
-///
-/// Everything else here is free: utt transcribes on the Mac and the transcripts are read off
-/// disk. This one model run is the whole of what Deckhand spends, so it is worth saying out
-/// loud rather than leaving to be discovered on a bill.
-public struct Spend: Codable, Hashable, Sendable {
-    public var runs = 0
-    public var tokens = 0
-    /// Read from the cache rather than billed as new. Most of the traffic, almost none of it.
-    public var cached = 0
-
-    public init(runs: Int = 0, tokens: Int = 0, cached: Int = 0) {
-        self.runs = runs
-        self.tokens = tokens
-        self.cached = cached
-    }
-
-    public init(from decoder: Decoder) throws {
-        let box = try decoder.container(keyedBy: CodingKeys.self)
-        runs = try box.decodeIfPresent(Int.self, forKey: .runs) ?? 0
-        tokens = try box.decodeIfPresent(Int.self, forKey: .tokens) ?? 0
-        cached = try box.decodeIfPresent(Int.self, forKey: .cached) ?? 0
-    }
-
-    /// One line for the foot of a briefing: what it cost, in the units a person reads.
-    public var line: String {
-        let thousands = Double(tokens) / 1000
-        let size = tokens < 1000 ? "\(tokens) tokens" : String(format: "%.1fk tokens", thousands)
-        return "\(runs) briefing\(runs == 1 ? "" : "s") · \(size)"
-    }
-}
-
-/// One thing you asked a session for, and whether it has got to it.
-///
-/// Written by the same model run as the briefing, from your own messages — it is your list,
-/// not the session's plan, which is why it is short and in your words.
-public struct Ask: Codable, Hashable, Sendable, Identifiable {
-    public let text: String
-    public let state: String
-
-    public init(text: String, state: String) {
-        self.text = text
-        self.state = state
-    }
-
-    public var id: String { text }
-
-    public enum State: Sendable { case todo, doing, done }
-
-    public var progress: State {
-        switch state {
-        case "done": .done
-        case "doing": .doing
-        default: .todo
-        }
-    }
 }
 
 /// A file this session touched that you could actually open: a shot it took, a note it wrote.

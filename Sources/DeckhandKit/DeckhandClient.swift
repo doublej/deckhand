@@ -36,13 +36,41 @@ public struct DeckhandClient: Sendable {
         return body["files"] ?? []
     }
 
-    /// One of those files, whole. The Mac serves only what that session's transcript named,
-    /// so this is a way to see what it made and never a way to read the Mac's disk.
-    public func contents(of asset: Asset, in sessionId: String) async throws -> Data {
+    /// One of those files, saved to a local URL. The Mac serves only what that session's
+    /// transcript named, so this is a way to see what it made and never a way to read its disk.
+    ///
+    /// To disk rather than into memory, because one of the three kinds is video: a rendered
+    /// clip is routinely tens of megabytes, and AVPlayer wants a URL anyway. The caller owns
+    /// the file and deletes it.
+    ///
+    /// ponytail: the whole file lands before anything is shown. Fine over a LAN; if a
+    /// half-gigabyte clip ever needs to start playing at once, that is a ranged asset loader.
+    public func download(_ asset: Asset, in sessionId: String) async throws -> URL {
         let escaped = asset.path.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
         var req = request(.get, "sessions/\(sessionId)/file?path=\(escaped)")
-        req.timeoutInterval = 60
-        return try await send(req)
+        req.timeoutInterval = 300
+        let (temporary, response) = try await urlSession.download(for: req)
+        try check(response, at: temporary)
+        // The session's own temporary file is gone the moment this returns, and the extension
+        // has to survive: AVFoundation picks its reader from it, exactly as utt does.
+        let kept = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension((asset.name as NSString).pathExtension)
+        try FileManager.default.moveItem(at: temporary, to: kept)
+        return kept
+    }
+
+    /// The same reading of a status code as `send`, for a body that went to disk.
+    private func check(_ response: URLResponse, at file: URL) throws {
+        guard let http = response as? HTTPURLResponse else { throw DeckhandError.badResponse }
+        guard !(200..<300).contains(http.statusCode) else { return }
+        let said = (try? Data(contentsOf: file)).flatMap { String(bytes: $0, encoding: .utf8) } ?? ""
+        try? FileManager.default.removeItem(at: file)
+        switch http.statusCode {
+        case 401: throw DeckhandError.unauthorized
+        case 404: throw DeckhandError.notLive
+        default: throw DeckhandError.http(http.statusCode, said)
+        }
     }
 
     public func turns(of sessionId: String, limit: Int = 8) async throws -> Rounds {
@@ -69,6 +97,12 @@ public struct DeckhandClient: Sendable {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let body = try JSONEncoder().encode(["token": pushToken, "kind": kind])
         _ = try await send(req, body: body)
+    }
+
+    /// Interrupt a run, compact the conversation, or clear it. Keystrokes into the session's
+    /// own pane on the Mac, which is the only thing that can interrupt one.
+    public func control(_ action: Control, of sessionId: String) async throws {
+        _ = try await send(request(.post, "sessions/\(sessionId)/control?action=\(action.rawValue)"))
     }
 
     /// Bring the session's iTerm pane to the front on the Mac.

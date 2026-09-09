@@ -8,6 +8,8 @@ struct SessionView: View {
     let session: Session
     @State private var recorder = Recorder()
     @State private var showing: Pane = .summary
+    /// Set while the one control that cannot be undone waits to be confirmed.
+    @State private var confirming: Control?
     @Environment(\.dismiss) private var dismiss
 
     /// Three things you want on arriving, and they want different layouts: the briefing wants
@@ -22,7 +24,7 @@ struct SessionView: View {
             header
             switch showing {
             case .summary: BriefingView(model: model, session: session)
-            case .transcript: transcript
+            case .transcript: TranscriptView(model: model, session: session)
             case .files: FilesView(model: model, session: session)
             }
             // One slot, two things: the button you hold, or what it heard waiting to be sent.
@@ -37,6 +39,19 @@ struct SessionView: View {
         // that already named the page — two rows of chrome before a word of content. The
         // chevron moved into the header and the band went with it.
         .toolbar(.hidden, for: .navigationBar)
+        .confirmationDialog(
+            "Clear \(session.name)?",
+            isPresented: .init(get: { confirming != nil }, set: { if !$0 { confirming = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Clear the conversation", role: .destructive) {
+                if let confirming { send(confirming) }
+                confirming = nil
+            }
+            Button("Keep it", role: .cancel) { confirming = nil }
+        } message: {
+            Text("Everything said in this session goes. There is no undo.")
+        }
         // Hiding the bar takes the system's swipe-back with it, so the page catches its own:
         // started at the leading edge, mostly sideways, and simultaneous so it never competes
         // with scrolling the transcript or opening a tool call.
@@ -90,19 +105,7 @@ struct SessionView: View {
             }
             Spacer(minLength: Spacing.extraSmall)
             StatePill(session.isBusy ? .busy : .idle)
-            Button {
-                Task { await model.focus(session) }
-            } label: {
-                Image(systemName: "macwindow")
-                    .font(.system(size: 14, weight: .semibold))
-                    .frame(width: 28, height: 34)
-                    .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-            .tint(Palette.tint)
-            .foregroundStyle(session.pane == nil ? Palette.textTertiary : Palette.tint)
-            .disabled(session.pane == nil)
-            .accessibilityLabel("Focus on Mac")
+            controls
         }
         .padding(.leading, Spacing.extraSmall)
         .padding(.trailing, Spacing.small)
@@ -110,64 +113,46 @@ struct SessionView: View {
         .padding(.bottom, Spacing.extraSmall)
     }
 
+    /// Everything you can do to the session rather than say to it, behind one glyph: bringing
+    /// its pane forward, stopping a run, compacting, clearing. A row of four buttons up here
+    /// would be more chrome than the header has, and three of the four are rare.
+    ///
+    /// All of them are keystrokes in its pane, so all of them need one — without a pane the
+    /// menu is there and says why rather than quietly doing nothing.
+    private var controls: some View {
+        Menu {
+            Button("Show on the Mac", systemImage: "macwindow") {
+                Task { await model.focus(session) }
+            }
+            Divider()
+            ForEach(Control.allCases, id: \.self) { action in
+                Button(action.label, systemImage: action.symbol, role: role(action)) {
+                    if action.asksFirst { confirming = action } else { send(action) }
+                }
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .font(.system(size: 16, weight: .semibold))
+                .frame(width: 28, height: 34)
+                .contentShape(.rect)
+        }
+        .tint(Palette.tint)
+        .foregroundStyle(session.pane == nil ? Palette.textTertiary : Palette.tint)
+        .disabled(session.pane == nil)
+        .accessibilityLabel(session.pane == nil ? "No iTerm pane on the Mac" : "Session controls")
+    }
+
+    private func role(_ action: Control) -> ButtonRole? {
+        action == .clear ? .destructive : nil
+    }
+
+    private func send(_ action: Control) {
+        Task { await model.control(action, of: session) }
+    }
+
     private var subtitle: String {
         let ago = session.lastActive.formatted(.relative(presentation: .numeric, unitsStyle: .narrow))
         return "\(session.folder) · \(ago)"
-    }
-
-    private var transcript: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: Spacing.extraSmall) {
-                    if model.turns.isEmpty { nothingYet }
-                    ForEach(Array(model.turns.enumerated()), id: \.offset) { index, turn in
-                        // The id goes on the pair, not the card: a turn that is only a tool
-                        // run has no card, and scrolling to the newest turn has to land on
-                        // it anyway — silently it would not scroll at all.
-                        VStack(alignment: .leading, spacing: Spacing.xxs) {
-                            // What it ran sits above what it said, in the order it happened.
-                            if !turn.tools.isEmpty { ToolTrace(tools: turn.tools) }
-                            if !turn.text.isEmpty {
-                                TurnCard(turn: turn,
-                                         showsRole: startsRun(index),
-                                         waiting: index == unanswered ? awaiting : nil)
-                            }
-                        }
-                        .id(index)
-                    }
-                    // Below everything the session has written down, because that is where
-                    // they are: after the last thing it said, waiting to be read.
-                    if !queued.isEmpty {
-                        VStack(alignment: .leading, spacing: Spacing.extraSmall) {
-                            ForEach(Array(queued.enumerated()), id: \.offset) { _, text in
-                                QueuedCard(text: text)
-                            }
-                        }
-                        .id("queued")
-                    }
-                }
-                .padding(.horizontal, Spacing.medium)
-                .padding(.bottom, Spacing.medium)
-            }
-            // Always the newest line. This once skipped the first load, to stop the summary
-            // card at the top of the list being scrolled away before it could be read — the
-            // summary has its own tab now, so the transcript can go back to doing the one
-            // thing a transcript should do.
-            .onChange(of: model.turns.count) { scroll(proxy) }
-            .onChange(of: queued.count) { scroll(proxy) }
-            .onAppear { scroll(proxy) }
-        }
-    }
-
-    /// What you have said that the session has not picked up yet. Its own bookkeeping, read
-    /// off the transcript by the Mac — never inferred from the shape of the conversation.
-    private var queued: [String] { model.queued[session.sessionId] ?? [] }
-
-    private var nothingYet: some View {
-        Text(model.connection.isHealthy ? "Nothing said yet in this session" : "Waiting for the Mac…")
-            .font(Typography.subtitle)
-            .foregroundStyle(Palette.textSecondary)
-            .padding(.vertical, Spacing.small)
     }
 
     /// At the foot of the page, not under the title. Up there it sat a few points beneath the
@@ -216,20 +201,6 @@ struct SessionView: View {
         )
     }
 
-    /// The newest thing is always what you want to see, and what you just said is newer than
-    /// anything the session has written down.
-    private func scroll(_ proxy: ScrollViewProxy) {
-        withAnimation {
-            if model.review[session.sessionId] != nil {
-                proxy.scrollTo("review", anchor: .bottom)
-            } else if !queued.isEmpty {
-                proxy.scrollTo("queued", anchor: .bottom)
-            } else {
-                proxy.scrollTo(model.turns.count - 1, anchor: .bottom)
-            }
-        }
-    }
-
     /// Held for reading, over the top of whichever tab you were on — including the button you
     /// were holding to record. Nothing else on the page can be acted on until this is answered,
     /// so covering it is honest rather than rude: it was the foot of the transcript before,
@@ -248,28 +219,5 @@ struct SessionView: View {
             .overlay(alignment: .top) { Divider() }
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }
-    }
-
-    /// False when the turn before this one was from the same speaker, so a run of replies
-    /// carries one label rather than the same word over and over.
-    private func startsRun(_ index: Int) -> Bool {
-        index == 0 || model.turns[index - 1].role != model.turns[index].role
-    }
-
-    /// The last thing you said, when nothing has answered it yet.
-    ///
-    /// Your words used to sit at the foot of the transcript in grey, which read as "not sent";
-    /// removing that left no way at all to tell a prompt still in the queue from one that has
-    /// been dealt with. This marks the message itself instead of inventing a second one.
-    private var unanswered: Int? {
-        guard let mine = model.turns.lastIndex(where: \.isUser) else { return nil }
-        let answered = model.turns[(mine + 1)...].contains { !$0.isUser && !$0.text.isEmpty }
-        return answered ? nil : mine
-    }
-
-    /// Only while it is actually working. Anything it has not picked up at all is in the
-    /// queue below, which says so itself — this is the other half: picked up, being worked on.
-    private var awaiting: PillState? {
-        session.isBusy ? .busy : nil
     }
 }

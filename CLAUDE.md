@@ -125,6 +125,16 @@ unauthenticated route; everything else needs the `x-deckhand-token` header, and 
   nothing happen used to read as having sent nothing. `dequeue` carries no content, so the
   replay pops the oldest; a `remove` naming something outside the tail window does the same,
   which is what lets a replay that began mid-queue still empty in the right order.
+- **Stop, compact and clear are keystrokes, not messages.** `deliver.control` sends Escape for
+  a cancel and types `/compact` or `/clear` the same way a spoken line is typed. The peer socket
+  cannot do any of them — it delivers a message and none of these is one — so a session with no
+  iTerm pane cannot be controlled from the phone and the menu says so rather than failing
+  quietly. `clear` is the only irreversible thing in the app and the phone confirms it.
+- **Serving a file is not the same size as taking one.** `MAX_FILE_BYTES` is 512 MB against
+  `MAX_UPLOAD_BYTES`'s 32 MB, and reusing the upload cap for `/file` is what made every video a
+  session rendered come back as 413 — read on the phone as "cannot display this". The phone
+  downloads to a temporary file rather than into memory, because AVPlayer wants a URL and a
+  rendered clip is bigger than every voice clip ever recorded into that session put together.
 - **The file listing is the whole permission.** `/file` serves a path only because that
   session's transcript named it, re-derived per request. There is no allow-list to maintain and
   no way to widen it by accident — which is what keeps a file endpoint off the rest of the Mac.

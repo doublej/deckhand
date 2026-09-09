@@ -145,6 +145,17 @@ final class AppModel {
         }
     }
 
+    /// Stop, compact or clear. Nothing to fetch afterwards: the transcript poll picks up
+    /// whatever the session does about it, which is the honest picture either way.
+    func control(_ action: Control, of session: Session) async {
+        guard let client = settings.client() else { return }
+        await run {
+            try await client.control(action, of: session.sessionId)
+            self.status = "\(action.label) — sent to \(session.name)"
+            if action == .clear { self.turns = [] }
+        }
+    }
+
     func focus(_ session: Session) async {
         guard let client = settings.client() else { return }
         await run {

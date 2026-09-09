@@ -9,6 +9,10 @@ from pathlib import Path
 
 PORT = 4180
 MAX_UPLOAD_BYTES = 32 * 1024 * 1024
+# What may be served back out. Nothing like the upload cap, which is sized for a spoken clip:
+# a video a session rendered is routinely bigger than every clip ever recorded into it, and it
+# is streamed from disk rather than held in memory at either end.
+MAX_FILE_BYTES = 512 * 1024 * 1024
 TOKEN_HEADER = "x-deckhand-token"
 
 

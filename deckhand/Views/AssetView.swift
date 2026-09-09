@@ -5,16 +5,26 @@ import SwiftUI
 /// One file, open. Three kinds and three ways of showing them: an image fits the sheet, text
 /// scrolls and can be selected, a video gets a player.
 ///
-/// The bytes are fetched when the sheet appears and released when it closes. Nothing about a
-/// 30 MB clip should outlive the screen looking at it.
+/// The file is fetched to disk when the sheet appears and deleted when it closes. It arrives
+/// as one thing, ready, rather than as bytes that become a picture a frame later — a video
+/// rendered from half-loaded state is how "it cannot play this" gets on the screen while the
+/// clip is perfectly fine.
 struct AssetView: View {
     @Bindable var model: AppModel
     let session: Session
     let asset: Asset
-    @State private var data: Data?
+    @State private var ready: Ready?
     @State private var failed: String?
-    @State private var playing: URL?
+    /// The downloaded file, kept only so it can be deleted again.
+    @State private var local: URL?
     @Environment(\.dismiss) private var dismiss
+
+    /// A file that has arrived and been read as what it is.
+    private enum Ready {
+        case picture(UIImage)
+        case words(String)
+        case film(AVPlayer)
+    }
 
     var body: some View {
         NavigationStack {
@@ -34,25 +44,8 @@ struct AssetView: View {
     }
 
     @ViewBuilder private var content: some View {
-        if let failed {
-            message(failed)
-        } else if let data {
-            shown(data)
-        } else {
-            ProgressView().controlSize(.regular)
-        }
-    }
-
-    @ViewBuilder private func shown(_ data: Data) -> some View {
-        switch asset.sort {
-        case .image: picture(data)
-        case .video: film
-        case .text: writing(data)
-        }
-    }
-
-    @ViewBuilder private func picture(_ data: Data) -> some View {
-        if let image = UIImage(data: data) {
+        switch ready {
+        case .picture(let image):
             // Zoomable, because half of what a session makes is a screenshot of something
             // small in the corner of something large.
             ScrollView([.horizontal, .vertical]) {
@@ -61,59 +54,82 @@ struct AssetView: View {
                     .scaledToFit()
                     .frame(maxWidth: .infinity)
             }
+        case .words(let text):
+            ScrollView {
+                Text(text)
+                    .font(Typography.mono)
+                    .foregroundStyle(Palette.textPrimary)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(Spacing.medium)
+            }
+        case .film(let player):
+            VideoPlayer(player: player)
+        case nil:
+            waiting
+        }
+    }
+
+    @ViewBuilder private var waiting: some View {
+        if let failed {
+            Text(failed)
+                .font(Typography.subtitle)
+                .foregroundStyle(Palette.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(Spacing.large)
         } else {
-            message("Not an image this phone can draw")
+            VStack(spacing: Spacing.small) {
+                ProgressView()
+                // A rendered clip takes a moment over the LAN, and a spinner with no number
+                // beside it is how a working download reads as a hung one.
+                Text("\(asset.size.formatted(.byteCount(style: .file))) from the Mac")
+                    .font(Typography.hint)
+                    .foregroundStyle(Palette.textTertiary)
+            }
         }
-    }
-
-    @ViewBuilder private var film: some View {
-        if let playing {
-            VideoPlayer(player: AVPlayer(url: playing))
-        } else {
-            message("Could not stage the clip for playback")
-        }
-    }
-
-    private func writing(_ data: Data) -> some View {
-        ScrollView {
-            Text(String(bytes: data, encoding: .utf8) ?? "Not text this phone can read")
-                .font(Typography.mono)
-                .foregroundStyle(Palette.textPrimary)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(Spacing.medium)
-        }
-    }
-
-    private func message(_ text: String) -> some View {
-        Text(text)
-            .font(Typography.subtitle)
-            .foregroundStyle(Palette.textSecondary)
-            .padding(Spacing.large)
     }
 
     private func load() async {
         do {
-            let bytes = try await model.contents(of: asset, in: session)
-            data = bytes
-            // AVPlayer wants a URL, and it picks its reader off the extension — the same rule
-            // the clips going the other way live under.
-            if asset.sort == .video { playing = try stage(bytes) }
+            let file = try await model.download(asset, in: session)
+            local = file
+            ready = try open(file)
         } catch {
-            failed = "The Mac could not hand that over"
+            failed = reason(error)
         }
     }
 
-    private func stage(_ bytes: Data) throws -> URL {
-        let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString)
-            .appendingPathExtension((asset.name as NSString).pathExtension)
-        try bytes.write(to: url)
-        return url
+    private func open(_ file: URL) throws -> Ready {
+        switch asset.sort {
+        case .video:
+            return .film(AVPlayer(url: file))
+        case .image:
+            guard let image = UIImage(contentsOfFile: file.path) else {
+                throw Trouble.unreadable("Not an image this phone can draw")
+            }
+            return .picture(image)
+        case .text:
+            return .words(try String(contentsOf: file, encoding: .utf8))
+        }
+    }
+
+    private enum Trouble: Error { case unreadable(String) }
+
+    /// Says which wall it hit. "Could not hand that over" for every failure is how a file that
+    /// is simply too big to send reads as a broken app.
+    private func reason(_ error: Error) -> String {
+        if case Trouble.unreadable(let why) = error { return why }
+        guard let error = error as? DeckhandError else { return "Could not open \(asset.name)" }
+        switch error {
+        case .http(413, _): return "\(asset.name) is too big for the Mac to send"
+        case .notLive: return "The Mac no longer has that file"
+        case .unauthorized: return "The Mac refused the pairing token"
+        default: return "The Mac could not hand that over"
+        }
     }
 
     private func discard() {
-        if let playing { try? FileManager.default.removeItem(at: playing) }
-        data = nil
+        if let local { try? FileManager.default.removeItem(at: local) }
+        ready = nil
     }
 }

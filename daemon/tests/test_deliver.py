@@ -174,3 +174,40 @@ def test_an_unreadable_key_file_does_not_stop_delivery(inbox, claude_home):
     (claude_home / "sessions" / "4242.abc123.key").write_text("{ not json")
     assert deliver.deliver(session_for(inbox.getsockname()), "hello") == ("socket", None)
     assert [f["type"] for f in read_frames(inbox)] == ["user"]
+
+
+def test_the_three_controls_are_keystrokes_in_the_pane(inbox, claude_home, monkeypatch):
+    """Escape stops a run; the other two are slash commands typed like any other line."""
+    typed: list[list[str]] = []
+    monkeypatch.setattr(
+        deliver.subprocess,
+        "run",
+        lambda argv, **_k: (typed.append(argv), subprocess.CompletedProcess(argv, 0, "", ""))[1],
+    )
+    session = session_for(inbox.getsockname())
+    session.pane = a_pane()
+
+    assert deliver.control(session, "cancel") is None
+    assert deliver.control(session, "compact") is None
+
+    assert typed == [
+        ["it2", "session", "send", "-s", "PANE-1", deliver.ESCAPE],
+        ["it2", "session", "send", "-s", "PANE-1", deliver.CLEAR_LINE + "/compact"],
+        ["it2", "session", "send", "-s", "PANE-1", deliver.RETURN],
+    ]
+
+
+def test_a_control_needs_a_pane_and_says_so(inbox, claude_home):
+    """The peer socket delivers messages, and none of these is a message."""
+    session = session_for(inbox.getsockname())
+    session.pane = None
+
+    assert "no iTerm pane" in (deliver.control(session, "cancel") or "")
+
+
+def test_an_unknown_control_is_refused_rather_than_typed(inbox, claude_home, monkeypatch):
+    monkeypatch.setattr(deliver.subprocess, "run", lambda *_a, **_k: pytest.fail("typed anyway"))
+    session = session_for(inbox.getsockname())
+    session.pane = a_pane()
+
+    assert deliver.control(session, "rm -rf") == "no such control 'rm -rf'"

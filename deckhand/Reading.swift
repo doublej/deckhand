@@ -70,10 +70,10 @@ extension AppModel {
         }
     }
 
-    /// One file's bytes. Held by the view that asked, never cached here — a video is 30 MB
-    /// and the model outlives the screen showing it.
-    func contents(of asset: Asset, in session: Session) async throws -> Data {
+    /// One file, saved to a temporary URL the caller owns and deletes. Never cached here — a
+    /// rendered clip is tens of megabytes and the model outlives the screen showing it.
+    func download(_ asset: Asset, in session: Session) async throws -> URL {
         guard let client = settings.client() else { throw DeckhandError.unauthorized }
-        return try await client.contents(of: asset, in: session.sessionId)
+        return try await client.download(asset, in: session.sessionId)
     }
 }
