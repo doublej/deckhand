@@ -21,6 +21,12 @@ targets:
       path: deckhand/Info.plist
       properties:
         CFBundleDisplayName: Deckhand
+        # The daemon is the other half of the same product; one version covers both.
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        # No encryption of its own: plain HTTP to a Mac on your own network. Declared so
+        # every upload does not stop to ask the same question.
+        ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait

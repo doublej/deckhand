@@ -28,7 +28,11 @@ guard let context = CGContext(
     bitsPerComponent: 8,
     bytesPerRow: 0,
     space: CGColorSpaceCreateDeviceRGB(),
-    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+    // Opaque, not premultiplied: App Store Connect refuses an app icon that carries an alpha
+    // channel at all (ITMS-90717), even one whose every pixel is already opaque. The ground
+    // fill below covers the canvas, so nothing is lost -- the unlit dots still blend against
+    // it, because source alpha governs the blend whether or not the destination keeps one.
+    bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
 ) else { fatalError("could not make a bitmap to draw into") }
 
 context.setFillColor(ground)
