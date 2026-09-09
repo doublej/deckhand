@@ -80,9 +80,12 @@ public struct Queued: Codable, Hashable, Sendable, Identifiable {
         state = try box.decodeIfPresent(String.self, forKey: .state) ?? "waiting"
     }
 
-    /// What the card says about it, in the person's terms rather than the lane's.
+    /// What the card says about it, in a person's words and not the queue's. "Absorbed mid-turn"
+    /// is what the transcript calls it; what it means to the person who sent it is that the
+    /// session grabbed it while it was working, and that it will never show up above as a
+    /// message of its own — which is the only reason this card is still here.
     public var line: String {
-        isWaiting ? "in its inbox, not picked up yet" : "picked up mid-run, so it is in no turn"
+        isWaiting ? "waiting in its inbox" : "picked up while it was working"
     }
 }
 

@@ -31,16 +31,20 @@ struct TranscriptView: View {
                         }
                         .id(index)
                     }
-                    // Below everything the session has written down, because that is where
-                    // they are: after the last thing it said, waiting to be read.
-                    if !queued.isEmpty {
+                    // Taken first, then still waiting, because that is the order they are in:
+                    // the session has read one lot and not the other. Mixed together they read
+                    // as a pile of stuck messages, some inexplicably without a way to move them.
+                    ForEach(taken) { item in
+                        QueuedCard(item: item, force: nil)
+                    }
+                    if !waiting.isEmpty {
                         VStack(alignment: .leading, spacing: Spacing.extraSmall) {
-                            ForEach(queued) { item in
+                            ForEach(waiting) { item in
                                 QueuedCard(
                                     item: item,
                                     // Nothing else will make it read this: the inbox is only
                                     // drained when a turn ends, so forcing it is ending the turn.
-                                    force: item.isWaiting && session.isBusy
+                                    force: session.isBusy
                                         ? { Task { await model.control(.cancel, of: session) } }
                                         : nil
                                 )
@@ -68,6 +72,11 @@ struct TranscriptView: View {
     /// What you have said that the session has not picked up yet. Its own bookkeeping, read
     /// off the transcript by the Mac — never inferred from the shape of the conversation.
     private var queued: [Queued] { model.queued[session.sessionId] ?? [] }
+    /// Read by the session but written nowhere: these are part of the conversation and appear in
+    /// no turn, which is the only reason they are shown at all.
+    private var taken: [Queued] { queued.filter { !$0.isWaiting } }
+    /// Still in the inbox. These are the ones that can be forced.
+    private var waiting: [Queued] { queued.filter(\.isWaiting) }
 
     private var nothingYet: some View {
         Text(model.connection.isHealthy ? "Nothing said yet in this session" : "Waiting for the Mac…")
@@ -80,7 +89,7 @@ struct TranscriptView: View {
     /// newer than anything the session has written down.
     private func scroll(_ proxy: ScrollViewProxy) {
         withAnimation {
-            if queued.isEmpty {
+            if waiting.isEmpty {
                 proxy.scrollTo(model.turns.count - 1, anchor: .bottom)
             } else {
                 proxy.scrollTo("queued", anchor: .bottom)
@@ -117,20 +126,32 @@ struct TranscriptView: View {
 /// Everything else in this app is a reading of this file — turns, tool traces, the inbox replay
 /// — so when one of those looks wrong, this is the only way to tell from a phone whether the app
 /// is wrong or the session is. It opens at the bottom, which is where the news is.
+///
+/// One `Text` per line, wrapped, in a lazy stack. It was one `Text` holding the whole file in a
+/// scroll view free on both axes, which drew nothing at all: a JSONL line runs to thousands of
+/// characters, unwrapped that is a line tens of thousands of points wide, and past that CoreText
+/// gives up and renders an empty view — a black screen with no error anywhere.
 struct RawView: View {
     @Bindable var model: AppModel
     let session: Session
-    @State private var text: String?
+    @State private var lines: [String] = []
+    @State private var read = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
-            ScrollView([.horizontal, .vertical]) {
-                Text(text ?? "Reading the transcript…")
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(Palette.textPrimary)
-                    .textSelection(.enabled)
-                    .padding(Spacing.small)
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: Spacing.xxs) {
+                    ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                        Text(line)
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundStyle(Palette.textPrimary)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    state
+                }
+                .padding(Spacing.small)
             }
             .defaultScrollAnchor(.bottom)
             .background(Palette.surfaceGround)
@@ -142,6 +163,34 @@ struct RawView: View {
                 }
             }
         }
-        .task { text = await model.raw(for: session) ?? "Nothing came back from the Mac" }
+        .task {
+            let text = await model.raw(for: session) ?? ""
+            lines = text.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
+            read = true
+        }
+    }
+
+    /// Reading, or read and empty. Without this an empty file and a failed fetch both look
+    /// exactly like the bug this view just had.
+    @ViewBuilder private var state: some View {
+        if !read {
+            HStack(spacing: Spacing.extraSmall) {
+                ProgressView()
+                Text("Reading the transcript…")
+                    .font(Typography.hint)
+                    .foregroundStyle(Palette.textSecondary)
+            }
+            .padding(.vertical, Spacing.large)
+        } else if lines.isEmpty {
+            Text("Nothing came back from the Mac")
+                .font(Typography.subtitle)
+                .foregroundStyle(Palette.textSecondary)
+                .padding(.vertical, Spacing.large)
+        } else {
+            Text("\(lines.count) lines, newest last")
+                .font(Typography.hint)
+                .foregroundStyle(Palette.textTertiary)
+                .padding(.top, Spacing.small)
+        }
     }
 }

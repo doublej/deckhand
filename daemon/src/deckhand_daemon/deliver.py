@@ -98,6 +98,20 @@ def clean_name(name: str) -> str:
     return "".join(c for c in flat if c.isprintable())[:MAX_NAME].strip()
 
 
+def with_images(text: str, paths: list[str]) -> str:
+    """The words, and where the pictures are.
+
+    A path is how an image reaches a session: Claude Code's own `Read` shows it a file, so a
+    message naming one is a message it can see. Nothing is encoded into the prompt and nothing
+    depends on the terminal's paste handling — which is not reachable from a phone anyway.
+    """
+    if not paths:
+        return text
+    named = " ".join(paths)
+    label = "attached image" if len(paths) == 1 else "attached images"
+    return f"{text}\n\n{label}: {named}" if text.strip() else f"{label}: {named}"
+
+
 def deliver(session: Session, text: str, route: str = "auto") -> tuple[str | None, str | None]:
     """Returns (route taken, error). Never raises: a session that has gone is not an exception.
 

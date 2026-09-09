@@ -123,3 +123,48 @@ def test_say_puts_the_words_in_and_names_the_route(token, monkeypatch):
     assert answer.status_code == 200
     assert answer.json() == {"delivered": True, "delivered_by": "keyboard", "delivery_error": None}
     assert seen == {"text": "run the tests", "route": "keyboard"}
+
+
+def test_a_picture_is_kept_and_the_message_names_it(token, monkeypatch):
+    """An image reaches a session as a path: the session's own Read is what can see a file."""
+    seen = {}
+    monkeypatch.setattr(
+        app_module.deliver, "deliver",
+        lambda session, text, route: (seen.update(text=text), ("keyboard", None))[1],
+    )
+    kept = client(token).post(
+        f"/sessions/{SID}/image", files={"file": ("shot.png", b"\x89PNG" + b"x" * 40, "image/png")}
+    )
+    assert kept.status_code == 200
+    path = Path(kept.json()["path"])
+    assert path.is_file() and path.parent == config.image_dir(SID)
+
+    said = client(token).post(f"/sessions/{SID}/say", json={"text": "look", "images": [str(path)]})
+
+    assert said.json()["delivered"] is True
+    assert seen["text"] == f"look\n\nattached image: {path}"
+
+
+def test_only_this_sessions_own_pictures_can_be_named(token, monkeypatch):
+    """Otherwise "say this and read that file" would point a session at anything on the Mac."""
+    seen = {}
+    monkeypatch.setattr(
+        app_module.deliver, "deliver",
+        lambda session, text, route: (seen.update(text=text), ("keyboard", None))[1],
+    )
+    elsewhere = config.data_dir() / "escape.png"
+    elsewhere.write_bytes(b"x")
+
+    client(token).post(
+        f"/sessions/{SID}/say",
+        json={"text": "look", "images": [str(elsewhere), "/etc/passwd"]},
+    )
+
+    assert seen["text"] == "look"
+
+
+def test_a_file_that_is_not_an_image_is_refused(token):
+    answer = client(token).post(
+        f"/sessions/{SID}/image", files={"file": ("notes.txt", b"hello", "text/plain")}
+    )
+    assert answer.status_code == 415

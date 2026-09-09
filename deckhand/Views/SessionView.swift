@@ -260,7 +260,11 @@ struct SessionView: View {
             isMine: true,
             onStart: { model.status = "Recording for \(session.name)" },
             onClip: { await model.upload(clip: $0, to: session) },
-            content: { TalkMark(state: $0, level: recorder.level) }
+            content: {
+                TalkMark(state: $0,
+                         level: recorder.level,
+                         confirms: model.preferences.confirms)
+            }
         )
     }
 
@@ -274,7 +278,11 @@ struct SessionView: View {
                 text: text,
                 target: session.name,
                 send: { Task { await model.send(text, to: session) } },
-                discard: { model.discard(for: session) }
+                discard: { model.discard(for: session) },
+                snaps: model.snaps(for: session),
+                attach: { model.attach($0, to: session) },
+                paste: { model.attachFromClipboard(to: session) },
+                unattach: { model.unattach($0, from: session) }
             )
             .frame(maxWidth: .infinity)
             .shadow(color: .black.opacity(0.18), radius: 10, y: 3)

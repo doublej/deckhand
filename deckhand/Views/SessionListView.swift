@@ -181,7 +181,11 @@ struct SessionListView: View {
                 target: session.name,
                 send: { Task { await model.send(text, to: session) } },
                 discard: { model.discard(for: session) },
-                compact: true
+                compact: true,
+                snaps: model.snaps(for: session),
+                attach: { model.attach($0, to: session) },
+                paste: { model.attachFromClipboard(to: session) },
+                unattach: { model.unattach($0, from: session) }
             )
         }
     }

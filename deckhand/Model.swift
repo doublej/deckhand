@@ -66,6 +66,8 @@ final class AppModel {
     /// written it down yet.
     /// Transcribed, held, and waiting to be read before it goes anywhere.
     var review: [String: String] = [:]
+    /// Pictures pinned to those words, per session, until they are sent or discarded.
+    var attached: [String: [Snap]] = [:]
     var showsHidden = false
 
     private let logger = Logger(subsystem: "dev.jurrejan.deckhand", category: "app")
@@ -218,26 +220,12 @@ final class AppModel {
         status = "Read it, then send it"
     }
 
-    /// Sends what was held for review. The words move from "waiting on you" to "waiting on
-    /// the session", which is the same card in two different states.
-    func send(_ text: String, to session: Session) async {
-        guard let client = settings.client() else { return }
-        review[session.sessionId] = nil
-        status = "Sending to \(session.name)…"
-        await run {
-            let sent = try await client.say(text, to: session.sessionId, route: self.preferences.route)
-            guard sent.delivered else {
-                self.review[session.sessionId] = text
-                self.status = sent.deliveryError ?? "\(session.name) did not take it"
-                return
-            }
-            self.status = "Sent to \(session.name) by \(sent.deliveredBy ?? "the Mac")"
-            await self.loadTurns(for: session)
-        }
-    }
+    /// Sending what was held for review lives in `Snaps.swift`: the words may have pictures
+    /// pinned to them, and those have to reach the Mac before the message that names them.
 
     func discard(for session: Session) {
         review[session.sessionId] = nil
+        attached[session.sessionId] = nil
         status = "Discarded"
     }
 

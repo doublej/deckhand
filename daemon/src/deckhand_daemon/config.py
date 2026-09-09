@@ -30,6 +30,17 @@ def audio_dir(session_id: str) -> Path:
     return d
 
 
+def image_dir(session_id: str) -> Path:
+    """Where a picture sent from the phone lands, per session.
+
+    It stays after delivery on purpose: the message names the path and the session reads the
+    file, which it may do minutes later or twice.
+    """
+    d = data_dir() / "images" / session_id
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
 def token() -> str:
     """Read the pairing token, creating one on first run. 12 chars: typable on a phone."""
     path = data_dir() / "token"

@@ -54,8 +54,8 @@ struct TurnCard: View {
 /// sent nothing at all.
 struct QueuedCard: View {
     let item: Queued
-    /// Stops the run so the session reads this next. Absent when there is no run to stop, or
-    /// when the session already took it.
+    /// Stops the run so the session reads this next. Only ever on one that is still waiting:
+    /// there is nothing to force about a message the session has already taken.
     let force: (() -> Void)?
 
     var body: some View {
@@ -70,7 +70,9 @@ struct QueuedCard: View {
                     .font(Typography.hint)
                     .foregroundStyle(Palette.textTertiary)
                     .lineLimit(1)
-                StatePill(item.isWaiting ? .wait : .busy)
+                // A pill says what something *is*, and nothing sensible can be said about a
+                // message that has already been read. Only the waiting one is a state.
+                if item.isWaiting { StatePill(.wait) }
             }
             Text(item.text)
                 .font(.system(size: 13))
@@ -86,12 +88,18 @@ struct QueuedCard: View {
                     .padding(.top, Spacing.xxs)
             }
         }
-        .overlay(alignment: .leading) {
-            // Dashed, where a turn's rail is solid: the same voice, not yet in the record.
-            Capsule()
-                .strokeBorder(Palette.tint, style: StrokeStyle(lineWidth: 1.5, dash: [3, 3]))
-                .frame(width: 3)
-                .padding(.vertical, Spacing.extraSmall)
-        }
+        .overlay(alignment: .leading) { rail }
+    }
+
+    /// Dashed while it is still in the inbox, solid once the session has it: the dashes mean
+    /// "said but not read", and a message already being worked on has been read. Three cards in
+    /// a row with the same dashes and no button read as three things stuck.
+    private var rail: some View {
+        Capsule()
+            .strokeBorder(Palette.tint,
+                          style: StrokeStyle(lineWidth: 1.5, dash: item.isWaiting ? [3, 3] : []))
+            .frame(width: 3)
+            .padding(.vertical, Spacing.extraSmall)
+            .opacity(item.isWaiting ? 1 : 0.55)
     }
 }

@@ -171,6 +171,9 @@ private struct TalkGesture: ViewModifier {
 struct TalkMark: View {
     let state: TalkState
     let level: Double
+    /// Whether the words are held for reading before they go. It changes what a tap does, so it
+    /// changes what the pill may promise: a tap that opens a review card has not sent anything.
+    var confirms = true
 
     /// How much room a scrolling pane leaves at the end of its content for the mark to float
     /// over: the mark, its tile, and the air around it.
@@ -246,11 +249,16 @@ struct TalkMark: View {
             .minimumScaleFactor(0.8)
             .padding(.horizontal, Spacing.small)
             .padding(.vertical, 6)
+            // The mark's own ground, because these slid out from under the mark: three pieces
+            // of one control, not two labels visiting from the page they float over.
             .background(
                 Capsule(style: .continuous)
-                    .fill(Palette.surfacePrimary)
+                    .fill(Palette.lcdGround)
                     .shadow(color: .black.opacity(0.18), radius: 8, y: 2)
             )
+            // Which makes the ground dark whatever the page is, so the tokens that mean
+            // "quieter text" have to resolve against dark or they resolve into it.
+            .environment(\.colorScheme, .dark)
             .contentShape(.capsule)
             .onTapGesture { action?() }
             .accessibilityAddTraits(.isButton)
@@ -258,9 +266,14 @@ struct TalkMark: View {
 
     /// Nothing at rest: the mark says what it is. Only once it is listening is there anything
     /// to tell you, and then there are two things and they are both actions.
+    ///
+    /// It says what will actually happen. With the review step on, letting go does not send
+    /// anything — it transcribes and hands you the words to read — and a button that claims to
+    /// send and then does not is worse than one that says nothing.
     private var label: String? {
-        if state.busy { return "SENDING" }
+        if state.busy { return confirms ? "TRANSCRIBING" : "SENDING" }
         guard isRecording else { return nil }
-        return state.mode == .hold ? "RELEASE TO SEND" : "TAP TO SEND"
+        let what = confirms ? "PREVIEW" : "SEND"
+        return state.mode == .hold ? "RELEASE TO \(what)" : "TAP TO \(what)"
     }
 }

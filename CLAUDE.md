@@ -156,6 +156,22 @@ unauthenticated route; everything else needs the `x-deckhand-token` header, and 
   and the phone decides how many to show (`AskList.shown`). This needs more than one turn, so the
   run is `max_turns=16` with `permission_mode="bypassPermissions"` — safe only because those three
   functions are the entire tool surface and nobody is at the daemon to answer a prompt.
+- **A picture reaches a session as a path, not as a paste.** `POST /sessions/{id}/image` keeps
+  the bytes under `images/<sessionId>/` and answers with the path; `POST .../say` takes
+  `images: [path]` and `deliver.with_images` appends them to the words, so the session sees the
+  file with its own `Read`. Terminal paste handling is not reachable from a phone and encoding an
+  image into a typed prompt is not a thing, so the file is the mechanism. `app._kept_images` only
+  passes paths inside that session's own folder — without it, "say this and read that file" would
+  aim a session at anything on the Mac. The files are kept after delivery (the session may read
+  one later, or twice); nothing prunes them yet.
+- **`PhotosPicker` needs no usage description** and `UIPasteboard.hasImages` needs no permission,
+  which is why the clipboard button only appears when there is something to paste: asking
+  `UIPasteboard.general.image` is what triggers the system's paste consent, and only then.
+- **A raw JSONL line cannot be one unwrapped `Text`.** The first raw-transcript view was a single
+  `Text` of the whole file inside a `ScrollView([.horizontal, .vertical])`. Unwrapped, a 10k-char
+  line is tens of thousands of points wide, and past that CoreText renders **nothing** — a black
+  screen, no error, no warning. It is one wrapped `Text` per line in a `LazyVStack` now, and it
+  says how many lines arrived so that empty never looks like broken again.
 - **The talk control is a mark and nothing else.** It floats over the pane rather than sitting
   under it, and the scrolling panes add `TalkMark.clearance` to the end of their content so
   nothing is stuck behind it. No bar, no ground, no resting label: a band of furniture across

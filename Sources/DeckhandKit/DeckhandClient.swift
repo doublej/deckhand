@@ -85,13 +85,39 @@ public struct DeckhandClient: Sendable {
         return answer.text
     }
 
-    /// Put words into a session. The other half of an upload the person asked to read first.
-    public func say(_ text: String, to sessionId: String, route: DeliveryRoute) async throws -> Delivery {
+    /// Put words into a session, and name any pictures going with them. The other half of an
+    /// upload the person asked to read first.
+    public func say(
+        _ text: String,
+        to sessionId: String,
+        route: DeliveryRoute,
+        images: [String] = []
+    ) async throws -> Delivery {
         var req = request(.post, "sessions/\(sessionId)/say?route=\(route.rawValue)")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.timeoutInterval = 30
-        let body = try JSONEncoder().encode(["text": text])
+        struct Said: Encodable {
+            let text: String
+            let images: [String]
+        }
+        let body = try JSONEncoder().encode(Said(text: text, images: images))
         return try decode(try await send(req, body: body))
+    }
+
+    /// Hand a picture to the Mac and get back the path it was kept at.
+    ///
+    /// A path, because that is how an image reaches a session: the message names the file and
+    /// the session reads it with its own tools. Nothing is pasted into a terminal.
+    public func upload(image: Data, named name: String, to sessionId: String) async throws -> String {
+        let boundary = "deckhand.\(UUID().uuidString)"
+        var req = request(.post, "sessions/\(sessionId)/image")
+        req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        req.timeoutInterval = 120
+        struct Kept: Decodable { let path: String }
+        let kept: Kept = try decode(try await send(req, body: multipart(boundary: boundary,
+                                                                       name: name,
+                                                                       bytes: image)))
+        return kept.path
     }
 
     /// Hand the Mac a token it can push a Lock Screen update to.
@@ -181,12 +207,25 @@ public struct DeckhandClient: Sendable {
     }
 
     private func multipart(boundary: String, clip: URL) throws -> Data {
-        let name = clip.lastPathComponent
+        try multipart(boundary: boundary,
+                      name: clip.lastPathComponent,
+                      bytes: try Data(contentsOf: clip),
+                      kind: "audio/m4a")
+    }
+
+    /// One file in one part. The Mac reads the kind off the filename, so the content type here
+    /// only has to be present — it is the suffix that decides what is accepted.
+    private func multipart(
+        boundary: String,
+        name: String,
+        bytes: Data,
+        kind: String = "application/octet-stream"
+    ) throws -> Data {
         var data = Data()
         data.append("--\(boundary)\r\n")
         data.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(name)\"\r\n")
-        data.append("Content-Type: audio/m4a\r\n\r\n")
-        data.append(try Data(contentsOf: clip))
+        data.append("Content-Type: \(kind)\r\n\r\n")
+        data.append(bytes)
         data.append("\r\n--\(boundary)--\r\n")
         return data
     }

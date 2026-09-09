@@ -7,6 +7,7 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Annotated
 
 from fastapi import Body, Depends, FastAPI, Header, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
@@ -257,19 +258,63 @@ async def upload_audio(
     }
 
 
+IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".heic", ".gif", ".webp"}
+
+
+@app.post("/sessions/{session_id}/image", dependencies=[Depends(require_token)])
+async def add_image(session_id: str, file: UploadFile) -> dict:
+    """Take a picture from the phone and keep it, so a message can name where it is.
+
+    Answers with the path, which is the only thing the phone does with it: saying something with
+    an image attached is saying the words and naming the file, and the session reads it itself.
+    """
+    _session_or_404(session_id)
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in IMAGE_SUFFIXES:
+        raise HTTPException(status_code=415, detail=f"{suffix or 'that'} is not an image")
+    body = await file.read()
+    if len(body) > config.MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="that picture is too big to send")
+    if not body:
+        raise HTTPException(status_code=400, detail="that picture is empty")
+    path = config.image_dir(session_id) / f"{int(time.time())}-{uuid.uuid4().hex[:8]}{suffix}"
+    path.write_bytes(body)
+    log.info("kept a %d KB image for %s at %s", len(body) // 1024, session_id, path.name)
+    return {"path": str(path)}
+
+
 @app.post("/sessions/{session_id}/say", dependencies=[Depends(require_token)])
 async def say(
     session_id: str,
     text: str = Body(embed=True),
+    images: Annotated[list[str] | None, Body(embed=True)] = None,
     route: str | None = Query(default=None, description="auto, keyboard or socket"),
 ) -> dict:
     """Put words into a session. The other half of an upload the person asked to read first."""
     session = await _live_session(session_id)
+    said = deliver.with_images(text, _kept_images(session_id, images or []))
     taken, error = await asyncio.to_thread(
-        deliver.deliver, session, text, route or plugin.route())
+        deliver.deliver, session, said, route or plugin.route())
     log.info("delivery to %s: %s", session.name, error or f"{taken} took it")
     push.spoke_to(session_id)
     return {"delivered": taken is not None, "delivered_by": taken, "delivery_error": error}
+
+
+def _kept_images(session_id: str, wanted: list[str]) -> list[str]:
+    """Only files this session's own image folder holds.
+
+    The phone names a path it was given rather than one it chose, and this is what keeps that
+    true: without it, "say this and read that file" would point a session at anything on the Mac.
+    """
+    folder = config.image_dir(session_id).resolve()
+    kept = []
+    for path in wanted:
+        found = Path(path).resolve()
+        if found.parent == folder and found.is_file():
+            kept.append(str(found))
+        else:
+            log.warning("refused an image outside %s's own folder: %s", session_id, path)
+    return kept
 
 
 @app.post("/live/token", dependencies=[Depends(require_token)])
