@@ -11,8 +11,12 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
+
+PANE_TTL = 3.0  # seconds; one `it2` call costs ~0.5 s and the phone polls every few
+_pane_cache: tuple[float, dict] = (0.0, {})
 
 
 def sessions_dir() -> Path:
@@ -64,12 +68,25 @@ def _processes() -> dict[int, str]:
 
 def _panes() -> dict[str, Pane]:
     """tty short name -> iTerm pane. Empty when iTerm or its Python API is unavailable."""
+    global _pane_cache
+    fetched_at, cached = _pane_cache
+    if time.monotonic() - fetched_at < PANE_TTL:
+        return cached
+    panes = _fetch_panes()
+    _pane_cache = (time.monotonic(), panes)
+    return panes
+
+
+def _fetch_panes() -> dict[str, Pane]:
     try:
         out = subprocess.run(
             ["it2", "session", "list", "--json"],
             capture_output=True,
             text=True,
-            timeout=10,
+            # iTerm2 asks for Python API approval the first time a new client connects;
+            # until someone clicks it, this call blocks. Give up fast and list panes as
+            # unknown rather than making the phone wait.
+            timeout=4,
             check=False,
         )
     except (OSError, subprocess.TimeoutExpired):

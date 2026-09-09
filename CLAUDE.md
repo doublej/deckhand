@@ -49,6 +49,10 @@ header.
   globbing `~/.claude/projects/*/<sessionId>.jsonl`, never by rebuilding the path.
 - Transcripts run to megabytes: only the last 512 KB is read, and the first line of that
   chunk is dropped as a fragment.
+- The **first** connection from a new client makes iTerm2 ask for Python API approval. Until
+  someone clicks it, `it2` blocks: pane data is missing and `/sessions` costs the 4 s timeout.
+  It happened once when the launchd agent was first bootstrapped and has been approved since.
+  The pane map is cached for 3 s because one `it2` call costs ~0.5 s.
 - Sessions with no iTerm pane are hidden — unless iTerm answers nothing at all, in which case
   every live session is listed so the app still works without the iTerm Python API.
 - ATS: the app talks plain HTTP to a `.local` name, which needs `NSAllowsLocalNetworking`
