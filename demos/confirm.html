@@ -22,6 +22,8 @@
   <label class="eyebrow" for="note">Note, if there is one</label>
   <input id="note" type="text" placeholder="Travels back with the answer">
 
+  <p class="hint" id="said" hidden></p>
+
   <div class="actions">
     <button id="no">Not yet</button>
     <button id="yes" class="primary">Tag and push</button>
@@ -54,6 +56,18 @@
     }
     window.deckhand.respond(value);
     window.deckhand.close();
+  }
+
+  // What was answered last time. `window.deckhand.answer` is that value in exactly the shape it
+  // was given, or null where nobody has — and a page that has been answered must not draw itself
+  // as fresh. There is no control here holding the boolean, so it is said in words; the note is
+  // the part you would otherwise retype.
+  const before = window.deckhand && window.deckhand.answer;
+  if (before) {
+    document.getElementById("note").value = before.feedbackText || "";
+    const said = document.getElementById("said");
+    said.textContent = "You answered: " + (before.answer ? "Tag and push" : "Not yet");
+    said.hidden = false;
   }
 
   document.getElementById("yes").addEventListener("click", () => answer(true));

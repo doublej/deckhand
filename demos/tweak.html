@@ -87,6 +87,16 @@
 
   document.getElementById("leave").addEventListener("click", () => send({ cancelled: true }));
 
+  // Where the sliders were left last time. A tweak that was cancelled carries no values, so the
+  // sliders stay on what the code actually does — which is the honest place for them.
+  const before = window.deckhand && window.deckhand.answer;
+  if (before && before.answer) {
+    for (const slider of sliders) {
+      const was = Number(before.answer[slider.id]);
+      if (Number.isFinite(was)) slider.value = was;
+    }
+  }
+
   document.querySelector("main").addEventListener("input", show);
   show();
 

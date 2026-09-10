@@ -61,10 +61,10 @@
     return picked.value || other.value.trim();
   }
 
-  function refresh() {
+  function refresh(touched) {
     const picked = document.querySelector("input[name=branch]:checked");
     other.hidden = !picked || picked.value !== "";
-    if (!other.hidden) other.focus({ preventScroll: true });
+    if (!other.hidden && touched) other.focus({ preventScroll: true });
 
     const branch = chosen();
     send.disabled = branch === "";
@@ -74,6 +74,19 @@
   document.querySelectorAll("input[name=branch]").forEach((r) => r.addEventListener("change", refresh));
   other.addEventListener("input", refresh);
   refresh();
+
+  // What was answered last time, ticked. A pick hands back the typed text rather than the literal
+  // "Other", so an answer that is none of the rows belongs in the field on the row with no value.
+  const before = window.deckhand && window.deckhand.answer;
+  if (before && typeof before.answer === "string") {
+    const hit = document.querySelector('input[name=branch][value="' + CSS.escape(before.answer) + '"]');
+    if (hit) hit.checked = true;
+    else {
+      document.querySelector('input[name=branch][value=""]').checked = true;
+      other.value = before.answer;
+    }
+    refresh();
+  }
 
   send.addEventListener("click", () => {
     const value = { answer: chosen() };

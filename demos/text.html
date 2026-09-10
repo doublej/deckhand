@@ -53,6 +53,11 @@
     window.deckhand.close();
   }
 
+  // What was answered last time, back in the field — editable, because that is the only sensible
+  // thing to do with a sentence you are being shown again.
+  const before = window.deckhand && window.deckhand.answer;
+  if (before && typeof before.answer === "string") field.value = before.answer;
+
   field.addEventListener("input", refresh);
   field.addEventListener("keydown", (e) => { if (e.key === "Enter") answer(); });
   send.addEventListener("click", answer);

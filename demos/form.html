@@ -127,6 +127,26 @@
     window.deckhand.close();
   }
 
+  // What was answered last time, per question. The app puts it in place before this script runs,
+  // so there is no repaint: the controls are built already ticked. A question whose id is not in
+  // the answer is one that was not reached, and stays empty.
+  const before = window.deckhand && window.deckhand.answer;
+  const was = before && before.answer;
+  if (was) {
+    for (const step of steps) {
+      const gave = was[step.dataset.id];
+      if (gave === undefined || gave === null) continue;
+      if (step.dataset.kind === "text") {
+        step.querySelector("input").value = String(gave);
+        continue;
+      }
+      for (const one of [].concat(gave)) {
+        const hit = step.querySelector('input[value="' + CSS.escape(String(one)) + '"]');
+        if (hit) hit.checked = true;
+      }
+    }
+  }
+
   document.querySelector("main").addEventListener("input", show);
   document.querySelector("main").addEventListener("change", show);
   back.addEventListener("click", () => { at = Math.max(0, at - 1); show(); });
