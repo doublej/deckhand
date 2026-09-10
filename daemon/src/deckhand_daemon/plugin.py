@@ -28,7 +28,7 @@ from .log import LOG_FILE, log
 ID = "deckhand"
 DAEMON_LABEL = "com.jurrejan.deckhand"
 POLL = 1.0
-UTT = Path.home() / "Library" / "Application Support" / "dev.jurrejan.utt" / "plugins"
+UTT = Path.home() / "Library" / "Application Support" / "dev.jurrejan.utt" / "extensions"
 # Routes are Deckhand's word; the page gets the person's. Same three choices either way.
 ROUTE_OPTIONS = {"whichever works": "auto", "typed into the terminal": "keyboard",
                  "sent as a message": "socket"}
