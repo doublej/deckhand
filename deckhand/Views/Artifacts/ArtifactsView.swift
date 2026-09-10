@@ -3,10 +3,14 @@ import SwiftUI
 
 /// What this session has put on your phone: the questions it could not ask in a sentence.
 ///
-/// A slip is one HTML page a session wrote. They live in the project rather than with the session
-/// — `.deckhand/artifacts/` beside the code — so they outlive the session that wrote one, and a
-/// second session working in the same folder finds the first one's work. That is why this is a
-/// listing of a folder on the Mac and not a thing the app keeps.
+/// A slip is one HTML page a session wrote, kept in the project rather than with the session —
+/// `.deckhand/artifacts/` beside the code — which is why this is a listing of a folder on the Mac
+/// and not a thing the app keeps.
+///
+/// Two kinds are in it. Most are this session's own, under its id. A few are the folder's, written
+/// flat, and every session working there is looking at the same page — so answering one sends the
+/// answer into whichever session you have open rather than the one that asked. The row says so in
+/// its caption and nowhere louder: it is a distinction that matters when it matters.
 struct ArtifactsView: View {
     @Bindable var model: AppModel
     let session: Session
@@ -205,8 +209,13 @@ private struct ArtifactRow: View {
 
     /// When it was written, and the slug — which is the name an agent will say out loud when it
     /// tells you there is something on your phone.
+    ///
+    /// "project" leads it for a slip that belongs to the folder rather than to this session. In
+    /// the caption because that is the quiet line, and first because the caption truncates from
+    /// the other end — a qualifier you only see on long titles is one you cannot trust.
     private var caption: String {
         let ago = artifact.changed.formatted(.relative(presentation: .numeric, unitsStyle: .narrow))
-        return done ? "answered · \(ago) · \(artifact.id)" : "\(ago) · \(artifact.id)"
+        let words = [artifact.shared ? "project" : nil, done ? "answered" : nil, ago, artifact.id]
+        return words.compactMap { $0 }.joined(separator: " · ")
     }
 }

@@ -1,20 +1,32 @@
 """One HTML page a session wrote, read on the phone, and the answer on its way back.
 
-The store is the project's own folder — `<cwd>/.deckhand/artifacts` — and that is the design
-rather than a detail of it. Kept per session under Deckhand's own state, the way everything else
-here is kept, one project's pages would scatter across every session that ever worked on it and
-the second session would never find the first one's work. In the project, an agent writes a page
-with `Write`, lists them with `ls`, reads an old one with `Read` and duplicates one with `cp` —
-no new tool, no token, no discovery step, because an agent already knows its own cwd.
-`docs/artifacts.md` is the contract this builds.
+The store is inside the project — `<cwd>/.deckhand/artifacts` — and that is the design rather
+than a detail of it. Kept under Deckhand's own state, the way everything else here is kept, an
+agent could not reach its own pages at all. In the project it writes one with `Write`, lists
+them with `ls`, reads an old one with `Read` and duplicates one with `cp` — no new tool, no
+token, no discovery step, because an agent already knows its own cwd. `docs/artifacts.md` is the
+contract this builds.
 
-Two things keep a folder inside someone's project from becoming a file server on their Mac. An
-id is one strict slug and never a path, so `../../../etc/passwd` is not an id at all. And every
-file is resolved and its parent compared against this session's own artifacts folder, which is
-what catches a page that is really a symlink pointing elsewhere — the same check
-`saying._kept_images` makes before a message may name a picture. A read also requires the folder
-to be there already and nothing ever looks upward for one, so a session started in `/` or in
-`$HOME` lists nothing and serves nothing.
+**Inside that folder there are two scopes, and the session's own is the default.** A slip a
+session writes lives under `artifacts/<session id>/`; one written flat in `artifacts/` belongs to
+the folder and every session working in it sees it. Flat was the only scope once, on the argument
+that pages are about the project and outlive the session that wrote one — true of some of them,
+and making the rest wrong. Three sessions open in one repo listed the same slips three times, and
+answering one delivered into whichever session the phone had open rather than the one that asked,
+because the route in is `/sessions/{id}/artifacts/{aid}/answer`. Scoping the default to the
+session is what sends an answer back where the question came from. What the old scope was for
+survives: the store is still in the project, so `ls ..` from a session's folder finds a sibling's
+work and a page meant for the folder is still written flat. Only the phone's listing narrows —
+to this session's own, plus the folder's.
+
+Three things keep a folder inside someone's project from becoming a file server on their Mac. An
+id is one strict slug and never a path, so `../../../etc/passwd` is not an id at all. A session
+id is now a path component too, so it is held to exactly that same rule — it arrives over HTTP
+and is no more trustworthy than an id is. And every file is resolved and its parent compared
+against the folder it was looked up in, which is what catches a page that is really a symlink
+pointing elsewhere — the same check `saying._kept_images` makes before a message may name a
+picture. A read also requires the folder to be there already and nothing ever looks upward for
+one, so a session started in `/` or in `$HOME` lists nothing and serves nothing.
 
 Nothing here raises over a bad file. A page half-written by an agent that was interrupted, or one
 that is not text at all, must not be able to empty the phone's listing: it lists under its id and
@@ -54,43 +66,58 @@ MAX_PAGE_BYTES = 4 * 1024 * 1024
 BRIEF = 240
 
 
-def folder(session: sessions.Session) -> Path:
-    """This project's artifacts folder, made if it is not there yet.
+def project(session: sessions.Session) -> Path:
+    """Where a slip that belongs to the folder lives, and the root every scope hangs under."""
+    return Path(session.cwd) / ".deckhand" / "artifacts"
 
-    `.deckhand/.gitignore` holding `*` goes in beside it, so the folder ignores itself and no
-    repository gains an entry because someone answered a question on their phone. It is topped
-    up rather than written once: an agent creating the folder with `Write` leaves no `.gitignore`
-    behind, and the daemon is the only thing that can put one there. A folder that will not take
-    the write is only a folder git can see — it is not a reason for the phone to see nothing.
+
+def own(session: sessions.Session) -> Path | None:
+    """Where this session's own slips live: a folder under that one, named by its session id.
+
+    None when that id could not be a folder name. It reaches here off a record on disk by way of
+    a path segment in a URL, so it is held to exactly the rule an artifact id is held to — one
+    segment, no dot and no separator, so neither `..` nor a path can be spelled. A session whose
+    id fails it has no folder of its own and sees only the folder's, which is what every session
+    saw before this existed; it never falls back to writing somewhere it was not asked to.
     """
-    spot = _where(session)
+    return project(session) / session.session_id if ID.fullmatch(session.session_id) else None
+
+
+def folder(session: sessions.Session) -> Path:
+    """This session's own artifacts folder, made if it is not there yet.
+
+    `.deckhand/.gitignore` holding `*` goes in, so the folder ignores itself and no repository
+    gains an entry because someone answered a question on their phone. It is topped up rather
+    than written once: an agent creating the folder with `Write` leaves no `.gitignore` behind,
+    and the daemon is the only thing that can put one there. A folder that will not take the
+    write is only a folder git can see — it is not a reason for the phone to see nothing.
+    """
+    spot = own(session) or project(session)
     spot.mkdir(parents=True, exist_ok=True)
-    ignore = spot.parent / ".gitignore"
-    if not ignore.exists():
-        try:
-            ignore.write_text("*\n")
-        except OSError as error:
-            log.warning("could not make %s ignore itself: %s", spot.parent, error)
+    _ignore(session)
     return spot
 
 
-def kept(session: sessions.Session) -> Path | None:
-    """The same folder, but only when it is already there. None is what a read gets otherwise.
-
-    This is the difference between a feature and a file server: a session working in `/` or in
-    `$HOME` has no artifacts folder, so it has no artifacts, and nothing walks upward to find a
-    folder belonging to some enclosing directory.
-    """
-    return folder(session) if _where(session).is_dir() else None
-
-
 def listing(session: sessions.Session) -> list[dict]:
-    """Every page in this project's folder, newest first, with what the phone needs to show it."""
-    spot = kept(session)
-    if spot is None:
+    """Every page this session can see, newest first, with what the phone needs to show it.
+
+    Its own and the folder's, in one list. The folder's are read first and the session's own
+    written over them, so an id in both scopes is the session's own — it wrote that page for
+    itself, and a page it did not write cannot displace it.
+    """
+    if not project(session).is_dir():
         return []
-    rows = (_row(session, found.stem) for found in spot.glob("*.html"))
-    return sorted((row for row in rows if row), key=lambda row: row["modified"], reverse=True)
+    _ignore(session)
+    rows: dict[str, dict] = {}
+    for spot in reversed(_spots(session)):
+        if not spot.is_dir():
+            continue
+        shared = spot == project(session)
+        for found in spot.glob("*.html"):
+            row = _row(spot, found.stem, shared=shared)
+            if row:
+                rows[row["id"]] = row
+    return sorted(rows.values(), key=lambda row: row["modified"], reverse=True)
 
 
 def counted(session: sessions.Session) -> dict:
@@ -107,7 +134,9 @@ def counted(session: sessions.Session) -> dict:
 
     Counted off `listing` rather than off the folder, so the numbers a row promises are exactly
     what the page tab will show. A file whose name is not a slug is not an artifact of this
-    session's, and counting one here would promise a page that does not list.
+    session's, and counting one here would promise a page that does not list. That is also why
+    the folder's own slips count: they are on this session's tab, they are waiting on the person
+    the same way, and a row saying one fewer than the tab it opens is the worse of the two.
     """
     rows = listing(session)
     answered = sum(1 for row in rows if row["answered"])
@@ -169,13 +198,24 @@ def answer(session: sessions.Session, artifact_id: str, value: Any) -> dict | No
     return written | {"file": str(answer_file)}
 
 
-def _where(session: sessions.Session) -> Path:
-    """Where this session's artifacts would be. A path, not a promise: nothing is created here."""
-    return Path(session.cwd) / ".deckhand" / "artifacts"
+def _spots(session: sessions.Session) -> list[Path]:
+    """The folders a slip of this session's can be in, its own first — first is what wins a tie."""
+    mine = own(session)
+    return [mine, project(session)] if mine else [project(session)]
 
 
-def _file(session: sessions.Session, artifact_id: str, suffix: str) -> Path | None:
-    """One file of this artifact's, inside this session's own folder, or None.
+def _ignore(session: sessions.Session) -> None:
+    """Top up `.deckhand/.gitignore`, so the store ignores itself whoever made the folder."""
+    ignore = project(session).parent / ".gitignore"
+    if not ignore.exists():
+        try:
+            ignore.write_text("*\n")
+        except OSError as error:
+            log.warning("could not make %s ignore itself: %s", ignore.parent, error)
+
+
+def _inside(spot: Path, artifact_id: str, suffix: str) -> Path | None:
+    """One file of this artifact's, inside that one folder, or None.
 
     The only place an id from the phone turns into a path, so it is the only place the check has
     to be made. `fullmatch` refuses anything that is not one plain slug, and resolving before
@@ -183,35 +223,52 @@ def _file(session: sessions.Session, artifact_id: str, suffix: str) -> Path | No
     resolves somewhere whose parent is not this folder. What the project itself links its own
     artifacts folder to is the project's business — the id cannot reach outside either way.
     """
-    spot = kept(session)
-    if spot is None or not ID.fullmatch(artifact_id):
+    if not ID.fullmatch(artifact_id):
         return None
     settled = (spot / f"{artifact_id}{suffix}").resolve()
     if settled.parent != spot.resolve():
-        log.warning("refused an artifact outside %s's own folder: %r", session.name, artifact_id)
+        log.warning("refused an artifact outside %s: %r", spot, artifact_id)
         return None
     return settled
 
 
-def _row(session: sessions.Session, artifact_id: str) -> dict | None:
-    """One page as the phone lists it. None for a file that is not an artifact of this session's.
+def _file(session: sessions.Session, artifact_id: str, suffix: str) -> Path | None:
+    """The same file, in whichever of this session's scopes actually holds that page.
+
+    The page decides the scope and the suffix follows it, so an answer is always written beside
+    the question it answers rather than in the folder a caller happened to think of. A folder
+    that is not there holds no page, which is how "a read requires the folder to exist" survives
+    two of them.
+    """
+    for spot in _spots(session):
+        page_at = _inside(spot, artifact_id, ".html")
+        if page_at is not None and page_at.is_file():
+            return _inside(spot, artifact_id, suffix)
+    return None
+
+
+def _row(spot: Path, artifact_id: str, shared: bool) -> dict | None:
+    """One page as the phone lists it. None for a file in there that is not an artifact.
 
     `answered` is the whole state there is: a page with no answer beside it is open, and one with
-    an answer has been answered and can be asked again by deleting the file.
+    an answer has been answered and can be asked again by deleting the file. `shared` is the
+    other half of what a row means — it says this page belongs to the folder and every session
+    working in it is looking at the same one, so answering it is not answering *this* session.
     """
-    found = _file(session, artifact_id, ".html")
+    found = _inside(spot, artifact_id, ".html")
     if found is None:
         return None
     try:
         modified = found.stat().st_mtime
     except OSError:
         return None
-    beside = _file(session, artifact_id, ".answer.json")
+    beside = _inside(spot, artifact_id, ".answer.json")
     return {
         "id": artifact_id,
         "title": _title(found, artifact_id),
         "modified": modified,
         "answered": beside is not None and beside.is_file(),
+        "shared": shared,
     }
 
 

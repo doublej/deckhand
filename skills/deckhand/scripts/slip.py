@@ -8,7 +8,11 @@ so there is one copy of every page and `just demo-check` gates it) and swaps in 
 and a list.
 
 Nothing here talks to the daemon, because nothing needs to: a slip is a file in the session's own
-`cwd`, which is the whole reason it needs no tool.
+`cwd`, which is the whole reason it needs no tool. It goes under `.deckhand/artifacts/<session
+id>/`, so only the session that asked lists it and the answer comes back to the session that
+asked. `$CLAUDE_CODE_SESSION_ID` is that id and is in every Bash call Claude Code makes; with it
+unset — a person running this in a terminal — the slip is written flat, which is the older scope
+and means the folder rather than a session.
 
     slip.py --kind confirm --title "Tag 0.4.0 and push it?" --option "Tag and push"
     slip.py --kind pick --title "Which branch" --option develop --option main
@@ -24,6 +28,7 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -147,11 +152,19 @@ def main() -> int:
     parse.add_argument("--dir", default=".", metavar="DIR",
                        help="the session's own folder (default: here). Nothing walks upward "
                             "looking for one, so a slip written elsewhere is invisible")
+    parse.add_argument("--session", default=os.environ.get("CLAUDE_CODE_SESSION_ID", ""),
+                       metavar="ID",
+                       help="whose slip this is (default: $CLAUDE_CODE_SESSION_ID). Empty writes "
+                            "it to the folder, where every session working there sees it")
     said = parse.parse_args()
 
     slug = said.slug or buildSlug(said.title)
     if not SLUG.fullmatch(slug):
         sys.exit(f"slip.py: {slug!r} is not a slip id — letters, digits, - and _, one segment")
+    # Loudly rather than flat: the daemon holds a session id to this same rule, so a slip filed
+    # under one it refuses is one the phone never lists — the failure nobody notices.
+    if said.session and not SLUG.fullmatch(said.session):
+        sys.exit(f"slip.py: {said.session!r} is not a session id — one segment, no dot, no slash")
 
     page = fillCommon((TEMPLATES / f"{said.kind}.html").read_text(), said.title, slug, said.note)
     if said.kind == "aloud":
@@ -160,7 +173,7 @@ def main() -> int:
         page = {"confirm": fillConfirm, "pick": fillPick, "text": fillText}[said.kind](
             page, said.option)
 
-    folder = Path(said.dir).expanduser().resolve() / ".deckhand" / "artifacts"
+    folder = Path(said.dir).expanduser().resolve() / ".deckhand" / "artifacts" / said.session
     folder.mkdir(parents=True, exist_ok=True)
     where = folder / f"{slug}.html"
     where.write_text(page)

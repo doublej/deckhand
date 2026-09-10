@@ -9,29 +9,38 @@ gate the demos pass, applied to what came out.
 """
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 SCRIPTS = REPO / "skills" / "deckhand" / "scripts"
+SID = "aaaa1111-2222-3333-4444-555566667777"
 
 # The demo gate, reached by path because `demos/` is a folder of pages rather than a package.
 sys.path.insert(0, str(REPO / "demos"))
 import check
 
 
-def run(script, *args):
+def run(script, *args, session=""):
+    """As a session runs it, with the id Claude Code injects into every Bash call spelled out.
+
+    Spelled rather than inherited: this suite is itself run from inside a session, so a test
+    leaving `CLAUDE_CODE_SESSION_ID` alone would file its slips under whoever ran it and prove
+    nothing about either scope.
+    """
+    env = dict(os.environ) | {"CLAUDE_CODE_SESSION_ID": session}
     done = subprocess.run([sys.executable, str(SCRIPTS / script), *args],
-                          capture_output=True, text=True, check=False)
+                          capture_output=True, text=True, check=False, env=env)
     return done.returncode, done.stdout.strip(), done.stderr.strip()
 
 
-def slip(tmp_path, *args):
-    code, out, err = run("slip.py", "--dir", str(tmp_path), *args)
+def slip(tmp_path, *args, session=""):
+    code, out, err = run("slip.py", "--dir", str(tmp_path), *args, session=session)
     assert code == 0, err
     page = Path(out)
-    assert page == tmp_path / ".deckhand" / "artifacts" / page.name
+    assert page == tmp_path / ".deckhand" / "artifacts" / session / page.name
     title, faults = check.check(page)
     assert faults == [], faults
     return page, page.read_text(), title
@@ -92,6 +101,36 @@ def test_a_slug_that_could_be_a_path_is_refused(tmp_path):
                        "--title", "x", "--slug", "../escape")
 
     assert code != 0 and "not a slip id" in err
+
+
+def test_a_slip_is_filed_under_the_session_that_wrote_it(tmp_path):
+    """The default, and the whole point: only the session that asked lists it or is answered."""
+    page, _, _ = slip(tmp_path, "--kind", "text", "--title", "Name it", session=SID)
+
+    assert page.parent == tmp_path / ".deckhand" / "artifacts" / SID
+    page.with_name("name-it.answer.json").write_text(json.dumps({"value": {"answer": "ok"}}))
+    code, out, _ = run("answer.py", "--dir", str(tmp_path), "name-it", session=SID)
+
+    assert code == 0 and json.loads(out) == {"answer": "ok"}
+
+
+def test_a_session_reads_back_a_slip_belonging_to_the_folder(tmp_path):
+    """A flat slip is the folder's, so a session working there answers the same page."""
+    page, _, _ = slip(tmp_path, "--kind", "text", "--title", "Name it")
+    page.with_name("name-it.answer.json").write_text(json.dumps({"value": {"answer": "ours"}}))
+
+    code, out, _ = run("answer.py", "--dir", str(tmp_path), "name-it", session=SID)
+
+    assert code == 0 and json.loads(out) == {"answer": "ours"}
+
+
+def test_a_session_id_that_could_be_a_path_is_refused(tmp_path):
+    """It becomes a folder name here and a path segment in the daemon. Same rule, both ends."""
+    code, _, err = run("slip.py", "--dir", str(tmp_path), "--kind", "text",
+                       "--title", "x", session="../escape")
+
+    assert code != 0 and "not a session id" in err
+    assert not (tmp_path / ".deckhand").exists()
 
 
 def test_the_answer_is_printed_once_it_lands_and_a_false_one_counts(tmp_path):

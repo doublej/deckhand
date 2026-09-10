@@ -2,13 +2,16 @@
 
 Six working pages: one per thing `consult-user-mcp` can ask, plus the one shape that has no
 `consult-user` equivalent because it only makes sense on a phone — a slip answered out loud.
-They are artifacts, not mockups: copy one into a project's `.deckhand/artifacts/` and it is live
-on the phone, where its `<title>` becomes its name and the part of the filename before `.html`
-becomes its id.
+They are artifacts, not mockups: copy one into a session's own folder and it is live on the phone,
+where its `<title>` becomes its name and the part of the filename before `.html` becomes its id.
 
 ```
-cp demos/pick.html ~/dev/multi-stack/deckhand/.deckhand/artifacts/which-branch.html
+cp demos/pick.html .deckhand/artifacts/$CLAUDE_CODE_SESSION_ID/which-branch.html
 ```
+
+That folder is the session's own, so only the session that put the slip there lists it and the
+answer comes back to it. Drop the `$CLAUDE_CODE_SESSION_ID` segment to leave the slip flat in
+`.deckhand/artifacts/`, where it belongs to the project and every session working there sees it.
 
 Each one answers through `window.deckhand.respond(value)` with the **same shape** the matching
 `ask` comes back with, so an agent that can already read a consult-user answer can read this one

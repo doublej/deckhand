@@ -44,11 +44,32 @@ daemon also messages this session when an answer lands, so a stopped session is 
 polling. Run both from the session's own folder: nothing walks upward, so a slip written from a
 subdirectory is one the phone never lists.
 
+## Whose slip it is
+
+A slip goes in **this session's own folder**, `.deckhand/artifacts/$CLAUDE_CODE_SESSION_ID/`, and
+both scripts do that without being told — that variable is in every Bash call and is the id the
+daemon knows this session by. Only the session that asked lists it, and the answer comes back to
+the session that asked; two sessions in one repo no longer read each other's questions or take
+each other's answers.
+
+A slip written **flat** in `.deckhand/artifacts/` belongs to the folder instead, and every session
+working there lists it and can answer it. Write one there for a question about the project rather
+than about the work in hand — pass `--session ""` to either script. The phone marks those rows
+`project`, because answering one sends the answer into whichever session is open.
+
 ## Writing one by hand
 
 For a wizard, sliders, or anything those four miss, copy a template out of
-`~/.claude/skills/deckhand/templates/` — all four plus `form` and `tweak`, as working pages. The
-`<title>` is the slip's name, the filename before `.html` its id: `[A-Za-z0-9][A-Za-z0-9_-]{0,63}`.
+`~/.claude/skills/deckhand/templates/` — all four plus `form` and `tweak`, as working pages:
+
+```bash
+mkdir -p .deckhand/artifacts/$CLAUDE_CODE_SESSION_ID
+cp ~/.claude/skills/deckhand/templates/form.html \
+   .deckhand/artifacts/$CLAUDE_CODE_SESSION_ID/release-check.html
+```
+
+The `<title>` is the slip's name, the filename before `.html` its id:
+`[A-Za-z0-9][A-Za-z0-9_-]{0,63}`.
 
 Inline HTML, CSS and JS **only**. The app injects `default-src 'none'` with inline style and
 script, `img-src data:`, no form action and no navigation — so a CDN, a font, a `fetch` or a

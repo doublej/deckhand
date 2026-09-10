@@ -18,8 +18,15 @@ the daemon's source on 2026-09-10.
   is resolved from the session's own `cwd` and no enclosing directory is searched. A session
   started in `/` or in `$HOME` has no slips at all, silently. Writing one from a subdirectory
   puts it somewhere the phone will never list.
+- **A slip is the session's own unless it is written flat.** `.deckhand/artifacts/<session
+  id>/<slug>.html` is listed only by that session and answered back into it; `<slug>.html` flat in
+  `.deckhand/artifacts/` belongs to the folder, is listed by every session working there, and is
+  answered into whichever one the phone had open. `$CLAUDE_CODE_SESSION_ID` is the id, and both
+  scripts use it without being told. A session id in a path is held to the same slug rule an
+  artifact id is, so a session whose id fails it sees only the folder's slips.
 - **The id is one strict slug**: `[A-Za-z0-9][A-Za-z0-9_-]{0,63}`. No dots, so `..` cannot be
   spelled; no separators, so no path can. Anything else is not an id and the page is not served.
+  The same slug in both scopes is two different pages, and the session's own wins.
 - **The `<title>` is the slip's name**, read out of the first 8 KB of the file. A `<title>`
   further in than that is not in the head, and the slip falls back to being named by its id.
 - **An answer can never be JSON `null`.** FastAPI cannot tell an omitted field from an explicit

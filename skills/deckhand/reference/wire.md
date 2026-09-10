@@ -60,12 +60,14 @@ curl -s "$DECK/sessions" -H "x-deckhand-token: $TOKEN"
 
 ## Slips
 
-The listing and the answer, for when you want them from the Mac rather than off disk.
+The listing and the answer, for when you want them from the Mac rather than off disk. A slip
+lives in `.deckhand/artifacts/<session id>/` when it is a session's own — the default, and where
+these routes look first — or flat in `.deckhand/artifacts/` when it belongs to the folder.
 
 | Route | Answers | The trap |
 |---|---|---|
-| `GET /sessions/{id}/artifacts` | `{artifacts: [{id, title, modified, answered}]}` | Newest first. `answered` is the whole state: a page with no `.answer.json` beside it is open. |
-| `GET /sessions/{id}/artifacts/{aid}` | `text/html` | 404 if there is no such id, no `.deckhand/artifacts/` folder, or the page is over 4 MB. |
+| `GET /sessions/{id}/artifacts` | `{artifacts: [{id, title, modified, answered, shared}]}` | Newest first, this session's own **and** the folder's. `shared` is true for the folder's, which every session working there also lists. `answered` is the whole state: a page with no `.answer.json` beside it is open. |
+| `GET /sessions/{id}/artifacts/{aid}` | `text/html` | 404 if there is no such id in either scope, no `.deckhand/artifacts/` folder, or the page is over 4 MB. An id in both scopes resolves to the session's own. |
 | `GET /sessions/{id}/artifacts/{aid}/answer` | `{value}` | **`{"value": null}` means nobody has answered** — it is not an error. A missing page is still a 404. |
 | `POST /sessions/{id}/artifacts/{aid}/answer` | `{answer, delivered, delivered_by, delivery_error}` | The phone's route in. `value` is required JSON and **cannot be `null`** (FastAPI cannot tell an omitted field from an explicit null); `false`, `0`, `""` and `[]` all arrive intact. Do not answer your own slip. |
 

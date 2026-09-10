@@ -29,6 +29,18 @@ struct ArtifactTests {
         #expect(list.artifacts.first?.changed == Date(timeIntervalSince1970: 1_757_500_000))
     }
 
+    @Test("a slip says which scope it is in, and a Mac too old to say marks nothing")
+    func decodesScope() throws {
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        let list = try decoder.decode(ArtifactList.self, from: Data("""
+        {"artifacts":[{"id":"mine","title":"Mine","modified":1.0,"answered":false,"shared":false},
+                      {"id":"ours","title":"Ours","modified":1.0,"answered":false,"shared":true},
+                      {"id":"older","title":"Older","modified":1.0,"answered":false}]}
+        """.utf8))
+        #expect(list.artifacts.map(\.shared) == [false, true, false])
+    }
+
     @Test("a Mac with nothing to show, and one that has never heard of artifacts, read the same")
     func decodesAbsence() throws {
         // The `Session.context` case: a missing key is not a broken answer. The other half of

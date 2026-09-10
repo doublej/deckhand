@@ -1,5 +1,6 @@
-"""The folder, what it lists, and the two ways an id must not be allowed to leave it."""
+"""The folder, its two scopes, what it lists, and the ways an id must not be allowed to leave."""
 
+import dataclasses
 import json
 import os
 
@@ -13,6 +14,66 @@ def test_a_page_lists_under_its_own_title(session, asking):
         ("which-branch", "Which branch?", False)
     ]
     assert listed[0]["modified"] == asking.stat().st_mtime
+
+
+def test_a_session_sees_its_own_slips_and_the_folders_and_can_tell_them_apart(
+    session, asking, mine
+):
+    listed = {row["id"]: row["shared"] for row in artifacts.listing(session)}
+
+    assert listed == {"palette-pick": False, "which-branch": True}
+
+
+def test_one_session_never_sees_another_sessions_own_slips(session, sibling, asking, mine):
+    """The bug this scope exists for: three sessions in one repo listed the same slips thrice."""
+    assert [row["id"] for row in artifacts.listing(sibling)] == ["which-branch"]
+    assert artifacts.page(sibling, "palette-pick") is None
+    assert artifacts.answer(sibling, "palette-pick", "warm") is None
+    assert artifacts.counted(sibling) == {"artifacts_waiting": 1, "artifacts_answered": 0}
+    assert artifacts.counted(session) == {"artifacts_waiting": 2, "artifacts_answered": 0}
+
+
+def test_an_answer_lands_in_the_scope_the_page_is_in(session, asking, mine):
+    """A slip of the session's own is answered beside itself, never in the folder above it."""
+    artifacts.answer(session, "palette-pick", "warm")
+    artifacts.answer(session, "which-branch", "develop")
+
+    assert (mine.parent / "palette-pick.answer.json").is_file()
+    assert not (asking.parent / "palette-pick.answer.json").exists()
+    assert (asking.parent / "which-branch.answer.json").is_file()
+
+
+def test_the_same_id_in_both_scopes_resolves_to_the_sessions_own(session, asking, mine):
+    """A page the session wrote for itself cannot be displaced by one it did not write."""
+    (mine.parent / "which-branch.html").write_text("<title>Mine</title>ours")
+
+    listed = {row["id"]: (row["title"], row["shared"]) for row in artifacts.listing(session)}
+
+    assert listed["which-branch"] == ("Mine", False)
+    assert artifacts.page(session, "which-branch") == "<title>Mine</title>ours"
+    artifacts.answer(session, "which-branch", "develop")
+    assert not (asking.parent / "which-branch.answer.json").exists()
+
+
+def test_a_session_id_that_could_be_a_path_gets_no_folder_of_its_own(session, asking):
+    """It reaches a path through a URL segment, so it is held to exactly the rule an id is."""
+    for climbing in ["../../../etc", "..", ".", "a/b", "/etc", ""]:
+        astray = dataclasses.replace(session, session_id=climbing)
+
+        assert artifacts.own(astray) is None
+        # Still the folder's own slips, and still nothing above the folder.
+        assert [row["id"] for row in artifacts.listing(astray)] == ["which-branch"]
+        assert artifacts.page(astray, "which-branch") is not None
+
+
+def test_a_page_under_a_folder_that_is_not_a_session_of_ours_is_invisible(session, asking):
+    """Only two folders are ever read, so a stranger's scope is not one of them."""
+    elsewhere = asking.parent / "cccc1111-2222-3333-4444-555566667777"
+    elsewhere.mkdir()
+    (elsewhere / "not-mine.html").write_text("<title>Not mine</title>")
+
+    assert [row["id"] for row in artifacts.listing(session)] == ["which-branch"]
+    assert artifacts.page(session, "not-mine") is None
 
 
 def test_the_newest_page_is_first(session, asking):
@@ -56,7 +117,6 @@ def test_an_escape_in_the_title_is_shown_as_the_character_it_is(session, asking)
 
 def test_a_project_with_no_folder_has_no_artifacts_and_gains_no_folder(session, project):
     """A session working in `/` or in `$HOME` must not turn the daemon into a file server."""
-    assert artifacts.kept(session) is None
     assert artifacts.listing(session) == []
     assert artifacts.counted(session) == {"artifacts_waiting": 0, "artifacts_answered": 0}
     assert artifacts.page(session, "which-branch") is None
@@ -67,7 +127,7 @@ def test_a_project_with_no_folder_has_no_artifacts_and_gains_no_folder(session, 
 def test_the_folder_ignores_itself(session, project):
     spot = artifacts.folder(session)
 
-    assert spot == project / ".deckhand" / "artifacts"
+    assert spot == project / ".deckhand" / "artifacts" / session.session_id
     assert (project / ".deckhand" / ".gitignore").read_text() == "*\n"
 
 

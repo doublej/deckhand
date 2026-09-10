@@ -20,25 +20,47 @@ thing it has that a spoken reply does not is **structure**: a form returns field
 
 ```
 <the session's cwd>/.deckhand/
-  .gitignore          # a single `*` — the folder ignores itself, so no repo gains a new entry
+  .gitignore              # a single `*` — the folder ignores itself, so no repo gains an entry
   artifacts/
-    <id>.html         # the page. Written by the agent. Its <title> is the artifact's name.
-    <id>.answer.json  # written by the daemon when the person answers. Absent until then.
+    <session id>/         # this session's own slips. Where a slip written today goes.
+      <id>.html           # the page. Written by the agent. Its <title> is the artifact's name.
+      <id>.answer.json    # written by the daemon when the person answers. Absent until then.
+    <id>.html             # flat: a slip belonging to the folder, listed by every session in it.
 ```
 
 In the project, not in `~/Library/Application Support/Deckhand/`, which is where every other
-piece of Deckhand's state lives. This is the one exception and it is the whole design:
+piece of Deckhand's state lives. This is the one exception and it is the whole design: an agent
+can write one with `Write`, list them with `ls`, read an old one with `Read`, and duplicate one
+with `cp`. No new tool, no MCP, no token, no discovery step — an agent knows its own cwd and
+nothing else is needed. "Agents can reuse earlier artifacts and edit, improve, duplicate them"
+costs exactly zero code because of this choice.
 
-- An agent can write one with `Write`, list them with `ls`, read an old one with `Read`, and
-  duplicate one with `cp`. No new tool, no MCP, no token, no discovery step — an agent knows
-  its own cwd and nothing else is needed. "Agents can reuse earlier artifacts and edit,
-  improve, duplicate them" costs exactly zero code because of this choice.
-- Artifacts are about the project, and they outlive the session that wrote one. Keyed by
-  session they would scatter one project's slips across every session that ever worked on it,
-  and the second session would not find the first one's work.
+**Two scopes inside that folder, and a session's own is the default.** Flat was the only scope
+once, on the argument that slips are about the project and outlive the session that wrote one.
+That is true of some of them, and it made the rest wrong: three sessions open in one repo listed
+the same slips three times, and answering one delivered the answer into whichever session the
+phone had open rather than into the one that asked — the route in is
+`/sessions/{id}/artifacts/{aid}/answer`, so the session is whichever tab you came from. A slip
+under the session's own id goes back to the session that asked it.
+
+What the old scope was for survives the change:
+
+- The store is still in the project, so `ls ..` from a session's folder finds a sibling
+  session's work and `cp` still duplicates it. Only the **phone's listing** narrowed, and it
+  narrowed to this session's own plus the folder's — never to a stranger's.
+- **A slip meant for the folder is still written flat**, and every session working there lists
+  it. That is the right shape for a question about the project rather than about a piece of
+  work: "which branch does this repo release from", not "which branch should *this* land on".
+- Nothing had to move. Every slip written before scopes existed is a flat one and goes on
+  working as the folder's.
+
+A session's listing carries both, and says which is which: `shared` is true for a slip that
+belongs to the folder. Where the same id exists in both, the session's own wins — a page it
+wrote for itself cannot be displaced by one it did not write.
 
 `<id>` is a slug the agent picks and that a person could read: `release-check`, `palette-pick`,
-`which-branch`. Duplicating an artifact is copying its file to a new slug.
+`which-branch`. Duplicating an artifact is copying its file to a new slug. `<session id>` is held
+to exactly the same rule, because it is a path segment in a URL before it is a folder name.
 
 ## What the page may contain
 
@@ -111,10 +133,14 @@ GET /sessions/{session_id}/artifacts/{artifact_id}/answer   ->  {"value": <whate
 Write the file, tell the person it is there, then read the answer:
 
 ```
-.deckhand/artifacts/which-branch.html      <- Write
+.deckhand/artifacts/$CLAUDE_CODE_SESSION_ID/which-branch.html      <- Write
 "I have put a question on your phone."
-.deckhand/artifacts/which-branch.answer.json   <- Read, once it exists
+.deckhand/artifacts/$CLAUDE_CODE_SESSION_ID/which-branch.answer.json   <- Read, once it exists
 ```
+
+`CLAUDE_CODE_SESSION_ID` is in every Bash call Claude Code makes and is the session id the daemon
+knows, so an agent needs no discovery step to find its own folder. Drop the segment to write a
+slip that belongs to the project instead.
 
 Nothing registers an artifact and nothing cleans one up. A slip with no answer file beside it
 is open; one with an answer beside it has been answered, and can be asked again by deleting the
@@ -192,4 +218,5 @@ Copy `demos/aloud.html`, change the title and the block, and that is the whole o
 Five pages under `demos/`, one per thing `consult-user-mcp` can ask, because that MCP is the
 existing proof of which questions are worth asking from a phone: a confirm, a pick (single and
 multiple), a text field, a form of several questions in sequence, and a set of sliders. They are
-working artifacts, not mockups — copy one into a project's `.deckhand/artifacts/` and it runs.
+working artifacts, not mockups — copy one into a session's `.deckhand/artifacts/<session id>/`
+and it runs.

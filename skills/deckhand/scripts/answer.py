@@ -19,11 +19,23 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from pathlib import Path
 
 LOOK = 2.0
+
+
+def whereAnswer(base: Path, session: str, slug: str) -> list[Path]:
+    """The answer file, in each scope the daemon reads — this session's own first, then the folder.
+
+    Both, because a session can be handed a slip it did not write: one written flat belongs to the
+    folder and every session working there answers the same page. Same order the daemon resolves
+    in, so what this prints is what the phone answered.
+    """
+    spots = [base / session, base] if session else [base]
+    return [spot / f"{slug}.answer.json" for spot in spots]
 
 
 def readAnswer(path: Path) -> tuple[object, bool]:
@@ -46,19 +58,24 @@ def main() -> int:
                        help="how long to block (default: look once)")
     parse.add_argument("--dir", default=".", metavar="DIR",
                        help="the session's own folder (default: here)")
+    parse.add_argument("--session", default=os.environ.get("CLAUDE_CODE_SESSION_ID", ""),
+                       metavar="ID",
+                       help="whose slip this is (default: $CLAUDE_CODE_SESSION_ID). A slip "
+                            "written flat, belonging to the folder, is looked for either way")
     said = parse.parse_args()
 
-    path = Path(said.dir).expanduser().resolve() / ".deckhand" / "artifacts"
-    path = path / f"{said.slug}.answer.json"
+    base = Path(said.dir).expanduser().resolve() / ".deckhand" / "artifacts"
+    paths = whereAnswer(base, said.session, said.slug)
     until = time.monotonic() + said.wait
     while True:
-        value, found = readAnswer(path)
-        if found:
-            print(json.dumps(value, ensure_ascii=False, indent=2))
-            return 0
+        for path in paths:
+            value, found = readAnswer(path)
+            if found:
+                print(json.dumps(value, ensure_ascii=False, indent=2))
+                return 0
         left = until - time.monotonic()
         if left <= 0:
-            print(f"{said.slug} has not been answered yet ({path})", file=sys.stderr)
+            print(f"{said.slug} has not been answered yet ({paths[0]})", file=sys.stderr)
             return 1
         time.sleep(min(LOOK, left))
 

@@ -2,9 +2,11 @@ import Foundation
 
 /// One page a session wrote for the person holding the phone.
 ///
-/// It is a file in the project — `.deckhand/artifacts/<id>.html` — so the id is both the slug
-/// an agent picked and the name of the file, and `title` is the page's own `<title>`. The Mac
-/// reads both off disk per request; nothing registers an artifact and nothing cleans one up.
+/// It is a file in the project — `.deckhand/artifacts/<session id>/<id>.html` for a slip this
+/// session wrote, `.deckhand/artifacts/<id>.html` for one that belongs to the folder — so the id
+/// is both the slug an agent picked and the name of the file, and `title` is the page's own
+/// `<title>`. The Mac reads both off disk per request; nothing registers an artifact and nothing
+/// cleans one up.
 public struct Artifact: Codable, Hashable, Identifiable, Sendable {
     /// The slug an agent picked and a person could read: `release-check`, `which-branch`.
     public let id: String
@@ -16,12 +18,34 @@ public struct Artifact: Codable, Hashable, Identifiable, Sendable {
     /// Whether `<id>.answer.json` sits beside the page. A page with no answer file is open, and
     /// asking the same question again is deleting that file — so this flips back, both ways.
     public let answered: Bool
+    /// Whether this page belongs to the folder rather than to the session that opened it.
+    ///
+    /// A slip written today is the writing session's own and nobody else lists it; one written
+    /// flat in `.deckhand/artifacts/` is the folder's, and every session working there sees the
+    /// same page. It matters when you answer: the answer goes back into the session you have
+    /// open, which for a shared one need not be the session that asked.
+    public let shared: Bool
 
-    public init(id: String, title: String, modified: Double, answered: Bool) {
+    public init(id: String, title: String, modified: Double, answered: Bool,
+                shared: Bool = false) {
         self.id = id
         self.title = title
         self.modified = modified
         self.answered = answered
+        self.shared = shared
+    }
+
+    /// Spelled out for `shared` alone, for the reason `ArtifactList` is: a Mac whose daemon
+    /// predates scopes sends no such key, and a throw would empty the whole tab over a word the
+    /// row only whispers. It reads `false` there — a Mac with no scopes has no distinction to
+    /// draw, and an unmarked row is that tab exactly as it read before any of this.
+    public init(from decoder: Decoder) throws {
+        let box = try decoder.container(keyedBy: CodingKeys.self)
+        id = try box.decode(String.self, forKey: .id)
+        title = try box.decode(String.self, forKey: .title)
+        modified = try box.decode(Double.self, forKey: .modified)
+        answered = try box.decode(Bool.self, forKey: .answered)
+        shared = try box.decodeIfPresent(Bool.self, forKey: .shared) ?? false
     }
 
     public var changed: Date { Date(timeIntervalSince1970: modified) }
