@@ -112,7 +112,11 @@ async def upload_audio(
         "path": str(path),
         "bytes": len(body),
         "received_at": time.time(),
-        # What utt heard, not what the chain made of it. The notes say what was changed.
+        # What utt handed back, which is not quite what it heard: the jobs lane answers with
+        # `text`, `error` and `finishedAt` and nothing else, so the raw transcript never crosses
+        # it. utt's own cleanup stage has already run by then, and so has any other extension
+        # declaring `filtersTranscripts`. This is the earliest form Deckhand can see; the notes
+        # below say what *Deckhand's* own chain changed, which is a different question.
         "transcript": text,
         "transcript_error": error,
         # What the chain made of it, and null when it left the words alone — so the card shows

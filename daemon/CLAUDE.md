@@ -234,9 +234,15 @@ summariser read what a folder's subagents did. `GET|PUT /settings` is the whole 
 
 ## utt, the plugin page, and APNs
 
-- **Transcription goes over the plugin file lane.** The clip is written into
-  `~/Library/Application Support/dev.jurrejan.utt/plugins/deckhand.jobs/` and utt writes the
-  text beside it. No listener, no token, nothing on the network, and it works whether or not
+- **Transcription goes over the plugin file lane.** The clip is written into utt's own
+  extensions folder — `~/Library/Application Support/dev.jurrejan.utt/extensions/deckhand.jobs/`
+  on any current utt, `plugins/` on one older than the rebrand — and utt writes the text beside
+  it. **Never name either path in code**: `plugin.plugins_dir()` asks the disk which one exists,
+  newest name first, because the folder that counts is the one the *running* utt makes at launch
+  and not the one its source says. Both folders exist on this Mac, which is exactly how a reading
+  of the tagged source can conclude the lane is broken while it is working — the proof of which
+  utt actually reads is that the answer files and the jobs directory itself are owner-only
+  (0600/0700), and utt is the only thing that writes with those modes. No listener, no token, nothing on the network, and it works whether or not
   utt's HTTP API is switched on. **The daemon holds no token of utt's**: `needsApi` is false,
   so there is nothing to go stale.
 - **The clip must be whole before it is audio.** utt picks up finished audio extensions from
@@ -251,6 +257,14 @@ summariser read what a folder's subagents did. `GET|PUT /settings` is the whole 
   starts with the same letter, so the list cannot rewrite a sentence: it catches "cockwheel" →
   "cogwheel", "Tu Y" → "TUI", "deck hand" → "deckhand". It cannot fix an ordinary word misheard
   as another ordinary word ("previous tree" for "previous three" stays wrong).
+- **Anything utt hands back has already been through utt, and possibly through another
+  extension.** The jobs answer carries `text`, `error` and `finishedAt` — there is no `raw`, so
+  the transcript as heard never crosses the lane. utt's cleanup stage has run on it, and so has
+  every installed extension declaring `filtersTranscripts`: one closure serves the hotkey, the
+  API and the jobs lane alike, and the filters chain in id order. An extension that pastes
+  everything in capitals would put every phone prompt into a session in capitals with nothing in
+  Deckhand's log to say why. `skipsTextStages` bounds what *utt* may do; it does not bound
+  another extension, and there is nothing on this side that can.
 - **The plugin page needs utt 1.1.0 or newer.** Before that, utt dropped manifest keys that were
   not all-lowercase and said nothing, so `copyToken` and `openLog` never became buttons and only
   `stop` did — a page can be half-missing and look complete. There is still no way for a plugin
