@@ -121,6 +121,14 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   not parse posts zero and the block falls back to the source lines, which is what every surface
   did before any of this existed. Slips do **not** get this yet: an artifact page is sandboxed by
   its own CSP and nothing injects mermaid into one.
+- **The orders pane writes on a sheet, and it has to.** `OrdersView` shows what a session has been
+  told to keep in mind and opens `Editor` to change it. A field on the pane itself would put a
+  second `TalkControl` on a screen that already floats one over it: two controls reading the one
+  recorder, both live, one filling a box and the other sending to the session — the `isMine`
+  arrangement `AloudCards` uses cannot help, because these two do different things with the same
+  clip. A sheet covers the mark, so the only control listening is the one under your thumb, and
+  `Editor` already opens focused with the keyboard up. Its own loading rather than an `AppModel`
+  extension, because `deckhand/` sits on its 16-file gate and nothing outside that pane wants it.
 - **The transcript poll asks for what is on screen, not for a fixed page.** It fetched the newest
   eight every five seconds and replaced the list with them, so a step back into the conversation
   was taken away again before it could be read — which is what "I cannot see the whole transcript
@@ -136,9 +144,9 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   screen to choose between four screens was a band of chrome doing what a swipe does for free, so
   `pane` is a `TabView(.page)` and the bar is gone — the panes are that much taller and the talk
   mark sits where the bar was. Its native index display is **off**: those dots land exactly where
-  the mark floats. The indicator is four dots on the header's meter row instead, which was already
-  being drawn and had the space spare, so the whole change costs nothing and returns a band. Two
-  things follow. The dots are not a control — four dots you can hit are four dots somebody will
+  the mark floats. The indicator is a dot per pane on the header's meter row instead, which was
+  already being drawn and had the space spare, so the whole change costs nothing and returns a
+  band. Two things follow. The dots are not a control — dots you can hit are dots somebody will
   try to hit — and the page's own edge-swipe-to-leave has to be arbitrated against the paging
   rather than restricted to the first pane. It fires from **every** pane, and the strip that
   catches it wins by being drawn over them.

@@ -22,6 +22,7 @@ projects/       # what folders there are, and starting a session in one
 reading/        # everything that reads a transcript and nothing that writes one
 deliver.py      # the words go into the session, by keyboard or by socket
 saying.py       # what a spoken line becomes before it is delivered
+orders/         # one session's standing orders, and how they get in front of a message
 filters/        # what happens to a prompt between the phone and the session
 projects/       # the folders on this Mac, and starting a session in one of them
 prompts/        # every prompt this daemon sends a model, and nothing else
@@ -154,6 +155,16 @@ the words carry, so it fails and says why instead. The receipt names the route t
   — it is `supportsNonInteractive`, so with an argument it renames without opening a picker.
   Verified against a live session: the registry's `name` and `nameSince` both move. A busy
   session only runs it when its turn ends, so the listing catches up late.
+- **Standing orders ride on a prompt and never on their own.** `orders/` keeps what the person
+  told one session to keep in mind, filed by session id; `saying._with_orders` puts it in front of
+  the words at the two doors a prompt from the phone comes through, after the filter chain and
+  before `deliver`. Not inside `deliver`, which also carries the idle check and a slip's answer —
+  neither of those is the person speaking, and their words have no business on a message they did
+  not send. Every prompt rather than once, because the daemon does not own the session's context: a
+  `/clear`, a compact it never saw, or a queued prompt lost to a restart each make "I already said
+  this" false, and each fails the same silent way. The cost is bounded by `prompts/orders.md`'s own
+  `limit` instead. An empty field adds **nothing** — `carry` hands back the identical string, so a
+  session nobody has given orders to cannot be told apart from one on a daemon without this feature.
 - **A picture reaches a session as a path, not as a paste.** `POST /sessions/{id}/image` keeps
   the bytes under `images/<sessionId>/` and answers with the path; `POST .../say` takes
   `images: [path]` and `deliver.with_images` appends them to the words, so the session sees the

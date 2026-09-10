@@ -29,11 +29,16 @@ struct SessionView: View {
     /// What the confirmation is about to do, in that control's own words.
     private var asking: Caution? { confirming?.caution(about: session.name) }
 
-    /// Four things you want on arriving, and they want different layouts: the briefing wants
-    /// a page to itself, the transcript wants to be pinned to its newest line, and the files and
-    /// the slips this session put on the phone are lists you scroll from the top.
+    /// What you want on arriving, and they want different layouts: the briefing wants a page to
+    /// itself, the transcript wants to be pinned to its newest line, and the files and the slips
+    /// this session put on the phone are lists you scroll from the top.
+    ///
+    /// Orders is last on purpose. The order here is the swipe order, so the pane you land on is
+    /// still the briefing and the pane you leave from is still the first — and standing orders are
+    /// the one thing here you set once and then stop looking at.
     enum Pane: String, CaseIterable {
-        case summary = "Summary", slips = "Slips", transcript = "Transcript", files = "Files"
+        case summary = "Summary", slips = "Slips", transcript = "Transcript", files = "Files",
+             orders = "Orders"
     }
 
     /// The session as the Mac last described it, not as it was when the page opened. A compact,
@@ -100,8 +105,8 @@ struct SessionView: View {
         .overlay(alignment: .bottom) {
             SessionFoot(model: model, session: session, recorder: recorder)
         }
-        // Named on arrival and then gone. The dots say where you are among four; they cannot say
-        // which four, and a pane you land on by accident is a pane you have to read to identify.
+        // Named on arrival and then gone. The dots say where you are among the panes; they cannot
+        // say which, and a pane you land on by accident is one you have to read to identify.
         .onChange(of: showing) { _, now in
             withAnimation(Motion.arriving) { landed = now }
             Task {
@@ -229,8 +234,8 @@ struct SessionView: View {
     ///
     /// Subtle on purpose and never in the way: it is not a control, it does not take the touch,
     /// and it leaves on its own after a second. A label that stayed would be the tab bar again
-    /// by another name — this exists only because a swipe can be accidental and the four dots
-    /// say how many panes there are without saying which one this is.
+    /// by another name — this exists only because a swipe can be accidental and the dots say
+    /// how many panes there are without saying which one this is.
     @ViewBuilder private var landing: some View {
         if let landed {
             Text(landed.rawValue.uppercased())
@@ -251,7 +256,7 @@ struct SessionView: View {
         }
     }
 
-    /// The four panes side by side, swiped between rather than chosen from a bar.
+    /// The panes side by side, swiped between rather than chosen from a bar.
     ///
     /// The bar is gone and nothing replaced it at the foot: it was a band of chrome across every
     /// screen to hold four words, and the four words are now four dots on a row the header was
@@ -266,6 +271,7 @@ struct SessionView: View {
             ArtifactsView(model: model, session: session).tag(Pane.slips)
             TranscriptView(model: model, session: session, earlier: $earlier).tag(Pane.transcript)
             FilesView(model: model, session: session).tag(Pane.files)
+            OrdersView(model: model, session: session, say: say).tag(Pane.orders)
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
         .animation(Motion.opening, value: showing)
