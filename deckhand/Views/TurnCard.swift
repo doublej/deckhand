@@ -12,6 +12,9 @@ struct TurnCard: View {
     /// markdown and is not becoming markdown — a mermaid fence is the one thing lifted out of the
     /// words, because it is the one whose contents are not the answer.
     @Environment(\.diagram) private var diagram
+    /// Closed until asked. Thinking is the longest thing in a turn and the least often wanted —
+    /// a transcript that opened every block by default would be a transcript nobody could skim.
+    @State private var thinking = false
 
     var body: some View {
         Card(spacing: Spacing.xxs) {
@@ -21,6 +24,9 @@ struct TurnCard: View {
                     .tracking(1)
                     .foregroundStyle(turn.isUser ? accent : Palette.textTertiary)
             }
+            // Above the words, which is where it happened: this is how it got to what it says
+            // next, the same argument that puts the tool trace above a message rather than under.
+            thought
             ForEach(Array(Fenced.parts(turn.text).enumerated()), id: \.offset) { _, part in
                 said(part)
             }
@@ -35,6 +41,58 @@ struct TurnCard: View {
                     .padding(.vertical, Spacing.extraSmall)
             }
         }
+    }
+
+    /// What it thought on the way here, behind one line you can press.
+    ///
+    /// A turn still in flight has thinking and no words yet, so this is also how a session reads
+    /// while it is working — nothing special is done for the live case, it simply arrives with
+    /// the page like everything else and the poll keeps it current.
+    @ViewBuilder private var thought: some View {
+        if !turn.thoughts.isEmpty {
+            Button { withAnimation(.snappy(duration: 0.2)) { thinking.toggle() } } label: {
+                HStack(spacing: Spacing.xxs) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                        .rotationEffect(.degrees(thinking ? 90 : 0))
+                    Text(count)
+                        .font(Typography.eyebrow)
+                        .tracking(1)
+                    Spacer(minLength: 0)
+                }
+                .foregroundStyle(Palette.textTertiary)
+                .frame(minHeight: 26)
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("thinking-toggle")
+            if thinking {
+                VStack(alignment: .leading, spacing: Spacing.extraSmall) {
+                    ForEach(Array(turn.thoughts.enumerated()), id: \.offset) { _, said in
+                        Text(said)
+                            .font(.system(size: 12))
+                            .italic()
+                            .foregroundStyle(Palette.textSecondary)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                // A rail down the side, in the quiet colour: the same shape that marks your own
+                // turns, so a block of italics inside a card still reads as set apart from it.
+                .padding(.leading, Spacing.extraSmall)
+                .overlay(alignment: .leading) {
+                    Capsule().fill(Palette.textTertiary.opacity(0.3)).frame(width: 2)
+                }
+                .padding(.bottom, Spacing.xxs)
+                .transition(.opacity)
+            }
+        }
+    }
+
+    /// Said as a count rather than "Thinking", because the number is the part that tells you
+    /// whether opening it is worth the scroll.
+    private var count: String {
+        turn.thoughts.count == 1 ? "THOUGHT" : "\(turn.thoughts.count) THOUGHTS"
     }
 
     /// One run of a turn: the words as they were written, or the picture a mermaid fence meant.

@@ -264,3 +264,57 @@ def test_reading_the_tail_still_means_the_tail(claude_home, monkeypatch):
                                               for n in range(6)])
     monkeypatch.setattr(transcripts, "transcript_path", lambda sid: Path("/does/not/matter"))
     assert [t.text for t in transcripts.read_turns("sid", 2)] == ["4", "5"]
+
+
+def test_thinking_rides_with_the_message_it_produced(tmp_path, monkeypatch):
+    """A thinking block belongs to the turn it led to, exactly as a tool call does — it is how
+    the session got to what it says next, not a message of its own."""
+    line = json.dumps({
+        "type": "assistant",
+        "timestamp": "t",
+        "message": {"content": [
+            {"type": "thinking", "thinking": "  weighing it up  ", "signature": "sig"},
+            {"type": "text", "text": "here is the answer"},
+        ]},
+    })
+    path = tmp_path / "s.jsonl"
+    path.write_text(line + "\n")
+    monkeypatch.setattr(transcripts, "transcript_path", lambda _: path)
+    turns, _ = transcripts.page_turns("s", 4)
+    assert len(turns) == 1
+    assert turns[0].text == "here is the answer"
+    # Stripped, because the model pads them and a leading blank line is a blank first row.
+    assert turns[0].thoughts == ["weighing it up"]
+
+
+def test_a_run_still_going_carries_what_it_has_thought_so_far(tmp_path, monkeypatch):
+    """This is the whole of how thinking arrives live: no push, no second route. A session
+    mid-turn has thoughts and no words, and the phone re-reads this page every few seconds."""
+    line = json.dumps({
+        "type": "assistant",
+        "timestamp": "t",
+        "message": {"content": [{"type": "thinking", "thinking": "still going", "signature": "s"}]},
+    })
+    path = tmp_path / "s.jsonl"
+    path.write_text(line + "\n")
+    monkeypatch.setattr(transcripts, "transcript_path", lambda _: path)
+    turns, _ = transcripts.page_turns("s", 4)
+    assert [t.thoughts for t in turns] == [["still going"]]
+    assert turns[-1].text == ""
+
+
+def test_redacted_thinking_is_not_an_empty_disclosure(tmp_path, monkeypatch):
+    """It carries an encrypted blob and no words, so a heading over it would promise nothing."""
+    line = json.dumps({
+        "type": "assistant",
+        "timestamp": "t",
+        "message": {"content": [
+            {"type": "redacted_thinking", "data": "AAAA"},
+            {"type": "text", "text": "done"},
+        ]},
+    })
+    path = tmp_path / "s.jsonl"
+    path.write_text(line + "\n")
+    monkeypatch.setattr(transcripts, "transcript_path", lambda _: path)
+    turns, _ = transcripts.page_turns("s", 4)
+    assert turns[0].thoughts == []

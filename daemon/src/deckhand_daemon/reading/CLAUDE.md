@@ -57,6 +57,16 @@ context.py      # the CLAUDE.md tree a session in a folder is loaded with, befor
 - **`updated_at` is the moment a session's status last changed, not a heartbeat.** Measured here:
   a session reporting `busy` with a 1553 s old stamp while it was mid-turn. So it is only the age
   of an *idle* session.
+- **Thinking rides with the turn it produced.** The transcript carries `thinking` blocks in the
+  same content list as `text` and `tool_use`, and they were dropped outright — 326 of them in one
+  session here. They are collected exactly as tool calls are and handed to the next message with
+  words, because that is what they are: how the session got to what it says next. They travel
+  with the turns rather than behind a second route, which is affordable (measured: median 548
+  characters, p90 1718, and a 25-turn page comes to 18 KB against tool results already capped at
+  4000 each) and is the whole of how thinking arrives **live** — a run still in flight is a turn
+  with thoughts and no words, and the phone re-reads the page every few seconds anyway.
+  `redacted_thinking` is deliberately skipped: it is an encrypted blob with no words in it, so
+  surfacing it would be a heading over nothing.
 - **The context tree is the other half of "why did it do that".** `context.py` answers what a
   session *starts* with, where everything else here answers what it has said — a rule three
   folders up never appears in a transcript and is shaping every answer all the same. It is

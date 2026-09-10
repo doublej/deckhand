@@ -56,6 +56,12 @@ class Turn:
     # What the session ran on the way to saying this. Attached to the message that follows
     # them, because that is where they read as "how it got here" rather than as noise.
     tools: list[Tool] = field(default_factory=list)
+    # What it thought on the way there, in order. Collected exactly as the tools are and for the
+    # same reason: thinking belongs to the message it produced, not to a message of its own.
+    # Measured on a real transcript — 326 blocks, median 548 characters, p90 1718 — which is why
+    # these travel with the turn rather than behind a second request. A page of them is tens of
+    # kilobytes against tool results already capped at four thousand characters each.
+    thoughts: list[str] = field(default_factory=list)
 
     def to_json(self) -> dict:
         return asdict(self)
@@ -228,6 +234,24 @@ def parse_line(raw: bytes) -> dict | None:
         return None
 
 
+def _thoughts_of(entry: dict) -> list[str]:
+    """Everything the session thought in one entry, in order.
+
+    `redacted_thinking` is deliberately not read: it carries no text a person could be shown,
+    only an encrypted blob, so surfacing it would be an empty disclosure with a heading on it.
+    """
+    content = entry.get("message", {}).get("content")
+    if entry.get("type") != "assistant" or not isinstance(content, list):
+        return []
+    return [
+        thought.strip()[:MAX_FULL]
+        for block in content
+        if isinstance(block, dict) and block.get("type") == "thinking"
+        and (thought := str(block.get("thinking") or ""))
+        and thought.strip()
+    ]
+
+
 def _scan(path: Path, window: int) -> list[Turn]:
     """Parse the conversation turns in the last `window` bytes, with what was run between them.
 
@@ -240,6 +264,7 @@ def _scan(path: Path, window: int) -> list[Turn]:
     """
     turns: list[Turn] = []
     ran: list[tuple[str, Tool]] = []
+    thought: list[str] = []
     answers: dict[str, tuple[str, bool]] = {}
     for raw in tail_lines(path, window):
         entry = parse_line(raw)
@@ -254,14 +279,20 @@ def _scan(path: Path, window: int) -> list[Turn]:
             continue
         answers.update(_answers(entry))
         ran.extend(_tools_of(entry))
+        thought.extend(_thoughts_of(entry))
         text = text_of(entry)
         if text is None:
             continue
         turns.append(Turn(role=entry["type"], text=text, timestamp=entry.get("timestamp", ""),
-                          tools=_settle(ran, answers)))
+                          tools=_settle(ran, answers), thoughts=thought))
         ran = []
-    if ran:
-        turns.append(Turn(role="assistant", text="", timestamp="", tools=_settle(ran, answers)))
+        thought = []
+    # A run still in flight carries whatever it has thought so far, which is the whole of how
+    # thinking arrives live: the phone re-reads this page every few seconds, and a session
+    # mid-turn has thoughts and no words yet.
+    if ran or thought:
+        turns.append(Turn(role="assistant", text="", timestamp="",
+                          tools=_settle(ran, answers), thoughts=thought))
     return turns
 
 

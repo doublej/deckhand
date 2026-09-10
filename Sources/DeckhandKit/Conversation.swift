@@ -11,12 +11,20 @@ public struct Turn: Codable, Hashable, Sendable {
     public let timestamp: String
     /// What the session ran on its way to saying this. Empty for anything you said.
     public var tools: [Tool] = []
+    /// What it thought on the way there, in order, and empty for anything you said. Carried with
+    /// the turn rather than fetched on demand: a page of them measured 18 KB against tool results
+    /// already capped at four thousand characters each, and travelling together is what makes a
+    /// run still in flight show its thinking as it happens — the phone re-reads this page every
+    /// few seconds and a session mid-turn has thoughts and no words yet.
+    public var thoughts: [String] = []
 
-    public init(role: String, text: String, timestamp: String, tools: [Tool] = []) {
+    public init(role: String, text: String, timestamp: String,
+                tools: [Tool] = [], thoughts: [String] = []) {
         self.role = role
         self.text = text
         self.timestamp = timestamp
         self.tools = tools
+        self.thoughts = thoughts
     }
 
     /// Tolerant of a daemon that predates tool traces. The phone and the Mac are updated
@@ -28,6 +36,7 @@ public struct Turn: Codable, Hashable, Sendable {
         text = try box.decode(String.self, forKey: .text)
         timestamp = try box.decode(String.self, forKey: .timestamp)
         tools = try box.decodeIfPresent([Tool].self, forKey: .tools) ?? []
+        thoughts = try box.decodeIfPresent([String].self, forKey: .thoughts) ?? []
     }
 
     public var isUser: Bool { role == "user" }
