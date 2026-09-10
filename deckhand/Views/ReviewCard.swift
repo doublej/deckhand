@@ -81,7 +81,7 @@ struct ReviewCard: View {
         VStack(alignment: .leading, spacing: Spacing.extraSmall) {
             staging
             if !compact {
-                attachments
+                attachments.padding(.horizontal, Self.gutter)
                 actions
                 // Under the row you press, and still the only thing that may be: it is a receipt
                 // rather than a fourth verb, so nothing below Send is both pressable and
@@ -104,35 +104,37 @@ struct ReviewCard: View {
         }
     }
 
-    /// Edit, in the top right of the box, drawn the way `SayRest` is drawn.
+    /// Edit, at the foot of the box on the right, drawn the way `SayRest` is drawn.
     ///
-    /// A glyph and a word with nothing behind them: a pill here would be a third pill on a card
-    /// that already has two, and this is the quietest of the three things you can do — it does
-    /// not send and it does not throw away, it just opens the words. 44pt of finger under 11pt
-    /// of ink, the same trade `SayRest` makes and for the same reason.
-    private var editCorner: some View {
-        HStack(spacing: 0) {
-            Spacer(minLength: 0)
-            Button { editing = true } label: {
-                Label("Edit", systemImage: "square.and.pencil")
-                    .font(Typography.hint)
-                    .foregroundStyle(accent)
-                    .lineLimit(1)
-                    .padding(.leading, Spacing.extraSmall)
-                    .frame(minHeight: Self.touch, alignment: .trailing)
-                    .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("edit-prompt")
+    /// A glyph and a word with nothing behind them: this is the quietest of the three things you
+    /// can do — it neither sends nor throws away, it just opens the words. 44pt of finger under
+    /// 11pt of ink, the trade `SayRest` makes. No trailing padding, so it ends on the column the
+    /// words above it end on.
+    private var openWords: some View {
+        Button { editing = true } label: {
+            Label("Edit", systemImage: "square.and.pencil")
+                .font(Typography.hint)
+                .foregroundStyle(accent)
+                .lineLimit(1)
+                .frame(minHeight: Self.touch, alignment: .trailing)
+                .contentShape(.rect)
         }
-        // The row exists only to hold it, so it may not add height of its own on top of the
-        // 44pt the control already stands on.
-        .frame(height: Self.touch)
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("edit-prompt")
     }
 
     /// The minimum a finger can be asked to hit. The same raw number `ReviewActions`, `SayRest`
     /// and `FilesView` write, and for the same reason: no spacing token means "a finger".
     private static let touch: CGFloat = 44
+
+    /// The one left edge everything on this card is set against.
+    ///
+    /// It is the box's own padding, so the prompt starts here — and anything that does not is a
+    /// second column. There were three: the words at 16, Discard at 8, and the two attach
+    /// controls flush against the box's outer edge, reading as three unrelated groups rather
+    /// than one card. Filled shapes are the exception and align by their own edge, which is
+    /// where Send's trailing edge comes from: ink lines up with text, a capsule with the box.
+    private static let gutter = Spacing.medium
 
     private var actions: some View {
         ReviewActions(route: target,
@@ -158,7 +160,6 @@ struct ReviewCard: View {
     /// dispose of it.
     private var staging: some View {
         VStack(alignment: .leading, spacing: Spacing.extraSmall) {
-            if !compact { editCorner }
             // The words and the way to say more of them, tight together: the second lands on the
             // line under the first, so the control belongs where the caret would be.
             VStack(alignment: .leading, spacing: Spacing.xxs) {
@@ -179,9 +180,18 @@ struct ReviewCard: View {
                 .frame(maxHeight: compact ? 96 : 260)
                 .fixedSize(horizontal: false, vertical: true)
                 .scrollBounceBehavior(.basedOnSize)
-                // It stood in the row at the foot until it read as a fourth thing you do *with*
-                // the prompt rather than the one thing that makes more of it.
-                if let more { SayRest(more: more, words: words) { draft = nil } }
+                // The box's own foot: add to the words on the left, open them on the right.
+                //
+                // Edit was a row of its own above the words, which put it in a 44pt band of
+                // nothing with the prompt pushed down under it. Down here it is on the line the
+                // words end on, opposite the control that continues them — the two read as the
+                // pair they are: the only things here that change the prompt rather than
+                // dispose of it.
+                HStack(spacing: 0) {
+                    if let more { SayRest(more: more, words: words) { draft = nil } }
+                    Spacer(minLength: Spacing.small)
+                    if !compact { openWords }
+                }
             }
             // Under the words, quiet, and in a deck column too: there is no size of card on which
             // it is acceptable to show somebody a word they did not say without saying so.
@@ -207,10 +217,8 @@ struct ReviewCard: View {
     /// A deck column stays at `Radius.medium`: 20pt corners on a 240pt tile eat the tile.
     private var corner: CGFloat { compact ? Radius.medium : Radius.extraLarge }
 
-    // The teal border that used to ring this is gone. It was drawn when the card was the only
-    // thing floating over the transcript and needed an edge to be one thing rather than words on
-    // words. `SessionFoot` now lays a blurred ground under the whole slot, so the card has a
-    // ground to sit on and the ring had become a second edge saying what the ground already said.
+    // The teal border that used to ring this is gone: `SessionFoot` lays a blurred ground under
+    // the whole slot now, so the ring had become a second edge saying what the ground says.
 
     /// A line under the words, quiet, and in a deck column too: there is no size of card on which
     /// it is acceptable to show somebody a word they did not say without saying so.

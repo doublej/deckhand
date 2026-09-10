@@ -88,7 +88,11 @@ struct ReviewActions: View {
             .font(.system(size: 14))
             .foregroundStyle(Palette.textTertiary)
             .lineLimit(1)
-            .padding(.horizontal, Spacing.extraSmall)
+            // The card's own gutter, not this row's: unfilled, this is ink, and ink on this
+            // card lines up with the prompt. `ReviewCard.gutter` says why. Send is filled and
+            // aligns by its own edge instead, which is why only the leading side is the wide one.
+            .padding(.leading, Spacing.medium)
+            .padding(.trailing, Spacing.extraSmall)
             .frame(minHeight: Self.touch)
             .contentShape(.capsule)
     }
