@@ -42,14 +42,26 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   `SessionFoot`'s `.onAppear` closes it, because "the card is on screen" is a fact only a view
   has. It is answered once per clip — the card comes back every time somebody swipes between
   panes, and only the first of those is the one the person waited for.
-- **A clip's breakdown is shown twice, drawn once, and never in a sheet.** `TimingsView` is the
-  drawing; the clip archive expands a row into it and the review card's round-trip line
-  (`ClipCost`) opens it *inside the card*, under Discard/Edit/Send. It was a sheet, which took the
-  card off the screen in order to explain the card. Exact milliseconds, because a bar with no
-  number cannot answer "which stage and by how much" — the bars behind the rows are only there so
-  the answer can be found without reading fourteen numbers first. That line is also the one thing
-  allowed to sit below Send: it is a receipt, not a fourth verb, and nothing both pressable and
-  consequential goes under the button that sends.
+- **A clip's breakdown is shown twice, drawn once, never in a sheet and no longer in the card.**
+  `TimingsView` is the drawing; the clip archive expands a row into it, and the review card's
+  round-trip line (`ClipCost`) pulls it down onto a slab of its own beneath the card. It has now
+  been in three places and each move was a different failure: a sheet took the card off the screen
+  in order to explain the card, and drawing the table *inside* the card doubled the height of the
+  thing you were about to send. The slab is on the page, not in the box. Exact milliseconds,
+  because a bar with no number cannot answer "which stage and by how much" — the bars behind the
+  rows are only there so the answer can be found without reading fourteen numbers first. That line
+  is still the one thing allowed to sit below Send: it is a receipt, not a fourth verb, and nothing
+  both pressable and consequential goes under the button that sends.
+- **The review card's buttons are not in the card, and that is the corner audit's real answer.**
+  A 44pt control is a 22pt corner; nested 16pt inside a card whose own corner was 12, the inner
+  curve is *wider* than the one containing it, which reads as fighting. Tightening the button to
+  `Radius.small` fixed the arithmetic and left a row of small hard rectangles at the foot of a soft
+  card. So the nesting went instead: Discard, Edit and Send sit below the container, on the page's
+  own ground, nested in nothing — free to be the capsule iOS makes a 44pt control, and the card
+  went up to `Radius.extraLarge` because nothing is concentric with it any more. The box now holds
+  the prompt and the things that add to it; everything you do *with* a finished prompt is under it.
+  A deck column is the exception and keeps all of it inside: 240 points has no room for a row of
+  capsules standing on their own.
 - **`Rewrites` is the before the card never had.** The note said *what* the chain swapped; it
   could not show the sentence those words replaced, so a swap that was wrong read as a mishearing
   and a mishearing read as a swap. utt's own cleanup and this Mac's filter chain are two rows
