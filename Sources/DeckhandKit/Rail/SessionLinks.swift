@@ -82,7 +82,7 @@ public struct LinkTrail: Identifiable, Hashable, Sendable {
         guard window > 0 else { return 0 }
         let age = now.timeIntervalSince(latest)
         guard age < window else { return 0 }
-        return pow(max(0, 1 - age / window), 1.6)
+        return pow(max(0, 1 - age / window), 1.25)
     }
 
     /// The pairs to draw, newest first, with each direction's traffic folded in.

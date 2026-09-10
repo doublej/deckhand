@@ -122,6 +122,10 @@ struct SessionListView: View {
                     nodes: nodes.mapValues { proxy[$0] }
                 )
             }
+            // Reclaims the page's own side margin for the threads to bow into. A background
+            // takes no room, so this costs the list nothing and is the difference between an
+            // arc between two sessions and a wire running down the edge of the screen.
+            .padding(.leading, -Self.gutter)
         }
     }
 

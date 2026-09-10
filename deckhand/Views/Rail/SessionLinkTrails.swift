@@ -71,8 +71,10 @@ struct SessionLinkTrails: View {
         let start = CGPoint(x: from.midX, y: from.midY)
         let end = CGPoint(x: into.midX, y: into.midY)
         // Never past the leading edge: a thread clipped off the side reads as a glitch.
-        let room = max(4, start.x - 3)
-        let reach = min(10 + abs(end.y - start.y) * 0.06 + CGFloat(lane) * 5, room)
+        let room = max(4, start.x - 4)
+        // Enough bow that two adjacent rows still get a lens rather than a bulge, growing
+        // with the distance until it runs out of margin.
+        let reach = min(14 + abs(end.y - start.y) * 0.05 + CGFloat(lane) * 5, room)
         return LinkArc(start: start, end: end, reach: reach)
     }
 }
