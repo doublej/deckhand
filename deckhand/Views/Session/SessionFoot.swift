@@ -53,8 +53,7 @@ struct SessionFoot: View {
             content: {
                 TalkMark(state: $0,
                          level: recorder.level,
-                         confirms: model.preferences.confirms,
-                         clips: true)
+                         confirms: model.preferences.confirms)
             }
         )
         .offset(y: Spacing.small)

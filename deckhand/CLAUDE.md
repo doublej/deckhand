@@ -112,6 +112,18 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   another answer into the session. So it says "Sending…", it refuses a second tap while one is
   in flight, and success closes the screen — a web slip closes itself with `deckhand.close()`,
   and anything the app draws in place of a page has to do that job itself.
+- **Two gestures on one control means one modifier, and the order inside it is the bug.** The
+  archive gesture went on as a second `ViewModifier` wrapping `TalkGesture`, which put its long
+  press *outside* the tap — and a long press applied outside a tap takes the touch, so
+  tap-to-talk stopped working entirely while hold-to-talk was fine. Every working pair in this
+  file is long press **inner**, tap **outer**; they are in one modifier now so the order cannot
+  drift apart again. The release of a long press also arrives as a tap a moment later, and in
+  tap-to-talk a tap starts recording — so letting go claims the touch, or reading your clips
+  would open the microphone behind them.
+- **The mark says nothing at rest, and that includes the archive.** A standing "· HOLD FOR CLIPS"
+  was tried as a footnote to the gesture nobody can discover by trying it, and it was on screen
+  every second the app was open to explain a thing you do once. It is gone. Nothing is labelled
+  at rest here — the rule has no exception, and the exception is what made it noise.
 - **The talk control is a mark and nothing else.** It floats over the pane rather than sitting
   under it, and the scrolling panes add `TalkMark.clearance` to the end of their content so
   nothing is stuck behind it. No bar, no ground, no resting label: a band of furniture across the

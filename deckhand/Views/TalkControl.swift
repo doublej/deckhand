@@ -47,8 +47,9 @@ struct TalkControl<Content: View>: View {
                                   press: press,
                                   tapped: tapped,
                                   toggled: toggled,
+                                  reach: reaching,
+                                  claim: claim,
                                   stop: stop))
-            .modifier(ReachGesture(mode: mode, reach: reaching))
     }
 
     /// Nil where nothing installs a second gesture at all, which is every surface that already
@@ -100,6 +101,11 @@ struct TalkControl<Content: View>: View {
         guard !isRecording, claimed() else { return }
         onArchive?()
     }
+
+    /// Claim this touch outright, so whatever it produces next is ignored. Used when a long
+    /// press has opened the archive: its release still arrives as a tap, and in tap-to-talk a
+    /// tap starts recording — so without this, reading your clips would open the microphone.
+    private func claim() { pressedAt = .now }
 
     /// True when this touch has not already been answered, and claims it when it has not.
     ///
@@ -165,7 +171,18 @@ private struct TalkGesture: ViewModifier {
     let press: () -> Void
     let tapped: () -> Void
     let toggled: () -> Void
+    /// The way to the clip archive, where this surface has one. Installed here rather than in a
+    /// modifier of its own, and that is the entire fix for tap-to-talk: as a second modifier it
+    /// wrapped this one, so its long press sat *outside* the tap and took the touch before the
+    /// tap could have it. Every working pair in this file is long press inner, tap outer.
+    let reach: (() -> Void)?
+    /// Take the touch, so the tap a long press ends with cannot also be acted on.
+    let claim: () -> Void
     let stop: () -> Void
+
+    /// Longer than the settle a recording needs, because in tap-to-talk the two are in a race
+    /// and the recording is the one a slow finger means far more often.
+    private static let longer = 0.45
 
     /// A press has to settle before it counts as talking. Without the wait, a finger dragged
     /// across the deck to scroll it starts recording instead of scrolling.
@@ -182,14 +199,31 @@ private struct TalkGesture: ViewModifier {
                 }
                 .onTapGesture { tapped() }
         case .hold:
-            content.gesture(held)
+            content
+                .gesture(held)
+                .onTapGesture { reach?() ?? tapped() }
         case .toggle where pressToStart:
             content
                 .onLongPressGesture(minimumDuration: Self.settle) { press() }
                 .onTapGesture { tapped() }
+        case .toggle where reach != nil:
+            reaching(content)
         case .toggle:
             content.onTapGesture { toggled() }
         }
+    }
+
+    /// Both gestures, in this order. The long press reads your clips; the tap talks. Its release
+    /// arrives as a tap a moment later, so the claim on letting go is what stops the archive
+    /// opening and the microphone opening on the same press.
+    private func reaching(_ content: Content) -> some View {
+        content
+            .onLongPressGesture(minimumDuration: Self.longer) { down in
+                if !down { claim() }
+            } perform: {
+                reach?()
+            }
+            .onTapGesture { toggled() }
     }
 
     private var held: some Gesture {
@@ -204,36 +238,5 @@ private struct TalkGesture: ViewModifier {
     private var pressed: some Gesture {
         LongPressGesture(minimumDuration: Self.settle)
             .onEnded { _ in press() }
-    }
-}
-
-/// The way to everything this phone has recorded, on the one press talking does not already use.
-///
-/// A longer hold is not available and never was: a hold of any length *is* the recording, from
-/// `TalkGesture.settle` onwards, so there is no duration left to give this. What is left is the
-/// other press — a tap where talking is a hold, a long press where talking is a tap — and it is
-/// the opposite one in each mode for that reason rather than as a preference.
-///
-/// Its own modifier so that `TalkGesture` is untouched by it, and applied only where there is
-/// somewhere to reach: a row in the sessions list already spends its tap on opening the session
-/// and its swipe on starting it, and a third meaning on that touch is the thing this app has
-/// repeatedly learned not to do. Nothing installs a gesture there at all.
-private struct ReachGesture: ViewModifier {
-    let mode: TalkMode
-    let reach: (() -> Void)?
-
-    /// Longer than the settle a recording needs, because in this mode the two are in a race and
-    /// the recording is the one a slow finger means far more often.
-    private static let longer = 0.45
-
-    @ViewBuilder func body(content: Content) -> some View {
-        switch (mode, reach) {
-        case (.hold, .some(let reach)):
-            content.onTapGesture(perform: reach)
-        case (.toggle, .some(let reach)):
-            content.onLongPressGesture(minimumDuration: Self.longer, perform: reach)
-        default:
-            content
-        }
     }
 }

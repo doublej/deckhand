@@ -20,7 +20,7 @@ struct TalkMark: View {
     var confirms = true
     /// Whether this mark can reach the clip archive. The one thing about this control that cannot
     /// be worked out by pressing it, so it is the one thing said at rest — see `reach`.
-    var clips = false
+
     /// The screen's accent, which is already the recording colour by the time this mark is open —
     /// the page it floats over sets it from the same recorder. It used to switch on its own,
     /// which is how the mark went orange on a page that stayed teal around it.
@@ -123,20 +123,9 @@ struct TalkMark: View {
     /// send and then does not is worse than one that says nothing.
     private var label: String? {
         if state.busy { return confirms ? "TRANSCRIBING" : "SENDING" }
-        guard isRecording else { return reach }
+        guard isRecording else { return nil }
         let what = confirms ? "PREVIEW" : "SEND"
         return state.mode == .hold ? "RELEASE TO \(what)" : "TAP TO \(what)"
     }
 
-    /// The one sentence at rest, and only where there is somewhere to go.
-    ///
-    /// Nothing is labelled at rest anywhere else in this app, and that stands: the mark says what
-    /// it is by being the mark. This is the exception because the gesture behind it is the press
-    /// this mode does *not* use for talking, and that is the only thing here nobody can discover
-    /// by trying it. Written as an aside — the dot in front of it — rather than as an instruction,
-    /// because the mark is still the button and this is a footnote to it.
-    private var reach: String? {
-        guard clips else { return nil }
-        return state.mode == .hold ? "· TAP FOR CLIPS" : "· HOLD FOR CLIPS"
-    }
 }
