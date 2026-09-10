@@ -296,6 +296,18 @@ unauthenticated route; everything else needs the `x-deckhand-token` header, and 
   binary). `UIContextMenuSystem`, which would be the supported answer, is iOS 26. So the app's own
   surface is the answer: `ArtifactPage.watcher` reports *that* there is a selection and
   `SayOnPage` appears under the page. Reconsider when the floor reaches iOS 26.
+- **A two-letter name fails the lint, and `at` is the one everybody reaches for.** SwiftLint's
+  `identifier_name` wants three characters, and a point on a picture wants to be called `at` —
+  it has now been written and renamed three times (`Pin.at` → `Pin.spot`, and twice in
+  `Marking`). The two spaces need two words anyway: `spot` is a place in the picture's own
+  pixels, `onScreen` is where that place currently is in a view. Never the same word for both.
+- **SwiftUI state must not be set from inside `updateUIView`.** It runs inside the update pass and
+  the change is dropped — silently, with no warning in the console. `PictureScroll` reports a
+  marker's position to the surface above it, and the first report always worked while every later
+  one vanished: dropping a pin also mutates a binding, which buys a second update pass that picks
+  the change up, so only a path that happened to mutate something else appeared to work. Report
+  from a gesture or a delegate callback, or defer to the next tick — and where a pushed value
+  identifies *what* it describes, the reader can ignore a stale one rather than draw it.
 - **An artifact is a "slip" to the person holding the phone.** The tab says SLIPS, the row says
   "1 of 3 slips waiting", and the message a session gets back says "Answered the slip …". The
   folder (`.deckhand/artifacts/`), the endpoints (`/sessions/{id}/artifacts`) and `artifacts.py`
