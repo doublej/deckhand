@@ -125,9 +125,16 @@ the words carry, so it fails and says why instead. The receipt names the route t
 
 - **The keyboard route.** `it2 session send` types the words into the session's pane and
   presses return, so they arrive as a prompt from the person at the machine — which is what
-  they are. Three bursts, not one: ctrl-U (a half-typed line in the prompt is not part of what
-  was said), the words, then return alone — a return at the tail of one fast paste is what
-  leaves a message staged in the box instead of sent. It cannot be confirmed: a staged message
+  they are. Two bursts: ctrl-U with the words (a half-typed line in the prompt is not part of
+  what was said), then the return. **Both keys are CSI-u escape sequences** — `\x1b[117;5u`
+  and `\x1b[13u` — rather than the bare bytes they stand for, and that spelling is why a long
+  prompt submits at all. Claude Code's input tokenizer splits a control byte out as its own
+  keypress only when the whole read is under 64 bytes; in a longer read it is folded into the
+  surrounding text run. The words and the return are two writes, but a session slow to drain
+  its tty takes both in one read — measured against an inert pane, a reader stalled for six
+  seconds got a single 122-byte read holding the words *and* the return — and at that size the
+  return is typed rather than pressed, which is a prompt left sitting in the box. An escape
+  sequence is tokenised out of a read of any size. It still cannot be confirmed: a staged message
   and a sent one look identical to `it2 session read`, and a busy session queues the words for
   as long as its turn lasts. The receipt says they were typed, which is all that is known.
   One hazard: if that pane happens to be showing a permission prompt, dictated words go to the
