@@ -92,6 +92,7 @@ struct FilesView: View {
             .padding(.top, Spacing.extraSmall)
             .padding(.bottom, Spacing.extraLarge)
         }
+        .fadingEdges()
         // Room at the end for the bar that floats over this.
         .contentMargins(.bottom, TalkMark.clearance, for: .scrollContent)
     }

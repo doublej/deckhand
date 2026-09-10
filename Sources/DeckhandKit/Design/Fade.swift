@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 /// How present a session looks on the rail, as a function of how long it has been quiet.
 ///
@@ -48,4 +49,61 @@ public extension Session {
     func contrast(asOf now: Date = Date()) -> Double {
         isBusy ? 1 : Fade.contrast(idleFor: now.timeIntervalSince(lastActive))
     }
+}
+
+/// The soft edge on a scroll view, drawn only where there is something past it.
+///
+/// The seam was a mask on the container holding the panes, so both edges were always soft
+/// whatever was in them. On a pane whose content fits, that is a gradient laid over the first
+/// and last rows for no reason — it dims things sitting exactly where they belong and reads as
+/// a rendering fault rather than as depth. A fade means *there is more this way*, so it may
+/// only be drawn when there is.
+///
+/// It belongs to the scroll view rather than to whatever contains one: only the scroll view
+/// knows its own content height, and a container holding four of them cannot answer for the one
+/// on screen. `onScrollGeometryChange` is the whole mechanism and it is an iOS 18 API, which is
+/// this app's floor.
+///
+/// The top is the deeper of the two, as it was on the container: what runs under the header
+/// needs more room to disappear into than what runs off the foot.
+public struct FadingEdges: ViewModifier {
+    /// Whether there is content above the top edge, and below the bottom one.
+    private struct Past: Equatable {
+        var above = false
+        var below = false
+    }
+
+    @State private var past = Past()
+
+    public init() {}
+
+    public func body(content: Content) -> some View {
+        content
+            .onScrollGeometryChange(for: Past.self) { geometry in
+                let top = geometry.contentOffset.y + geometry.contentInsets.top
+                let bottom = geometry.contentSize.height - geometry.contentOffset.y
+                    - geometry.containerSize.height + geometry.contentInsets.bottom
+                // A point of slack at each end: a scroll view at rest lands a fraction past
+                // its own edge often enough that an exact test flickers the gradient on and
+                // off while nothing is moving.
+                return Past(above: top > 1, below: bottom > 1)
+            } action: { _, now in past = now }
+            .mask(alignment: .top) {
+                VStack(spacing: 0) {
+                    LinearGradient(colors: [past.above ? .clear : .black, .black],
+                                   startPoint: .top, endPoint: .bottom)
+                        .frame(height: 20)
+                    Rectangle().fill(.black)
+                    LinearGradient(colors: [.black, past.below ? .clear : .black],
+                                   startPoint: .top, endPoint: .bottom)
+                        .frame(height: 12)
+                }
+            }
+            .animation(Motion.fading, value: past)
+    }
+}
+
+public extension View {
+    /// Soften this scroll view's top and bottom, each only while there is content past it.
+    func fadingEdges() -> some View { modifier(FadingEdges()) }
 }

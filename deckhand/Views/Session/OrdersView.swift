@@ -45,6 +45,7 @@ struct OrdersView: View {
             .padding(.bottom, Spacing.extraLarge)
         }
         .frame(maxHeight: .infinity)
+        .fadingEdges()
         // Room at the end for the mark that floats over this.
         .contentMargins(.bottom, TalkMark.clearance, for: .scrollContent)
         .task { await load() }

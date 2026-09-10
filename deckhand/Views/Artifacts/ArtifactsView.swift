@@ -94,6 +94,7 @@ struct ArtifactsView: View {
             .padding(.top, mixed ? Spacing.extraSmall : Spacing.medium)
             .padding(.bottom, Spacing.extraLarge)
         }
+        .fadingEdges()
         // Room at the end for the mark that floats over this.
         .contentMargins(.bottom, TalkMark.clearance, for: .scrollContent)
     }

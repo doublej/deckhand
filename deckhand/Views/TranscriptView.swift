@@ -56,6 +56,7 @@ struct TranscriptView: View {
                 .padding(.horizontal, Spacing.medium)
                 .padding(.bottom, Spacing.medium)
             }
+            .fadingEdges()
             // Room at the end for the bar that floats over this: without it the newest line
             // lands behind the button, which is exactly the line you came to read.
             .contentMargins(.bottom, TalkMark.clearance, for: .scrollContent)

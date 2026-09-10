@@ -86,7 +86,6 @@ struct SessionView: View {
                 // now that the panes reach the physical bottom the same hard cut happens down
                 // there against the rounded corner. A few points of fade at each end is what
                 // makes both read as "there is more of this" instead.
-                .mask(edges)
                 // The way out, and the one strip of this page a sideways drag does not page.
                 // On the panes rather than on the stack, so it is over the thing it has to beat
                 // and clear of the mark at the foot. See `back`.
@@ -181,23 +180,6 @@ struct SessionView: View {
                 try? await Task.sleep(for: .seconds(5))
             }
             await written
-        }
-    }
-
-    /// The mask both panes are drawn through: clear at the very top and bottom, solid between.
-    ///
-    /// Fixed heights rather than a fraction of the pane, because this is about the seam and the
-    /// seam is the same size whatever the pane's height is. The top is the deeper of the two —
-    /// that edge meets the header, where a half-cut line of text has something solid to be cut
-    /// against and looks broken; the bottom runs out into the rounded corner, which does most of
-    /// the work already.
-    private var edges: some View {
-        VStack(spacing: 0) {
-            LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
-                .frame(height: 20)
-            Rectangle().fill(.black)
-            LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
-                .frame(height: 12)
         }
     }
 

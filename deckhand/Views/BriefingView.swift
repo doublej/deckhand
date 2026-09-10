@@ -39,6 +39,7 @@ struct BriefingView: View {
             .padding(.bottom, Spacing.extraLarge)
         }
         .frame(maxHeight: .infinity)
+        .fadingEdges()
         // Room at the end for the bar that floats over this.
         .contentMargins(.bottom, TalkMark.clearance, for: .scrollContent)
         // The listing and not `session.waitingPages`, which is a number: a link has to know
