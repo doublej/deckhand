@@ -50,7 +50,7 @@ final class AppModel {
     var tasks: [String: [Ask]] = [:]
     /// The files each session touched that you could open. Fetched when you ask for them.
     var assets: [String: [Asset]] = [:]
-    /// The pages each session has put on this phone, and whether each has been answered.
+    /// The slips each session has put on this phone, and whether each has been answered.
     var artifacts: [String: [Artifact]] = [:]
     /// What you have said to each session that it has not picked up yet. The session's own
     /// inbox, read off its transcript — not a guess made from the shape of the conversation.
