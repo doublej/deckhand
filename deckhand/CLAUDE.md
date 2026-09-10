@@ -62,11 +62,17 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   the prompt and the things that add to it; everything you do *with* a finished prompt is under it.
   A deck column is the exception and keeps all of it inside: 240 points has no room for a row of
   capsules standing on their own.
-- **`Rewrites` is the before the card never had.** The note said *what* the chain swapped; it
-  could not show the sentence those words replaced, so a swap that was wrong read as a mishearing
-  and a mishearing read as a swap. utt's own cleanup and this Mac's filter chain are two rows
-  rather than one, because the answer to each is in a different app. utt's half is nil on every
-  Mac today and draws nothing — the gate is `UploadReceipt.uttRewrote`, which asks utt's `stages`
+- **`Rewrites` is the before the card never had, drawn as a diff over the after.** The note said
+  *what* the chain swapped; it could not show the sentence those words replaced, so a swap that
+  was wrong read as a mishearing and a mishearing read as a swap. It was a whole before-block,
+  which asked somebody to read two paragraphs and spot the difference — it is now one paragraph
+  with the gone words struck through and the new ones in the card's own ink, off `diffWords`
+  (`DeckhandKit/Clips/TextDiff.swift`, where `just test` can prove the ordering). The far end is
+  the *prepared* words, never the card's draft: `Filtered` was built about those, so an edit typed
+  by hand would otherwise be attributed to a filter that never saw it. utt's own cleanup and this
+  Mac's filter chain are two rows rather than one, because the answer to each is in a different
+  app. utt's half is nil on every Mac today and draws nothing — the gate is
+  `UploadReceipt.uttRewrote`, which asks utt's `stages`
   and never `raw != text`, exactly as utt's own `ProcessedTranscript.changed` does.
 - **There is no longer hold to give a second gesture.** A hold of any length already *is* the
   recording, from `TalkGesture.settle` onwards, so the other three things get the press each mode

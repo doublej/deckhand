@@ -228,7 +228,7 @@ struct ReviewCard: View {
             if let note = filtered?.note { aside(note, in: Palette.textTertiary) }
             // What the note cannot say: the sentence those words replaced. Without it a swap
             // that was wrong reads as a mishearing, and a mishearing as a swap.
-            if let filtered, !compact { Rewrites(filtered: filtered) }
+            if let filtered, !compact { Rewrites(filtered: filtered, prepared: text) }
             // The colour is the whole of the difference, as everywhere else in this app: the words
             // alone in the state's own colour, never a label inside a capsule that reads as
             // something you press — and there is a real button an inch below this one.
