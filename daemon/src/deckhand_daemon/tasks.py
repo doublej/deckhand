@@ -109,33 +109,32 @@ def drop(session_id: str, task_id: str) -> dict | None:
     return None
 
 
-def server(session_id: str):
+def server(session_id: str, described: dict[str, str]):
     """The three tools, bound to one session's list. None of them can reach another session's.
 
     In-process, so a tool call is a function call: the list the phone reads a moment later is
     the same file this wrote, with no daemon round trip in between.
+
+    `described` is what the model is told each tool does, handed in by whoever is running rather
+    than written here: a tool description is prompt, and every prompt in this daemon lives in
+    `prompts/`. These three come from the briefing agent's own file, because that agent is the
+    only thing that has ever called them.
     """
     from claude_agent_sdk import create_sdk_mcp_server, tool
 
-    @tool("add_task", "Add an ask the person has made that is not in the list yet. "
-                      "Their words, shortened to a few. Never a step you decided to take.",
-          {"text": str})
+    @tool("add_task", described["add_task"], {"text": str})
     async def add_task(args: dict) -> dict:
         task = add(session_id, args.get("text", ""))
         return _said(f"{task['id']} [{_box(task['state'])}] {task['text']}")
 
-    @tool("set_task_state", "Move an ask along: todo (nothing done yet), doing (started, "
-                            "unfinished), done (finished, nothing about it still open).",
-          {"id": str, "state": str})
+    @tool("set_task_state", described["set_task_state"], {"id": str, "state": str})
     async def set_task_state(args: dict) -> dict:
         task = set_state(session_id, args.get("id", ""), args.get("state", ""))
         if task is None:
             return _said(f"no task {args.get('id')!r} in this list — check the ids you were given")
         return _said(f"{task['id']} is now {task['state']}")
 
-    @tool("drop_task", "Remove an ask for good. Only when the person withdrew it or it was "
-                       "never theirs. An ask that is finished is done, not dropped.",
-          {"id": str, "reason": str})
+    @tool("drop_task", described["drop_task"], {"id": str, "reason": str})
     async def drop_task(args: dict) -> dict:
         reason = " ".join(str(args.get("reason", "")).split())
         if not reason:

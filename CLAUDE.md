@@ -24,7 +24,7 @@ controlled from its own page inside utt.
   utt's HTTP API is switched on. `plugins/deckhand.json` is the manifest, rewritten at every
   start-up; `deckhand.values.json` carries what the person set on the page, and
   `deckhand.action.json` which button they pressed.
-- Summaries: the Claude Agent SDK, sonnet at low effort, with the three task tools and nothing
+- Summaries: the Claude Agent SDK, Haiku 4.5 with thinking off, with the three task tools and nothing
   else. One run writes both the briefing and the person's list. The daemon owns the schedule:
   briefings are files, one worker walks the sessions, and the phone only ever reads. `/summary`
   reports what it spent; a run bills a few hundred tokens against fifty thousand read from
@@ -74,6 +74,11 @@ Sources/DeckhandKit/Design/
   Fade.swift      # how present a rail row is, given how long its session has been quiet
   Chrome.swift    # Card, SettingsGroup, SettingRow, PageHeader
 daemon/src/deckhand_daemon/
+  prompts/        # every prompt this daemon sends a model, and nothing else
+    __init__.py     # frontmatter and body, out of one markdown file
+    briefing.md     # the briefing agent: what it writes, its model, its three tools
+    crafting.md     # the prompt-crafting filter's agent
+    idle-check.md   # what a session that has gone quiet is asked
   sessions.py     # which Claude sessions are alive, and their iTerm pane
   reading/        # everything that reads a transcript and nothing that writes one
     transcripts.py  # the last rounds, and the activity blob a summary is written from
@@ -386,6 +391,16 @@ unauthenticated route; everything else needs the `x-deckhand-token` header, and 
   sentence into the attribution field produced 40-odd revisions in four seconds. Anything done
   on a values change has to be cheap, or debounced. Reading a value and assigning it is cheap;
   restarting something would not be.
+- **A prompt is a file, not a Python string.** Everything this daemon says to a model lives in
+  `daemon/src/deckhand_daemon/prompts/` as one markdown file per agent: YAML frontmatter for the
+  settings its run needs — model, effort, turns, timeout, and the tool descriptions, each with the
+  reason it is what it is — and the body is the prompt verbatim, in the shape Claude Code writes an
+  agent definition in. The modules keep their own `MODEL` and `TIMEOUT`, read from the file at
+  import, so nothing downstream knows a file is involved and an edit takes a restart. Two things
+  follow. Placeholders are filled by plain replacement, never `str.format`: the body is a file
+  somebody edits, and a literal brace in a pasted JSON example would otherwise raise on every
+  prompt built from it forever. And a missing or unclosed fence raises at import rather than
+  starting a daemon that writes no briefings.
 - Anything the summariser or the transcriber needs must be reachable without a person present.
   The summariser passes `setting_sources=[]` for the same reason it is fast: loading the user
   settings starts every configured MCP server, which cost more than a minute.

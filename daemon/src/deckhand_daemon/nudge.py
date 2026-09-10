@@ -6,7 +6,7 @@ Nobody is watching every pane, so the Mac watches instead and puts the question 
 itself — which is the only party that knows whether the remaining asks are unfinished, already
 done under another name, or ones it decided against.
 
-Deliberately not a task runner. It asks once per state of the list and takes any answer, because
+The message itself is `prompts/idle-check.md`. Deliberately not a task runner. It asks once per state of the list and takes any answer, because
 the wrong failure here is a daemon that will not let a session stop working.
 """
 
@@ -16,7 +16,7 @@ import asyncio
 import os
 import time
 
-from . import deliver, sessions, tasks
+from . import deliver, prompts, sessions, tasks
 from .log import log
 
 # Between sweeps. Nothing here is urgent — a session that has stopped stays stopped.
@@ -32,6 +32,8 @@ AGAIN = 30 * 60
 # it was asked. All three are this process's, not the file's: a restarted daemon asks again.
 _quiet_since: dict[str, float] = {}
 _asked_about: dict[str, tuple[float, str]] = {}
+
+IDLE_CHECK = prompts.load("idle-check")
 
 
 def enabled() -> bool:
@@ -79,7 +81,8 @@ def _consider(session: sessions.Session, now: float) -> bool:
     # has answered and moved on, and a changing list is one churning through a job it cannot end.
     if standing == about or now - when < AGAIN:
         return False
-    route, error = deliver.deliver(session, _question(open_asks), route="socket")
+    route, error = deliver.deliver(
+        session, _question(open_asks), route=IDLE_CHECK.settings["route"])
     if error:
         log.warning("idle check could not reach %s: %s", session.name, error)
         return False
@@ -96,10 +99,4 @@ def _fingerprint(open_asks: list[dict]) -> str:
 def _question(open_asks: list[dict]) -> str:
     """The whole message. Says what it is, so nobody reads it as the person typing."""
     listed = "; ".join(f"{task['id']} [{task['state']}] {task['text']}" for task in open_asks)
-    return (
-        "Deckhand idle check — this is the Mac's daemon, not JJ. You have stopped with asks still "
-        f"open on JJ's list for this session: {listed}. Either finish them, or say in your reply "
-        "why they should not be handled — already done under another name, superseded, waiting on "
-        "him, or you decided against it. Your answer is what corrects the list, so an explanation "
-        "closes an ask as surely as doing it does. Nothing to do if you have already answered this."
-    )
+    return IDLE_CHECK.filled(listed=listed)
