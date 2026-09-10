@@ -16,12 +16,26 @@ struct SessionRow: View {
     let asks: [Ask]
     /// Whether this is the row the microphone is open for, and whether the clip is on its way.
     let talk: TalkState
+    /// Favourites are no longer a section of their own — a star would split a project in two —
+    /// so the mark that used to be the section header is now on the row itself.
+    let starred: Bool
+    /// Where this row sits in its project's block. Only the ends of a block are rounded: four
+    /// rows that each round their own four corners read as four cards that happen to touch,
+    /// which is exactly what grouping them was meant to stop.
+    let first: Bool
+    let last: Bool
     /// The rail's accent, which is utt orange while any row on it is listening.
     @Environment(\.accent) private var accent
 
     var body: some View {
         HStack(alignment: .top, spacing: Spacing.small) {
             GlyphTile(DotGlyph.forName(session.name), size: 32, prominent: current || talk.isRecording)
+                // Where a thread to this session starts and ends. On the tile rather than the
+                // row, so the light comes out of the session's own face and no arithmetic
+                // about padding is needed anywhere.
+                .anchorPreference(key: SessionNodes.self, value: .bounds) {
+                    [session.sessionId: $0]
+                }
             VStack(alignment: .leading, spacing: Spacing.xxs) {
                 title
                 // The row is worth its extra height only when there is something in it; a
@@ -48,17 +62,13 @@ struct SessionRow: View {
         }
         .padding(Spacing.small)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: Radius.medium, style: .continuous)
-                .fill(Color.primary.opacity(current ? 0.11 : 0.045))
-        )
+        .background(slab.fill(Color.primary.opacity(current ? 0.11 : 0.045)))
         // The one row that is listening says so in the language the rest of the app uses for
         // it: utt's orange, around the row rather than through it, so the words stay readable
         // while you are speaking about them.
         .overlay {
             if talk.isRecording || talk.busy {
-                RoundedRectangle(cornerRadius: Radius.medium, style: .continuous)
-                    .strokeBorder(Palette.recording, lineWidth: 1.5)
+                slab.strokeBorder(Palette.recording, lineWidth: 1.5)
             }
         }
         .contentShape(.rect)
@@ -73,6 +83,18 @@ struct SessionRow: View {
         // stopped to ask you something this morning is the row you most need to see at six.
         .opacity(talk.isRecording || talk.busy || current || session.waitingPages > 0
                  ? 1 : session.contrast())
+    }
+
+    /// The ground this row sits on, and the border it takes while it is listening — one shape,
+    /// so the two can never round differently. Square where the block continues.
+    private var slab: UnevenRoundedRectangle {
+        UnevenRoundedRectangle(
+            topLeadingRadius: first ? Radius.medium : 0,
+            bottomLeadingRadius: last ? Radius.medium : 0,
+            bottomTrailingRadius: last ? Radius.medium : 0,
+            topTrailingRadius: first ? Radius.medium : 0,
+            style: .continuous
+        )
     }
 
     /// How far the two things you are in the middle of with this session have got: what you asked
@@ -142,6 +164,12 @@ struct SessionRow: View {
                 .foregroundStyle(Palette.textPrimary)
                 .lineLimit(1)
             Spacer(minLength: Spacing.extraSmall)
+            if starred {
+                Image(systemName: "star.fill")
+                    .font(.system(size: 8))
+                    .foregroundStyle(accent)
+                    .accessibilityLabel("Starred")
+            }
             StateWord(talk.isRecording ? .rec : talk.busy ? .wait : session.isBusy ? .busy : .idle)
         }
     }

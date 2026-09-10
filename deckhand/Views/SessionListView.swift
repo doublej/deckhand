@@ -38,7 +38,7 @@ struct SessionListView: View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 0) {
                 groups
-                foot
+                RailFoot(model: model, showSettings: $showSettings, showProjects: $showProjects)
             }
             .padding(.horizontal, Self.gutter)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -70,6 +70,7 @@ struct SessionListView: View {
         .task {
             while !Task.isCancelled {
                 await model.refreshSessions()
+                await model.refreshLinks()
                 try? await Task.sleep(for: .seconds(4))
             }
         }
@@ -91,28 +92,41 @@ struct SessionListView: View {
         }
     }
 
-    /// What the pill cannot carry: the reason. Nothing at all when the Mac is simply there.
-    private var reason: String? {
-        switch model.connection {
-        case .connected(let iterm): iterm == "ok" ? nil : iterm
-        default: model.status ?? model.connection.label
-        }
-    }
-
     /// A List rather than a stack, only so a row can still be swiped to star or hide.
+    ///
+    /// Sessions messaging each other are drawn *behind* it, off the rows' own anchors, so the
+    /// picture follows the list as it scrolls and a session that scrolls away simply stops
+    /// having a thread. Nothing here knows a row height or an offset.
     private var groups: some View {
         List {
             if model.visibleSessions.isEmpty { empty.plainRow() }
-            group("Favourites", model.visibleSessions.filter { model.preferences.isFavorite($0.name) })
-            group("Sessions", model.visibleSessions.filter { !model.preferences.isFavorite($0.name) })
+            ForEach(model.projects) { block($0) }
         }
         .listStyle(.plain)
-        .listRowSpacing(Spacing.extraSmall)
+        // A hairline, so the sessions of one project read as one slab. What separates two
+        // projects is the header between them, not a gap between their rows.
+        .listRowSpacing(1)
         .listSectionSeparator(.hidden)
         .scrollContentBackground(.hidden)
         .scrollIndicators(.hidden)
         .environment(\.defaultMinListRowHeight, 1)
-        .refreshable { await model.refreshSessions() }
+        .refreshable {
+            await model.refreshSessions()
+            await model.refreshLinks()
+        }
+        .backgroundPreferenceValue(SessionNodes.self) { nodes in
+            GeometryReader { proxy in
+                SessionLinkTrails(
+                    trails: model.trails,
+                    window: model.preferences.linkWindow,
+                    nodes: nodes.mapValues { proxy[$0] }
+                )
+            }
+            // Reclaims the page's own side margin for the threads to bow into. A background
+            // takes no room, so this costs the list nothing and is the difference between an
+            // arc between two sessions and a wire running down the edge of the screen.
+            .padding(.leading, -Self.gutter)
+        }
     }
 
     /// Says which of the four empty states this is, rather than implying the Mac is idle.
@@ -135,25 +149,23 @@ struct SessionListView: View {
         }
     }
 
-    @ViewBuilder private func group(_ title: String, _ sessions: [Session]) -> some View {
-        if !sessions.isEmpty {
-            Section {
-                ForEach(sessions) { row($0).plainRow() }
-            } header: {
-                Text(title.uppercased())
-                    .font(Typography.groupLabel)
-                    .tracking(0.6)
-                    .foregroundStyle(Palette.textTertiary)
-                    .padding(.horizontal, Spacing.small)
-                    .padding(.bottom, Spacing.extraSmall)
+    /// One project as a block: the folder and where it sits said once above it, then its
+    /// sessions stuck together as a single slab with hairline seams.
+    private func block(_ project: ProjectGroup) -> some View {
+        Section {
+            ForEach(Array(project.sessions.enumerated()), id: \.element.id) { index, session in
+                row(session, first: index == 0, last: index == project.sessions.count - 1)
+                    .plainRow()
             }
+        } header: {
+            ProjectHeader(project: project)
         }
     }
 
     /// Tap a row to open it, hold one to talk to it without opening it at all — which is the
     /// whole point of a list of six sessions: answering the one that needs a word is a press,
     /// not a page. What it heard appears under the row it was said to.
-    private func row(_ session: Session) -> some View {
+    private func row(_ session: Session, first: Bool, last: Bool) -> some View {
         let hidden = model.preferences.isHidden(session.name)
         return VStack(spacing: Spacing.xxs) {
             TalkControl(
@@ -164,7 +176,7 @@ struct SessionListView: View {
                 onTap: { chosen = session },
                 onStart: { startTalking(to: session) },
                 onClip: { await heard($0, for: session) },
-                content: { open(session, $0) }
+                content: { open(session, $0, first: first, last: last) }
             )
             review(for: session)
         }
@@ -185,13 +197,16 @@ struct SessionListView: View {
     /// The row, and every tap on it. Deliberately not a `Button`: a button takes the touch
     /// before the press that starts talking ever sees it. What a tap means is the talk
     /// control's to say — open this session, or send what it just heard.
-    private func open(_ session: Session, _ talk: TalkState) -> some View {
+    private func open(_ session: Session, _ talk: TalkState, first: Bool, last: Bool) -> some View {
         SessionRow(
             session: session,
             current: model.current == session.sessionId,
             headline: model.headlines[session.sessionId],
             asks: model.tasks[session.sessionId] ?? [],
-            talk: talk
+            talk: talk,
+            starred: model.preferences.isFavorite(session.name),
+            first: first,
+            last: last
         )
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
@@ -237,40 +252,6 @@ struct SessionListView: View {
             model.setHidden(session, !hidden)
         }
         .tint(Palette.lcdGround)
-    }
-
-    /// The one thin line on the page, and now the only chrome on it: the mark, whatever is
-    /// wrong, the daemon's state, and the two places you can go. It was two lines, one at each
-    /// end, and the top one spent a band of the screen saying what this one already says.
-    private var foot: some View {
-        HStack(spacing: Spacing.small) {
-            Wordmark()
-            if let reason {
-                Text(reason)
-                    .font(Typography.hint)
-                    .foregroundStyle(Palette.textTertiary)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: Spacing.extraSmall)
-            // Only when there is nothing wrong. One line holds one of the two: what the Mac is
-            // spending while it is fine, or what is broken about it — and the reason is a
-            // sentence, so it is the thing that would be squeezed to an ellipsis by these.
-            if reason == nil { Statusline(model: model) }
-            StateWord(model.connection.state)
-            Button("New session", systemImage: "plus") { showProjects = true }
-                .accessibilityIdentifier("new-session")
-            Button("Hidden sessions", systemImage: model.showsHidden ? "eye" : "eye.slash") {
-                model.showsHidden.toggle()
-            }
-            Button("Settings", systemImage: "gearshape") { showSettings = true }
-        }
-        .labelStyle(.iconOnly)
-        .font(.system(size: 12, weight: .semibold))
-        .foregroundStyle(Palette.textTertiary)
-        .padding(.horizontal, Spacing.small)
-        // Even, so the mark sits in the middle of the band rather than at the foot of it. The
-        // home indicator is the safe area's job now, not this padding's.
-        .padding(.vertical, Spacing.small)
     }
 
 }

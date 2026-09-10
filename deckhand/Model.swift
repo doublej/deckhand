@@ -40,6 +40,10 @@ final class AppModel {
     var settings: ServerSettings
     var preferences: Preferences
     var sessions: [Session] = []
+    /// Sessions that have been messaging each other lately, already folded into one thread per
+    /// pair. Empty is the normal state and means the rail draws nothing at all. The rest of the
+    /// rail's own logic is in `Views/Rail/Linking.swift`.
+    var trails: [LinkTrail] = []
     var turns: [Turn] = []
     var deckTurns: [String: [Turn]] = [:]
     var summaries: [String: String] = [:]

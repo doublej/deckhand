@@ -76,6 +76,12 @@ Full glossary: ./GLOSSARY.md
   of the person's authority. That wrapper is a genuine control against one agent laundering
   permissions through another — it is not something to defeat. `keyboard` therefore never silently
   falls back.
+- **One session messaging another is visible only in the receiver's transcript**, as a
+  `queue-operation`/`enqueue` whose `content` opens `<cross-session-message from="uds:…">`. That
+  header is written by the *sender's* Claude Code, which the daemon is not — so its own socket
+  deliveries structurally cannot appear in that lane and no "is this really an agent?" filter is
+  needed or wanted. Four ways to parse it wrong, each measured rather than assumed, are written
+  out at the top of `daemon/src/deckhand_daemon/links/edges.py`. Read them before touching it.
 - **`delivered: true` is not the same as "it was said".** A filter can stop a prompt the daemon
   accepted. Ask `Delivery.went`, never `delivered` alone.
 - **A screen is one of two surfaces**: the rail (dark, `Palette.lcdGround`) or a page (the
@@ -108,6 +114,9 @@ the session. `?deliver=false` transcribes without sending, for the review card, 
 - `GET|PUT /settings` — what this Mac has been set to do, globally and per folder; `GET
   /settings/project?path=` is the resolved answer for one of them
 - `POST /sessions/{id}/notify` — an agent asking for the person outright, in its own words
+- `GET /sessions/links?within=` — which sessions have been messaging each other lately, as
+  directed edges whose two ends are both on the listing. The rail draws them as light running
+  from sender to receiver, decaying over the same window the phone asked for
 - `GET /briefings` — every live session's last briefing at once, off disk, for a cold start
 - `GET /sessions/{id}/commands` — the slash commands and skills that session could be handed
 - `GET /sessions/{id}/context` — every CLAUDE.md a session in that folder is loaded with, as a
