@@ -121,6 +121,11 @@ struct ReviewCard: View {
                 .font(Typography.hint)
                 .foregroundStyle(accent)
                 .lineLimit(1)
+                .chip(.clear)
+                // Pulled back by its own trailing inset, the mirror of what `SayRest` does on
+                // the leading side: the chip is what makes the two boxes match, and neither may
+                // pay for it by moving off the column it sits on.
+                .padding(.trailing, -Chip.insets.trailing)
                 // Bottom of the box, for the reason `SayRest.face` gives: these two sit on the
                 // card's foot row and centred ink floats above the edge it belongs on.
                 .frame(minHeight: Self.touch, alignment: .bottomTrailing)
@@ -199,6 +204,11 @@ struct ReviewCard: View {
                     Spacer(minLength: Spacing.small)
                     if !compact { openWords }
                 }
+                // Down into the box's own bottom padding. Bottom-aligned in a 44pt frame the
+                // ink still stood 20 points off the edge — the padding is the card's and the
+                // controls were sitting on top of it rather than into it. The touch boxes move
+                // with them and stay inside the card.
+                .padding(.bottom, -Spacing.extraSmall)
             }
             // Under the words, quiet, and in a deck column too: there is no size of card on which
             // it is acceptable to show somebody a word they did not say without saying so.

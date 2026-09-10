@@ -115,3 +115,34 @@ struct PinnedStrip: View {
     /// number `ReviewActions` and `FilesView` write — no spacing token means "a finger".
     private var thumb: CGFloat { compact ? 44 : 56 }
 }
+
+/// The shape the card's two foot controls are drawn in: Add on the left, Edit on the right.
+///
+/// It exists because they were built separately and stopped matching. Add carries a capsule for
+/// when it is recording, and a capsule needs padding inside it; Edit had none, so bottom-aligning
+/// the two boxes put their *ink* four points apart — the padding under Add's word is inside its
+/// box and the box is what got aligned. One set of insets used by both is the only version of
+/// this that cannot drift.
+///
+/// Clear at rest for both. Add fills while it is listening, which is the one thing on the card
+/// that has to be unmissable; a resting fill on either would read as a button you are meant to
+/// press next, and neither is.
+struct Chip: ViewModifier {
+    let fill: Color
+
+    /// Small enough that the capsule does not read as a button, wide enough that it does not cut
+    /// into the glyph while it is filled.
+    static let insets = EdgeInsets(top: Spacing.xxs, leading: Spacing.extraSmall,
+                                   bottom: Spacing.xxs, trailing: Spacing.extraSmall)
+
+    func body(content: Content) -> some View {
+        content
+            .padding(Self.insets)
+            .background(Capsule().fill(fill))
+    }
+}
+
+extension View {
+    /// Draw this as one of the card's foot controls. See ``Chip``.
+    func chip(_ fill: Color) -> some View { modifier(Chip(fill: fill)) }
+}
