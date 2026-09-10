@@ -53,8 +53,8 @@ def test_a_normal_run_returns_what_the_model_wrote(monkeypatch):
     assert run(summarize("s1", ACTIVITY)) == ("Edited two handlers.", None)
     # The transcript, and the list it is read against: the model cannot avoid adding what is
     # already there if it has never been shown what is already there.
-    assert ACTIVITY in calls[0]
-    assert "THE LIST SO FAR" in calls[0]
+    assert f"<activity>\n{ACTIVITY}\n</activity>" in calls[0]
+    assert "<task_list>" in calls[0]
 
 
 def test_asking_twice_runs_twice_because_deciding_is_not_this_module_s_job(monkeypatch):
