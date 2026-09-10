@@ -104,7 +104,8 @@ the session. `?deliver=false` transcribes without sending, for the review card, 
 - `GET /sessions/{id}/commands` — the slash commands and skills that session could be handed
 - `GET /sessions/{id}/raw` — the transcript as readable lines, for when the app's reading looks wrong
 - `POST /sessions/{id}/queue/clear` — draw a line under an inbox holding prompts nothing will read
-- `GET|PUT /filters` — what this Mac can do to a prompt, and what it is currently doing
+- `GET /filters` — every filter this Mac has; `GET|PUT /sessions/{id}/filters` — the chain one
+  session is actually running
 - `GET /sessions/{id}/files`, `GET /sessions/{id}/file?path=` — what the session touched
 - `GET|POST /sessions/{id}/artifacts` — slips
 - `POST /sessions/{id}/image`, `POST /sessions/{id}/focus`, `POST /sessions/{id}/control`

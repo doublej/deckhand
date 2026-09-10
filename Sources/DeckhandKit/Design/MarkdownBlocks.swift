@@ -5,17 +5,24 @@ import Foundation
 // three, a dash that is the start of a sentence — and DeckhandKit is the half `just test` reaches.
 
 extension Markdown {
-    /// The five shapes a line of a real document turns into.
+    /// The six shapes a line of a real document turns into.
     ///
     /// `verbatim` carries both a fence's contents and a table's rows, because the answer to both
     /// is the same: show the source. A fence is source by definition, and a table is source
     /// because half a rendered table is worse to read than the pipes were.
+    ///
+    /// `diagram` is the one fence whose *contents* are not the answer. A mermaid block is a
+    /// picture written down, and showing eleven lines of `A-->B` to somebody on a phone is
+    /// showing them the thing rather than what it means. It stays a separate case rather than a
+    /// flag on `verbatim` so that anything which cannot draw one falls back to showing the
+    /// source, which is exactly what it did before this existed.
     enum Block: Equatable {
         case heading(Int, String)
         case bullet(Int, String)
         case numbered(String, String)
         case paragraph(String)
         case verbatim([String])
+        case diagram([String])
 
         static func parse(_ text: String) -> [Block] {
             var walk = Walk()
@@ -80,6 +87,9 @@ extension Markdown {
         private var out: [Block] = []
         /// Non-nil means we are between two fences, where every line is code whatever it says.
         private var fenced: [String]?
+        /// The word after the opening backticks, lowercased. Thrown away until there was one
+        /// fence whose language changed what to *do* with it rather than only how to colour it.
+        private var language = ""
         /// A table is a run of adjacent rows, so it is collected until something else arrives.
         private var table: [String] = []
 
@@ -93,6 +103,12 @@ extension Markdown {
             if trimmed.hasPrefix("```") {
                 close()
                 fenced = []
+                // ```` ```mermaid ```` and ```` ```mermaid title=x ```` are both mermaid; the
+                // rest of the info string is nobody's business here.
+                language = trimmed.dropFirst(3)
+                    .trimmingCharacters(in: .whitespaces)
+                    .prefix { !$0.isWhitespace }
+                    .lowercased()
                 return
             }
             if trimmed.hasPrefix("|") {
@@ -114,8 +130,9 @@ extension Markdown {
         /// stray pair of backticks would draw an empty box.
         private mutating func close() {
             if let open = fenced {
-                if !open.isEmpty { out.append(.verbatim(open)) }
+                if !open.isEmpty { out.append(language == "mermaid" ? .diagram(open) : .verbatim(open)) }
                 fenced = nil
+                language = ""
             }
             if !table.isEmpty {
                 out.append(.verbatim(table))

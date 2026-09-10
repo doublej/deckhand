@@ -38,5 +38,10 @@ struct RootView: View {
             }
         }
         .ignoresSafeArea(.keyboard)
+        // Set once, at the root, so every surface that renders markdown draws a mermaid fence
+        // rather than printing it: a transcript, a briefing, a report a session left behind. The
+        // seam is here because drawing one needs a web view and `Markdown` lives in DeckhandKit,
+        // which has no UIKit in it on purpose.
+        .diagrams { AnyView(MermaidBlock(source: $0)) }
     }
 }

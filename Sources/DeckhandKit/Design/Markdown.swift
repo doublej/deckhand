@@ -14,6 +14,7 @@ import SwiftUI
 /// about a line that begins `- `, a fence, or a hash.
 public struct Markdown: View {
     private let blocks: [Block]
+    @Environment(\.diagram) private var diagram
 
     public init(_ text: String) {
         blocks = Block.parse(text)
@@ -43,6 +44,23 @@ public struct Markdown: View {
                 .padding(.bottom, Spacing.small)
         case .verbatim(let lines):
             Verbatim(lines: lines).padding(.bottom, Spacing.small)
+        case .diagram(let lines):
+            drawn(lines).padding(.bottom, Spacing.small)
+        }
+    }
+
+    /// A mermaid block, drawn if this screen knows how and shown as its source if it does not.
+    ///
+    /// Drawing one needs a web view, and a web view is UIKit — which does not belong in this
+    /// module, where everything has to be reachable by `just test` on the Mac with no simulator.
+    /// So the app hands the drawing in through the environment and this asks for it. A surface
+    /// that never sets one is not broken: it gets the eleven lines of `A-->B`, which is what
+    /// every surface got before any of this existed.
+    @ViewBuilder private func drawn(_ lines: [String]) -> some View {
+        if let draw = diagram {
+            draw(lines.joined(separator: "\n"))
+        } else {
+            Verbatim(lines: lines)
         }
     }
 

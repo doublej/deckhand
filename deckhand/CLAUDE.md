@@ -41,6 +41,16 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   the other nine at rest — the same arrangement the deck uses for its columns. The accent is
   per-card for the same reason: the card being talked into goes utt orange and the rest stay teal,
   which is the only way a screen full of marks says which one is listening.
+- **A mermaid fence draws, and the seam is the environment.** `Markdown` (in DeckhandKit) knows a
+  diagram when it parses one; drawing it needs a web view, which cannot live in that module. So
+  the app hands the renderer in at the root with `.diagrams { }` and `Views/Diagrams/MermaidBlock`
+  does the work. mermaid is **bundled** (`deckhand/Resources/mermaid.min.js`, MIT, 11.12.3) and
+  injected as a `WKUserScript` — host-initiated, the lane the slip bridge already uses — so a
+  diagram draws with the Mac asleep and no policy was loosened. A web view has no opinion about
+  its own height, so the page measures what mermaid drew and posts it back; a diagram that will
+  not parse posts zero and the block falls back to the source lines, which is what every surface
+  did before any of this existed. Slips do **not** get this yet: an artifact page is sandboxed by
+  its own CSP and nothing injects mermaid into one.
 - **A control that fires a request has to say so where the thumb is.** The slip's send button
   answered, delivered, and looked dead: the only receipt was in the bar at the top of the screen
   and the button is at the foot of a long scroll. It got pressed again, and every press was

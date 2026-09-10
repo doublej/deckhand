@@ -23,6 +23,7 @@ struct MarkdownTests {
             case .numbered(let number, _): "n\(number)"
             case .paragraph: "p"
             case .verbatim: "v"
+            case .diagram: "d"
             }
         }
     }
@@ -112,5 +113,52 @@ struct MarkdownTests {
 
     private func asset(_ name: String) -> Asset {
         Asset(path: "/tmp/\(name)", name: name, kind: "text", size: 10, modified: 1)
+    }
+}
+
+/// The one fence whose contents are not the answer.
+@Suite("Diagrams")
+struct DiagramTests {
+    @Test("a mermaid fence is a diagram and every other fence is still code")
+    func tellsThemApart() {
+        let blocks = Markdown.Block.parse("""
+        Before.
+
+        ```mermaid
+        graph TD
+          A[Phone] --> B[Mac]
+        ```
+
+        ```swift
+        let x = 1
+        ```
+
+        ```
+        plain
+        ```
+        """)
+        #expect(blocks.contains(.diagram(["graph TD", "  A[Phone] --> B[Mac]"])))
+        #expect(blocks.contains(.verbatim(["let x = 1"])))
+        #expect(blocks.contains(.verbatim(["plain"])))
+        #expect(blocks.first == .paragraph("Before."))
+    }
+
+    /// The language is the word after the backticks and nothing else on the line, so a fence with
+    /// a title on it is still the diagram it says it is. Case is not a promise anybody makes.
+    @Test("the rest of the info string is nobody's business")
+    func readsTheLanguage() {
+        #expect(Markdown.Block.parse("```Mermaid\nflowchart LR\n```") == [.diagram(["flowchart LR"])])
+        #expect(Markdown.Block.parse("```mermaid title=Flow\nflowchart LR\n```")
+                == [.diagram(["flowchart LR"])])
+        // Not mermaid, and not almost-mermaid either.
+        #expect(Markdown.Block.parse("```mermaidish\nx\n```") == [.verbatim(["x"])])
+    }
+
+    /// Two fences in a row, where the second must not inherit the first one's language — the bug
+    /// this shape makes impossible, and the reason the word is cleared on close.
+    @Test("a language does not leak into the next fence")
+    func forgetsBetweenFences() {
+        let blocks = Markdown.Block.parse("```mermaid\ngraph TD\n```\n```\nnot a diagram\n```")
+        #expect(blocks == [.diagram(["graph TD"]), .verbatim(["not a diagram"])])
     }
 }

@@ -17,6 +17,14 @@ targets:
       - path: deckhand
         excludes:
           - "**/CLAUDE.md"
+          - "Resources/**"
+      # 2.8 MB of JavaScript is a resource and nothing else. Declared on its own because the
+      # wholesale include above treats an unknown extension as an *unhandled* file — it warns and
+      # does not copy it, so `Bundle.main.url(forResource:)` would answer nil on a device.
+      - path: deckhand/Resources
+        buildPhase: resources
+        excludes:
+          - "README.md"
       - deckhand/Assets.xcassets
     dependencies:
       - package: DeckhandKit
