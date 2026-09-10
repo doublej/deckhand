@@ -65,6 +65,13 @@ struct RailFoot: View {
                 model.showsHidden.toggle()
             }
             Button("Settings", systemImage: "gearshape") { showSettings = true }
+            // The panel is reached by swiping the screen left, and a gesture nobody is told
+            // about is not a way in for somebody using VoiceOver. Last in the row because it
+            // is the one thing here that is a place rather than a switch.
+            Button("Manager", systemImage: "bubble.left.and.text.bubble.right") {
+                withAnimation(Motion.opening) { model.manager.open = true }
+            }
+            .accessibilityIdentifier("open-manager")
         }
         .labelStyle(.iconOnly)
         .font(.system(size: 12, weight: .semibold))

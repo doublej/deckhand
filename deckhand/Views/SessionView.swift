@@ -165,9 +165,14 @@ struct SessionView: View {
         }
         // Anything waiting on you lives in the transcript, so do not leave it on a tab the
         // person is not looking at.
+        // Which pane the manager asked for. Read on the way in as well as on a change: a run
+        // that opened this session and named a pane in one breath set both before this view
+        // existed, so an `onChange` alone would never fire for it.
+        .onChange(of: model.manager.pane) { _, name in show(name) }
         .task {
             model.turns = []
             model.current = session.sessionId
+            show(model.manager.pane)
             // Beside the transcript, not in front of it. The summariser thinks for ten
             // seconds or more, and awaiting it here left the page empty for that long —
             // then everything arrived at once and jumped to the newest turn.
@@ -181,6 +186,13 @@ struct SessionView: View {
             }
             await written
         }
+    }
+
+    /// Move to the pane the manager named, and take the ask off the desk so it happens once.
+    private func show(_ name: String?) {
+        guard let name, let pane = Pane(rawValue: name.capitalized) else { return }
+        model.manager.pane = nil
+        withAnimation(Motion.opening) { showing = pane }
     }
 
     /// The strip down the leading edge that leaves this page, from whichever pane you are on.

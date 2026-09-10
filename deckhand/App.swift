@@ -30,19 +30,25 @@ struct DeckhandApp: App {
     }
 }
 
-/// Portrait is one session at a time. Landscape is the whole deck at once.
+/// Portrait is one session at a time. Landscape is the whole deck at once — and one swipe left
+/// of either is the manager.
 struct RootView: View {
     @Bindable var model: AppModel
 
     var body: some View {
-        GeometryReader { geometry in
-            if geometry.size.width > geometry.size.height {
-                DeckView(model: model)
-            } else {
-                SessionListView(model: model)
+        // Outside the keyboard rule below, deliberately. The rail and the deck ignore the
+        // keyboard because nothing on them is typed into; the manager panel is one long field
+        // and has to rise for it, which it cannot do inside an ancestor that ignores it.
+        ManagerShell(model: model) {
+            GeometryReader { geometry in
+                if geometry.size.width > geometry.size.height {
+                    DeckView(model: model)
+                } else {
+                    SessionListView(model: model)
+                }
             }
+            .ignoresSafeArea(.keyboard)
         }
-        .ignoresSafeArea(.keyboard)
         // Set once, at the root, so every surface that renders markdown draws a mermaid fence
         // rather than printing it: a transcript, a briefing, a report a session left behind. The
         // seam is here because drawing one needs a web view and `Markdown` lives in DeckhandKit,

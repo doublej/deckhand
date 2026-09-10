@@ -93,6 +93,9 @@ final class AppModel {
     /// Pictures pinned to those words, per session, until they are sent or discarded.
     var attached: [String: [Snap]] = [:]
     var showsHidden = false
+    /// The manager's own state, in its own object — see `Views/Manager/ManagerDesk.swift`.
+    /// One object rather than six more properties here, for the reason `picker` is one.
+    var manager = ManagerDesk()
     /// The project picker's own state, in its own object — see `Starting.swift`.
     var picker = ProjectPicker()
     var wants = Switchboard()

@@ -66,6 +66,20 @@ struct SessionListView: View {
             // On the page rather than on the row: a row is recycled as the listing refreshes, and
             // a sheet presented from one goes with it.
             .sheet(item: $marking) { SnapView(model: model, session: $0.session, snap: $0.snap) }
+            // Where the manager has asked this phone to go. The gate is this page's own
+            // `@State`, so this page is the only thing that can move it — the desk holds the
+            // ask and hands it over, which is the whole of the app's command surface today.
+            .onChange(of: model.manager.route) { _, route in
+                guard let route else { return }
+                model.manager.route = nil
+                switch route {
+                case .session(let id): chosen = model.sessions.first { $0.sessionId == id }
+                case .list: chosen = nil
+                case .settings: showSettings = true
+                case .projects: showProjects = true
+                case .refresh: Task { await model.refreshSessions() }
+                }
+            }
         }
         .task {
             while !Task.isCancelled {
