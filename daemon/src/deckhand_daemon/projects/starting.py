@@ -65,7 +65,7 @@ import time
 from pathlib import Path
 
 from ..log import log
-from ..sessions import Session, live_sessions, sessions_dir
+from ..sessions import Session, forget_panes, live_sessions, sessions_dir
 
 IT2_TIMEOUT = 15
 # What Claude Code costs between the shell running it and its session record landing. Measured at
@@ -168,8 +168,25 @@ def _settled(folder: Path, known: set[str]) -> tuple[Session | None, str | None]
                 continue
             if Path(session.cwd).resolve() == wanted:
                 log.info("%s came up in %s", session.name, folder)
-                return session, None
+                return _with_pane(session), None
     return None, f"claude was started in {folder.name} but has not reported itself yet"
+
+
+def _with_pane(session: Session) -> Session:
+    """The same session, with its pane filled in.
+
+    The pane map is cached for three seconds, and a window opened two seconds ago was not in it
+    when it was built — so a freshly started session is reported with `pane: null`, which every
+    screen reads as "cannot be typed into". True a moment later and wrong in the receipt, which
+    is the half of it that gets shown.
+    """
+    if session.pane is not None:
+        return session
+    forget_panes()
+    for fresh in live_sessions(iterm_only=False):
+        if fresh.session_id == session.session_id:
+            return fresh
+    return session
 
 
 def _it2(*args: str) -> bool:

@@ -30,6 +30,17 @@ _pane_cache: tuple[float, dict] = (0.0, {})
 _pane_error: str | None = None
 
 
+def forget_panes() -> None:
+    """Drop the cached pane map, so the next lookup asks iTerm again.
+
+    For the one caller that knows the map is stale rather than merely old: a window opened a
+    second ago is a pane this cache was built before, and a session reported with no pane reads
+    as a session that cannot be typed into.
+    """
+    global _pane_cache
+    _pane_cache = (0.0, {})
+
+
 def iterm_status() -> str:
     """What the phone should be told about the iTerm side: "ok" or why panes are missing."""
     return _pane_error or "ok"
