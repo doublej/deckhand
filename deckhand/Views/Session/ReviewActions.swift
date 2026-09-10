@@ -7,10 +7,12 @@ import SwiftUI
 /// it. The rule here is the one `FilesView`'s selector already set: a control is a capsule at the
 /// app's reading size with 44pt of finger under it.
 ///
-/// The four share the width equally, which buys two things beyond room. Nothing is squeezed on a
-/// narrow phone, and a label that changes under a state cannot move a button out from under a
-/// finger — the failure `TalkMark` records having made once already. Discard sits at the far end
-/// from Send, which is the actual fix for hitting the wrong one: distance, not a confirmation.
+/// Three things, not four, and not three of a kind. Edit and Send are the two you press, so they
+/// are the two capsules and they stand together at the end you press things at. Discard is the
+/// one that loses something: it keeps its 44pt of finger and gives up its fill, so it is quiet
+/// and it is as far from Send as the row is wide — distance is the actual fix for hitting the
+/// wrong one, not a confirmation. Adding to the words moved out from between them altogether and
+/// went under the prompt, where the words it records land; see `SayRest`.
 struct ReviewActions: View {
     let route: String
     /// The words as they stand, which is what Send sends and what a second clip lands beneath.
@@ -18,11 +20,6 @@ struct ReviewActions: View {
     let discard: () -> Void
     let edit: () -> Void
     let send: (String) -> Void
-    /// What it takes to say the rest of it, or nil where there is no recorder to lend.
-    var more: SayMore?
-    /// Called once a second clip has been handed over, so the card can drop the draft it just
-    /// passed up: the new words come back as the model's, and a stale draft would mask them.
-    var finished: () -> Void = {}
     /// A deck column, which is 240pt wide and has room for none of this.
     var compact = false
     @Environment(\.accent) private var accent
@@ -46,15 +43,15 @@ struct ReviewActions: View {
                 .foregroundStyle(Palette.textTertiary)
                 .lineLimit(1)
             HStack(spacing: Spacing.xxs) {
-                Button(action: discard) {
-                    face("Discard", ink: Palette.textSecondary, fill: Palette.tileIdle)
-                }
-                .buttonStyle(.plain)
+                Button(action: discard) { quiet("Discard") }
+                    .buttonStyle(.plain)
+                // Collapses to nothing but its minimum on a narrow phone, which is what keeps
+                // the two capsules the same width as each other at every size.
+                Spacer(minLength: Spacing.extraSmall)
                 Button(action: edit) {
                     face("Edit", ink: accent, fill: Palette.tileIdle)
                 }
                 .buttonStyle(.plain)
-                if let more { adding(more) }
                 Button { send(words) } label: {
                     face("Send", ink: .white, fill: accent, weight: .semibold)
                 }
@@ -86,29 +83,20 @@ struct ReviewActions: View {
         }
     }
 
-    /// Say the rest of it, wearing the same capsule as the buttons either side of it.
-    ///
-    /// While it listens the capsule fills, which is feedback that costs no width: the label stays
-    /// the same word and the segment stays the same size, so the control cannot move under the
-    /// finger holding it. The page is going orange at the same time — this is the local half of
-    /// the same signal, for the finger that is covering the rest of the screen.
-    private func adding(_ more: SayMore) -> some View {
-        TalkControl(recorder: more.recorder,
-                    mode: more.mode,
-                    isMine: true,
-                    onStart: {},
-                    onClip: { clip in
-                        await more.heard(clip, words)
-                        finished()
-                    },
-                    content: { state in
-                        face("Add",
-                             ink: state.isRecording ? .white : accent,
-                             fill: state.isRecording ? accent : Palette.tileIdle)
-                    })
+    /// The one that loses something, in the quiet colour with no fill under it. Still 44pt of
+    /// finger and still the full width of the word, because a control that is easy to miss on
+    /// purpose is a different thing from one that is hard to hit at all.
+    private func quiet(_ label: String) -> some View {
+        Text(label)
+            .font(.system(size: 14))
+            .foregroundStyle(Palette.textTertiary)
+            .lineLimit(1)
+            .padding(.horizontal, Spacing.extraSmall)
+            .frame(minHeight: Self.touch)
+            .contentShape(.rect)
     }
 
-    /// One segment. Equal width to its siblings, 44pt tall, and the label centred in it.
+    /// One capsule. Equal width to its sibling, 44pt tall, and the label centred in it.
     private func face(
         _ label: String,
         ink: Color,

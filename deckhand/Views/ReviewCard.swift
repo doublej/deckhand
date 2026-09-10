@@ -49,6 +49,7 @@ struct ReviewCard: View {
     /// nobody to ask — a deck column, or a card built from words with no session behind them.
     var commands: (() async -> [SlashCommand])?
     @State private var picked: [PhotosPickerItem] = []
+    @State private var picking = false
     @State private var editing = false
     @State private var choosing = false
     @Environment(\.accent) private var accent
@@ -73,6 +74,10 @@ struct ReviewCard: View {
             }
             .frame(maxHeight: compact ? 96 : 260)
             .scrollBounceBehavior(.basedOnSize)
+            // Directly under the words, because under the words is where what it records goes.
+            // It stood in the row at the foot until it read as a fourth thing you do *with* the
+            // prompt rather than the one thing that makes more of it.
+            if let more { SayRest(more: more, words: words) { draft = nil } }
             // Under the words, quiet, and in a deck column too: there is no size of card on which
             // it is acceptable to show somebody a word they did not say without saying so.
             if let note = filtered?.note { aside(note, in: Palette.textTertiary) }
@@ -86,8 +91,6 @@ struct ReviewCard: View {
                           discard: discard,
                           edit: { editing = true },
                           send: send,
-                          more: more,
-                          finished: { draft = nil },
                           compact: compact)
         }
         .sheet(isPresented: $editing) {
@@ -125,22 +128,20 @@ struct ReviewCard: View {
             .fixedSize(horizontal: false, vertical: true)
     }
 
-    /// The two ways a picture gets in, above the words they will go with. Both are always
-    /// offered: the clipboard one was hidden whenever the clipboard held no image, which from
-    /// the outside is a button that comes and goes for no visible reason.
+    /// What can be put in front of the words, and what can be pinned to them, above the words
+    /// themselves.
     ///
-    /// As many photos as you like in one trip, numbered as they are chosen. One per trip was a
-    /// picker reopened four times to say one thing about four screenshots, and `.ordered` is what
-    /// makes the order they arrive in the order they were picked rather than the order the library
-    /// happens to hold them — which is the order the words about them end up in.
+    /// Two controls, not three. Photos and Clipboard are one question — where is the picture —
+    /// asked twice, and answering it took a third of the row to say so; they are one control
+    /// now and the menu is where the two answers live.
     @ViewBuilder private var attachments: some View {
         if attach != nil || commands != nil {
             HStack(spacing: Spacing.small) {
                 // First, because it goes at the front of the words: a command is the one part of
                 // a prompt a phone cannot dictate — `/orchestrate-sessions` comes back as four
                 // words and a guess — so it is picked from the Mac's own list and the rest is
-                // still spoken. Deliberately not in the row below: that row is Discard, Edit, Add
-                // and Send, and it has already been too crowded once.
+                // still spoken. Deliberately not in the row at the foot: that row is what you do
+                // with a finished prompt, and this is part of writing one.
                 if commands != nil {
                     Button { choosing = true } label: {
                         Attach(word: "Command", symbol: "slash.circle", compact: compact)
@@ -148,7 +149,7 @@ struct ReviewCard: View {
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("pick-command")
                 }
-                if attach != nil { photos }
+                if attach != nil { pictures }
                 Spacer(minLength: 0)
             }
             .font(Typography.hint)
@@ -156,26 +157,34 @@ struct ReviewCard: View {
         }
     }
 
-    /// The two ways a picture gets in. Both are always offered: the clipboard one was hidden
-    /// whenever the clipboard held no image, which from the outside is a button that comes and
-    /// goes for no visible reason.
-    @ViewBuilder private var photos: some View {
+    /// The two ways a picture gets in, behind one word. Both are always offered: the clipboard one
+    /// was hidden whenever the clipboard held no image, which from the outside is a button that
+    /// comes and goes for no visible reason.
+    ///
+    /// The picker is presented by the menu rather than being the label of one, because a
+    /// `PhotosPicker` is a control and not a menu item — putting one inside a `Menu` gives a row
+    /// that opens nothing. `.photosPicker(isPresented:)` is the same picker with the trigger
+    /// separated from it, which is what a menu needs.
+    ///
+    /// As many photos as you like in one trip, numbered as they are chosen. One per trip was a
+    /// picker reopened four times to say one thing about four screenshots, and `.ordered` is what
+    /// makes the order they arrive in the order they were picked rather than the order the library
+    /// happens to hold them — which is the order the words about them end up in.
+    @ViewBuilder private var pictures: some View {
         if let attach {
-            Group {
-                PhotosPicker(selection: $picked,
-                             maxSelectionCount: nil,
-                             selectionBehavior: .ordered,
-                             matching: .images,
-                             photoLibrary: .shared()) {
-                    Attach(word: "Photos", symbol: "photo.badge.plus", compact: compact)
-                }
-                if let paste {
-                    Button(action: paste) {
-                        Attach(word: "Clipboard", symbol: "doc.on.clipboard", compact: compact)
-                    }
-                        .buttonStyle(.plain)
-                }
+            Menu {
+                Button("Photos", systemImage: "photo.badge.plus") { picking = true }
+                if let paste { Button("Clipboard", systemImage: "doc.on.clipboard", action: paste) }
+            } label: {
+                Attach(word: "Add attachments", symbol: "paperclip", compact: compact)
             }
+            .accessibilityIdentifier("add-attachments")
+            .photosPicker(isPresented: $picking,
+                          selection: $picked,
+                          maxSelectionCount: nil,
+                          selectionBehavior: .ordered,
+                          matching: .images,
+                          photoLibrary: .shared())
             // The picker hands back items, not bytes; the bytes come over a moment later.
             // One at a time and in the order they were chosen, so each thumbnail appears as its
             // picture arrives rather than all of them after the slowest one.
