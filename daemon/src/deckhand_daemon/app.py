@@ -158,13 +158,27 @@ def session_file(session_id: str, path: str = Query(description="one of /files")
 
 
 @app.get("/sessions/{session_id}/turns", dependencies=[Depends(require_token)])
-def session_turns(session_id: str, limit: int = Query(default=8, ge=1, le=50)) -> dict:
+def session_turns(
+    session_id: str,
+    limit: int = Query(default=8, ge=1, le=200),
+    before: int = Query(default=0, ge=0, description="how many turns from the end to skip"),
+) -> dict:
+    """A page of the conversation, newest page first.
+
+    `before` walks backwards: 0 is the tail, `before=25` is the twenty-five turns before that.
+    The phone holds nothing between launches, so this is the only way it ever sees history —
+    which is the right way round, since the Mac is where the transcript lives and where it is
+    parsed. `more` says whether there is an older page, so a screen knows when to stop asking.
+    """
     saying.session_or_404(session_id)
+    turns, more = transcripts.page_turns(session_id, limit, before)
     return {
-        "turns": [t.to_json() for t in transcripts.read_turns(session_id, limit)],
+        "turns": [t.to_json() for t in turns],
         # Said, delivered, and not picked up yet. Nothing in the transcript shows this: a
-        # message sent mid-turn is not a turn until the session absorbs it.
-        "queued": asked.queued(session_id),
+        # message sent mid-turn is not a turn until the session absorbs it. Only ever true of
+        # the newest page — an older page is history, and nothing is queued behind history.
+        "queued": asked.queued(session_id) if before == 0 else [],
+        "more": more,
     }
 
 

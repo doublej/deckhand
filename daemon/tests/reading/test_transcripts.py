@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 from deckhand_daemon.reading import transcripts
 
@@ -222,3 +223,44 @@ def test_a_mid_run_message_does_not_cut_a_tool_run_off_from_its_results(claude_h
     ]
     assert turns[0].tools == []
     assert [(t.name, t.result) for t in turns[1].tools] == [("Bash", "90 passed")]
+
+
+def test_a_page_of_turns_walks_backwards_from_the_end(claude_home, monkeypatch):
+    """The phone reads a conversation from the bottom, so the cursor counts from the end. A
+    transcript only grows at the end, which is what makes that cursor stable while it does."""
+    from deckhand_daemon.reading import transcripts
+
+    said = [f"line {n}" for n in range(1, 13)]
+    monkeypatch.setattr(transcripts, "_scan",
+                        lambda path, window: [transcripts.Turn(role="assistant", text=t, timestamp="")
+                                              for t in said])
+    monkeypatch.setattr(transcripts, "transcript_path", lambda sid: Path("/does/not/matter"))
+
+    newest, more = transcripts.page_turns("sid", limit=4)
+    assert [t.text for t in newest] == ["line 9", "line 10", "line 11", "line 12"]
+    assert more is True
+
+    older, more = transcripts.page_turns("sid", limit=4, before=4)
+    assert [t.text for t in older] == ["line 5", "line 6", "line 7", "line 8"]
+    assert more is True
+
+    oldest, more = transcripts.page_turns("sid", limit=4, before=8)
+    assert [t.text for t in oldest] == ["line 1", "line 2", "line 3", "line 4"]
+    # Nothing before the first page, which is how the phone knows to stop asking.
+    assert more is False
+
+    # Past the start is empty rather than an error or a wrapped page.
+    beyond, more = transcripts.page_turns("sid", limit=4, before=99)
+    assert beyond == []
+    assert more is False
+
+
+def test_reading_the_tail_still_means_the_tail(claude_home, monkeypatch):
+    """`read_turns` is every other caller in the daemon and its shape must not have moved."""
+    from deckhand_daemon.reading import transcripts
+
+    monkeypatch.setattr(transcripts, "_scan",
+                        lambda path, window: [transcripts.Turn(role="assistant", text=str(n), timestamp="")
+                                              for n in range(6)])
+    monkeypatch.setattr(transcripts, "transcript_path", lambda sid: Path("/does/not/matter"))
+    assert [t.text for t in transcripts.read_turns("sid", 2)] == ["4", "5"]

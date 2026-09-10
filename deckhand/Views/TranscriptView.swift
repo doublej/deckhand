@@ -10,12 +10,18 @@ import SwiftUI
 struct TranscriptView: View {
     @Bindable var model: AppModel
     let session: Session
+    /// Whether there is an older page on the Mac. Owned by the page above, because it is the
+    /// answer to the load the page above is already making every few seconds.
+    @Binding var earlier: Bool
+    /// Set while a step back is in flight, so a second tap does not ask for the same page twice.
+    @State private var stepping = false
 
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: Spacing.extraSmall) {
                     if model.turns.isEmpty && queued.isEmpty { nothingYet }
+                    earlierStep(proxy)
                     ForEach(Array(model.turns.enumerated()), id: \.offset) { index, turn in
                         // The id goes on the pair, not the card: a turn that is only a tool
                         // run has no card, and scrolling to the newest turn has to land on
@@ -57,7 +63,10 @@ struct TranscriptView: View {
             // card at the top of the list being scrolled away before it could be read — the
             // summary has its own tab now, so the transcript can go back to doing the one
             // thing a transcript should do.
-            .onChange(of: model.turns.count) { scroll(proxy) }
+            // The *newest* turn, not the count: reading further back grows the list at the far
+            // end, and pinning to the bottom every time it grows is how a step back into the
+            // conversation throws you straight out of it again.
+            .onChange(of: model.turns.last?.timestamp) { scroll(proxy) }
             .onChange(of: queued.count) { scroll(proxy) }
             .onChange(of: session.isBusy) { scroll(proxy) }
             .onAppear { scroll(proxy) }
@@ -68,6 +77,42 @@ struct TranscriptView: View {
     /// bookkeeping, read off the transcript by the Mac — never inferred from the conversation.
     /// Anything it *has* picked up is a turn above, in the place it arrived.
     private var queued: [Queued] { model.queued[session.sessionId] ?? [] }
+
+    /// The way back into the rest of the conversation, and only when there is one — a control
+    /// that answers "nothing older" after a wait is worse than no control at all.
+    ///
+    /// Nothing is held on the phone between launches and nothing needs to be: the Mac has the
+    /// transcript and does the parsing, so this is a request for a page rather than a cache.
+    @ViewBuilder private func earlierStep(_ proxy: ScrollViewProxy) -> some View {
+        if earlier {
+            Button { step(proxy) } label: {
+                HStack(spacing: Spacing.xxs) {
+                    if stepping { ProgressView().controlSize(.mini) }
+                    Text(stepping ? "Reading…" : "Earlier")
+                }
+                .font(Typography.hint)
+                .foregroundStyle(Palette.textSecondary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, Spacing.small)
+            }
+            .disabled(stepping)
+        }
+    }
+
+    private func step(_ proxy: ScrollViewProxy) {
+        guard !stepping else { return }
+        stepping = true
+        Task {
+            let (added, more) = await model.loadOlderTurns(for: session)
+            earlier = more
+            // Every row on screen has just been pushed down by exactly this many, and the ids
+            // are positions, so the turn that was at the top is now at `added`. One hop first:
+            // the rows have to be renumbered before one of them can be asked for by number.
+            try? await Task.sleep(for: .milliseconds(1))
+            if added > 0 { proxy.scrollTo(added, anchor: .top) }
+            stepping = false
+        }
+    }
 
     private var nothingYet: some View {
         Text(model.connection.isHealthy ? "Nothing said yet in this session" : "Waiting for the Mac…")

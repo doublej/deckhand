@@ -15,6 +15,9 @@ struct SessionView: View {
     @State private var renaming = false
     @State private var reading = false
     @State private var filtering = false
+    /// Whether the Mac holds turns older than the ones on screen. Answered by every load, so
+    /// the transcript can offer the way back without a request of its own to find out.
+    @State private var earlier = false
     @Environment(\.dismiss) private var dismiss
 
     /// What the confirmation is about to do, in that control's own words.
@@ -129,7 +132,10 @@ struct SessionView: View {
             // then everything arrived at once and jumped to the newest turn.
             async let written: Void = model.loadSummary(for: session)
             while !Task.isCancelled {
-                await model.loadTurns(for: session)
+                // As many as are already on screen, not a fixed page: this poll used to replace
+                // the list with the newest eight every five seconds, so anything scrolled back to
+                // was taken away again before it could be read.
+                earlier = await model.loadTurns(for: session, limit: model.shown)
                 try? await Task.sleep(for: .seconds(5))
             }
             await written
@@ -139,7 +145,7 @@ struct SessionView: View {
     @ViewBuilder private var pane: some View {
         switch showing {
         case .summary: BriefingView(model: model, session: session)
-        case .transcript: TranscriptView(model: model, session: session)
+        case .transcript: TranscriptView(model: model, session: session, earlier: $earlier)
         case .files: FilesView(model: model, session: session)
         case .slips: ArtifactsView(model: model, session: session)
         }

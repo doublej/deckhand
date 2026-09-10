@@ -5,7 +5,9 @@ import Testing
 
 @Suite("Deckhand client", .serialized)
 struct ClientTests {
-    private func client() -> DeckhandClient {
+    /// Not private: `ClientTests+Turns.swift` extends this suite rather than starting one of its
+    /// own, because `StubProtocol` is static and two suites stubbing it answer each other.
+    func client() -> DeckhandClient {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [StubProtocol.self]
         return DeckhandClient(
@@ -81,9 +83,9 @@ struct ClientTests {
         let rounds = try await client().turns(of: "809bbb83-b4dd-4680-8109-de8c18cf7d69", limit: 4)
         #expect(rounds.turns.count == 2)
         #expect(rounds.turns.allSatisfy { $0.role == "assistant" })
-        // The fixture predates the inbox, which is the version-skew case: no key, no queue.
-        #expect(rounds.queued.isEmpty)
-        #expect(StubProtocol.lastRequest?.url?.query == "limit=4")
+        // The fixture predates the inbox and the older-page key: no key, no queue, no more.
+        #expect(rounds.queued.isEmpty && !rounds.more)
+        #expect(StubProtocol.lastRequest?.url?.query == "limit=4&before=0")
     }
 
     @Test("an upload carries the clip bytes as multipart")

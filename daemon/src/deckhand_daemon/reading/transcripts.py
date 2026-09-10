@@ -177,15 +177,36 @@ def describe(entry: dict) -> list[str]:
 
 def read_turns(session_id: str, limit: int = 8) -> list[Turn]:
     """The last `limit` conversation turns, oldest first."""
+    return page_turns(session_id, limit)[0]
+
+
+def page_turns(session_id: str, limit: int = 8, before: int = 0) -> tuple[list[Turn], bool]:
+    """`limit` turns ending `before` turns from the end, and whether older ones exist.
+
+    The phone reads a conversation from the bottom and walks backwards, so the cursor is a count
+    from the *end* rather than an id or an offset from the start. That is not laziness: a
+    transcript only ever grows at the end, so the thirtieth-from-last turn is still the
+    thirtieth-from-last a minute later even though the session has said three more things. An
+    offset from the start would have to be recomputed every time the file grew, and an id would
+    mean an index this daemon does not keep.
+
+    The whole of a session's history is on this Mac and always was — nothing about a phone
+    restart loses any of it. What was missing was a way to ask for more than the tail.
+    """
     path = transcript_path(session_id)
     if path is None:
-        return []
+        return [], False
+    wanted = limit + before
     turns: list[Turn] = []
     for window in TAIL_WINDOWS:
         turns = _scan(path, window)
-        if len(turns) >= limit:
+        # One more than asked for, so "is there an older page" is answered by the same read
+        # rather than by a second one.
+        if len(turns) > wanted:
             break
-    return turns[-limit:]
+    end = max(0, len(turns) - before)
+    start = max(0, end - limit)
+    return turns[start:end], start > 0
 
 
 def tail_lines(path: Path, window: int) -> list[bytes]:

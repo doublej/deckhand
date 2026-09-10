@@ -6,13 +6,66 @@ import Foundation
 /// are all one job, they all go through the same client, and none of them change anything.
 @MainActor
 extension AppModel {
-    func loadTurns(for session: Session, limit: Int = 8) async {
-        guard let client = settings.client() else { return }
+    /// How many turns a first look at a session fetches, and how many more each step back adds.
+    ///
+    /// Eight was the number for a long time and it was too few to be a transcript: opening a
+    /// session showed the last four exchanges and there was no way to ask for the fifth. The Mac
+    /// holds the whole file and does the parsing — it always did — so this is a question about
+    /// what to fetch first, not about what exists.
+    static let page = 25
+
+    /// The ceiling on one request. The Mac refuses more than this, and a phone drawing two
+    /// hundred turns is already asking a lot of a `LazyVStack`.
+    static let mostAtOnce = 200
+
+    /// How many turns the live poll should ask for: everything already on screen, so that a page
+    /// somebody scrolled back to is not thrown away five seconds later by the poll that keeps the
+    /// newest end current. This is the whole of what "keep the history" needs on the phone —
+    /// nothing is stored here, it is re-read from the Mac, which is where the transcript lives.
+    var shown: Int {
+        min(AppModel.mostAtOnce, max(AppModel.page, turns.count))
+    }
+
+    /// The newest page. Answers whether the Mac has older turns than these, so the screen can
+    /// offer to go back without a second request to find out.
+    @discardableResult
+    func loadTurns(for session: Session, limit: Int = AppModel.page) async -> Bool {
+        guard let client = settings.client() else { return false }
+        var more = false
         await run {
             let rounds = try await client.turns(of: session.sessionId, limit: limit)
             self.turns = rounds.turns
             self.queued[session.sessionId] = rounds.queued
+            more = rounds.more
         }
+        return more
+    }
+
+    /// The page before the one on screen, put in front of it. Hands back how many arrived — the
+    /// screen needs the count to stay where it was, since everything already drawn has just been
+    /// pushed down by exactly that many rows.
+    ///
+    /// `before` is the number of turns already held, which is a cursor counted from the end of
+    /// the file. That is what makes it safe while the session keeps talking: new turns land at
+    /// the end and do not move the boundary this is reading back from.
+    func loadOlderTurns(for session: Session) async -> (added: Int, more: Bool) {
+        guard let client = settings.client() else { return (0, false) }
+        let held = turns.count
+        var arrived: [Turn] = []
+        var more = false
+        await run {
+            let older = try await client.turns(of: session.sessionId,
+                                               limit: AppModel.page,
+                                               before: held)
+            // The page may have been replaced while this was in flight — a live poll, or another
+            // session opened. Prepending to a list that is no longer the one asked about would
+            // splice one conversation into another.
+            guard self.turns.count == held else { return }
+            arrived = older.turns
+            more = older.more
+            self.turns = older.turns + self.turns
+        }
+        return (arrived.count, more)
     }
 
     /// Everything the transcript holds, as lines. Not kept on the model: it is large, it is

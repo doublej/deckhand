@@ -42,17 +42,25 @@ public struct Turn: Codable, Hashable, Sendable {
 public struct Rounds: Codable, Hashable, Sendable {
     public var turns: [Turn] = []
     public var queued: [Queued] = []
+    /// Whether the Mac has older turns than these. The phone keeps no transcript of its own —
+    /// the Mac holds the file and does the parsing — so this is how a screen reading backwards
+    /// knows when it has reached the beginning rather than guessing from a short page.
+    public var more = false
 
-    public init(turns: [Turn] = [], queued: [Queued] = []) {
+    public init(turns: [Turn] = [], queued: [Queued] = [], more: Bool = false) {
         self.turns = turns
         self.queued = queued
+        self.more = more
     }
 
-    /// Tolerant, like everything else off this wire: a daemon a version behind sends no queue.
+    /// Tolerant, like everything else off this wire: a daemon a version behind sends no queue,
+    /// and one older still says nothing about older pages — which reads as "there are none",
+    /// and leaves such a Mac working exactly as it did.
     public init(from decoder: Decoder) throws {
         let box = try decoder.container(keyedBy: CodingKeys.self)
         turns = try box.decodeIfPresent([Turn].self, forKey: .turns) ?? []
         queued = try box.decodeIfPresent([Queued].self, forKey: .queued) ?? []
+        more = try box.decodeIfPresent(Bool.self, forKey: .more) ?? false
     }
 }
 

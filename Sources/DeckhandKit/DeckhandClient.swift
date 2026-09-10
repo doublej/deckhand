@@ -91,8 +91,11 @@ public struct DeckhandClient: Sendable {
         }
     }
 
-    public func turns(of sessionId: String, limit: Int = 8) async throws -> Rounds {
-        try await get("sessions/\(sessionId)/turns?limit=\(limit)")
+    /// A page of the conversation. `before` counts backwards from the end — 0 is the tail, 25 is
+    /// the twenty-five turns before that — because a transcript only grows at the end, so a
+    /// cursor counted from there stays pointing at the same turn while the session keeps talking.
+    public func turns(of sessionId: String, limit: Int = 8, before: Int = 0) async throws -> Rounds {
+        try await get("sessions/\(sessionId)/turns?limit=\(limit)&before=\(before)")
     }
 
     /// Everything in the transcript, in order, one line per event and none of the syntax it is

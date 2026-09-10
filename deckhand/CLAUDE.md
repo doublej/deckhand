@@ -51,6 +51,17 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   not parse posts zero and the block falls back to the source lines, which is what every surface
   did before any of this existed. Slips do **not** get this yet: an artifact page is sandboxed by
   its own CSP and nothing injects mermaid into one.
+- **The transcript poll asks for what is on screen, not for a fixed page.** It fetched the newest
+  eight every five seconds and replaced the list with them, so a step back into the conversation
+  was taken away again before it could be read — which is what "I cannot see the whole transcript
+  after a restart" actually was: nothing is kept on the phone and nothing needs to be, the Mac has
+  the file and does the parsing (`page_turns`, `?before=`). `AppModel.shown` is the poll's limit
+  and it grows with `turns.count`. Two things follow. The auto-scroll watches
+  `turns.last?.timestamp`, never `turns.count` — reading further back grows the list at the far
+  end, and pinning to the bottom on every growth throws you straight out of where you went. And
+  the row ids are positions, so a prepend renumbers everything: `TranscriptView.step` scrolls to
+  index `added` afterwards, one runloop hop later, or the reader lands wherever the new page
+  begins.
 - **A control that fires a request has to say so where the thumb is.** The slip's send button
   answered, delivered, and looked dead: the only receipt was in the bar at the top of the screen
   and the button is at the foot of a long scroll. It got pressed again, and every press was
