@@ -132,23 +132,41 @@ struct SessionFoot: View {
     /// the slot's own padding, so no strip of transcript shows around the edges.
     ///
     /// The top edge is faded rather than cut. A hard horizontal line across the middle of a
-    /// transcript reads as a rendering fault; 24 points of gradient reads as depth.
+    /// transcript reads as a rendering fault; a long gradient reads as depth.
+    ///
+    /// **The ramp is eased, not just long.** A two-stop `clear → black` gradient changes alpha at
+    /// a constant rate, so however far you stretch it there is still a line at the top where the
+    /// dimming visibly starts — which is the edge this exists to remove. The stops below are
+    /// roughly quadratic: almost nothing for the first quarter, then gathering. That is what makes
+    /// it read as tapering rather than as a band, and it is why lengthening `Spacing.large` alone
+    /// did not fix it.
     @ViewBuilder private var backdrop: some View {
         if model.review[session.sessionId] != nil {
             Rectangle()
                 .fill(.ultraThinMaterial)
                 .mask(alignment: .top) {
                     VStack(spacing: 0) {
-                        LinearGradient(colors: [.clear, .black],
-                                       startPoint: .top,
-                                       endPoint: .bottom)
-                            .frame(height: Spacing.large)
+                        LinearGradient(stops: Self.taper, startPoint: .top, endPoint: .bottom)
+                            .frame(height: Self.fade)
                         Rectangle()
                     }
                 }
                 .ignoresSafeArea(edges: .bottom)
         }
     }
+
+    /// How far the backdrop takes to arrive. Three times what it was: at 24 points the transition
+    /// happened inside one line of transcript, which is a band across a word rather than a fade.
+    private static let fade: CGFloat = 72
+
+    /// Quadratic-ish, so the first points are nearly clear and the last are nearly solid.
+    private static let taper: [Gradient.Stop] = [
+        .init(color: .clear, location: 0),
+        .init(color: .black.opacity(0.06), location: 0.25),
+        .init(color: .black.opacity(0.25), location: 0.5),
+        .init(color: .black.opacity(0.56), location: 0.75),
+        .init(color: .black, location: 1)
+    ]
 
     /// Held for reading, over the top of whichever tab you were on — including the button you
     /// were holding to record. Nothing else on the page can be acted on until this is answered,
