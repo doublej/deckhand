@@ -162,14 +162,15 @@ struct ReviewCard: View {
             RoundedRectangle(cornerRadius: corner, style: .continuous)
                 .fill(Palette.surfacePrimary)
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: corner, style: .continuous)
-                .strokeBorder(accent.opacity(0.4), lineWidth: 1)
-        )
     }
 
     /// A deck column stays at `Radius.medium`: 20pt corners on a 240pt tile eat the tile.
     private var corner: CGFloat { compact ? Radius.medium : Radius.extraLarge }
+
+    // The teal border that used to ring this is gone. It was drawn when the card was the only
+    // thing floating over the transcript and needed an edge to be one thing rather than words on
+    // words. `SessionFoot` now lays a blurred ground under the whole slot, so the card has a
+    // ground to sit on and the ring had become a second edge saying what the ground already said.
 
     /// A line under the words, quiet, and in a deck column too: there is no size of card on which
     /// it is acceptable to show somebody a word they did not say without saying so.

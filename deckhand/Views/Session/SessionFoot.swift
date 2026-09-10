@@ -32,6 +32,7 @@ struct SessionFoot: View {
         }
         .padding(.horizontal, Spacing.small)
         .padding(.bottom, Spacing.extraSmall)
+        .background(backdrop)
         .sheet(item: $marking) { SnapView(model: model, session: $0.session, snap: $0.snap) }
         .sheet(isPresented: $browsing) { ArchiveSheet(model: model) }
         .confirmationDialog("", isPresented: $reaching, titleVisibility: .hidden) { reach }
@@ -114,6 +115,39 @@ struct SessionFoot: View {
             }
         )
         .offset(y: Spacing.medium)
+    }
+
+    /// The ground the held card stands on, and nothing at all the rest of the time.
+    ///
+    /// The card's own pieces do not all have a fill: Discard has none by design, and the
+    /// round-trip line is a line. Standing them over a live transcript put words on words —
+    /// "Discard" over "RUNNING" — which is the one thing a control that throws work away must
+    /// never be. Giving each piece its own tile would be four tiles and four edges; one ground
+    /// under the whole slot is the same fix once.
+    ///
+    /// Material rather than a colour, because this covers a transcript that is still moving
+    /// underneath: a flat fill would read as a panel that appeared, and blurred glass reads as
+    /// the page still being there and out of reach — which is exactly what is true while a card
+    /// is waiting to be answered. It runs the full width and down through the safe area, past
+    /// the slot's own padding, so no strip of transcript shows around the edges.
+    ///
+    /// The top edge is faded rather than cut. A hard horizontal line across the middle of a
+    /// transcript reads as a rendering fault; 24 points of gradient reads as depth.
+    @ViewBuilder private var backdrop: some View {
+        if model.review[session.sessionId] != nil {
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .mask(alignment: .top) {
+                    VStack(spacing: 0) {
+                        LinearGradient(colors: [.clear, .black],
+                                       startPoint: .top,
+                                       endPoint: .bottom)
+                            .frame(height: Spacing.large)
+                        Rectangle()
+                    }
+                }
+                .ignoresSafeArea(edges: .bottom)
+        }
     }
 
     /// Held for reading, over the top of whichever tab you were on — including the button you

@@ -128,6 +128,10 @@ struct TimingsView: View {
                 .font(Typography.mono)
                 .foregroundStyle(stage == timing.slowest ? Palette.lcdRed : Palette.textSecondary)
         }
+        // Inside the padding, so the words get a gutter and the bar keeps its edge: the bar is
+        // drawn behind this row from its leading edge, and PHONE set flush against that edge read
+        // as the label falling out of the chart rather than standing in it.
+        .padding(.horizontal, Spacing.extraSmall)
         .padding(.vertical, 1)
         .background(alignment: .leading) { bar(stage) }
     }
