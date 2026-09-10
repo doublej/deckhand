@@ -29,8 +29,18 @@ from .sessions import Session, sessions_dir
 TIMEOUT = 5.0
 TYPE_TIMEOUT = 15
 MSG_VERSION = 1
-CLEAR_LINE = "\x15"  # ctrl-U: whatever is half-typed in the prompt is not part of what was said
-RETURN = "\r"
+# Both keys are spelled as CSI-u escape sequences rather than as the bare control bytes they
+# stand for, and that spelling is the whole reason a long prompt submits. Claude Code's input
+# tokenizer only splits a control byte out as a keypress when the whole read is under 64 bytes;
+# in a longer one it is folded into the surrounding text run and arrives as characters. The
+# words and the return are two writes, but a session slow to drain its tty reads both as one
+# chunk — measured here: a reader stalled for six seconds took a 122-byte read holding the
+# words *and* the return — and at that size the return is typed instead of pressed, which is a
+# prompt left staged in the box. An escape sequence is tokenised out of a read of any size.
+# `\x1b[13u` decodes to `return` and `\x1b[117;5u` to ctrl-U, the same keys with no length to
+# be wrong about.
+CLEAR_LINE = "\x1b[117;5u"  # ctrl-U: a half-typed line is not part of what was said
+RETURN = "\x1b[13u"
 # The receiver already wraps a socket message in its own "another Claude session sent this"
 # framing, so this only has to say who is actually speaking — and it has to be short, because
 # it sits in JJ's pane taking up room he wanted for the message.
@@ -123,7 +133,10 @@ def deliver(session: Session, text: str, route: str = "auto") -> tuple[str | Non
     from another agent. `auto` takes the keyboard when there is a pane and the socket when there
     is not.
     """
-    message = " ".join(text.split())
+    # One line, and nothing in it that is not a character. A control byte left in the words
+    # would be read as a keypress of its own once they are typed — an ESC in a prompt cancels
+    # the turn it was meant to start — and this is the one place both routes pass through.
+    message = "".join(c for c in " ".join(text.split()) if c == " " or c.isprintable())
     if not message:
         return None, "nothing to deliver"
     if route not in ROUTES:
@@ -153,10 +166,11 @@ def _type_into_pane(pane_id: str, message: str) -> bool:
     Only ever aimed at a pane whose tty carries a live `claude` process — that is how the pane
     was found — so the text lands in a prompt, never in a shell.
 
-    Three keystroke bursts, not one. Ctrl-U first, because a half-finished line already sitting
-    in the prompt would otherwise be glued to the front of what was said. Then the words. Then
-    return on its own, so it is a keypress rather than the tail of a fast paste, which is what
-    leaves a message staged in the box instead of sent.
+    Two keystroke bursts. Ctrl-U leads the first, because a half-finished line already sitting
+    in the prompt would otherwise be glued to the front of what was said; the return follows in
+    its own write, so a refusal between the two is still a failure this can report. Neither key
+    relies on that separation to be read as a keypress — both are CSI-u sequences, which
+    survive arriving in the same chunk as the words. The constants say why that matters.
 
     ponytail: no read-back. A submitted message and a staged one look the same to
     `it2 session read`, and a session that is mid-turn queues the message for minutes, so there

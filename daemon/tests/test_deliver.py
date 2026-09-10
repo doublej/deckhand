@@ -1,4 +1,5 @@
 import json
+import re
 import shutil
 import socket
 import subprocess
@@ -304,3 +305,66 @@ def test_an_empty_name_is_refused_rather_than_typed(inbox, claude_home, monkeypa
     session.pane = a_pane()
 
     assert deliver.rename(session, "  ") == "a name cannot be empty"
+
+
+# Claude Code's input tokenizer splits a bare control byte out as its own keypress only when
+# the whole read is under 64 bytes; in a longer one it is folded into the surrounding text run
+# and arrives as characters. An escape sequence is split out of a read of any size. That rule
+# is the bug, so this is the rule.
+KEYSTROKE = re.compile(r"\x1b\[[\d;]*u|[\x00-\x1f]")
+
+
+def recording_it2(monkeypatch) -> list[str]:
+    """Every burst `it2` was handed, in order, without a pane to type it into."""
+    bursts: list[str] = []
+
+    def run(argv, **_kwargs):
+        bursts.append(argv[-1])
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    monkeypatch.setattr(deliver.subprocess, "run", run)
+    return bursts
+
+
+def keys_pressed(chunk: str) -> list[str]:
+    """What a session reading `chunk` in one go would take as keypresses rather than as text."""
+    return [k.group() for k in KEYSTROKE.finditer(chunk)
+            if k.group().startswith("\x1b") or len(chunk) < 64]
+
+
+def test_a_long_prompt_with_pictures_submits_even_read_as_one_chunk(inbox, claude_home,
+                                                                    monkeypatch):
+    """The shape that broke: a long spoken prompt and two pictures, typed and never sent.
+
+    The daemon always writes the return after the words, and against a reader that drains its
+    tty at once the two arrive as two reads. A session that is slow to drain takes both in one
+    — measured against an inert pane, a reader stalled for six seconds got the words and the
+    return in a single 122-byte read — and at that size a bare return is text, not a keypress.
+    So the test is not whether the return was written; it is whether it still reads as a
+    keypress when everything written lands together.
+    """
+    typed = recording_it2(monkeypatch)
+    session = session_for(inbox.getsockname())
+    session.pane = a_pane()
+    folder = "/Users/jurrejan/Library/Application Support/Deckhand/images/s-1"
+    said = deliver.with_images(
+        "tell me which of these two crops reads better on the rail. " * 12,
+        [f"{folder}/1789054000-aaaa1111.png", f"{folder}/1789054001-bbbb2222.png"],
+    )
+
+    assert deliver.deliver(session, said, route="keyboard") == ("keyboard", None)
+
+    one_chunk = "".join(typed)
+    assert len(one_chunk) > 64, "the shape under test is the long one"
+    assert keys_pressed(one_chunk) == [deliver.CLEAR_LINE, deliver.RETURN]
+
+
+def test_a_control_byte_in_the_words_is_never_typed(inbox, claude_home, monkeypatch):
+    """An escape in a prompt would cancel the turn it was meant to start."""
+    typed = recording_it2(monkeypatch)
+    session = session_for(inbox.getsockname())
+    session.pane = a_pane()
+
+    assert deliver.deliver(session, "run \x1b\x07the \x15tests", route="keyboard")[0] == "keyboard"
+
+    assert typed[0] == deliver.CLEAR_LINE + "run the tests"
