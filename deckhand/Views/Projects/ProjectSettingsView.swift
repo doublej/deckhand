@@ -170,12 +170,7 @@ struct ProjectSettingsView: View {
             get: { now },
             set: { value in Task { await model.override(project.path) { $0[keyPath: key] = value } } }
         )) {
-            VStack(alignment: .leading, spacing: 1) {
-                Text(words).font(Typography.primaryRow).foregroundStyle(Palette.textPrimary)
-                if model.wants.settings?.projects[project.path]?[keyPath: key] != nil {
-                    Text("only here").font(Typography.hint).foregroundStyle(Palette.tint)
-                }
-            }
+            label(words, over: key)
         }
         .tint(Palette.tint)
         .frame(minHeight: 44)
@@ -183,20 +178,43 @@ struct ProjectSettingsView: View {
 
     /// Empty means "the default", which is a real answer and the one most projects want — so it
     /// is an option rather than an absence, and it is first.
+    ///
+    /// The label is drawn here rather than handed to the `Picker`, which is the whole reason this
+    /// is a row and not one control: a menu picker only shows the label it was given inside a
+    /// `Form` or a `List`, and this card is neither. Both rows read "Default" and nothing else,
+    /// so there was no telling which model either of them was about.
     private func picker(_ words: String,
                         chosen: String,
                         offered: [String],
                         over key: WritableKeyPath<Overrides, String?>) -> some View {
-        Picker(words, selection: Binding(
-            get: { chosen },
-            set: { value in Task { await model.override(project.path) { $0[keyPath: key] = value } } }
-        )) {
-            Text("Default").tag("")
-            ForEach(offered, id: \.self) { Text($0).tag($0) }
+        HStack(spacing: Spacing.small) {
+            label(words, over: key)
+            Spacer(minLength: Spacing.extraSmall)
+            Picker(words, selection: Binding(
+                get: { chosen },
+                set: { value in
+                    Task { await model.override(project.path) { $0[keyPath: key] = value } }
+                }
+            )) {
+                Text("Default").tag("")
+                ForEach(offered, id: \.self) { Text($0).tag($0) }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .tint(Palette.tint)
         }
-        .tint(Palette.tint)
-        .font(Typography.primaryRow)
         .frame(minHeight: 44)
+    }
+
+    /// What a row is about, and whether this folder is the one saying so. Shared by both kinds
+    /// of control: the marker means the same thing on a model as it does on a switch.
+    private func label<Value>(_ words: String, over key: KeyPath<Overrides, Value?>) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(words).font(Typography.primaryRow).foregroundStyle(Palette.textPrimary)
+            if model.wants.settings?.projects[project.path]?[keyPath: key] != nil {
+                Text("only here").font(Typography.hint).foregroundStyle(Palette.tint)
+            }
+        }
     }
 
     private func eyebrow(_ words: String) -> some View {

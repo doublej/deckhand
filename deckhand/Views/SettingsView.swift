@@ -128,6 +128,9 @@ struct SettingsView: View {
                 Text("Default").tag("")
                 ForEach(offered, id: \.self) { Text($0).tag($0) }
             }
+            // The row already says what this is. A menu picker draws no label of its own outside
+            // a `Form` anyway, but saying so means the row never depends on that staying true.
+            .labelsHidden()
             .pickerStyle(.menu)
             .tint(Palette.tint)
             .disabled(model.wants.settings == nil)
