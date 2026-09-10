@@ -192,12 +192,13 @@ def focus_session(session_id: str) -> dict:
 @app.post("/sessions/{session_id}/control", dependencies=[Depends(require_token)])
 async def control_session(
     session_id: str,
-    action: str = Query(description="cancel, compact or clear"),
+    action: str = Query(description="cancel, compact, clear or exit"),
 ) -> dict:
-    """The three things you do to a session rather than say to it.
+    """The four things you do to a session rather than say to it.
 
-    `clear` throws away the conversation and cannot be undone, which is the phone's problem to
-    ask about — here it is one more thing typed into the pane, exactly as it would be by hand.
+    `clear` throws away the conversation and `exit` throws away the session; neither can be
+    undone, which is the phone's problem to ask about — here they are one more thing typed into
+    the pane, exactly as they would be by hand.
     """
     session = await saying.live_session(session_id)
     if action not in deliver.CONTROLS:

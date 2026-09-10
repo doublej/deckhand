@@ -100,41 +100,6 @@ public struct ContextWindow: Codable, Hashable, Sendable {
     }
 }
 
-/// The three things you do *to* a session rather than say to it. Each is a keystroke in its
-/// pane on the Mac, exactly as it would be typed by hand.
-public enum Control: String, CaseIterable, Sendable {
-    /// Escape: stop what it is doing now.
-    case cancel
-    /// `/compact`: fold the conversation so far into a summary and carry on.
-    case compact
-    /// `/clear`: throw the conversation away. There is no undo, so the phone asks first.
-    case clear
-
-    public var label: String {
-        switch self {
-        case .cancel: "Stop this run"
-        case .compact: "Compact the conversation"
-        case .clear: "Clear the conversation"
-        }
-    }
-
-    public var symbol: String {
-        switch self {
-        // Filled, not outlined: this is the one you reach for while something is
-        // running, and an outline of a stop sign reads as a suggestion.
-        case .cancel: "stop.circle.fill"
-        // Says what compacting does to the conversation — folds it — where the old
-        // four-arrow glyph was the generic "make this smaller" from a window chrome.
-        case .compact: "rectangle.compress.vertical"
-        // The only irreversible thing in the app, and an eraser did not say so.
-        case .clear: "trash"
-        }
-    }
-
-    /// True for the one that cannot be undone.
-    public var asksFirst: Bool { self == .clear }
-}
-
 /// What became of a line of text handed to a session.
 public struct Delivery: Codable, Hashable, Sendable {
     public let delivered: Bool

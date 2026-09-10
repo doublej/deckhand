@@ -47,6 +47,9 @@ CONTROLS = {
     "cancel": (ESCAPE,),
     "compact": (CLEAR_LINE + "/compact", RETURN),
     "clear": (CLEAR_LINE + "/clear", RETURN),
+    # Quits Claude Code. Nothing on the phone can start one again, so this is the one control
+    # whose cost is the session itself rather than what is in it.
+    "exit": (CLEAR_LINE + "/exit", RETURN),
 }
 
 

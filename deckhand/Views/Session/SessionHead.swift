@@ -120,8 +120,9 @@ struct SessionHead: View {
     /// the menu was the only way to any of those, and the menu was the thing switched off.
     private var hasNoPane: Bool { session.pane == nil }
 
+    /// Red for the ones that cannot be undone, which is the same set that asks first.
     private func role(_ action: Control) -> ButtonRole? {
-        action == .clear ? .destructive : nil
+        action.asksFirst ? .destructive : nil
     }
 
     private func send(_ action: Control) {

@@ -17,6 +17,9 @@ struct SessionView: View {
     @State private var filtering = false
     @Environment(\.dismiss) private var dismiss
 
+    /// What the confirmation is about to do, in that control's own words.
+    private var asking: Caution? { confirming?.caution(about: session.name) }
+
     /// Four things you want on arriving, and they want different layouts: the briefing wants
     /// a page to itself, the transcript wants to be pinned to its newest line, and the files and
     /// the slips this session put on the phone are lists you scroll from the top.
@@ -85,12 +88,15 @@ struct SessionView: View {
                 Task { await model.rename(session, to: wanted) }
             }
         }
+        // One dialog for every control that cannot be undone, and it says whatever that control
+        // says. It used to be written for `clear` alone, so adding `exit` to the menu would have
+        // asked "Clear this?" before quitting Claude Code.
         .confirmationDialog(
-            "Clear \(session.name)?",
+            asking?.title ?? "",
             isPresented: .init(get: { confirming != nil }, set: { if !$0 { confirming = nil } }),
             titleVisibility: .visible
         ) {
-            Button("Clear the conversation", role: .destructive) {
+            Button(asking?.verb ?? "", role: .destructive) {
                 // The model directly rather than a helper: the one in `SessionHead` is
                 // for its menu, and a second copy here would be the same three lines
                 // twice. `send` unqualified is the C syscall, which compiles.
@@ -99,7 +105,7 @@ struct SessionView: View {
             }
             Button("Keep it", role: .cancel) { confirming = nil }
         } message: {
-            Text("Everything said in this session goes. There is no undo.")
+            Text(asking?.because ?? "")
         }
         // Hiding the bar takes the system's swipe-back with it, so the page catches its own:
         // started at the leading edge, mostly sideways, and simultaneous so it never competes

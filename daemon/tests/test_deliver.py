@@ -176,8 +176,8 @@ def test_an_unreadable_key_file_does_not_stop_delivery(inbox, claude_home):
     assert [f["type"] for f in read_frames(inbox)] == ["user"]
 
 
-def test_the_three_controls_are_keystrokes_in_the_pane(inbox, claude_home, monkeypatch):
-    """Escape stops a run; the other two are slash commands typed like any other line."""
+def test_the_controls_are_keystrokes_in_the_pane(inbox, claude_home, monkeypatch):
+    """Escape stops a run; the rest are slash commands typed like any other line."""
     typed: list[list[str]] = []
     monkeypatch.setattr(
         deliver.subprocess,
@@ -193,6 +193,34 @@ def test_the_three_controls_are_keystrokes_in_the_pane(inbox, claude_home, monke
     assert typed == [
         ["it2", "session", "send", "-s", "PANE-1", deliver.ESCAPE],
         ["it2", "session", "send", "-s", "PANE-1", deliver.CLEAR_LINE + "/compact"],
+        ["it2", "session", "send", "-s", "PANE-1", deliver.RETURN],
+    ]
+
+
+def test_every_control_the_phone_offers_is_one_the_daemon_knows(inbox, claude_home):
+    """The phone's menu and this table are two lists of the same four things.
+
+    They are in two languages and nothing joins them, so a control added to `Control` in Swift and
+    not here is a menu item that reaches the daemon and comes back "no such control" — which looks
+    like a broken session rather than a missing line. This is the join, written down.
+    """
+    assert set(deliver.CONTROLS) == {"cancel", "compact", "clear", "exit"}
+
+
+def test_exit_is_typed_and_returned_like_any_other_slash_command(inbox, claude_home, monkeypatch):
+    """It quits Claude Code, and it is still only two bursts into the pane."""
+    typed: list[list[str]] = []
+    monkeypatch.setattr(
+        deliver.subprocess,
+        "run",
+        lambda argv, **_k: (typed.append(argv), subprocess.CompletedProcess(argv, 0, "", ""))[1],
+    )
+    session = session_for(inbox.getsockname())
+    session.pane = a_pane()
+
+    assert deliver.control(session, "exit") is None
+    assert typed == [
+        ["it2", "session", "send", "-s", "PANE-1", deliver.CLEAR_LINE + "/exit"],
         ["it2", "session", "send", "-s", "PANE-1", deliver.RETURN],
     ]
 
