@@ -69,22 +69,74 @@ enum Marker {
     static func width(across size: CGSize) -> CGFloat {
         max(onScreen, min(size.width, size.height) * 0.045)
     }
+
+    /// How big the numeral is against the disc it sits in. Heavy at this size, because the figure
+    /// is the whole of what the marker says and a screenshot is usually busy behind it.
+    static let figure: CGFloat = 0.56
+
+    /// The three discs, outside in: a white ring, a black ring, and the white face the numeral is
+    /// drawn on. Fractions of the width rather than fixed points, so the marker looks like the
+    /// same object at 26 points on screen and at 90 pixels on a 6K screenshot.
+    static func bands(across wide: CGFloat) -> [(UIColor, CGFloat)] {
+        [(.white, 0), (.black, wide * 0.07), (.white, wide * 0.20)]
+    }
+
+    /// The same marker as a view, for while the picture is still being marked up. One label
+    /// carries one border, so the black ring is the border and the white ring outside it is a
+    /// shadow with no blur and no offset — which is also why `clipsToBounds` stays off. There is
+    /// nothing inside to clip: the figure is centred and fits.
+    static func label() -> UILabel {
+        let marker = UILabel(frame: CGRect(x: 0, y: 0, width: onScreen, height: onScreen))
+        marker.textAlignment = .center
+        marker.font = .systemFont(ofSize: onScreen * figure, weight: .heavy)
+        marker.textColor = .black
+        marker.backgroundColor = .white
+        marker.layer.cornerRadius = onScreen / 2
+        marker.layer.borderColor = UIColor.black.cgColor
+        marker.layer.shadowColor = UIColor.white.cgColor
+        marker.layer.shadowOpacity = 1
+        marker.layer.shadowRadius = 0
+        marker.layer.shadowOffset = .zero
+        marker.layer.shadowPath = UIBezierPath(
+            ovalIn: marker.bounds.insetBy(dx: -onScreen * 0.07, dy: -onScreen * 0.07)
+        ).cgPath
+        return marker
+    }
+
+    /// A thicker ring and a touch larger when it is the chosen one. Never a different colour: the
+    /// two rings are structural — they are what holds the marker off whatever is behind it — and
+    /// a chosen marker that changed colour would read as a second kind of mark.
+    static func dress(_ marker: UILabel, chosen: Bool) {
+        marker.layer.borderWidth = onScreen * (chosen ? 0.13 : 0.09)
+        marker.transform = chosen ? CGAffineTransform(scaleX: 1.18, y: 1.18) : .identity
+    }
 }
 
-/// A numeral in a filled disc: the tint, a white figure, and a hairline ring so it still separates
-/// from the picture when what is underneath happens to be teal. Not the capsule-round-a-label shape
-/// this app has banned — there is nothing to press and nothing but the number inside it.
+/// A numeral in a disc, drawn to be read off anything.
+///
+/// Deliberately not in this app's colours. Everywhere else a mark is teal because teal is what
+/// says "Deckhand"; here it is drawn *over somebody else's picture*, and the picture is very
+/// often a screenshot of this app — a teal disc on a teal button is a marker you have to hunt
+/// for, which is the one thing a marker may not be.
+///
+/// So it carries no hue at all: black figure on a white face, a black ring around it, and a white
+/// ring around that. Two rings rather than one because a single ring can only separate the marker
+/// from one kind of background — the white one holds it off a dark picture, the black one off a
+/// light one, and between them there is no colour a photograph or a screenshot can be that the
+/// marker disappears into. Black on white is also the most legible a numeral gets, which matters
+/// at a fifth of the size on a 6K screenshot.
 private func draw(_ number: Int, at pixel: CGPoint, on context: CGContext, across size: CGSize) {
     let wide = Marker.width(across: size)
     let disc = CGRect(x: pixel.x - wide / 2, y: pixel.y - wide / 2, width: wide, height: wide)
-    context.setFillColor(UIColor(Palette.tint).cgColor)
-    context.fillEllipse(in: disc)
-    context.setStrokeColor(UIColor.white.cgColor)
-    context.setLineWidth(max(1, wide / 16))
-    context.strokeEllipse(in: disc)
+    // Nested fills rather than strokes: a stroke straddles its path, so two of them at different
+    // widths need their insets worked out from half of each. Three discs cannot be misaligned.
+    for (colour, inset) in Marker.bands(across: wide) {
+        context.setFillColor(colour.cgColor)
+        context.fillEllipse(in: disc.insetBy(dx: inset, dy: inset))
+    }
     let style: [NSAttributedString.Key: Any] = [
-        .font: UIFont.systemFont(ofSize: wide * 0.58, weight: .semibold),
-        .foregroundColor: UIColor.white
+        .font: UIFont.systemFont(ofSize: wide * Marker.figure, weight: .heavy),
+        .foregroundColor: UIColor.black
     ]
     let figure = "\(number)" as NSString
     let box = figure.size(withAttributes: style)

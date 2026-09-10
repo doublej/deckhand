@@ -221,10 +221,7 @@ final class PictureScroll: UIScrollView, UIScrollViewDelegate, PKCanvasViewDeleg
             let mine = pins[index].id == picked
             marker.text = "\(index + 1)"
             marker.center = Fitting.point(of: pins[index].spot, of: pixels, drawn: picture.frame)
-            // A thicker ring and a touch larger. Not a different colour: the tint is what says
-            // "this is a marker", and a second colour would read as a second kind of mark.
-            marker.layer.borderWidth = mine ? 3 : 1.5
-            marker.transform = mine ? CGAffineTransform(scaleX: 1.15, y: 1.15) : .identity
+            Marker.dress(marker, chosen: mine)
         }
         report()
     }
@@ -263,15 +260,7 @@ final class PictureScroll: UIScrollView, UIScrollViewDelegate, PKCanvasViewDeleg
     }
 
     private func addMarker() -> UILabel {
-        let marker = UILabel(frame: CGRect(x: 0, y: 0, width: Marker.onScreen, height: Marker.onScreen))
-        marker.textAlignment = .center
-        marker.font = .systemFont(ofSize: Marker.onScreen * 0.58, weight: .semibold)
-        marker.textColor = .white
-        marker.backgroundColor = UIColor(Palette.tint)
-        marker.layer.cornerRadius = Marker.onScreen / 2
-        marker.layer.borderColor = UIColor.white.cgColor
-        marker.layer.borderWidth = 1.5
-        marker.clipsToBounds = true
+        let marker = Marker.label()
         addSubview(marker)
         return marker
     }
