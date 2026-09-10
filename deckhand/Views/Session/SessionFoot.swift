@@ -28,6 +28,12 @@ struct SessionFoot: View {
 
     /// The mark is the button. utt's mark, because recording is utt's job — it takes the
     /// recording tint and speeds up with the meter, exactly as it does in utt's own rail.
+    ///
+    /// Nudged down into the safe area, and only the mark: it sat a whole home indicator's height
+    /// clear of the bottom, which on a screen whose content now runs all the way down read as
+    /// floating in the middle of nothing. This leaves it just clear of the indicator itself. The
+    /// review card does not move — it is tall, and pushing its foot under the indicator would put
+    /// Send where the system's own gesture lives.
     private var talk: some View {
         TalkControl(
             recorder: recorder,
@@ -41,6 +47,7 @@ struct SessionFoot: View {
                          confirms: model.preferences.confirms)
             }
         )
+        .offset(y: Spacing.small)
     }
 
     /// Held for reading, over the top of whichever tab you were on — including the button you

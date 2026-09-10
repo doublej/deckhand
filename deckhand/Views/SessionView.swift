@@ -74,6 +74,12 @@ struct SessionView: View {
                 // content belongs under that band; the things you press do not, which is why
                 // this is on the pane and the mark below is on the stack outside it.
                 .ignoresSafeArea(.container, edges: .bottom)
+                // Both edges the content runs off, softened. A line of text cut in half by the
+                // header reads as a rendering fault rather than as something scrolled past, and
+                // now that the panes reach the physical bottom the same hard cut happens down
+                // there against the rounded corner. A few points of fade at each end is what
+                // makes both read as "there is more of this" instead.
+                .mask(edges)
                 .overlay(alignment: .top) { landing }
         }
         // Over the content, not under it. Stacked below, the bar took a band off every tab to
@@ -81,9 +87,10 @@ struct SessionView: View {
         // the end of their own content so anything can be read out from under it.
         //
         // On the stack rather than on the pane: the pane runs under the home indicator now, and
-        // an overlay on it would put the mark down there with it. The stack still ends where the
-        // safe area does, so this is the one place that keeps its inset without naming a number
-        // — a home indicator is 34 points on this phone and none at all on others.
+        // an overlay on it would put the whole slot down there with it, review card included.
+        // The stack still ends where the safe area does, so the slot starts from a real inset
+        // rather than a number somebody typed — a home indicator is 34 points on this phone and
+        // none at all on others — and the mark alone leans back down into it. See `SessionFoot`.
         .overlay(alignment: .bottom) {
             SessionFoot(model: model, session: session, recorder: recorder)
         }
@@ -180,6 +187,23 @@ struct SessionView: View {
                 try? await Task.sleep(for: .seconds(5))
             }
             await written
+        }
+    }
+
+    /// The mask both panes are drawn through: clear at the very top and bottom, solid between.
+    ///
+    /// Fixed heights rather than a fraction of the pane, because this is about the seam and the
+    /// seam is the same size whatever the pane's height is. The top is the deeper of the two —
+    /// that edge meets the header, where a half-cut line of text has something solid to be cut
+    /// against and looks broken; the bottom runs out into the rounded corner, which does most of
+    /// the work already.
+    private var edges: some View {
+        VStack(spacing: 0) {
+            LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                .frame(height: 20)
+            Rectangle().fill(.black)
+            LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                .frame(height: 12)
         }
     }
 
