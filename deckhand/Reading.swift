@@ -92,6 +92,23 @@ extension AppModel {
         }
     }
 
+    /// The names this session answers to. Handed back rather than kept, and asked for only when
+    /// a picker opens: there are getting on for two hundred on this Mac, they are files a person
+    /// edits, and a copy on the phone would be a stale copy of something cheap to fetch.
+    ///
+    /// Empty on a failure rather than a throw, with the reason in the status line — the same
+    /// answer `raw(for:)` gives, because it is the same question: a fetch made by hand, for one
+    /// screen, where the caller has no sensible thing to do with an error but say so.
+    func commands(for session: Session) async -> [SlashCommand] {
+        guard let client = settings.client() else { return [] }
+        do {
+            return try await client.commands(of: session.sessionId)
+        } catch {
+            status = "Could not read \(session.name)'s commands"
+            return []
+        }
+    }
+
     /// One file, saved to a temporary URL the caller owns and deletes. Never cached here — a
     /// rendered clip is tens of megabytes and the model outlives the screen showing it.
     func download(_ asset: Asset, in session: Session) async throws -> URL {

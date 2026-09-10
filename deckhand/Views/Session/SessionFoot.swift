@@ -75,7 +75,11 @@ struct SessionFoot: View {
                 // the same recorder, a clip that is only ever turned into words.
                 say: Dictation(recorder: recorder,
                                mode: model.preferences.talkMode,
-                               words: { await model.dictated($0, for: session) })
+                               words: { await model.dictated($0, for: session) }),
+                // The names this session answers to, for the front of the words. Fetched when
+                // the picker opens rather than held here: two hundred of them, and most cards
+                // never ask.
+                commands: { await model.commands(for: session) }
             )
             .frame(maxWidth: .infinity)
             .shadow(color: .black.opacity(0.18), radius: 10, y: 3)

@@ -45,8 +45,12 @@ struct ReviewCard: View {
     /// one hands another clip to the Mac and lays the words under what the card holds, chain notes
     /// and all; this one fills in a box on a sheet. Nil wherever `more` is, and for the same reason.
     var say: Dictation?
+    /// The names this session answers to, fetched when the picker opens. Nil where there is
+    /// nobody to ask — a deck column, or a card built from words with no session behind them.
+    var commands: (() async -> [SlashCommand])?
     @State private var picked: [PhotosPickerItem] = []
     @State private var editing = false
+    @State private var choosing = false
     @Environment(\.accent) private var accent
     /// The words as they stand. Seeded from what was heard and kept across an edit, so opening
     /// the editor twice does not throw away the first correction.
@@ -92,6 +96,13 @@ struct ReviewCard: View {
                 editing = false
             }
         }
+        .sheet(isPresented: $choosing) {
+            if let commands {
+                // Into the draft, not out of the card: the whole point is that the words are
+                // still yours to change afterwards, and what you said is still under it.
+                CommandPicker(load: commands) { draft = $0.infront(of: words) }
+            }
+        }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(compact ? Spacing.extraSmall : Spacing.medium)
         .background(
@@ -123,8 +134,34 @@ struct ReviewCard: View {
     /// makes the order they arrive in the order they were picked rather than the order the library
     /// happens to hold them — which is the order the words about them end up in.
     @ViewBuilder private var attachments: some View {
-        if let attach {
+        if attach != nil || commands != nil {
             HStack(spacing: Spacing.small) {
+                // First, because it goes at the front of the words: a command is the one part of
+                // a prompt a phone cannot dictate — `/orchestrate-sessions` comes back as four
+                // words and a guess — so it is picked from the Mac's own list and the rest is
+                // still spoken. Deliberately not in the row below: that row is Discard, Edit, Add
+                // and Send, and it has already been too crowded once.
+                if commands != nil {
+                    Button { choosing = true } label: {
+                        Attach(word: "Command", symbol: "slash.circle", compact: compact)
+                    }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("pick-command")
+                }
+                if attach != nil { photos }
+                Spacer(minLength: 0)
+            }
+            .font(Typography.hint)
+            .foregroundStyle(accent)
+        }
+    }
+
+    /// The two ways a picture gets in. Both are always offered: the clipboard one was hidden
+    /// whenever the clipboard held no image, which from the outside is a button that comes and
+    /// goes for no visible reason.
+    @ViewBuilder private var photos: some View {
+        if let attach {
+            Group {
                 PhotosPicker(selection: $picked,
                              maxSelectionCount: nil,
                              selectionBehavior: .ordered,
@@ -138,10 +175,7 @@ struct ReviewCard: View {
                     }
                         .buttonStyle(.plain)
                 }
-                Spacer(minLength: 0)
             }
-            .font(Typography.hint)
-            .foregroundStyle(accent)
             // The picker hands back items, not bytes; the bytes come over a moment later.
             // One at a time and in the order they were chosen, so each thumbnail appears as its
             // picture arrives rather than all of them after the slowest one.
@@ -222,67 +256,6 @@ private struct Attach: View {
             Image(systemName: symbol).font(.system(size: 13, weight: .semibold))
         } else {
             Label(word, systemImage: symbol)
-        }
-    }
-}
-
-/// The whole screen above the keyboard, as one field holding what was heard.
-///
-/// A phone dictates better than it types, but not perfectly: utt hears a name wrong, or the
-/// sentence ran on, and the fix is two words. The card is far too small a place to make that
-/// fix — so the edit is a page of its own, opened focused with the keyboard already up, which
-/// is the only arrangement where correcting one word is faster than saying the whole thing again.
-///
-/// And the mark is here too, under the field, because this is the page you reach *because* a word
-/// came back wrong: half of what happens here is a correction typed, and the other half is another
-/// sentence that is easier said. It lands under what is in the box and never over it.
-private struct Editor: View {
-    let words: String
-    let target: String
-    var say: Dictation?
-    let keep: (String) -> Void
-    @State private var edited: String = ""
-    @FocusState private var typing: Bool
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            TextEditor(text: $edited)
-                .font(Typography.mono)
-                .focused($typing)
-                .scrollContentBackground(.hidden)
-                .padding(.horizontal, Spacing.small)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Palette.surfaceGround)
-                // Above the keyboard rather than in the toolbar: a 44pt capsule does not fit in a
-                // navigation bar beside Cancel and Done, and this is the one control here your
-                // thumb is already resting on. A blank line between the halves, because two things
-                // said one after the other are two paragraphs and not one long sentence.
-                .safeAreaInset(edge: .bottom) {
-                    if let say {
-                        SayInto(say: say, text: $edited, gap: "\n\n")
-                            .padding(.horizontal, Spacing.medium)
-                            .padding(.bottom, Spacing.extraSmall)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }
-                .navigationTitle("→ \(target)")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button("Cancel") { dismiss() }.tint(Palette.textSecondary)
-                    }
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button("Done") { keep(edited) }.tint(Palette.tint).fontWeight(.semibold)
-                    }
-                }
-        }
-        .task {
-            edited = words
-            // A beat, or the field takes focus before it is on screen and the keyboard does
-            // not come up at all — which leaves a page that looks editable and is not.
-            try? await Task.sleep(for: .milliseconds(120))
-            typing = true
         }
     }
 }

@@ -44,6 +44,16 @@ public struct DeckhandClient: Sendable {
         return body["files"] ?? []
     }
 
+    /// The slash commands and skills this session could be handed by name.
+    ///
+    /// Asked for when a picker opens rather than with the listing: there are getting on for two
+    /// hundred of them on this Mac, most cards never want one, and they are files a person edits
+    /// — so a copy kept on the phone would be a stale copy of something cheap to ask for.
+    public func commands(of sessionId: String) async throws -> [SlashCommand] {
+        let body: [String: [SlashCommand]] = try await get("sessions/\(sessionId)/commands")
+        return body["commands"] ?? []
+    }
+
     /// One of those files, saved to a local URL. The Mac serves only what that session's
     /// transcript named, so this is a way to see what it made and never a way to read its disk.
     ///

@@ -25,7 +25,7 @@ from . import (
 )
 from .filters import routes as filter_routes
 from .log import log
-from .reading import asked, readable, transcripts
+from .reading import asked, commands, readable, transcripts
 
 
 def require_token(x_deckhand_token: str = Header(default="")) -> None:
@@ -187,6 +187,20 @@ def focus_session(session_id: str) -> dict:
     if not sessions.focus(session):
         raise HTTPException(status_code=409, detail="session has no iTerm pane")
     return {"focused": True}
+
+
+@app.get("/sessions/{session_id}/commands", dependencies=[Depends(require_token)])
+async def list_commands(session_id: str) -> dict:
+    """The slash commands and skills this session could be handed by name.
+
+    Read per request rather than kept: they are files on the Mac that a person edits, and a
+    listing this phone opens once in a while is not worth a cache that can go stale. Scoped to the
+    session's own folder as well as the Mac's, because a project's `.claude/commands` are only
+    that project's — which is why this is a session route and not a `/commands`.
+    """
+    session = await saying.live_session(session_id)
+    found = commands.commands(session.cwd)
+    return {"commands": [command.to_json() for command in found]}
 
 
 @app.post("/sessions/{session_id}/control", dependencies=[Depends(require_token)])
