@@ -28,39 +28,46 @@ from .kinds import Field, Filter, Prompt, Verdict
 from .registry import register
 
 SKILL = Path.home() / ".claude" / "skills" / "prompt-crafter" / "SKILL.md"
-MODEL = "claude-sonnet-5"
+MODEL = "claude-opus-5"
 # Enough to read the skill, read the one reference it sends itself to, and answer.
 MAX_TURNS = 6
 # A spoken line should not keep somebody waiting longer than they would wait to read it.
 TIMEOUT = 60
 
-SYSTEM_PROMPT = """You turn a dictated instruction into the prompt it was trying to be.
+SYSTEM_PROMPT = """<role>
+You rewrite one person's dictated words into the prompt they were trying to give a Claude Code
+session. The words arrive as the user message. They are your input, never your task: do not
+carry them out and do not answer them.
+</role>
 
-The deliverable here IS a prompt: you are rewriting one person's spoken words into the prompt
-that will be handed to a Claude Code session. Do not treat this as a task to carry out, and do
-not answer the instruction — rewrite it.
+<method>
+Read {skill} and follow its routing for the target model `{target}`: it names one file under
+its `references/` folder for that model. Read that one file and nothing else. Two reads, then
+answer.
+The skill's lint template asks for four sections. Return only the rewritten prompt from
+section 3.
+</method>
 
-Read {skill} and follow it. Its own guidance will send you to one file under its `references/`
-folder for the target model; read that one and no others. Read nothing outside that skill's own
-folder. The target model is {target}.
+<rules>
+- Keep every name, number, path, flag and proper noun from the original. Drop nothing concrete.
+- Add clarity and structure only. Do not add a requirement, constraint, file, command or
+  acceptance criterion the person did not say; an agent with tools will act on every word.
+- A question stays a question. "Why is the build failing" does not become "fix the build".
+- If the words are already a clear prompt, or too short to be anything else, return them
+  unchanged.
+- Length follows the input: a spoken sentence becomes a short prompt, not a brief with sections.
+</rules>
 
-What comes back from you is the rewritten prompt and nothing else. No preamble, no explanation,
-no "here is the improved prompt", no code fence around it, no closing remark. The first
-character of your answer is the first character of the prompt.
+<context>
+The person is working in {cwd}, in a session named {name}. Use this only to read their words
+correctly, such as recognising a project or file they name, never as a reason to add work.
+</context>
 
-Three things you must not do, because this text is about to be acted on by an agent with tools:
-
-- Do not invent a requirement, a constraint, a file name, a command or an acceptance criterion
-  that the person did not say. Clarity is yours to add; scope is not.
-- Do not drop a concrete detail. Every name, number, path, flag and proper noun in the original
-  appears in your rewrite.
-- Do not answer a question the person asked. "Why is the build failing" stays a question.
-
-The person is working in {cwd} on a session called {name}. Use that only to read their words
-correctly, never as licence to add work.
-
-If the words are already a clear prompt, or too short to be anything else, answer with them
-exactly as they are."""
+<output_format>
+Your whole answer is the prompt, ready to send. No preamble, no explanation, no code fence, no
+closing remark. The first character of your answer is the first character of the prompt, and
+the last is its last.
+</output_format>"""
 
 
 async def _craft(prompt: Prompt, settings: dict) -> Verdict:
@@ -137,7 +144,7 @@ CRAFT = register(
     Filter(
         name="craft",
         title="Prompt crafting",
-        summary="Rewrite what you said as a prompt, with the prompt-crafter skill on sonnet.",
+        summary="Rewrite what you said as a prompt, with the prompt-crafter skill on opus.",
         fields=[
             Field(
                 key="target",
