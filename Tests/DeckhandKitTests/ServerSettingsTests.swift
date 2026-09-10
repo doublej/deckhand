@@ -36,19 +36,40 @@ struct ServerSettingsTests {
 
 @Suite("Preferences")
 struct PreferencesTests {
-    @Test("starring and hiding survive a round trip")
+    /// Every field, compared as the whole document rather than key by key.
+    ///
+    /// `Preferences` is `Equatable`, so one `==` asserts that no field is written by `save` and
+    /// missed by `load` or the other way round — including any field added after this was
+    /// written, which a list of per-key expectations would silently not cover. That gap is not
+    /// hypothetical: a setting saved and never loaded looks exactly like a control that ignores
+    /// you, and the person only finds out one relaunch later.
+    @Test("every preference survives a round trip, not only the ones somebody thought of")
     func roundTrip() throws {
         let defaults = try #require(UserDefaults(suiteName: "deckhand.prefs.\(UUID().uuidString)"))
         var prefs = Preferences()
         prefs.toggleFavorite("warm-okapi")
         prefs.setHidden("binwatch", true)
         prefs.talkMode = .toggle
+        prefs.route = .keyboard
+        prefs.confirms = false
+        prefs.formatsMarkdown = false
+        prefs.linkWindow = 1800
         prefs.save(to: defaults)
 
-        let loaded = Preferences.load(from: defaults)
-        #expect(loaded.isFavorite("warm-okapi"))
-        #expect(loaded.isHidden("binwatch"))
-        #expect(loaded.talkMode == .toggle)
+        #expect(Preferences.load(from: defaults) == prefs)
+    }
+
+    /// Five minutes when nothing has been chosen, which is the number the daemon's own
+    /// `within` defaults to — the phone sends the window, so the two cannot be different.
+    @Test("the rail's window defaults to five minutes and is remembered once set")
+    func linkWindow() throws {
+        let defaults = try #require(UserDefaults(suiteName: "deckhand.prefs.\(UUID().uuidString)"))
+        #expect(Preferences.load(from: defaults).linkWindow == 300)
+
+        var prefs = Preferences()
+        prefs.linkWindow = 60
+        prefs.save(to: defaults)
+        #expect(Preferences.load(from: defaults).linkWindow == 60)
     }
 
     @Test("the markdown reading choice is remembered, and on until it is turned off")

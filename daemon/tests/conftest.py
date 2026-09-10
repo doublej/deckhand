@@ -43,6 +43,7 @@ def claude_home(tmp_path, monkeypatch):
                     "name": name,
                     "status": status,
                     "updatedAt": updated,
+                    "messagingSocketPath": f"/tmp/cc-socks/{pid}.sock",
                 }
             )
         )
