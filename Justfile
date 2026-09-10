@@ -228,3 +228,12 @@ install-agent:
 uninstall-agent:
     launchctl bootout gui/$(id -u)/com.jurrejan.deckhand || true
     rm -f ~/Library/LaunchAgents/com.jurrejan.deckhand.plist
+
+# Tell every session on this Mac that the phone exists. Personal scope, not per project:
+# whether the phone can be reached has nothing to do with the folder a session is running in.
+
+# `-n` so a second run replaces the link instead of nesting one inside it.
+[group('ops')]
+install-skill:
+    ln -sfn {{ justfile_directory() }}/skills/deckhand ~/.claude/skills/deckhand
+    @head -2 ~/.claude/skills/deckhand/SKILL.md | tail -1
