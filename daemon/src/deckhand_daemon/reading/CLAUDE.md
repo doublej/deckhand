@@ -6,6 +6,7 @@ Everything that reads a Claude Code transcript and nothing that writes one.
 
 ```
 transcripts.py  # the last rounds, the activity blob a summary is written from, context fullness
+machinery.py    # the wrappers a message travels in, and how much of one is worth keeping
 asked.py        # what the person asked for, and what is still in the session's inbox
 commands.py     # the slash commands and skills a session could be handed by name
 readable.py     # the whole transcript as lines, for when the app's reading looks wrong
@@ -21,6 +22,25 @@ context.py      # the CLAUDE.md tree a session in a folder is loaded with, befor
   session on every listing.
 
 ## Invariants
+
+- **A wrapper is caught by name, never by shape.** `machinery.py` knows six noise tags, two peer
+  envelopes and `task-notification`, and everything else it sees is content: `Array<String>` in a
+  prompt, `a < b`, an HTML snippet two sessions are discussing. This once swept every `<...>` out
+  of a queued message, which is a tidier screen bought with somebody's actual words. The two
+  answers differ because the wrappers do — a `<system-reminder>` hides nothing and goes whole, a
+  `<teammate-message>` is another session's entire report and its `summary=` was written for a
+  person, so the tag becomes a `**From <who>:** <summary>` line and the body stays. Under it the
+  boilerplate paragraphs the harness writes around a peer message go too, and only when a peer
+  envelope was actually seen outside a fence.
+- **Fenced and backticked text is quoted, whatever it says.** The transcripts here are full of
+  sessions showing each other these exact tags. A fence is sacred to everything in `machinery`;
+  a backticked span is sacred only to the tag stripping, because a peer's report is markdown and
+  says `just check` in it — one pattern covering both cuts the wrapper in half before anything
+  can read it. An unterminated fence takes the rest of the message with it, and an unclosed tag
+  loses the tag and keeps the words: neither can lose a message.
+- **Structure survives the daemon.** What comes off is machinery; markdown is not machinery. The
+  bold, the bullets and the fences reach the phone intact, because the thing that draws them is
+  `Markdown` in the app and the daemon cannot draw anything.
 
 - **A message absorbed mid-turn is a `queued_command` attachment, not a `user` entry.** No
   `user` entry is ever written for one — but it is written down, as

@@ -14,13 +14,11 @@ import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from . import machinery
+
 # A session deep in a tool run can push its last words far back, so widen until turns appear.
 TAIL_WINDOWS = (512 * 1024, 4 * 1024 * 1024, 32 * 1024 * 1024)
 MAX_TEXT = 4000
-_NOISE = re.compile(r"<(system-reminder|command-message|command-name|command-args)>.*?</\1>", re.DOTALL)
-# The envelope a queued message travels in: one session addressing another, or the daemon saying
-# who spoke. Tags only — whatever they wrap is the message.
-_WRAPPER = re.compile(r"</?[a-z][\w-]*(?:\s[^>]*)?>", re.IGNORECASE)
 # Not everything that reaches a session is a person. Claude Code queues its own notices — a
 # finished background task, a reminder — and those are machinery, not something anybody said.
 MACHINE = re.compile(r"^\s*<\s*(?:task-notification|system-reminder|local-command-\w+)\b", re.IGNORECASE)
@@ -100,7 +98,7 @@ def text_of(entry: dict) -> str | None:
         parts = [b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text"]
     else:
         return None
-    text = _NOISE.sub("", "\n".join(p for p in parts if p))
+    text = machinery.unwrapped("\n".join(p for p in parts if p))
     # The keyboard route types ctrl-U before the words to clear whatever was half-written in the
     # prompt, and that control character is part of the entry Claude Code writes down.
     text = "".join(c for c in text if c.isprintable() or c.isspace()).strip()
@@ -112,8 +110,12 @@ def unwrap(text: str) -> str:
 
     Deckhand's own socket route labels what it delivers, and a message from another session
     arrives inside a tag. Neither is what the person said, and neither belongs on the phone.
+
+    Which tags come off is `machinery`'s list rather than "anything shaped like a tag": this
+    once swept every `<...>` out of a queued message, and a prompt saying `Array<String>` lost
+    the half of itself that mattered.
     """
-    body = _WRAPPER.sub("", text)
+    body = machinery.unwrapped(text)
     # Control characters and all: the keyboard route types ctrl-U before the words to clear
     # whatever was half-written in the prompt, and that ctrl-U travels with the message.
     body = "".join(c for c in body if c.isprintable() or c.isspace()).strip()
