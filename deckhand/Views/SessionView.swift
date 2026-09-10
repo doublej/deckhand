@@ -121,6 +121,10 @@ struct SessionView: View {
         // clip is sent, thrown away, refused or interrupted.
         .accent(accent)
         .background(Palette.surfaceGround)
+        // A sideways drag in here is already the panes' and the leading edge is already the way
+        // out. The manager's swipe stands down for as long as this page is up — see `ManagerShell`.
+        .onAppear { model.manager.covered = true }
+        .onDisappear { model.manager.covered = false }
         // No navigation bar. It was a whole band holding one chevron, stacked above a header
         // that already named the page — two rows of chrome before a word of content. The
         // chevron moved into the header and the band went with it.

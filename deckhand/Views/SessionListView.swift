@@ -194,8 +194,14 @@ struct SessionListView: View {
             )
             review(for: session)
         }
-        .swipeActions(edge: .leading) { star(session) }
-        .swipeActions(edge: .trailing) { hide(session, hidden) }
+        // Both on the leading edge, and that is not a tidy-up: a trailing swipe is how the
+        // manager panel is pulled in from anywhere on the rail now (`ManagerShell`), so a row
+        // that answered to one would be arguing with the screen. One swipe, one edge, both
+        // actions — and the drag going the other way belongs to nothing on this page.
+        .swipeActions(edge: .leading) {
+            star(session)
+            hide(session, hidden)
+        }
     }
 
     private func startTalking(to session: Session) {

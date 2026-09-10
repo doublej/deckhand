@@ -1,12 +1,16 @@
 import XCTest
 
-/// The manager panel: the two ways in, the way back, and the thing the way in nearly broke.
+/// The manager panel: the two ways in, the way back, and the two things the way in must not take.
 ///
-/// The gesture is a strip overlaid on the trailing edge of the rail, which is the same shape
-/// `SessionView`'s back gesture uses and for the same reason — the rows underneath already spend
-/// their horizontal drag on `swipeActions`. `testARowStillRevealsItsActions` is the test that
-/// fails if the strip ever grows wide enough to take that drag, which is the whole risk of
-/// putting a gesture on this page at all.
+/// The panel is pulled in by a drag anywhere on the rail — it was a 24pt strip on the trailing
+/// edge, which meant aiming at an edge to reach a screen. Nothing is overlaid and nothing is
+/// taken from the rail: `ManagerShell` watches every drag with `simultaneousGesture` and moves
+/// the screen for one shape of them, sideways and trailing-going.
+///
+/// The direction gate is the whole design, so two of these tests are the gate rather than the
+/// panel. `testARowStillRevealsItsActions` fails if a leading-going drag stops belonging to the
+/// row it started on; `testAVerticalSwipeIsTheListsAndNotThePanels` fails if a drag up the page
+/// starts moving the screen sideways. Either one breaking makes the panel not worth having.
 ///
 /// Needs `DECKHAND_HOST` and `DECKHAND_TOKEN` in the environment (see `just ui-test`).
 final class ManagerPanelTests: XCTestCase {
@@ -23,24 +27,46 @@ final class ManagerPanelTests: XCTestCase {
         add(screenshot(app, named: "manager"))
     }
 
-    /// The gesture JJ asked for: everything moves left and the panel is behind it.
-    func testTheTrailingEdgeSwipesThePanelIn() throws {
+    /// The gesture JJ asked for: a drag begun in the middle of the screen, nowhere near an edge,
+    /// and the whole screen follows it. This is the one that fails against a strip.
+    func testASwipeFromTheMiddleOpensThePanel() throws {
+        let app = try launch()
+        let row = app.descendants(matching: .any).matching(identifier: "session-row").firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 20), "the rail stayed empty")
+
+        drag(app, from: 0.5, to: 0.05)
+        waitForPanel(app, onScreen: true)
+
+        // And back out the same way, from the middle of the panel rather than its edge.
+        drag(app, from: 0.5, to: 0.95)
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "the panel would not go away again")
+    }
+
+    /// The edge still works. "Anywhere" has to include the place it used to be the only place.
+    func testTheTrailingEdgeStillSwipesThePanelIn() throws {
         let app = try launch()
         let row = app.descendants(matching: .any).matching(identifier: "session-row").firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 20), "the rail stayed empty")
 
         drag(app, from: 0.995, to: 0.15)
-        let panel = app.textFields["manager-field"]
-        XCTAssertTrue(panel.waitForExistence(timeout: 5), "a trailing edge drag did not open it")
-
-        // And back out the way it came, from the panel's own leading edge.
-        drag(app, from: 0.005, to: 0.85)
-        XCTAssertTrue(row.waitForExistence(timeout: 5), "the panel would not go away again")
+        waitForPanel(app, onScreen: true)
     }
 
-    /// The strip is drawn over the rows, so it takes the touch before the `List` sees it. It is
-    /// 24 points wide for exactly this reason: a row swiped anywhere else still reveals its
-    /// actions. This is the regression that would make the panel not worth having.
+    /// A drag up the page is the list's, and the screen must not follow it sideways. This is what
+    /// a strip bought by being 24 points wide and what the direction gate buys instead.
+    func testAVerticalSwipeIsTheListsAndNotThePanels() throws {
+        let app = try launch()
+        let row = app.descendants(matching: .any).matching(identifier: "session-row").firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 20), "the rail stayed empty")
+
+        app.swipeUp()
+        app.swipeDown()
+        waitForPanel(app, onScreen: false, timeout: 2)
+        XCTAssertTrue(row.exists, "the rail went somewhere it was not sent")
+    }
+
+    /// Every row action lives on the leading edge now, which is what leaves the trailing drag
+    /// free for the screen. A leading-going drag is still the row's, from anywhere on it.
     func testARowStillRevealsItsActions() throws {
         let app = try launch()
         let row = app.descendants(matching: .any).matching(identifier: "session-row").firstMatch
@@ -50,7 +76,11 @@ final class ManagerPanelTests: XCTestCase {
             NSPredicate(format: "label == 'Star' OR label == 'Unstar'")
         ).firstMatch
         XCTAssertTrue(star.waitForExistence(timeout: 5),
-                      "the manager strip took the row's own swipe")
+                      "the panel gesture took the row's own swipe")
+        let hide = app.buttons.matching(
+            NSPredicate(format: "label == 'Hide' OR label == 'Show'")
+        ).firstMatch
+        XCTAssertTrue(hide.exists, "hiding lost its home when it moved off the trailing edge")
     }
 
     /// The whole loop, against the Mac that is actually running: the words go up, the Mac writes
@@ -76,6 +106,21 @@ final class ManagerPanelTests: XCTestCase {
         XCTAssertTrue(card.waitForExistence(timeout: 15),
                       "what was said never came back onto the panel")
         add(screenshot(app, named: "manager-said"))
+    }
+
+    /// On screen, not merely in the hierarchy.
+    ///
+    /// Both halves of the shell are mounted the whole time — the panel is one screen's width off
+    /// to the side — so its field `exists` whether or not it has been pulled in, and a test that
+    /// asked would pass without the gesture ever working. Hittability is what tells them apart.
+    private func waitForPanel(_ app: XCUIApplication, onScreen: Bool, timeout: TimeInterval = 5) {
+        let field = app.textFields["manager-field"]
+        let wanted = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "isHittable == %@", NSNumber(value: onScreen)),
+            object: field
+        )
+        XCTAssertEqual(XCTWaiter().wait(for: [wanted], timeout: timeout), .completed,
+                       onScreen ? "the panel did not come in" : "the panel came in uninvited")
     }
 
     /// A drag across the middle of the screen, from one fraction of the width to another.

@@ -18,6 +18,15 @@ final class ManagerDesk {
     /// Whether the panel is on screen. `ManagerShell` owns the gesture; this is the state it
     /// moves, so the rail's own foot can open the panel without knowing about the drag.
     var open = false
+
+    /// Whether a session's own page is sitting on top of the rail.
+    ///
+    /// The shell's swipe belongs to the rail and to the deck. Inside a session a sideways drag
+    /// already pages between that session's panes and a leading one already leaves it, so a
+    /// gesture that watched the whole screen there would be a third meaning for a drag that has
+    /// two — it took the pane swipes and the way out with them. Set by `SessionView`, which is
+    /// pushed from exactly one place.
+    var covered = false
     /// What is typed but not sent.
     var draft = ""
     var sending = false
