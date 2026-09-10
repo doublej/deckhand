@@ -7,12 +7,16 @@ import SwiftUI
 /// to answer — which stage is the slow one, and by how much. The bars are only there so the
 /// answer can be found without reading fourteen numbers first.
 ///
-/// Two surfaces show it and both are pages: a row in the clip archive that expands, and the
-/// sheet behind the total on the review card. Nothing here sets a ground of its own.
+/// Two surfaces show it and both are pages, and both open it in place rather than over
+/// themselves: a row in the clip archive, and the round-trip line under the review card's
+/// buttons. Nothing here sets a ground of its own.
 struct TimingsView: View {
     let timing: ClipTiming
     /// The archive draws it inside a list row that is already tight.
     var compact = false
+    /// The total, over the table. Off where whatever opened this is already showing it — the
+    /// review card's own line *is* the total, and the same number twice is not a second fact.
+    var totalled = true
 
     private var longest: Double { max(timing.slowest?.took ?? 1, 1) }
 
@@ -74,15 +78,17 @@ struct TimingsView: View {
     /// a breakdown dominated by however long somebody spoke says nothing about what is slow.
     private var heading: some View {
         VStack(alignment: .leading, spacing: 1) {
-            HStack(alignment: .firstTextBaseline, spacing: Spacing.small) {
-                Text("PRESS TO CARD")
-                    .font(Typography.eyebrow)
-                    .tracking(1.2)
-                    .foregroundStyle(Palette.textTertiary)
-                Spacer(minLength: 0)
-                Text(Self.spelled(timing.total))
-                    .font(Typography.mono)
-                    .foregroundStyle(Palette.textPrimary)
+            if totalled {
+                HStack(alignment: .firstTextBaseline, spacing: Spacing.small) {
+                    Text("PRESS TO CARD")
+                        .font(Typography.eyebrow)
+                        .tracking(1.2)
+                        .foregroundStyle(Palette.textTertiary)
+                    Spacer(minLength: 0)
+                    Text(Self.spelled(timing.total))
+                        .font(Typography.mono)
+                        .foregroundStyle(Palette.textPrimary)
+                }
             }
             Text(pace)
                 .font(Typography.hint)

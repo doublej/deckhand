@@ -157,7 +157,10 @@ public enum ArtifactStyle {
       color: var(--dh-text-primary);
       background: var(--dh-surface);
       border: 0.5px solid var(--dh-hairline);
-      border-radius: var(--dh-r-m);
+      /* One token below a card's own, the same as a field beside it: a button carrying the
+         container's radius makes two curves the same size on either side of 16px of padding,
+         which is the pair that reads as a clash. `ReviewActions.face` is the native half. */
+      border-radius: var(--dh-r-s);
       -webkit-tap-highlight-color: transparent;
     }
 

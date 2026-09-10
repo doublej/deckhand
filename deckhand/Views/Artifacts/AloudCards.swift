@@ -163,7 +163,14 @@ struct AloudCards: View {
                     .font(Typography.primaryRow)
                     .foregroundStyle(Color.white)
                     .frame(maxWidth: .infinity, minHeight: 44)
-                    .background(Capsule().fill(idle ? Palette.textTertiary : Palette.tint))
+                    // The same corner the cards above it carry, one token down. A 44pt capsule
+                    // here was a 22pt curve directly under a column of 12pt ones, at the same
+                    // width and twelve points away — the pair reads as fighting, exactly as it
+                    // did in the review card. See `Design/CLAUDE.md`.
+                    .background(
+                        RoundedRectangle(cornerRadius: Radius.small, style: .continuous)
+                            .fill(idle ? Palette.textTertiary : Palette.tint)
+                    )
             }
             .buttonStyle(.plain)
             // Both, and the second one matters: without it a tap while the first answer is still

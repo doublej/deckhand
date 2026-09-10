@@ -9,6 +9,10 @@ import SwiftUI
 /// kind, and the row was one control too wide either way. Under the words is where the words it
 /// records are going to land, which is the whole of what it needs to say.
 ///
+/// And directly under them now, not at the foot of a box the words did not fill: it is where the
+/// caret would be, because `Appending` lays the next clip on the line beneath these. The gap was
+/// the words' scroll box taking every point the card was offered; the card hugs them instead.
+///
 /// It is `TalkControl` underneath, so hold-versus-tap is the same gesture it is everywhere else in
 /// the app, and `Appending.swift` is what puts the words beneath rather than over.
 struct SayRest: View {
@@ -36,11 +40,16 @@ struct SayRest: View {
                     content: { face($0) })
     }
 
-    /// While it listens the capsule fills, and once the clip is on the wire it spins.
+    /// While it listens it fills, and once the clip is on the wire it spins.
     ///
     /// A glyph beside the word now that it stands on its own. In the row at the foot it was one
     /// verb among four and read as one; alone under a prompt, "Add" on its own could be adding
     /// anything, and the microphone is the whole of the difference.
+    ///
+    /// `Radius.small`, not a capsule, for the reason `ReviewActions.face` gives: a 22pt corner
+    /// nested 16pt inside the card's own 12pt one is the pair that reads as a clash. The frame is
+    /// untouched by that — the shape changes, the size does not, and the size is what a finger
+    /// mid-hold is standing on.
     private func face(_ state: TalkState) -> some View {
         let live = state.isRecording || state.busy
         return HStack(spacing: Spacing.xxs) {
@@ -56,8 +65,8 @@ struct SayRest: View {
         .lineLimit(1)
         .padding(.horizontal, Spacing.small)
         .frame(minHeight: Self.touch)
-        .background(Capsule().fill(fill(state)))
-        .contentShape(.capsule)
+        .background(RoundedRectangle(cornerRadius: Radius.small, style: .continuous).fill(fill(state)))
+        .contentShape(.rect(cornerRadius: Radius.small, style: .continuous))
         .animation(.snappy(duration: 0.2), value: word(state))
         .accessibilityAddTraits(.isButton)
         .accessibilityLabel(spoken(state))
@@ -67,7 +76,7 @@ struct SayRest: View {
     /// What the next press does, said only when a press is what comes next.
     ///
     /// The word used to be "Add" throughout, and the reasoning was sound for half the cases: in
-    /// hold mode the finger is on the capsule, so nothing about it may change size — that is the
+    /// hold mode the finger is on the control, so nothing about it may change size — that is the
     /// failure `TalkMark` records having made once already. In tap mode the finger is off it and
     /// a second tap is exactly what ends the recording, so a control that still says "Add" is
     /// refusing to say the one thing the person needs to know.

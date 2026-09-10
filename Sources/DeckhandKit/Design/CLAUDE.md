@@ -43,6 +43,16 @@ Markdown / MarkdownBlocks / Prose  # how a session's words are drawn
   `updated_at`, which is the age of an *idle* session only — a busy row is never faded whatever
   its timestamp says, or the hardest-working row on the rail would be the faintest one. Portrait
   only; `SessionRow` has no other caller.
+- **Corners get tighter inwards, never wider.** A shape nested inside another takes the `Radius`
+  token *below* its container's, because concentric corners want `inner = outer - the gap between
+  them` and this scale has no negative step: a `Radius.medium` card with `Spacing.medium` padding
+  wants a square inner corner, and `Radius.small` is as near as the tokens go. That is why a
+  filled control inside a card is a `Radius.small` rectangle and not a `Capsule` — a 44pt capsule
+  is a 22pt corner inside a 12pt one, the inner curve wider than the outer, which is the pair
+  that reads as fighting. A capsule is still right where nothing encloses it (the talk mark's
+  wings, the pane's landing label), where it is a bar or a rail whose radius is only its own
+  thickness (`Meter`, a turn's rail), where it is a circle (`SayInto` compact), and for a
+  page-level selector standing on the ground rather than in a card (`FilesView`, `ArtifactsView`).
 - **Session glyphs are derived from the session's name with FNV-1a, not `hashValue`**: Swift seeds
   its hashing per process, so a session's face would change on every cold start.
 - **The app icon is drawn from `DotMatrix.rect` itself** by `Sources/IconMaker` (`just icon`), so

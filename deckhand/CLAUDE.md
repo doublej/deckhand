@@ -42,11 +42,14 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   `SessionFoot`'s `.onAppear` closes it, because "the card is on screen" is a fact only a view
   has. It is answered once per clip — the card comes back every time somebody swipes between
   panes, and only the first of those is the one the person waited for.
-- **A clip's breakdown is shown twice and drawn once.** `TimingsView` is the drawing; the review
-  card shows the total with the slowest stage beside it (`ClipCost`, which opens the same view in
-  a sheet) and the clip archive expands a row into it. Exact milliseconds, because a bar with no
+- **A clip's breakdown is shown twice, drawn once, and never in a sheet.** `TimingsView` is the
+  drawing; the clip archive expands a row into it and the review card's round-trip line
+  (`ClipCost`) opens it *inside the card*, under Discard/Edit/Send. It was a sheet, which took the
+  card off the screen in order to explain the card. Exact milliseconds, because a bar with no
   number cannot answer "which stage and by how much" — the bars behind the rows are only there so
-  the answer can be found without reading fourteen numbers first.
+  the answer can be found without reading fourteen numbers first. That line is also the one thing
+  allowed to sit below Send: it is a receipt, not a fourth verb, and nothing both pressable and
+  consequential goes under the button that sends.
 - **`Rewrites` is the before the card never had.** The note said *what* the chain swapped; it
   could not show the sentence those words replaced, so a swap that was wrong read as a mishearing
   and a mishearing read as a swap. utt's own cleanup and this Mac's filter chain are two rows

@@ -4,11 +4,11 @@ import SwiftUI
 /// The foot of the review card: where the words are going, and the things you can do about them.
 ///
 /// It was one line of 11pt words eight points apart, Discard close enough to Edit to be taken for
-/// it. The rule here is the one `FilesView`'s selector already set: a control is a capsule at the
-/// app's reading size with 44pt of finger under it.
+/// it. A control here is at the app's reading size with 44pt of finger under it, and its corner is
+/// `Radius.small` rather than the capsule `FilesView`'s selector uses — see `face`.
 ///
 /// Three things, not four, and not three of a kind. Edit and Send are the two you press, so they
-/// are the two capsules and they stand together at the end you press things at. Discard is the
+/// are the two filled ones and they stand together at the end you press things at. Discard is the
 /// one that loses something: it keeps its 44pt of finger and gives up its fill, so it is quiet
 /// and it is as far from Send as the row is wide — distance is the actual fix for hitting the
 /// wrong one, not a confirmation. Adding to the words moved out from between them altogether and
@@ -34,33 +34,30 @@ struct ReviewActions: View {
     }
 
     /// The session page and the overview: room for real controls, so they are real controls.
+    ///
+    /// The session's name stood over this row until it did not. A full card only ever opens on that
+    /// session's own page, whose header names it — so the line said again what the screen already
+    /// said, and it was the one item here nobody taps. A deck column keeps it: there the columns
+    /// stand side by side and the name is what tells one card from the next.
     private var roomy: some View {
-        VStack(alignment: .leading, spacing: Spacing.extraSmall) {
-            // Its own line now. Sharing one with the buttons, it was the thing being squeezed
-            // when a name got long — and it is the one item here nobody taps.
-            Text("→ \(route)")
-                .font(Typography.hint)
-                .foregroundStyle(Palette.textTertiary)
-                .lineLimit(1)
-            HStack(spacing: Spacing.xxs) {
-                Button(action: discard) { quiet("Discard") }
-                    .buttonStyle(.plain)
-                // Collapses to nothing but its minimum on a narrow phone, which is what keeps
-                // the two capsules the same width as each other at every size.
-                Spacer(minLength: Spacing.extraSmall)
-                Button(action: edit) {
-                    face("Edit", ink: accent, fill: Palette.tileIdle)
-                }
+        HStack(spacing: Spacing.xxs) {
+            Button(action: discard) { quiet("Discard") }
                 .buttonStyle(.plain)
-                Button { send(words) } label: {
-                    face("Send", ink: .white, fill: accent, weight: .semibold)
-                }
-                .buttonStyle(.plain)
+            // Collapses to nothing but its minimum on a narrow phone, which is what keeps
+            // the two buttons the same width as each other at every size.
+            Spacer(minLength: Spacing.extraSmall)
+            Button(action: edit) {
+                face("Edit", ink: accent, fill: Palette.tileIdle)
             }
+            .buttonStyle(.plain)
+            Button { send(words) } label: {
+                face("Send", ink: .white, fill: accent, weight: .semibold)
+            }
+            .buttonStyle(.plain)
         }
     }
 
-    /// A deck column. Unchanged: 44pt capsules would be taller than the card they sit in.
+    /// A deck column. Unchanged: 44pt controls would be taller than the card they sit in.
     private var tight: some View {
         HStack(spacing: Spacing.small) {
             Text("→ \(route)")
@@ -96,7 +93,13 @@ struct ReviewActions: View {
             .contentShape(.rect)
     }
 
-    /// One capsule. Equal width to its sibling, 44pt tall, and the label centred in it.
+    /// One button. Equal width to its sibling, 44pt tall, and the label centred in it.
+    ///
+    /// Not a capsule, and that is the whole of the corner audit: a 44pt capsule is a 22pt corner
+    /// sitting 16pt inside a card whose own corner is 12, so the inner curve is *wider* than the
+    /// one it is nested in and the two read as fighting. Nested corners get tighter inwards.
+    /// `Radius.small` is the token below the card's own, which is as near concentric as this
+    /// scale goes without inventing a radius.
     private func face(
         _ label: String,
         ink: Color,
@@ -112,7 +115,7 @@ struct ReviewActions: View {
             .minimumScaleFactor(0.85)
             .padding(.horizontal, Spacing.extraSmall)
             .frame(maxWidth: .infinity, minHeight: Self.touch)
-            .background(Capsule().fill(fill))
+            .background(RoundedRectangle(cornerRadius: Radius.small, style: .continuous).fill(fill))
             .contentShape(.rect)
     }
 }

@@ -23,9 +23,9 @@ struct ReviewCard: View {
     /// chain will refuse: a greyed-out button with no sentence beside it leaves somebody holding
     /// words with no way to find out why, which is the worse half of this problem.
     var filtered: Filtered?
-    /// What this clip cost from the press to these words being here, one line under them. Nil
-    /// where the words came from somewhere other than a clip, and in a deck column, which has
-    /// room for the words and the buttons and nothing else.
+    /// What this clip cost from the press to these words being here, one quiet line *under* the
+    /// row you press. Nil where the words came from somewhere other than a clip, and in a deck
+    /// column, which has room for the words and the buttons and nothing else.
     var cost: ClipTiming?
     /// Small enough for a deck column, which has no room for a full card.
     var compact = false
@@ -66,22 +66,30 @@ struct ReviewCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.extraSmall) {
             attachments
-            // All of it. This was capped at six lines, which quietly hid the end of anything
-            // said in more than a sentence — and the end of a spoken instruction is usually
-            // the part with the actual instruction in it. Long ones scroll rather than clip.
-            ScrollView {
-                Text(words)
-                    .font(compact ? .system(size: 10) : Typography.mono)
-                    .foregroundStyle(Palette.textPrimary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .fixedSize(horizontal: false, vertical: true)
+            // The words and the way to say more of them, tight together: the second lands on the
+            // line under the first, so the control belongs where the caret would be.
+            VStack(alignment: .leading, spacing: Spacing.xxs) {
+                // All of it. This was capped at six lines, which quietly hid the end of anything
+                // said in more than a sentence — and the end of a spoken instruction is usually
+                // the part with the actual instruction in it. Long ones scroll rather than clip.
+                //
+                // And it hugs them, up to that cap. The scroll box was the only greedy child in
+                // this card, so on a short prompt it took every point the card was offered and
+                // the slack fell between the sentence and the control that continues it.
+                ScrollView {
+                    Text(words)
+                        .font(compact ? .system(size: 10) : Typography.mono)
+                        .foregroundStyle(Palette.textPrimary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxHeight: compact ? 96 : 260)
+                .fixedSize(horizontal: false, vertical: true)
+                .scrollBounceBehavior(.basedOnSize)
+                // It stood in the row at the foot until it read as a fourth thing you do *with*
+                // the prompt rather than the one thing that makes more of it.
+                if let more { SayRest(more: more, words: words) { draft = nil } }
             }
-            .frame(maxHeight: compact ? 96 : 260)
-            .scrollBounceBehavior(.basedOnSize)
-            // Directly under the words, because under the words is where what it records goes.
-            // It stood in the row at the foot until it read as a fourth thing you do *with* the
-            // prompt rather than the one thing that makes more of it.
-            if let more { SayRest(more: more, words: words) { draft = nil } }
             // Under the words, quiet, and in a deck column too: there is no size of card on which
             // it is acceptable to show somebody a word they did not say without saying so.
             if let note = filtered?.note { aside(note, in: Palette.textTertiary) }
@@ -92,7 +100,6 @@ struct ReviewCard: View {
             // alone in the state's own colour, never a label inside a capsule that reads as
             // something you press — and there is a real button an inch below this one.
             if let refusal = filtered?.refusal { aside(refusal, in: Palette.lcdRed) }
-            if let cost, !compact { ClipCost(timing: cost) }
             if !snaps.isEmpty { pinned }
             ReviewActions(route: target,
                           words: words,
@@ -100,6 +107,9 @@ struct ReviewCard: View {
                           edit: { editing = true },
                           send: send,
                           compact: compact)
+            // Under the row you press, and the only thing that may be: it is a receipt rather
+            // than a fourth verb, so nothing below Send is both pressable and consequential.
+            if let cost, !compact { ClipCost(timing: cost) }
         }
         .sheet(isPresented: $editing) {
             Editor(words: words, target: target, say: say) { edited in
