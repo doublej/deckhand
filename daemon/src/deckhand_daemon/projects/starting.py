@@ -66,6 +66,7 @@ from pathlib import Path
 
 from ..log import log
 from ..sessions import Session, forget_panes, live_sessions, sessions_dir
+from ..settings import wants
 
 IT2_TIMEOUT = 15
 # What Claude Code costs between the shell running it and its session record landing. Measured at
@@ -116,7 +117,13 @@ def start(cwd: str) -> tuple[Session | None, str | None]:
         return None, "iTerm opened a window with no session in it"
     running = live_sessions(iterm_only=False)
     known = {s.session_id for s in running}
-    launch = " ".join(["claude", "--name", shlex.quote(_free_name(folder.name, running)), *FLAGS])
+    # The folder's own model where it has one, and Claude Code's own default where it has
+    # not — an absent flag and a flag saying "the default" are different things to the CLI.
+    chosen = wants.resolved(str(folder)).session_model
+    model = ["--model", chosen] if chosen else []
+    launch = " ".join(
+        ["claude", "--name", shlex.quote(_free_name(folder.name, running)), *model, *FLAGS]
+    )
     if not _it2("session", "run", "-s", pane, f"cd {shlex.quote(str(folder))} && {launch}"):
         return None, "opened a window but iTerm would not run claude in it"
     log.info("started claude in %s", folder)

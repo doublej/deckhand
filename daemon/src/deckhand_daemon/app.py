@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
+from typing import Annotated
 
 from fastapi import Body, Depends, FastAPI, Header, HTTPException, Query
 from fastapi.responses import FileResponse
@@ -27,6 +28,7 @@ from .filters import routes as filter_routes
 from .log import log
 from .projects import routes as project_routes
 from .reading import asked, commands, readable, transcripts
+from .settings import routes as settings_routes
 
 
 def require_token(x_deckhand_token: str = Header(default="")) -> None:
@@ -50,6 +52,7 @@ app = FastAPI(title="Deckhand", version=__version__, lifespan=lifespan)
 app.include_router(artifacts.router, dependencies=[Depends(require_token)])
 app.include_router(filter_routes.router, dependencies=[Depends(require_token)])
 app.include_router(project_routes.router, dependencies=[Depends(require_token)])
+app.include_router(settings_routes.router, dependencies=[Depends(require_token)])
 app.include_router(saying.router, dependencies=[Depends(require_token)])
 
 
@@ -257,3 +260,25 @@ def main() -> None:
 
     log.info("deckhand %s  token: %s", config.base_url(), config.token())
     uvicorn.run(app, host="0.0.0.0", port=config.PORT, log_level="info")
+
+
+@app.post("/sessions/{session_id}/notify", dependencies=[Depends(require_token)])
+def ask_for_attention(session_id: str, line: Annotated[str, Body(embed=True)]) -> dict:
+    """An agent asking for the person outright, in its own words.
+
+    The only thing on the Lock Screen a session raises for itself — everything else there is the
+    Mac noticing something. So it is the one that a folder can refuse outright rather than merely
+    keep quiet about, and the refusal comes back rather than being swallowed: an agent that
+    thinks it has your attention and has not is worse than one that knows it has not.
+
+    Empty words are refused here rather than pushed as a blank card. There is no useful default:
+    the whole point of this route over the ones that fire on their own is that somebody had
+    something specific to say.
+    """
+    session = saying.session_or_404(session_id)
+    said = " ".join(line.split())
+    if not said:
+        raise HTTPException(status_code=400, detail="nothing to say")
+    if error := push.called(session, said):
+        return {"pushed": False, "why": error}
+    return {"pushed": True}

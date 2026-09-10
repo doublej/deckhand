@@ -10,8 +10,9 @@ from __future__ import annotations
 
 import asyncio
 
-from . import prompts, tasks
+from . import prompts, sessions, tasks
 from .log import log
+from .settings import wants
 
 BRIEFING = prompts.load("briefing")
 MODEL = BRIEFING.settings["model"]
@@ -105,6 +106,17 @@ def _prompt(session_id: str, activity: str, asks: str) -> str:
     return "\n\n".join(blocks)
 
 
+def _model_for(session_id: str) -> str:
+    """What writes this session's briefings: the folder's own choice, or the prompt file's.
+
+    Looked up here rather than threaded down from `briefings`, because a briefing is a model run
+    that takes seconds and one extra read of the live sessions beside it is nothing. Empty is the
+    only answer that keeps working when `prompts/briefing.md` is edited, so empty stays empty.
+    """
+    folder = next((s.cwd for s in sessions.live_sessions() if s.session_id == session_id), "")
+    return wants.resolved(folder).summary_model or MODEL
+
+
 async def _run(activity: str, session_id: str) -> tuple[str | None, str | None, dict | None]:
     """No extended thinking; only the three tools that manage this session's list.
 
@@ -119,7 +131,7 @@ async def _run(activity: str, session_id: str) -> tuple[str | None, str | None, 
         return None, "claude-agent-sdk is not installed", None
 
     options = ClaudeAgentOptions(
-        model=MODEL,
+        model=_model_for(session_id),
         system_prompt=SYSTEM_PROMPT,
         # allowed_tools auto-approves calls; tools=[] actually removes built-in tools.
         tools=[],

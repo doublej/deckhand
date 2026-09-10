@@ -97,6 +97,9 @@ the session. `?deliver=false` transcribes without sending, for the review card, 
 
 - `GET /projects` — every folder on this Mac a session could be started in, and which source
   said so; `POST /projects/session` opens a terminal there and answers with the session itself
+- `GET|PUT /settings` — what this Mac has been set to do, globally and per folder; `GET
+  /settings/project?path=` is the resolved answer for one of them
+- `POST /sessions/{id}/notify` — an agent asking for the person outright, in its own words
 - `GET /briefings` — every live session's last briefing at once, off disk, for a cold start
 - `GET /sessions/{id}/commands` — the slash commands and skills that session could be handed
 - `GET /sessions/{id}/raw` — the transcript as readable lines, for when the app's reading looks wrong

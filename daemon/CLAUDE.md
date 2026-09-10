@@ -144,6 +144,32 @@ the words carry, so it fails and says why instead. The receipt names the route t
   folder — without it, "say this and read that file" would aim a session at anything on the Mac.
   The files are kept after delivery; nothing prunes them yet.
 
+## What the person has set this Mac to do
+
+`settings/` is the switches, keyed by **path**. Four things act without being asked and each is
+one switch: `finished` (a session stopped), `slips` (a slip is unanswered), `called` (an agent
+asked for you outright, `POST /sessions/{id}/notify`), and `chase` (the idle check, which speaks
+to a session rather than to a person). Plus `subagents`, off by default, which lets the
+summariser read what a folder's subagents did. `GET|PUT /settings` is the whole document;
+`GET /settings/project?path=` is the resolved answer for one folder.
+
+- **Path, not session id.** "Per session" is what was asked for, and a session id is the wrong
+  key for it — it changes every restart, so the preference would be gone by morning. The folder
+  is stable, and a session's page edits the folder it is running in. (Stars and hidden rows key
+  by *name* for a related reason; a name is no good here because two folders share one often.)
+- **Per key, not per object.** A folder given only a different summariser keeps every other
+  answer and goes on following the global switch when that switch changes. `None` on the wire is
+  "no opinion" and is how an override is removed.
+- **A model this Mac does not offer is refused on write**, not passed through: it would become a
+  `--model` flag on a real launch line or an id the SDK rejects, both failing far from the screen
+  that set it. The empty string is an answer — "the default" — and survives.
+- **`called` is the only trigger a session raises for itself**, so it is the only one a folder may
+  refuse outright, and the refusal is returned rather than swallowed. An agent that thinks it has
+  your attention and has not is worse than one that knows it has not.
+- **Not one switch per push.** `push.py` raises a card, drops it when the session goes, and
+  re-announces when you answer; the last two are that card's bookkeeping, and switching one off
+  would strand a card nothing could clear.
+
 ## Briefings, tasks, and the idle check
 
 - **A briefing is a file, and the daemon decides when one is owed.** This was a dict in memory

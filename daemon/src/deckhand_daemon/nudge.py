@@ -18,6 +18,7 @@ import time
 
 from . import deliver, prompts, sessions, tasks
 from .log import log
+from .settings import wants
 
 # Between sweeps. Nothing here is urgent — a session that has stopped stays stopped.
 POLL = 30
@@ -68,6 +69,10 @@ def _consider(session: sessions.Session, now: float) -> bool:
     """Whether this session is quiet, owing, and has not just been asked the same thing."""
     if session.status == "busy":
         _quiet_since.pop(session.session_id, None)
+        return False
+    # Before anything is read off disk: a folder set not to be chased is not chased, and the
+    # environment switch stays what it is — the whole Mac, off.
+    if not wants.resolved(session.cwd).chase:
         return False
     since = _quiet_since.setdefault(session.session_id, now)
     if now - since < SETTLE:

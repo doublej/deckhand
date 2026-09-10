@@ -21,9 +21,10 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import config, sessions
+from . import artifacts, config, sessions
 from .log import log
 from .reading import transcripts
+from .settings import wants
 
 # Development, to match the app's `aps-environment`. A production-signed build talks to the
 # other host, and a token minted for one is rejected by the other.
@@ -169,6 +170,12 @@ def _post(token: str, payload: dict, auth: str, kind: str) -> str | None:
 POLL = 5.0
 _seen: dict[str, str] = {}
 _waiting: dict[str, float] = {}
+#: How many slips each session had waiting last sweep. A *new* one is the event; a slip that has
+#: been sitting there all afternoon is not, which is the same rule `_seen` applies to busy.
+_slips: dict[str, int] = {}
+#: What an agent asked to be told, per session, where one asked. Beats `_last_line`, because an
+#: agent that used its own words meant them.
+_said: dict[str, str] = {}
 
 
 async def watch() -> None:
@@ -191,20 +198,69 @@ def sweep() -> None:
         # `was` is None the first time we see a session, and a session that was already idle
         # when the daemon started is not something that just happened.
         if was == "busy" and now != "busy":
+            # Asked per folder rather than once for the Mac: the card is the only thing here a
+            # person has an opinion about project by project, and "not this one" is the shape
+            # that opinion takes.
+            if not wants.resolved(session.cwd).finished:
+                log.info("lock screen: %s stopped, but this folder is set quiet", session.name)
+                continue
             _waiting[session.session_id] = time.time()
             stopped = True
             log.info("lock screen: %s stopped and is waiting", session.name)
+        stopped = _slipped(session) or stopped
     for gone in set(_waiting) - alive:
         del _waiting[gone]
+        _said.pop(gone, None)
         stopped = True
     for gone in set(_seen) - alive:
         del _seen[gone]
+    for gone in set(_slips) - alive:
+        del _slips[gone]
     if stopped:
         announce(live)
 
 
+def _slipped(session) -> bool:
+    """Whether this session has just put a slip on the phone that nothing has answered.
+
+    A directory listing per session per sweep, which is the honest cost of noticing a file
+    appear without watching the filesystem. It is a handful of `stat` calls against a folder the
+    session itself wrote to seconds ago, so it is warm.
+    # ponytail: polled; a real watcher if this ever shows up in the log's timings.
+    """
+    waiting = int(artifacts.counted(session).get("artifacts_waiting", 0) or 0)
+    was = _slips.get(session.session_id)
+    _slips[session.session_id] = waiting
+    # `was` is None the first time, and slips that were already sitting there when the daemon
+    # started are not something that just happened.
+    if was is None or waiting <= was:
+        return False
+    if not wants.resolved(session.cwd).slips:
+        log.info("lock screen: %s has a slip waiting, but this folder is set quiet", session.name)
+        return False
+    _waiting[session.session_id] = time.time()
+    log.info("lock screen: %s is waiting on a slip", session.name)
+    return True
+
+
+def called(session, line: str) -> str | None:
+    """An agent asking for you outright, in its own words. Returns an error, or None.
+
+    The one trigger here a session decides for itself, which is why it is the one with a folder
+    switch that can refuse it outright rather than merely stay quiet: everything else on this
+    Lock Screen is the Mac noticing something, and this is a program asking to interrupt you.
+    """
+    if not wants.resolved(session.cwd).called:
+        return "this folder is set not to be interrupted"
+    _waiting[session.session_id] = time.time()
+    _said[session.session_id] = " ".join(line.split())[:120]
+    announce(sessions.live_sessions())
+    return None
+
+
 def spoke_to(session_id: str) -> None:
     """You answered it, so it is no longer waiting — whether or not you did it from the card."""
+    _said.pop(session_id, None)
     if _waiting.pop(session_id, None) is not None:
         announce(sessions.live_sessions())
 
@@ -216,7 +272,7 @@ def announce(live: list) -> None:
     card = Card(
         waiting=len(_waiting),
         name=session.name if session else "",
-        line=_last_line(newest) if newest else "",
+        line=(_said.get(newest) or _last_line(newest)) if newest else "",
         when=time.time(),
     )
     if error := show(card, config.base_url().removeprefix("http://").split(":")[0]):
