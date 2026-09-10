@@ -30,6 +30,11 @@ public struct Session: Codable, Hashable, Identifiable, Sendable {
     /// session with no pages rather than a listing that will not decode at all.
     public var artifactsWaiting: Int?
     public var artifactsAnswered: Int?
+    /// The model that answered its last request, written the way Claude Code writes it down
+    /// (`claude-sonnet-5`), and the reasoning effort that request ran at. Both come off the same
+    /// transcript entry `context` does, and both are optional for the same reason it is.
+    public var model: String?
+    public var effort: String?
 
     public var id: String { sessionId }
     public var isBusy: Bool { status == "busy" }

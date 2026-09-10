@@ -243,6 +243,10 @@ struct SessionListView: View {
                     .lineLimit(1)
             }
             Spacer(minLength: Spacing.extraSmall)
+            // Only when there is nothing wrong. One line holds one of the two: what the Mac is
+            // spending while it is fine, or what is broken about it — and the reason is a
+            // sentence, so it is the thing that would be squeezed to an ellipsis by these.
+            if reason == nil { statusline }
             StateWord(model.connection.state)
             Button("Hidden sessions", systemImage: model.showsHidden ? "eye" : "eye.slash") {
                 model.showsHidden.toggle()
@@ -256,6 +260,33 @@ struct SessionListView: View {
         // Even, so the mark sits in the middle of the band rather than at the foot of it. The
         // home indicator is the safe area's job now, not this padding's.
         .padding(.vertical, Spacing.small)
+    }
+
+    /// The two things the Mac's own statusline says that a phone in another room cannot see: how
+    /// much of the week's token window is gone, and what the rail is running. Quiet text, never a
+    /// pill — neither is a state and neither is pressable. One group, set tighter to each other
+    /// than to the state word, because they are one kind of thing; that is also what buys the
+    /// room, since at the footer's own 12pt the pair does not fit a 375pt phone and the type is
+    /// not going any smaller. The percentage is the only thing here that takes a colour, and only
+    /// over pace: amber is "this is going", which is what being ahead of your own week is.
+    private var statusline: some View {
+        HStack(spacing: Spacing.extraSmall) {
+            if let week = model.week {
+                Text(week.line)
+                    .font(Typography.hint)
+                    .foregroundStyle(week.overPace ? Palette.lcdYellow : Palette.textTertiary)
+                    // Never the one that gives way. A truncated percentage is a wrong number,
+                    // where a clipped effort word is only an ugly one.
+                    .fixedSize()
+                    .accessibilityLabel(week.spoken)
+            }
+            if let running = Session.running(model.visibleSessions) {
+                Text(running)
+                    .font(Typography.hint)
+                    .lineLimit(1)
+                    .accessibilityLabel("Running \(running)")
+            }
+        }
     }
 }
 

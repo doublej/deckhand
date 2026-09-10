@@ -80,13 +80,13 @@ def list_sessions() -> dict:
         # The phone asks for this every few seconds anyway, so the plugin page gets a live
         # count for free rather than the daemon paying for one of its own.
         plugin.status(sessions=f"{len(live)} live")
-    # How full each one's context is. Read here rather than on the session record because it
-    # comes out of the transcript, not the registry — and a phone deciding which session needs
-    # attention wants to know which one is about to compact.
+    # How full each one's context is, and what answered its last request. Read here rather than
+    # off the session record because all three come out of the transcript, not the registry — and
+    # a phone deciding which session needs attention wants to know which one is about to compact.
     window = sessions.context_window()
     listed = [
         s.to_json()
-        | {"context": {"used": sessions.context_used(s.session_id), "limit": window}}
+        | sessions.last_request(s.session_id).to_json(window)
         # And how far the person has got with what it asked them: a page with no answer file
         # beside it is the session stopped and waiting, which is the one thing on a row that is
         # genuinely blocked on you. It travels with the listing rather than costing the phone a
@@ -94,7 +94,9 @@ def list_sessions() -> dict:
         | artifacts.counted(s)
         for s in live
     ]
-    return {"sessions": listed, "iterm": status}
+    # What the week has cost so far, which belongs to the Mac rather than to any session. One
+    # small file read per listing, not per session — the statusline's agent does the counting.
+    return {"sessions": listed, "iterm": status, "week": sessions.week_usage()}
 
 
 @app.get("/sessions/{session_id}/summary", dependencies=[Depends(require_token)])

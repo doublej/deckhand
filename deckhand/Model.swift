@@ -64,6 +64,8 @@ final class AppModel {
     var waiting: Set<String> = []
     /// The session whose page is open. The rail lights exactly one row, the way utt does.
     var current: String?
+    /// How much of the week's token window the Mac has spent. Nil until a listing says.
+    var week: Week?
     var connection: Connection = .unpaired
     /// The Mac's own address on the network, as the Mac reports it. What a session's `localhost`
     /// means to anything that is not the Mac — this phone included.
@@ -162,11 +164,12 @@ final class AppModel {
         if sessions.isEmpty { connection = .checking }
         do {
             let health = try await client.health()
-            let found = try await client.sessions()
-            sessions = found
+            let listing = try await client.sessions()
+            sessions = listing.sessions
+            week = listing.week
             connection = .connected(iterm: health.iterm ?? "ok")
             macAddress = health.lan
-            logger.info("listed \(found.count) sessions")
+            logger.info("listed \(listing.sessions.count) sessions")
         } catch {
             connection = .failed(reason(error))
             logger.error("session refresh failed: \(String(describing: error))")

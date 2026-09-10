@@ -18,9 +18,9 @@ struct ClientTests {
     @Test("decodes a real /sessions payload from the daemon")
     func decodesSessions() async throws {
         StubProtocol.respond(with: fixture("sessions"))
-        let sessions = try await client().sessions()
-        #expect(sessions.count == 3)
-        let first = try #require(sessions.first)
+        let listing = try await client().sessions()
+        #expect(listing.sessions.count == 3)
+        let first = try #require(listing.sessions.first)
         #expect(first.name == "warm-okapi")
         #expect(first.folder == "the-ultimate-music-quiz")
         #expect(first.isBusy)
@@ -28,6 +28,9 @@ struct ClientTests {
         // The fixture predates artifacts, which is the version-skew case: no keys, no pages.
         #expect(first.waitingPages == 0)
         #expect(first.pages == 0)
+        // And predates the week and the model, which read the same way: nothing to say.
+        #expect(first.family == nil)
+        #expect(listing.week == nil)
         #expect(StubProtocol.lastRequest?.value(forHTTPHeaderField: "x-deckhand-token") == "tok")
         #expect(StubProtocol.lastRequest?.url?.path == "/sessions")
     }
@@ -39,10 +42,37 @@ struct ClientTests {
           "folder":"shop","status":"idle","updated_at":1.0,"tty":"ttys001","pane":null,
           "artifacts_waiting":2,"artifacts_answered":4}]}
         """.utf8))
-        let session = try #require(try await client().sessions().first)
+        let session = try #require(try await client().sessions().sessions.first)
         #expect(session.waitingPages == 2)
         #expect(session.answeredPages == 4)
         #expect(session.pages == 6)
+    }
+
+    @Test("the listing carries the week and what answered each session's last request")
+    func decodesWeekAndModel() async throws {
+        StubProtocol.respond(with: Data("""
+        {"sessions":[{"session_id":"sid","pid":1,"name":"warm-okapi","cwd":"/Users/jj/dev/shop",
+          "folder":"shop","status":"idle","updated_at":1.0,"tty":"ttys001","pane":null,
+          "model":"claude-sonnet-5","effort":"xhigh"}],
+         "week":{"pct_used":152,"pct_elapsed":51,"days_remaining":3.5}}
+        """.utf8))
+        let listing = try await client().sessions()
+        #expect(listing.week?.pctUsed == 152)
+        #expect(listing.week?.line == "152% · 3d")
+        #expect(listing.sessions.first?.family == "sonnet")
+        #expect(listing.sessions.first?.effort == "xhigh")
+    }
+
+    @Test("a week this app cannot read costs the sessions nothing")
+    func tolerateBrokenWeek() async throws {
+        StubProtocol.respond(with: Data("""
+        {"sessions":[{"session_id":"sid","pid":1,"name":"warm-okapi","cwd":"/Users/jj/dev/shop",
+          "folder":"shop","status":"idle","updated_at":1.0,"tty":"ttys001","pane":null}],
+         "week":{"pct_used":"most of it"}}
+        """.utf8))
+        let listing = try await client().sessions()
+        #expect(listing.week == nil)
+        #expect(listing.sessions.count == 1)
     }
 
     @Test("decodes a real /turns payload")

@@ -197,9 +197,8 @@ USAGE_WINDOW = 256 * 1024
 # `autoCompactWindow` in the person's own settings, which is what is read first — this is only
 # the floor under a machine that has never set one.
 DEFAULT_WINDOW = 200_000
-# A turn Claude Code wrote itself rather than one a model answered — an interrupt, an API error.
-# It carries a usage dict of zeros, so stopping at one reports an empty context window and names
-# `<synthetic>` as the model. The real last request is the entry before it.
+# A turn Claude Code wrote itself — an interrupt, an API error. Its usage is all zeros, so
+# stopping at one reports an empty window and `<synthetic>` as the model, not the real last one.
 SYNTHETIC = "<synthetic>"
 
 
@@ -212,8 +211,8 @@ class LastRequest:
     effort: str = ""
 
     def to_json(self, window: int) -> dict:
-        """The fragment a session's listing entry carries. Absent rather than empty when the
-        transcript has not said yet: a row with no model is one nothing has answered."""
+        """The fragment a listing entry carries. None, not "", for what the transcript has
+        not said: a row with no model is a session nothing has answered yet."""
         return {
             "context": {"used": self.used, "limit": window},
             "model": self.model or None,
@@ -228,9 +227,8 @@ def last_request(session_id: str) -> LastRequest:
     prompt is what was billed as input: what was newly written, what was newly cached, and what
     was read back from cache. Output is not in the window — it is what came out of it.
 
-    The model and the reasoning effort sit on that same entry, which is why they cost nothing:
-    the scan that finds the usage has already found both. A sidechain is skipped for the usage
-    and for them alike — a subagent runs whatever model it was given, not the session's.
+    The model and the effort are on that same entry, so they cost nothing — and a sidechain is
+    skipped for all three alike, because a subagent runs the model it was given, not this one's.
 
     Read over a small window, because this is asked for every session on every listing and the
     answer is always in the last few entries of the file.
@@ -271,23 +269,21 @@ def context_window() -> int:
 
 
 # The statusline's own cache, rewritten every minute by the `com.claude.statusline-cache` agent.
-# Deckhand counts no tokens of its own: it reads the object the terminal statusline is already
-# reading, so the phone and the Mac cannot quote different numbers at each other.
+# Deckhand counts no tokens of its own: it reads the object the terminal statusline reads, so the
+# phone and the Mac cannot quote different numbers at each other.
 WEEK_CACHE = "statusline-cache.json"
 
 
 def week_usage() -> dict | None:
-    """How much of the week's token window is spent, how far through the week that is, and how
-    long until it resets.
+    """What the week has spent, how far through the week that is, and how long until it resets.
 
     `pct_used` runs past 100 on a heavy week — the budget is an estimate, not a ceiling — so
     nothing here clamps it. `pct_elapsed` is what makes it mean anything: 152% spent at 51%
-    through is the fact, the 152 alone is not.
+    through is the fact, and the 152 alone is not.
 
-    None rather than zeros whenever there is nothing true to say: no cache (another Mac, or the
-    agent was never installed here), no week object in it, a field missing, or a window that has
-    already closed. A frozen cache answering for a week that ended on Sunday is worse than
-    answering nothing at all.
+    None rather than zeros whenever there is nothing true to say: no cache (another Mac, or no
+    agent here), no week in it, a missing field, or a window already closed — a frozen cache
+    answering for a week that ended on Sunday is worse than answering nothing.
     """
     cache = sessions_dir().parent / WEEK_CACHE
     try:

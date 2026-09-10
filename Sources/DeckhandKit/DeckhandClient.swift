@@ -16,9 +16,9 @@ public struct DeckhandClient: Sendable {
         try await get("health")
     }
 
-    public func sessions() async throws -> [Session] {
-        let body: SessionList = try await get("sessions")
-        return body.sessions
+    /// The live sessions, and what the listing says about the Mac itself — see `Listing`.
+    public func sessions() async throws -> Listing {
+        try await get("sessions")
     }
 
     /// What the session did since you last spoke. The Mac runs a small model to write it.
@@ -262,10 +262,6 @@ public struct DeckhandClient: Sendable {
         data.append("\r\n--\(boundary)--\r\n")
         return data
     }
-}
-
-private struct SessionList: Decodable {
-    let sessions: [Session]
 }
 
 private extension Data {
