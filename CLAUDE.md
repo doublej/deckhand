@@ -141,6 +141,8 @@ Both `/health` and `/sessions` carry an `iterm` field saying whether pane data i
   about Deckhand, why that is a skill rather than an MCP server, and the token that would make its
   refusals real
 - [docs/control-surface.md](docs/control-surface.md) — what it would take to drive the whole app from a command interface, and what such a surface must refuse
+- [docs/audio-speedup.md](docs/audio-speedup.md) — why clips are not re-encoded faster before
+  utt hears them: the saving is 0.27 s on a typical clip, and utt costs `1.38 s + 0.068 × seconds`
 - `.claude/rules/` — Swift naming traps, and the shared agent journal protocol
 - `launchd/com.jurrejan.deckhand.plist` — registered in `multi-stack/project-atlas/shared/daemons.json`
 - `python/parakeet-server` is the other local ASR service, currently disabled for memory; utt is
