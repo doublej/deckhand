@@ -29,15 +29,22 @@ struct ArtifactWeb: UIViewRepresentable {
     /// rather than fetched after it: a page that draws blank and then repopulates is worse than
     /// one that was never told.
     let answer: String
+    /// The screen's link to this page: what the page is holding goes in, and the two things the
+    /// screen asks of the page come back out through it.
+    let talk: PageTalk
     /// What the person answered, as the JSON text `JSON.stringify` made of it.
     let respond: (String) -> Void
     let close: () -> Void
 
-    func makeCoordinator() -> Pilot { Pilot(respond: respond, close: close) }
+    func makeCoordinator() -> Pilot { Pilot(respond: respond, close: close, talk: talk) }
 
     func makeUIView(context: Context) -> WKWebView {
         let web = WKWebView(frame: .zero, configuration: configured(with: context.coordinator))
         web.navigationDelegate = context.coordinator
+        // Weakly, and this is the one handle anything outside this file gets on the page: a
+        // selection to read and a field to lay words into. Never a navigation — there is nowhere
+        // to navigate to, and `decidePolicyFor` below would refuse it anyway.
+        talk.web = web
         // A swipe that goes back is a browser's gesture, and there is nowhere back to.
         web.allowsBackForwardNavigationGestures = false
         // A long press on a link showing a preview of where it goes: it goes nowhere, and the
@@ -68,11 +75,11 @@ struct ArtifactWeb: UIViewRepresentable {
         // A phone number or an address in the prose becoming a tappable callout is navigation
         // under another name, and every tap on one would be a way off this page.
         settings.dataDetectorTypes = []
-        settings.userContentController.addUserScript(
-            WKUserScript(source: ArtifactPage.bridge(for: artifact, answer: answer),
-                         injectionTime: .atDocumentStart,
-                         forMainFrameOnly: true)
-        )
+        for source in [ArtifactPage.bridge(for: artifact, answer: answer), ArtifactPage.watcher] {
+            settings.userContentController.addUserScript(
+                WKUserScript(source: source, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+            )
+        }
         // A relay, and this is the leak the whole file exists around: a user content controller
         // retains its message handler for as long as the configuration lives, and the
         // configuration lives as long as the web view. A handler that holds the web view — or
@@ -84,18 +91,22 @@ struct ArtifactWeb: UIViewRepresentable {
     }
 }
 
-/// The one navigation this page is allowed, and the two messages it may send.
+/// The one navigation this page is allowed, and the three messages it may send.
 @MainActor
 final class Pilot: NSObject, WKNavigationDelegate {
     var respond: (String) -> Void
     var close: () -> Void
+    /// Where a page's report of what it is holding lands. A class rather than a closure, so it does
+    /// not have to be rebound on every SwiftUI pass the way the two above do.
+    let talk: PageTalk
     /// Set by the load that put the page on the screen. Everything after it is something the
     /// page decided to do, and the answer to all of it is no.
     private var arrived = false
 
-    init(respond: @escaping (String) -> Void, close: @escaping () -> Void) {
+    init(respond: @escaping (String) -> Void, close: @escaping () -> Void, talk: PageTalk) {
         self.respond = respond
         self.close = close
+        self.talk = talk
     }
 
     /// One page, and it is the one we handed over.
@@ -120,8 +131,9 @@ final class Pilot: NSObject, WKNavigationDelegate {
         return .allow
     }
 
-    /// `window.deckhand`'s two messages. Anything else — a page probing what else the handler
-    /// will take — is dropped without a word.
+    /// `window.deckhand`'s two messages, and the watcher's one. Anything else — a page probing what
+    /// else the handler will take — is dropped without a word, and so is a `holds` this app has
+    /// never heard of.
     func heard(_ message: WKScriptMessage) {
         guard let body = message.body as? [String: Any], let kind = body["kind"] as? String else {
             return
@@ -131,6 +143,13 @@ final class Pilot: NSObject, WKNavigationDelegate {
             if let json = body["json"] as? String { respond(json) }
         case "close":
             close()
+        case "holds":
+            // Only ever a control appearing or going, so a page lying here costs nothing: what it
+            // would be offering to comment on or dictate into is read from the page, not taken
+            // from this message.
+            if let holds = (body["holds"] as? String).flatMap(PageTalk.Holds.init(rawValue:)) {
+                talk.holds = holds
+            }
         default:
             break
         }

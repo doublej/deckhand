@@ -121,6 +121,29 @@ the person asked *it* for, and the session's summary offers the newest waiting p
 press. An agent still tells the person it is there — a phone in a pocket says nothing — but nobody
 has to go looking through the list of pages to find it.
 
+## Talking at a page
+
+A phone dictates better than it types, so two things the app offers over every page are worth
+knowing about if you are writing one.
+
+**A field can be spoken into.** While an `<input>` (text, search, url, email, tel, number, or no
+type at all), a `<textarea>` or anything `contenteditable` has focus, a Say control appears under the
+page. The words are appended to whatever the field already holds — never over it — and the app then
+dispatches a real `bubbles: true` `input` event on the element. So **gate on `input`, not on
+`keydown`**: a page that watches for keystrokes will see a field fill up and not notice. `change` is
+deliberately not sent — the person may say more, or type. A `type="password"` field is not offered
+dictation at all.
+
+**A selection can be commented on.** While something is selected in the page, the hold-to-talk mark
+appears instead, and what the person says lands on the review card with the selected passage quoted
+above it and the slip named by title and slug. That is a remark about your page on its way to the
+session, not an answer: it never goes through `respond`, and a page neither sees it nor can stop it.
+
+Both are driven by a small script the app injects alongside the bridge, which listens for
+`selectionchange`, `focusin` and `focusout` and reports only *whether* the page is holding a
+selection or a focused field — never the text. A page that tears those listeners off loses itself
+the controls, the same way a page that paints nothing loses itself a screen.
+
 ## The demo set
 
 Five pages under `demos/`, one per thing `consult-user-mcp` can ask, because that MCP is the

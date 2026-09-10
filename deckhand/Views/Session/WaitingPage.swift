@@ -24,6 +24,12 @@ struct WaitingPage: View {
     /// How many more are waiting behind it.
     let more: Int
     @State private var open = false
+    /// This row's own recorder, lent to the viewer so a passage can be commented on and the page's
+    /// own fields can be spoken into. Owned here — the thing that presents the cover — because a
+    /// recorder has to outlive the clip and a cover's content does not outlive much. The session
+    /// page's own recorder is four hops up through a summary, which is the threading `AssetView`
+    /// already declined for the same reason.
+    @State private var recorder = Recorder()
     /// The page's own accent, so this goes utt orange with the rest of the screen while the mark
     /// at the foot of it is open.
     @Environment(\.accent) private var accent
@@ -42,7 +48,12 @@ struct WaitingPage: View {
             // are the chrome the viewer is meant not to have. Answering is what makes this
             // disappear, so the listing is read again on the way back.
             .fullScreenCover(isPresented: $open, onDismiss: reread) {
-                ArtifactView(model: model, session: session, artifact: artifact)
+                ArtifactView(model: model,
+                             session: session,
+                             artifact: artifact,
+                             say: Dictation(recorder: recorder,
+                                            mode: model.preferences.talkMode,
+                                            words: { await model.dictated($0, for: session) }))
             }
     }
 
