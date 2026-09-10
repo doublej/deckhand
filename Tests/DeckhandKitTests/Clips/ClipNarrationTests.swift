@@ -31,10 +31,19 @@ struct ClipNarrationTests {
     }
 
     /// A median wait is ~2 s. Enough beats to be a story, few enough to be read.
-    @Test("a two-second wait spends about six hundred milliseconds on each word")
+    @Test("a two-second wait says three words, not four")
     func aMedianWaitIsReadable() {
         let said = stride(from: 0, through: 2.0, by: 0.05).map { ClipNarration.word(after: $0) }
         #expect(Set(said).count == 3)
+    }
+
+    /// The one that flicked. Spacing them by eye is how it drifted back under a readable gap
+    /// last time, so the gap is a named number and this is what holds every beat to it.
+    @Test("no beat is on the pill for less than the floor")
+    func noBeatFlicks() {
+        for (earlier, later) in zip(ClipNarration.beats, ClipNarration.beats.dropFirst()) {
+            #expect(later.after - earlier.after >= ClipNarration.floor)
+        }
     }
 
     /// The long tail is a queue at utt, and saying so is the last honest thing there is to say.

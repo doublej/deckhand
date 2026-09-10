@@ -38,19 +38,33 @@ public enum ClipNarration {
 
     /// In order, the first at zero.
     ///
-    /// The first beat holds for 600 ms, which is longer than a whole round trip that only ever
-    /// waited on the Mac's own arithmetic — three words flickering past in a third of a second
-    /// reads as a fault rather than as progress, so a short answer shows one word and nothing
-    /// else. The three after it are spaced by the same ~600 ms, which is about what a median 2 s
-    /// wait can spend per word without turning into a slot machine.
+    /// **No beat is on screen for less than `floor`.** They were spaced from 600 ms, and 600 ms is
+    /// long enough on paper — it is longer than a whole round trip that only ever waited on the
+    /// Mac's own arithmetic, so a short answer still shows one word and nothing else. On the
+    /// phone it read as flicking rather than as progress: three words inside two seconds is a
+    /// board at a station, and the eye has started the second word about when the third arrives.
+    /// The floor went up and the later gaps went up with it, keeping the shape — each beat a
+    /// little longer than the one before, because a wait that is still going is a wait that is
+    /// going to keep going.
+    ///
+    /// What this costs is one word off a median trip: a 2 s wait tells three of these instead of
+    /// four. That is the trade being made deliberately — fewer words, each of them readable.
     public static let beats = [
         Beat(after: 0, word: "CLIP ON ITS WAY"),
-        Beat(after: 0.6, word: "FINDING SESSION"),
-        Beat(after: 1.25, word: "HANDED TO UTT"),
-        Beat(after: 2.2, word: "UTT TRANSCRIBING"),
-        Beat(after: 3.6, word: "STILL WITH UTT"),
-        Beat(after: 5.5, word: "UTT HAS A QUEUE")
+        Beat(after: floor, word: "FINDING SESSION"),
+        Beat(after: 1.85, word: "HANDED TO UTT"),
+        Beat(after: 2.95, word: "UTT TRANSCRIBING"),
+        Beat(after: 4.3, word: "STILL WITH UTT"),
+        Beat(after: 6.0, word: "UTT HAS A QUEUE")
     ]
+
+    /// The shortest a beat may hold the pill, in seconds, and the gap before the first change.
+    ///
+    /// Named because two other things are measured against it and would otherwise drift from it
+    /// silently: `Motion.word` has to finish a swap well inside one of these, and the staggered
+    /// roll in `WordRoll` takes about 550 ms end to end — which did not fit a 600 ms beat and
+    /// fits this one with room to read the word afterwards, which is the whole point of it.
+    public static let floor: TimeInterval = 0.9
 
     /// The word for a wait this long. Total by construction — the first beat starts at zero, so
     /// there is always one to show and nothing is ever held back until a beat falls due.
