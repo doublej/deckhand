@@ -310,6 +310,19 @@ summariser read what a folder's subagents did. `GET|PUT /settings` is the whole 
 `just daemon` runs it in the foreground and prints its address and pairing token.
 `.quality.json` caps a Python file at 400 lines and a directory at 16 files.
 
+- **The launchd daemon pins this tree at start and never reloads**, so a restart taken while any
+  file is mid-edit freezes that half-written state into the live service until somebody restarts
+  it again. It runs from `daemon/src/` in the working copy: one agent's `kickstart` landed on
+  another's partial write and `GET /sessions` answered 500 with a `NameError` for several
+  minutes, which on the phone reads as no sessions at all rather than as an error. `artifacts.py`
+  is the sharpest edge of it — `app.list_sessions` calls `artifacts.counted`, which calls
+  `listing` — so a name used above its definition *there* takes out the whole app's world and not
+  the slips tab. Helpers before their callers in that file, or write the change in one pass.
+- **A green `just daemon-test` says the file on disk is right and nothing about what is running.**
+  Recovery, once the edit is finished and the tests pass, is `launchctl kickstart -k
+  gui/$(id -u)/com.jurrejan.deckhand`. Restart deliberately and once: with several agents in the
+  tree, a bounce taken to fix one half-written file is a bounce onto whatever else is half-written.
+
 ## Related context
 
 - `../CLAUDE.md` — the repo map and the endpoint surface
