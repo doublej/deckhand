@@ -13,6 +13,7 @@
     "UITests/**/*.swift",
     "daemon/src/**/*.py",
     "daemon/tests/**/*.py",
+    "daemon/tools/**/*.py",
     "skills/**/*.py"
   ]
 }

@@ -56,6 +56,11 @@ icon:
 token:
     @cat ~/Library/Application\ Support/Deckhand/token
 
+# How far a clip survives being sped up and silence-trimmed (`--report` re-reads the last run).
+[group('develop')]
+audio-bench *args:
+    uv run --directory daemon python tools/audio_bench.py {{ args }}
+
 # Build and run the app in the simulator against a daemon on this Mac.
 [group('develop')]
 sim: generate
@@ -101,7 +106,7 @@ daemon-test:
 
 [group('quality')]
 daemon-lint:
-    uv run --directory daemon ruff check src tests
+    uv run --directory daemon ruff check src tests tools
 
 # Every demo artifact parses, names itself, answers through the app, and stays inside the CSP.
 [group('quality')]
