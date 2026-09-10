@@ -16,8 +16,10 @@ import SwiftUI
 ///
 /// There is no field. Nothing on this is typed into, and that is the point of it.
 struct PinCallout: View {
-    /// The number on the marker, which is also the number in the numbered list the session reads.
-    let place: Int
+    /// The id on the marker, letter and number both, which is also the id in the list the session
+    /// reads. A string rather than a number because the letter is what says *which picture* — see
+    /// `Pin.lettering(round:)`.
+    let place: String
     let words: String
     /// What it takes to say the remark. Nil means this picture was opened somewhere with no
     /// recorder to lend, in which case the only honest controls are the number and Delete.
@@ -52,9 +54,11 @@ struct PinCallout: View {
     /// still in the numbered list the session reads.
     private var remark: some View {
         HStack(alignment: .firstTextBaseline, spacing: Spacing.extraSmall) {
-            Text("\(place)")
+            Text(place)
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(Color.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
                 .frame(width: 18, height: 18)
                 .background(Circle().fill(Palette.tint))
             Text(said.isEmpty ? "Nothing said here yet" : said)

@@ -28,7 +28,7 @@ struct Markup: Equatable {
 ///
 /// The drawing needs no scaling here because it is already kept in pixels; see `PictureScroll`,
 /// which is where the conversion happens, once, as the strokes come off the canvas.
-func flattened(_ markup: Markup, onto picture: UIImage) -> UIImage {
+func flattened(_ markup: Markup, onto picture: UIImage, lettered: String) -> UIImage {
     let size = pixelSize(of: picture)
     let whole = CGRect(origin: .zero, size: size)
     let format = UIGraphicsImageRendererFormat.default()
@@ -40,7 +40,7 @@ func flattened(_ markup: Markup, onto picture: UIImage) -> UIImage {
             markup.drawing.image(from: whole, scale: 1).draw(in: whole)
         }
         for (place, pin) in markup.pins.enumerated() {
-            draw(place + 1, at: pin.spot, on: pass.cgContext, across: size)
+            draw("\(lettered)\(place + 1)", at: pin.spot, on: pass.cgContext, across: size)
         }
     }
 }
@@ -70,9 +70,20 @@ enum Marker {
         max(onScreen, min(size.width, size.height) * 0.045)
     }
 
-    /// How big the numeral is against the disc it sits in. Heavy at this size, because the figure
+    /// How big the id is against the disc it sits in. Heavy at this size, because the figure
     /// is the whole of what the marker says and a screenshot is usually busy behind it.
     static let figure: CGFloat = 0.56
+
+    /// That size, brought down when the id is longer than the disc was drawn for.
+    ///
+    /// Two characters is what it was drawn for: `A1`. A third — `A10`, or `AA1` — is wider than
+    /// the face at the full size and would touch the ring it sits inside, so it comes down in
+    /// proportion. The disc stays round: a marker that changed shape with its id would read as a
+    /// second kind of mark.
+    static func font(for label: String, across wide: CGFloat) -> UIFont {
+        let room = min(1, 2 / CGFloat(max(1, label.count)))
+        return .systemFont(ofSize: wide * figure * room, weight: .heavy)
+    }
 
     /// The three discs, outside in: a white ring, a black ring, and the white face the numeral is
     /// drawn on. Fractions of the width rather than fixed points, so the marker looks like the
@@ -88,7 +99,7 @@ enum Marker {
     static func label() -> UILabel {
         let marker = UILabel(frame: CGRect(x: 0, y: 0, width: onScreen, height: onScreen))
         marker.textAlignment = .center
-        marker.font = .systemFont(ofSize: onScreen * figure, weight: .heavy)
+        marker.font = font(for: "A1", across: onScreen)
         marker.textColor = .black
         marker.backgroundColor = .white
         marker.layer.cornerRadius = onScreen / 2
@@ -112,7 +123,7 @@ enum Marker {
     }
 }
 
-/// A numeral in a disc, drawn to be read off anything.
+/// An id in a disc, drawn to be read off anything.
 ///
 /// Deliberately not in this app's colours. Everywhere else a mark is teal because teal is what
 /// says "Deckhand"; here it is drawn *over somebody else's picture*, and the picture is very
@@ -123,9 +134,12 @@ enum Marker {
 /// ring around that. Two rings rather than one because a single ring can only separate the marker
 /// from one kind of background — the white one holds it off a dark picture, the black one off a
 /// light one, and between them there is no colour a photograph or a screenshot can be that the
-/// marker disappears into. Black on white is also the most legible a numeral gets, which matters
+/// marker disappears into. Black on white is also the most legible a figure gets, which matters
 /// at a fifth of the size on a 6K screenshot.
-private func draw(_ number: Int, at pixel: CGPoint, on context: CGContext, across size: CGSize) {
+///
+/// `label` is the whole id — the picture's letter and the place's number, `A3` — because that is
+/// what the words the session reads call this place, and the two have to be the same characters.
+private func draw(_ label: String, at pixel: CGPoint, on context: CGContext, across size: CGSize) {
     let wide = Marker.width(across: size)
     let disc = CGRect(x: pixel.x - wide / 2, y: pixel.y - wide / 2, width: wide, height: wide)
     // Nested fills rather than strokes: a stroke straddles its path, so two of them at different
@@ -135,10 +149,10 @@ private func draw(_ number: Int, at pixel: CGPoint, on context: CGContext, acros
         context.fillEllipse(in: disc.insetBy(dx: inset, dy: inset))
     }
     let style: [NSAttributedString.Key: Any] = [
-        .font: UIFont.systemFont(ofSize: wide * Marker.figure, weight: .heavy),
+        .font: Marker.font(for: label, across: wide),
         .foregroundColor: UIColor.black
     ]
-    let figure = "\(number)" as NSString
+    let figure = label as NSString
     let box = figure.size(withAttributes: style)
     figure.draw(at: CGPoint(x: disc.midX - box.width / 2, y: disc.midY - box.height / 2),
                 withAttributes: style)

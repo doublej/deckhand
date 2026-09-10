@@ -53,6 +53,7 @@ the wire.** Everywhere else the word is the same on both sides.
 | **file** | Something the session touched that a phone can open. The listing is the permission. | attachment, asset |
 | **snap / picture** | An image the person sends *to* a session, delivered as a path. | photo, screenshot, image (in prose) |
 | **markup** | What was marked on a picture, and what the session is told about it. | annotation (in code), drawing |
+| **lettering** | What a picture's markers wear in front of their numbers — `A1`, `B2`. One letter per marked picture, so one prompt holds no two ids alike. | prefix, group, index |
 | **spot** | A place in a picture's own pixels. | at, point, position |
 | **onScreen** | Where that place currently is in a view. | at, frame |
 

@@ -35,6 +35,10 @@ final class PictureScroll: UIScrollView, UIScrollViewDelegate, PKCanvasViewDeleg
     private var fittedFor: CGSize = .zero
     private lazy var once = UITapGestureRecognizer(target: self, action: #selector(tappedOnce))
 
+    /// What every marker on this picture wears in front of its number, so that what is drawn here
+    /// is character for character what the session will read. See `Pin.lettering(round:)`.
+    var lettered = "A"
+
     /// What the surface above is told. The scroll view decides nothing about what a tap means.
     var dropped: ((CGPoint) -> Void)?
     var opened: ((Pin) -> Void)?
@@ -219,7 +223,8 @@ final class PictureScroll: UIScrollView, UIScrollViewDelegate, PKCanvasViewDeleg
         while markers.count < pins.count { markers.append(addMarker()) }
         for (index, marker) in markers.enumerated() {
             let mine = pins[index].id == picked
-            marker.text = "\(index + 1)"
+            marker.text = "\(lettered)\(index + 1)"
+            marker.font = Marker.font(for: marker.text ?? "", across: Marker.onScreen)
             marker.center = Fitting.point(of: pins[index].spot, of: pixels, drawn: picture.frame)
             Marker.dress(marker, chosen: mine)
         }

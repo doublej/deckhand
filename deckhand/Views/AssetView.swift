@@ -51,7 +51,8 @@ struct AssetView: View {
                     }
                     ToolbarItemGroup(placement: .topBarTrailing) {
                         if !markup.isEmpty {
-                            Button("Send") { hand() }
+                            // Not Send: it sends nothing. See `SnapView.hand`.
+                            Button("Add to card") { hand() }
                                 .buttonStyle(.borderedProminent)
                                 .controlSize(.small)
                                 .tint(Palette.tint)
@@ -79,7 +80,11 @@ struct AssetView: View {
             // Zoomable, because half of what a session makes is a screenshot of something
             // small in the corner of something large — and markable, because pointing at the
             // small thing beats describing where it is.
-            Marking(picture: image, markup: $markup, pencilling: pencilling, say: say)
+            Marking(picture: image,
+                    lettered: model.lettering(for: session),
+                    markup: $markup,
+                    pencilling: pencilling,
+                    say: say)
         case .words(let text):
             ScrollView {
                 words(text)

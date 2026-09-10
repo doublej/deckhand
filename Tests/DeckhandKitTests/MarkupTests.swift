@@ -18,12 +18,13 @@ struct MarkupTests {
             Pin(spot: CGPoint(x: 88, y: 540), words: "the caption wraps onto four lines"),
             Pin(spot: CGPoint(x: 700, y: 1180), words: "too much air under the footer")
         ]
-        #expect(Pin.prose(pins, about: "shot.png", at: "/Users/jj/dev/shot.png") == """
-            Feedback on shot.png, marked on the attached copy:
+        #expect(Pin.prose(pins, about: "shot.png", at: "/Users/jj/dev/shot.png",
+                          lettered: "A") == """
+            Feedback on shot.png, marked A on the attached copy:
 
-            1. this badge is clipped
-            2. the caption wraps onto four lines
-            3. too much air under the footer
+            A1. this badge is clipped
+            A2. the caption wraps onto four lines
+            A3. too much air under the footer
 
             The unmarked original is at `/Users/jj/dev/shot.png`.
             """)
@@ -38,11 +39,11 @@ struct MarkupTests {
             Pin(spot: .zero),
             Pin(spot: .zero, words: "  \n  ")
         ]
-        let text = Pin.prose(pins, about: "a.png", at: "/a.png")
-        #expect(text.contains("1. the header is the wrong weight"))
-        #expect(text.contains("2. look here"))
+        let text = Pin.prose(pins, about: "a.png", at: "/a.png", lettered: "A")
+        #expect(text.contains("A1. the header is the wrong weight"))
+        #expect(text.contains("A2. look here"))
         // Whitespace is nothing typed, not a remark made of spaces.
-        #expect(text.contains("3. look here"))
+        #expect(text.contains("A3. look here"))
     }
 
     @Test("the numbers follow the order the places were marked, not where they are")
@@ -53,13 +54,13 @@ struct MarkupTests {
             Pin(spot: CGPoint(x: 900, y: 1400), words: "this one was marked first"),
             Pin(spot: CGPoint(x: 4, y: 8), words: "this one second")
         ]
-        let text = Pin.prose(pins, about: "a.png", at: "/a.png")
-        #expect(text.contains("1. this one was marked first\n2. this one second"))
+        let text = Pin.prose(pins, about: "a.png", at: "/a.png", lettered: "A")
+        #expect(text.contains("A1. this one was marked first\nA2. this one second"))
     }
 
     @Test("a picture with only a drawing on it still names both copies")
     func drawnOnly() {
-        let text = Pin.prose([], about: "chart.jpeg", at: "/tmp/chart.jpeg")
+        let text = Pin.prose([], about: "chart.jpeg", at: "/tmp/chart.jpeg", lettered: "A")
         #expect(text.hasPrefix("Feedback drawn on the attached copy of chart.jpeg."))
         #expect(text.hasSuffix("The unmarked original is at `/tmp/chart.jpeg`."))
         // No list at all rather than an empty one introduced as though it had items in it.
@@ -76,14 +77,14 @@ struct MarkupTests {
             Pin(spot: CGPoint(x: 12, y: 30), words: "this arrow points at the wrong cell"),
             Pin(spot: CGPoint(x: 40, y: 90))
         ]
-        #expect(Pin.prose(pins) == """
-            Feedback on the attached picture, marked on it:
+        #expect(Pin.prose(pins, lettered: "A") == """
+            Feedback on the attached picture, marked A on it:
 
-            1. this arrow points at the wrong cell
-            2. look here
+            A1. this arrow points at the wrong cell
+            A2. look here
             """)
-        #expect(!Pin.prose(pins).contains("`"))
-        #expect(!Pin.prose(pins).contains("original"))
+        #expect(!Pin.prose(pins, lettered: "A").contains("`"))
+        #expect(!Pin.prose(pins, lettered: "A").contains("original"))
     }
 
     /// A marker sits on top of the thing it is about, so the unmarked copy is not a spare — it is
@@ -92,10 +93,10 @@ struct MarkupTests {
     @Test("both copies attached says both are there and still names no path")
     func attachedWithOriginal() {
         let pins = [Pin(spot: CGPoint(x: 12, y: 30), words: "this arrow points at the wrong cell")]
-        let text = Pin.prose(pins, withOriginal: true)
+        let text = Pin.prose(pins, withOriginal: true, lettered: "A")
 
-        #expect(text.hasPrefix("Feedback on the attached picture, marked on it:"))
-        #expect(text.contains("1. this arrow points at the wrong cell"))
+        #expect(text.hasPrefix("Feedback on the attached picture, marked A on it:"))
+        #expect(text.contains("A1. this arrow points at the wrong cell"))
         #expect(text.contains("Both copies are attached"))
         #expect(text.contains("unmarked"))
         // The same rule as ever: there is no path until Send uploads it, so none is invented.
@@ -105,7 +106,7 @@ struct MarkupTests {
 
     @Test("a drawing with both copies attached still says both are there")
     func drawnWithOriginal() {
-        let text = Pin.prose([], withOriginal: true)
+        let text = Pin.prose([], withOriginal: true, lettered: "A")
 
         #expect(text.hasPrefix("Feedback drawn on the attached picture."))
         #expect(text.contains("Both copies are attached"))
@@ -113,19 +114,19 @@ struct MarkupTests {
 
     @Test("an attached picture with only a drawing on it says so and stops")
     func attachedDrawnOnly() {
-        #expect(Pin.prose([]) == "Feedback drawn on the attached picture.")
+        #expect(Pin.prose([], lettered: "A") == "Feedback drawn on the attached picture.")
     }
 
-    @Test("the numbering is the same for a file and for an attached picture")
+    @Test("the ids are the same for a file and for an attached picture")
     func sameNumbers() {
-        // The two halves of the feedback are joined by the number on the marker, and the markers
+        // The two halves of the feedback are joined by the id on the marker, and the markers
         // are drawn by one function whichever picture they are on. A file's remarks numbered
         // differently from an attachment's would be the one bug neither could be read through.
         let pins = [Pin(spot: .zero, words: "first"), Pin(spot: .zero), Pin(spot: .zero, words: "third")]
-        let numbered = ["1. first", "2. look here", "3. third"]
+        let numbered = ["C1. first", "C2. look here", "C3. third"]
         for line in numbered {
-            #expect(Pin.prose(pins).contains(line))
-            #expect(Pin.prose(pins, about: "a.png", at: "/a.png").contains(line))
+            #expect(Pin.prose(pins, lettered: "C").contains(line))
+            #expect(Pin.prose(pins, about: "a.png", at: "/a.png", lettered: "C").contains(line))
         }
     }
 
@@ -134,7 +135,46 @@ struct MarkupTests {
         // What a Mac screenshot is really called. The path is the session's way back to the
         // unmarked picture, so a prose line that tidied the spaces out of it would be a dead end.
         let path = "/Users/jj/Desktop/Screen Shot 2026-09-10 at 11.02.31.png"
-        let text = Pin.prose([Pin(spot: .zero, words: "here")], about: "Screen Shot.png", at: path)
+        let text = Pin.prose([Pin(spot: .zero, words: "here")], about: "Screen Shot.png", at: path,
+                             lettered: "A")
         #expect(text.contains("The unmarked original is at `\(path)`."))
+    }
+
+    @Test("two marked pictures in one prompt share no id")
+    func twoPictures() {
+        // The bug this exists to stop. Both blocks opened with the same sentence and both
+        // numbered their remarks from 1, so two marked pictures pinned to one prompt arrived as
+        // two markers called 1 and two items called 1 — and nothing anywhere, in the words or on
+        // the pictures, said which belonged to which. A session could not resolve it, and neither
+        // could a person reading over its shoulder.
+        let first = [Pin(spot: .zero, words: "this badge is clipped"),
+                     Pin(spot: .zero, words: "the caption wraps")]
+        let second = [Pin(spot: .zero, words: "the header is the wrong weight")]
+        let prompt = [Pin.prose(first, withOriginal: true, lettered: Pin.lettering(round: 0)),
+                      Pin.prose(second, withOriginal: true, lettered: Pin.lettering(round: 1))]
+            .joined(separator: "\n\n")
+
+        // Every id in the prompt exactly once, and the letter is what makes that true.
+        for id in ["A1", "A2", "B1"] {
+            #expect(prompt.components(separatedBy: "\n\(id). ").count == 2)
+        }
+        // Nothing is numbered bare any more, in either block.
+        #expect(!prompt.contains("\n1. "))
+        #expect(!prompt.contains("\n2. "))
+        // And the two headings are no longer the same sentence twice: each names the letter its
+        // own markers wear, which is the one thing about the picture a session can actually see.
+        #expect(prompt.contains("marked A on it:"))
+        #expect(prompt.contains("marked B on it:"))
+    }
+
+    @Test("the lettering runs past Z rather than starting over")
+    func lettering() {
+        #expect(Pin.lettering(round: 0) == "A")
+        #expect(Pin.lettering(round: 1) == "B")
+        #expect(Pin.lettering(round: 25) == "Z")
+        // Nobody will mark twenty-seven pictures into one prompt. A silent second A is the exact
+        // bug the letters exist to stop, so there is no wrapping point.
+        #expect(Pin.lettering(round: 26) == "AA")
+        #expect(Pin.lettering(round: 27) == "AB")
     }
 }

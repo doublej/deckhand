@@ -28,6 +28,18 @@ import SwiftUI
 /// on the way in anyway.
 private let markedTail = "-marked"
 
+/// How many rounds of marking each card already holds, so the next one wears the next letter.
+///
+/// Every id in one prompt has to be distinct. Two pictures marked up into the same words used to
+/// arrive with two markers called 1 and two items called 1, and nothing anywhere saying which
+/// belonged to which — not a filename, because there is none until Send, and not the order, which
+/// a reader cannot see. The letter is what says which picture, and it is burnt into the pixels as
+/// well as written into the words: `Pin.lettering(round:)`.
+///
+/// Beside `marked` and for its reasons: in memory, main-actor, the same lifetime as the card it
+/// counts for. Nothing resets it by hand and nothing has to — see `round(of:)`.
+@MainActor private var rounds: [String: Int] = [:]
+
 @MainActor
 extension AppModel {
     /// What is already on this picture, so reopening the sheet finds the pins where they were.
@@ -54,7 +66,8 @@ extension AppModel {
         // A picture with nothing on it is not feedback. The sheet's own Done button will not
         // offer itself for an empty markup either; this is the shared path, so it says no too.
         guard !markup.isEmpty else { return }
-        guard let snap = Snap(flattened(markup, onto: picture),
+        let lettered = lettering(for: session)
+        guard let snap = Snap(flattened(markup, onto: picture, lettered: lettered),
                              name: pngName(marking: asset.name)) else {
             status = "Could not draw the marked copy of \(asset.name)"
             return
@@ -62,8 +75,10 @@ extension AppModel {
         // Underneath whatever was already said, never instead of it — `Appending.swift`, which
         // is the one path that adds to a card rather than replacing what is in it. `Pin.prose`
         // opens with a heading of its own, so the two read as two paragraphs.
-        append(Pin.prose(markup.pins, about: asset.name, at: asset.path), to: session)
+        append(Pin.prose(markup.pins, about: asset.name, at: asset.path, lettered: lettered),
+               to: session)
         attach(snap, to: session)
+        spend(markup.pins, for: session)
         marked[asset.path] = nil
         status = landed(markup.pins.count, on: asset.name)
     }
@@ -95,7 +110,8 @@ extension AppModel {
     /// are there rather than trying to name a path that will not exist until the upload.
     func feedback(_ markup: Markup, of snap: Snap, in session: Session) {
         guard !markup.isEmpty else { return }
-        guard let copy = Snap(flattened(markup, onto: snap.picture),
+        let lettered = lettering(for: session)
+        guard let copy = Snap(flattened(markup, onto: snap.picture, lettered: lettered),
                               name: pngName(marking: snap.name)) else {
             status = "Could not draw the marked copy of the picture"
             return
@@ -109,7 +125,8 @@ extension AppModel {
             status = "That picture is no longer attached"
             return
         }
-        append(Pin.prose(markup.pins, withOriginal: original), to: session)
+        append(Pin.prose(markup.pins, withOriginal: original, lettered: lettered), to: session)
+        spend(markup.pins, for: session)
         forget(markupOf: snap)
         status = landed(markup.pins.count, on: "the picture")
     }
@@ -137,6 +154,35 @@ extension AppModel {
     /// keep: the markers are already burnt into the bytes the sheet just opened.
     private func isMarked(_ snap: Snap) -> Bool {
         (snap.name as NSString).deletingPathExtension.hasSuffix(markedTail)
+    }
+
+    /// What the next round of markers on this card wears in front of its numbers.
+    ///
+    /// Handed to the sheet as well as to the flattening, so the disc drawn while the marks are
+    /// being made reads character for character as the disc that ends up burnt into the copy.
+    func lettering(for session: Session) -> String {
+        Pin.lettering(round: round(of: session))
+    }
+
+    /// The card moved on to the next letter, once a round has actually landed in it.
+    ///
+    /// A round that marked no places wears no letter — there is no marker to put one on — so it
+    /// spends none either, or the next picture would be the B one with no A anywhere.
+    private func spend(_ pins: [Pin], for session: Session) {
+        guard !pins.isEmpty else { return }
+        rounds[session.sessionId] = round(of: session) + 1
+    }
+
+    /// How many rounds this card already holds.
+    ///
+    /// Nothing marked attached to it means the card has been sent or emptied — sending clears the
+    /// attachments — so the lettering starts at A again with nothing to reset by hand. Taking the
+    /// last marked picture out of a card whose remarks are still in it starts over too, and that
+    /// is the right answer to the wrong question: those remarks are already about a picture that
+    /// is no longer going anywhere.
+    private func round(of session: Session) -> Int {
+        guard snaps(for: session).contains(where: isMarked) else { return 0 }
+        return rounds[session.sessionId] ?? 0
     }
 
     /// What the status line says, which is how this app tells you anything happened at all. The

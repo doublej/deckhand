@@ -27,6 +27,11 @@ private struct Spotted: Equatable {
 
 struct Marking: View {
     let picture: UIImage
+    /// What every marker on this picture wears in front of its number. Decided by the card rather
+    /// than here — a second marked picture in one prompt is the B one — and shown while the marks
+    /// are still being made so that the disc on screen reads exactly as the disc that gets burnt
+    /// into the copy. See `Pin.lettering(round:)`.
+    let lettered: String
     @Binding var markup: Markup
     /// Whether the freehand layer has the touches. A mode, not a second picture.
     let pencilling: Bool
@@ -53,6 +58,7 @@ struct Marking: View {
 
     var body: some View {
         MarkedPicture(picture: picture,
+                      lettered: lettered,
                       markup: $markup,
                       pencilling: pencilling,
                       chosen: chosen,
@@ -124,10 +130,11 @@ struct Marking: View {
         chosen = chosen == pin.id ? nil : pin.id
     }
 
-    /// The number this pin is wearing on the picture, so the callout says the same one. Found by
+    /// The id this pin is wearing on the picture, so the callout says the same one. Found by
     /// id, for the same reason `chosen` is an id.
-    private func place(of pin: Pin) -> Int {
-        (markup.pins.firstIndex { $0.id == pin.id } ?? markup.pins.count - 1) + 1
+    private func place(of pin: Pin) -> String {
+        let number = (markup.pins.firstIndex { $0.id == pin.id } ?? markup.pins.count - 1) + 1
+        return "\(lettered)\(number)"
     }
 
     /// Over what was there, not after it. A remark said twice at one place is a remark corrected —
@@ -153,6 +160,7 @@ struct Marking: View {
 /// nothing to fit to and a screenshot drew at its full pixel size.
 struct MarkedPicture: UIViewRepresentable {
     let picture: UIImage
+    let lettered: String
     @Binding var markup: Markup
     let pencilling: Bool
     /// Which marker wears the chosen ring.
@@ -175,6 +183,7 @@ struct MarkedPicture: UIViewRepresentable {
     /// `moved` goes in before `chosen`, because setting `chosen` is what reports a position and a
     /// closure assigned after that report is a callout that never appears.
     func updateUIView(_ view: PictureScroll, context: Context) {
+        view.lettered = lettered
         view.dropped = dropped
         view.opened = opened
         view.moved = moved

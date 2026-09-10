@@ -44,7 +44,11 @@ struct SnapView: View {
 
     var body: some View {
         NavigationStack {
-            Marking(picture: snap.picture, markup: $markup, pencilling: pencilling, say: say)
+            Marking(picture: snap.picture,
+                    lettered: model.lettering(for: session),
+                    markup: $markup,
+                    pencilling: pencilling,
+                    say: say)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Palette.surfaceGround)
                 // What this phone calls the file is `photo.jpg`, and the Mac renames it to a
@@ -68,7 +72,7 @@ struct SnapView: View {
     }
 
     /// The one way to lose an attachment now that a tap on the thumbnail opens this instead. It is
-    /// behind that tap, at the far end of the bar from Send and Close, which is the same answer
+    /// behind that tap, at the far end of the bar from Add to card and Close, which is the same answer
     /// `ReviewActions` gives to pressing the wrong one: distance, not a confirmation.
     private var remove: some View {
         Button("Remove", role: .destructive) {
@@ -95,8 +99,13 @@ struct SnapView: View {
 
     /// The same word and the same button a file's feedback is handed over with, because it is the
     /// same gesture: the marks become words in the card, and the card's own Send is what sends.
+    ///
+    /// It said Send, and it sent nothing. Beside Close, on a screen full of markup, one press from
+    /// the review card's own Send — the one irreversible thing anywhere near here — that is a
+    /// button you have to press to find out what it does, and finding out costs you a prompt into
+    /// a live session. What it does is put the remarks in the card, so that is what it says.
     private var hand: some View {
-        Button("Send") {
+        Button("Add to card") {
             model.feedback(markup, of: snap, in: session)
             // The marks are the card's now, burnt into the copy that took this picture's place.
             markup = Markup()
