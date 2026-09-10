@@ -1,0 +1,195 @@
+"""The six tools a session gets so it can reach the person holding the phone.
+
+The skill said all of this in prose first, and the prose is still the better half: a slip is a
+file an agent writes in its own folder, and knowing that is worth more than any tool. These exist
+because a tool is present whether or not the model thought to look, and the failure they answer is
+a session that reached a decision needing the person and made it alone.
+
+**Four of the six are the daemon's own routes.** Nothing here reimplements one. `/say` carries the
+session's filter chain, its orders and the delivery record; `/notify` carries the folder's right to
+refuse being interrupted. Calling the functions underneath those routes would quietly drop all of
+it, which is the shape of bug that looks like it works.
+
+**Two of them are not routes at all.** A slip is written in the session's own `cwd` and read back
+from there, exactly as `docs/artifacts.md` chose — so `ask_on_phone` and `read_answer` run the
+skill's own `slip.py` and `answer.py` rather than talking to the daemon. One copy of that logic,
+and the tool and the shell command an agent might type produce the same file.
+
+**What it refuses, and how.** By absence: there is no route argument, no `/control`, no `PUT`, no
+`POST /projects/session`. `say_to_session` is socket-only, because an agent choosing the keyboard
+route is an agent claiming to be the person. None of this is a fence — the agent keeps `Bash` and
+the token is a readable file — it is there so an agent does not *drift* into speaking as the
+person because that route was the convenient one. `docs/agent-surface.md` says which token would
+make these refusals real, and it does not exist yet.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+from mcp.server.mcpserver import MCPServer
+from mcp.types import ToolAnnotations
+
+from . import here
+
+# The skill's own scripts, from this repo rather than from `~/.claude/skills/deckhand` — the same
+# files either way, since that is a symlink, and this way a checkout that has not been installed
+# still works. `templates/` beside them are symlinks into `demos/`, so there is one copy of every
+# page and `just demo-check` gates it.
+SCRIPTS = Path(__file__).resolve().parents[4] / "skills" / "deckhand" / "scripts"
+# A slip nobody answers should not hold a tool call open forever, and Claude Code's own tool
+# timeout is well under this anyway — so the default is to look once and let the daemon's message
+# wake the session when the answer lands.
+MAX_WAIT = 600.0
+READ_ONLY = ToolAnnotations(read_only_hint=True, open_world_hint=False)
+WRITES = ToolAnnotations(open_world_hint=False)
+
+server = MCPServer(name="deckhand", instructions=__doc__)
+
+
+async def _script(name: str, *args: str) -> tuple[bool, str]:
+    """Run one of the skill's scripts. Returns (it worked, what it printed).
+
+    In a subprocess rather than imported: both scripts end an argument they dislike with
+    `sys.exit(sentence)`, which is right for a command and would take this server down with it.
+    """
+    done = await asyncio.to_thread(
+        subprocess.run, [sys.executable, str(SCRIPTS / name), *args],
+        capture_output=True, text=True, check=False, timeout=MAX_WAIT + 30,
+    )
+    return done.returncode == 0, (done.stdout or done.stderr).strip()
+
+
+def _folder() -> tuple[dict, str] | tuple[None, str]:
+    """This session's record and its folder, or a sentence saying there is no session above."""
+    held = here.mine()
+    if held is None:
+        return None, ("this is not running inside a Claude Code session, so there is no folder "
+                      "to write a slip in and no session to speak as")
+    return held, held.get("cwd", "")
+
+
+@server.tool(annotations=READ_ONLY)
+async def whoami() -> dict:
+    """Which session this is: its id, its name, the folder it is working in."""
+    held, why = _folder()
+    if held is None:
+        return {"error": why}
+    return {"session": held["sessionId"], "name": held.get("name", ""),
+            "folder": held.get("cwd", ""), "status": held.get("status", "")}
+
+
+@server.tool(annotations=WRITES)
+async def ask_on_phone(question: str, kind: str = "confirm", options: list[str] | None = None,
+                       note: str = "", questions: list[str] | None = None) -> dict:
+    """Ask the person a question on their phone. Returns the slip's id, to read the answer by.
+
+    `kind` is one of confirm, pick, text, aloud. `options` is the yes label then the no label for
+    a confirm, one row per choice for a pick, and the field's label for a text. `questions` is for
+    an aloud slip only, each one `id:the question`, and the person answers by speaking.
+
+    The page is written into this session's own folder and appears on the phone within seconds.
+    Asking the same question again replaces the page and drops any answer already given to it.
+    """
+    held, why = _folder()
+    if held is None:
+        return {"error": why}
+    if kind not in ("confirm", "pick", "text", "aloud"):
+        return {"error": f"{kind!r} is not a kind of slip — confirm, pick, text or aloud"}
+    args = ["--kind", kind, "--title", question, "--dir", why, "--session", held["sessionId"]]
+    if note:
+        args += ["--note", note]
+    for choice in options or []:
+        args += ["--option", choice]
+    for asked in questions or []:
+        args += ["--question", asked]
+    worked, said = await _script("slip.py", *args)
+    if not worked:
+        return {"error": said}
+    return {"id": Path(said).stem, "title": question, "waiting": True, "page": said}
+
+
+@server.tool(annotations=READ_ONLY)
+async def read_answer(id: str, wait_seconds: float = 0.0) -> dict:
+    """What the person answered on a slip, if they have. `wait_seconds` blocks for up to ten
+    minutes; left out it looks once, which is usually right because the daemon messages this
+    session the moment an answer lands."""
+    held, why = _folder()
+    if held is None:
+        return {"error": why}
+    waited = max(0.0, min(float(wait_seconds), MAX_WAIT))
+    worked, said = await _script("answer.py", id, "--wait", str(waited), "--dir", why,
+                                 "--session", held["sessionId"])
+    if not worked:
+        return {"answered": False, "why": said}
+    try:
+        return {"answered": True, "value": json.loads(said)}
+    except json.JSONDecodeError:
+        return {"answered": True, "value": said}
+
+
+@server.tool(annotations=WRITES)
+async def call_for_attention(line: str) -> dict:
+    """Ask for the person outright, in your own words — a card on their Lock Screen.
+
+    For when a long job has finished with nobody watching or this session is stuck. The folder may
+    refuse to be interrupted, and the refusal comes back as `pushed: false` with the reason: say so
+    rather than carrying on as though they have seen it.
+    """
+    held, why = _folder()
+    if held is None:
+        return {"error": why}
+    return await here.reach("POST", f"/sessions/{held['sessionId']}/notify", json={"line": line})
+
+
+@server.tool(annotations=READ_ONLY)
+async def sessions() -> dict:
+    """Every Claude Code session live on this Mac: its name, folder, whether it is busy, and how
+    many slips it has left waiting for the person."""
+    answered = await here.reach("GET", "/sessions")
+    if "error" in answered:
+        return answered
+    return {"sessions": [
+        {"session": s.get("session_id"), "name": s.get("name"), "folder": s.get("cwd"),
+         "status": s.get("status"), "waiting": s.get("artifacts_waiting", 0)}
+        for s in answered.get("sessions", [])
+    ]}
+
+
+@server.tool(annotations=WRITES)
+async def say_to_session(session: str, text: str) -> dict:
+    """Say something to another session on this Mac, by name or by id.
+
+    It arrives down that session's peer inbox, labelled as coming from another Claude session and
+    carrying none of your user's authority — which is the only way an agent may speak to one. It
+    can be stopped by that session's filters, so read the receipt: `went: false` means it was not
+    said, whatever the reason beside it.
+    """
+    listed = await here.reach("GET", "/sessions")
+    if "error" in listed:
+        return listed
+    live = listed.get("sessions", [])
+    match = next((s for s in live if session in (s.get("session_id"), s.get("name"))), None)
+    if match is None:
+        return {"went": False, "why": f"no live session called {session!r} — "
+                                      f"there is {', '.join(s.get('name', '?') for s in live)}"}
+    answered = await here.reach("POST", f"/sessions/{match['session_id']}/say",
+                                params={"route": "socket"}, json={"text": text})
+    if "error" in answered:
+        return {"went": False, "why": answered["error"]}
+    stopped = answered.get("stopped_by")
+    return {"went": bool(answered.get("delivered")), "by": answered.get("delivered_by"),
+            "why": answered.get("delivery_error")
+            or (f"the {stopped} filter stopped it" if stopped else None)}
+
+
+def main() -> None:
+    server.run("stdio")
+
+
+if __name__ == "__main__":
+    main()

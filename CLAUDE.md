@@ -43,6 +43,8 @@ load-bearing: it never types into a pane. See [docs/manager.md](docs/manager.md)
 |---|---|
 | `daemon/` | The Mac half: sessions, projects, transcripts, delivery, briefings, utt, APNs. |
 | `daemon/…/manager/` | The manager: its conversation, its facade of tools, its run, its routes. |
+| `daemon/…/mcp/` | The six tools an agent *inside* a session gets, over stdio. `just install-mcp`. |
+| `skills/deckhand/` | The same surface as prose and two scripts, for a session with no tools. |
 | `Sources/DeckhandKit/` | Models, HTTP client, pure logic, design layer — everything `just test` can reach. |
 | `Sources/IconMaker/` | Draws the app icon from the same grid as the in-app mark (`just icon`). |
 | `deckhand/` | The iOS app target: `Model`, the recorders, and `Views/`. |

@@ -22,6 +22,21 @@ yes or no to this exact thing — or when the person is away, and a sentence in 
 is looking at is the same as saying nothing. Then do both: a phone in a pocket announces nothing
 itself, so say in one line that the slip is there.
 
+## The same things as tools
+
+Where the `deckhand` MCP server is installed, six tools arrive with it and are the shorter path.
+`ask_on_phone` and `read_answer` write and read exactly the file the scripts below do;
+`call_for_attention` puts a card on the Lock Screen; `whoami` says which session this is; and
+`sessions` and `say_to_session` reach the other sessions on this Mac. They work from any
+directory, because they take this session's folder out of its own record rather than out of `cwd`.
+
+`say_to_session` goes down the peer socket and takes no route. There is no tool for the keyboard,
+for `/clear`, for a session's settings or its filters, or for starting one — those belong to the
+person, and an agent choosing them is an agent claiming to be the person. `curl` still performs
+what a tool declines, so treat that as a boundary rather than a fence.
+
+Nothing below needs the tools. With none present it all still works.
+
 ## Writing one
 
 A slip is one HTML page in this session's own folder, and there is a script for the common shapes:

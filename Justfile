@@ -253,3 +253,18 @@ uninstall-agent:
 install-skill:
     ln -sfn {{ justfile_directory() }}/skills/deckhand ~/.claude/skills/deckhand
     @head -2 ~/.claude/skills/deckhand/SKILL.md | tail -1
+
+# Give every session on this Mac the six tools as well as the skill. User scope, the same reason:
+# a session started from the phone is an ordinary `claude` in an ordinary shell, so one entry in
+# ~/.claude.json reaches every one of them and the daemon injects nothing.
+
+# `--project` rather than `--directory`: the server has to keep the session's own cwd.
+[group('ops')]
+install-mcp:
+    claude mcp remove --scope user deckhand 2>/dev/null || true
+    claude mcp add --scope user deckhand -- uv run --project {{ justfile_directory() }}/daemon deckhand-mcp
+    @claude mcp list 2>/dev/null | grep deckhand || true
+
+[group('ops')]
+uninstall-mcp:
+    claude mcp remove --scope user deckhand

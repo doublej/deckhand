@@ -12,10 +12,12 @@ dependencies = [
     "httpx[http2]>=0.28.1",
     "pyjwt[crypto]>=2.13.0",
     "pyyaml>=6.0.3",
+    "mcp>=2.0.0",
 ]
 
 [project.scripts]
 deckhand-daemon = "deckhand_daemon.app:main"
+deckhand-mcp = "deckhand_daemon.mcp.server:main"
 
 [dependency-groups]
 dev = [

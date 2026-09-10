@@ -137,7 +137,15 @@ the daemon, because neither needs to.
 
 ## The MCP server, and the fact that starts it
 
-Build it when the evidence arrives, and the evidence is specific: sessions that reached a
+**Built on 2026-09-10, ahead of that evidence and on JJ's say-so** — the point of the surface was
+always that a session could work the app rather than only read about it. It lives in
+`daemon/src/deckhand_daemon/mcp/`, is installed once with `just install-mcp`, and is the six
+tools below with the refusals below. Two of them do not touch the daemon at all: `ask_on_phone`
+and `read_answer` run the skill's own scripts, so the tool and the shell command write the same
+file. The rest of this section is what was designed and is what shipped; phase 3's agent token
+still does not exist, so every refusal here remains a default rather than a guarantee.
+
+The evidence that was going to start it, kept because it is still the thing to measure: sessions that reached a
 decision needing the person, had the skill's description in context, and decided alone anyway.
 That is the only failure a tool fixes and prose does not, because a tool is present whether or
 not the model thought to look.
