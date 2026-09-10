@@ -128,6 +128,31 @@ struct ArtifactTests {
         #expect(injected.contains("configurable: false"))
     }
 
+    @Test("the bridge carries last time's answer, in the page's own shape")
+    func bridgeCarriesThePreviousAnswer() {
+        let page = Artifact(id: "footer", title: "What the footer should say", modified: 1,
+                            answered: true)
+        let said = ArtifactPage.bridge(for: page, answer: #"{"line":"Made on a boat"}"#)
+        #expect(said.contains(#"answer: {"line":"Made on a boat"}"#))
+        // Not frozen, unlike `artifact`: a page prefills its controls from this and the person
+        // then edits, which a frozen object would refuse.
+        #expect(!said.contains(#"Object.freeze({"line""#))
+        // Nobody has answered, and a page with no argument at all reads the same way.
+        #expect(ArtifactPage.bridge(for: page, answer: "null").contains("answer: null,"))
+        #expect(ArtifactPage.bridge(for: page).contains("answer: null,"))
+    }
+
+    @Test("an empty answer cannot leave the bridge a syntax error")
+    func bridgeSurvivesAnEmptyAnswer() {
+        let page = Artifact(id: "footer", title: "Footer", modified: 1, answered: true)
+        // `answer: ,` would take `window.deckhand` with it, and the page's only way to answer
+        // with it — so emptiness becomes the absence it means.
+        #expect(ArtifactPage.bridge(for: page, answer: "").contains("answer: null,"))
+        #expect(ArtifactPage.bridge(for: page, answer: "  \n ").contains("answer: null,"))
+        // A real value keeps its own whitespace trimmed off and nothing else.
+        #expect(ArtifactPage.bridge(for: page, answer: " [1,2] \n").contains("answer: [1,2],"))
+    }
+
     @Test("a title with a quote in it cannot end the bridge early")
     func bridgeEscapesATitle() {
         let page = Artifact(id: "x", title: "He said \"no\"\nagain", modified: 1, answered: false)

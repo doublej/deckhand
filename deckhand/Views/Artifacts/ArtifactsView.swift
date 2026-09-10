@@ -14,6 +14,14 @@ struct ArtifactsView: View {
     /// Which of them to show. Not remembered across opening the tab: what you want to see is
     /// decided by what has happened since you last looked, not by what you picked last time.
     @State private var show: Show = .all
+    /// This listing's own recorder, lent to the viewer so a passage can be commented on and a page's
+    /// own fields can be spoken into.
+    ///
+    /// Here rather than inside the cover, and that is the whole reason it is a `@State` on the
+    /// presenter: a `.fullScreenCover(item:)`'s content is built and torn down in ways this view is
+    /// not, and the one invariant a recorder has is that it outlives the clip. `AssetView` owns one
+    /// for the same reason — this is the same shape, one hop shorter.
+    @State private var recorder = Recorder()
     /// A tab inside the session's page, so its marks go orange with the rest of it.
     @Environment(\.accent) private var accent
 
@@ -57,7 +65,14 @@ struct ArtifactsView: View {
         // this page showing behind it, and all three are the chrome the viewer is meant not to
         // have. Answering is what changes the listing, so it is read again on the way back.
         .fullScreenCover(item: $open, onDismiss: reread) { artifact in
-            ArtifactView(model: model, session: session, artifact: artifact)
+            // The session is known here and nowhere inside the cover, so it is named here: an
+            // ambient "which session" is how a clip gets filed against the wrong one.
+            ArtifactView(model: model,
+                         session: session,
+                         artifact: artifact,
+                         say: Dictation(recorder: recorder,
+                                        mode: model.preferences.talkMode,
+                                        words: { await model.dictated($0, for: session) }))
         }
     }
 

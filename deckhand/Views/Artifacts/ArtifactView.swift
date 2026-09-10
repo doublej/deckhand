@@ -15,12 +15,23 @@ struct ArtifactView: View {
     @Bindable var model: AppModel
     let session: Session
     let artifact: Artifact
+    /// What it takes to talk at this slip rather than at the session: the *listing's* recorder, the
+    /// gesture the person set, and the one way a clip becomes words. A parameter rather than
+    /// something read out of the environment, because it names the session the clip is filed
+    /// against and an ambient "which session" is how a clip ends up on the wrong one.
+    let say: Dictation
     /// The HTML, once the Mac has handed it over. Fetched here rather than with the listing:
     /// a page is kilobytes, and nobody wants every artifact in memory to read one.
     @State private var html: String?
+    /// What the person answered last time, as JSON text for the bridge. Set before `html` is, so
+    /// the one gate below guarantees a page is never built without it — a page drawing itself blank
+    /// and then filling in a moment later is worse than the empty form this replaces.
+    @State private var answer = "null"
     @State private var failed: String?
     /// What became of the last answer. Not cleared on a timer — it is the only receipt there is.
     @State private var said: Said?
+    /// This screen's link to the page: what the page is holding, and the way to ask it things.
+    @State private var talk = PageTalk()
     @Environment(\.dismiss) private var dismiss
 
     /// What the Mac said about an answer: it reached the session, or it did not and why.
@@ -36,12 +47,22 @@ struct ArtifactView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Palette.surfaceGround.ignoresSafeArea())
+        // Above the keyboard when there is one, which is where the thumb already is — the same
+        // arrangement `PinWords` uses for the same problem. An inset rather than something floating
+        // over the page, because the page is the screen and a control over it would cover the very
+        // words it is about.
+        .safeAreaInset(edge: .bottom) { saying }
         .task { await fetch() }
     }
 
     @ViewBuilder private var page: some View {
         if let html {
-            ArtifactWeb(artifact: artifact, html: html, respond: answer, close: { dismiss() })
+            ArtifactWeb(artifact: artifact,
+                        html: html,
+                        answer: answer,
+                        talk: talk,
+                        respond: respond,
+                        close: { dismiss() })
                 .accessibilityIdentifier("artifact-page")
         } else {
             waiting
@@ -104,10 +125,34 @@ struct ArtifactView: View {
         .padding(Spacing.large)
     }
 
+    /// Say something about a passage, or into a field — and nothing at all the rest of the time.
+    ///
+    /// Only once the page is up: a control offering to comment on a selection in a page that has not
+    /// arrived has nothing to select, and one over the failure message would be furniture on a dead
+    /// end. Commenting closes this screen, because what it makes is a card at the foot of the
+    /// session's own page and that card is behind this one.
+    @ViewBuilder private var saying: some View {
+        if html != nil {
+            SayOnPage(model: model,
+                      session: session,
+                      artifact: artifact,
+                      say: say,
+                      talk: talk,
+                      commented: { dismiss() })
+        }
+    }
+
+    /// Both halves at once, and the answer lands first. Together rather than one after the other
+    /// because they are two requests to the same Mac about the same file, and the page cannot be
+    /// shown until both are in.
     private func fetch() async {
+        async let said = model.answered(to: artifact, in: session)
+        async let page = model.page(of: artifact, in: session)
         do {
-            html = try await model.page(of: artifact, in: session)
+            answer = await said
+            html = try await page
         } catch {
+            _ = await said
             failed = reason(error)
         }
     }
@@ -124,7 +169,7 @@ struct ArtifactView: View {
 
     /// The page called `window.deckhand.respond`. Straight on to the Mac: the answer is the
     /// person's own and nothing here edits it or asks them to confirm it twice.
-    private func answer(_ json: String) {
+    private func respond(_ json: String) {
         Task {
             do {
                 let sent = try await model.answer(artifact, in: session, valueJSON: json)

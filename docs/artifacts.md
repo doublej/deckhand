@@ -63,6 +63,7 @@ One function, injected before the page runs:
 window.deckhand.respond(value)   // any JSON value. May be called more than once.
 window.deckhand.close()          // dismiss the viewer
 window.deckhand.artifact         // { id, title }
+window.deckhand.answer           // what was answered last time, or null
 ```
 
 `respond` hands the value to the app, which sends it to the Mac. The daemon then does two
@@ -74,6 +75,31 @@ things, and both matter:
    speaking takes. An agent that has stopped is woken by it rather than having to poll.
 
 The answer is the person's own, so it travels as the person's words, not as a peer agent's.
+
+## Reading back what was answered
+
+`window.deckhand.answer` is the value the person last responded with, in exactly the shape it was
+responded with, or `null` where nobody has. It is in place before the page's first line runs — the
+app fetches it with the HTML and draws neither until both are in — so a page reads it while it is
+building its controls and never has to repaint.
+
+**A page is expected to use it.** An answered page that reopens showing an empty form is lying: the
+row that opened it says "answered". So read `window.deckhand.answer` once, and where it is not
+`null`, prefill from it — tick the option that was picked, fill the fields that were filled, put the
+sliders where they were left. Then let the person change their mind and call `respond` again; the
+Mac simply rewrites the answer file. The value is not frozen, so it can be edited in place.
+
+It is the page's own value, so the page is the only thing that can read it: Deckhand never inspects
+the shape and never normalises it. A page whose controls have changed since it was last answered is
+the page's problem to survive — treat an unexpected shape as nothing answered.
+
+Under it is one request, for agents that want the same fact from the Mac:
+
+```
+GET /sessions/{session_id}/artifacts/{artifact_id}/answer   ->  {"value": <whatever was responded>}
+```
+
+`{"value": null}` is "nobody has answered", not an error. A missing page is still a 404.
 
 ## How an agent uses one
 
@@ -94,6 +120,29 @@ this project has got with its pages — "1 of 3 pages waiting" — beside how fa
 the person asked *it* for, and the session's summary offers the newest waiting page as the thing to
 press. An agent still tells the person it is there — a phone in a pocket says nothing — but nobody
 has to go looking through the list of pages to find it.
+
+## Talking at a page
+
+A phone dictates better than it types, so two things the app offers over every page are worth
+knowing about if you are writing one.
+
+**A field can be spoken into.** While an `<input>` (text, search, url, email, tel, number, or no
+type at all), a `<textarea>` or anything `contenteditable` has focus, a Say control appears under the
+page. The words are appended to whatever the field already holds — never over it — and the app then
+dispatches a real `bubbles: true` `input` event on the element. So **gate on `input`, not on
+`keydown`**: a page that watches for keystrokes will see a field fill up and not notice. `change` is
+deliberately not sent — the person may say more, or type. A `type="password"` field is not offered
+dictation at all.
+
+**A selection can be commented on.** While something is selected in the page, the hold-to-talk mark
+appears instead, and what the person says lands on the review card with the selected passage quoted
+above it and the slip named by title and slug. That is a remark about your page on its way to the
+session, not an answer: it never goes through `respond`, and a page neither sees it nor can stop it.
+
+Both are driven by a small script the app injects alongside the bridge, which listens for
+`selectionchange`, `focusin` and `focusout` and reports only *whether* the page is holding a
+selection or a focused field — never the text. A page that tears those listeners off loses itself
+the controls, the same way a page that paints nothing loses itself a screen.
 
 ## The demo set
 

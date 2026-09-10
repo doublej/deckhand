@@ -68,7 +68,7 @@ public enum ArtifactPage {
         return (String(text[...close]), String(text[text.index(after: close)...]))
     }
 
-    /// `window.deckhand`, as the page sees it: the two things it can do and the one thing it
+    /// `window.deckhand`, as the page sees it: the two things it can do and the two things it
     /// can know. Injected at document start, so it is there before the page's first line runs.
     ///
     /// Frozen and non-configurable, because a page that overwrites `window.deckhand.respond`
@@ -85,17 +85,23 @@ public enum ArtifactPage {
     /// same thing to it, and the absence of the answer file already says "unanswered" — so a page
     /// that does this has a bug, and a `TypeError` in the page's own console is where the agent
     /// that wrote it will look. `false`, `0`, `""` and `[]` are answers and go as they are.
-    public static func bridge(for artifact: Artifact) -> String {
+    ///
+    /// `answer` is what the person said last time, as the JSON text of the value, or `null` where
+    /// nobody has. A page that was answered and then reopened drew itself blank while the row above
+    /// it said "answered", and both cannot be true — so the previous value is here, in the page's
+    /// own shape, because the page is the only thing that knows how to put its answer back into its
+    /// own controls. It is not frozen, unlike `artifact`: a page prefills its controls from it and
+    /// then the person edits, and a frozen object would throw the moment one did.
+    public static func bridge(for artifact: Artifact, answer: String = "null") -> String {
         """
         (function () {
           const post = (payload) => window.webkit.messageHandlers.\(handlerName).postMessage(payload);
           Object.defineProperty(window, 'deckhand', {
             value: Object.freeze({
               artifact: Object.freeze(\(described(artifact))),
+              answer: \(literal(answer)),
               respond: function (value) {
-                if (value === undefined || value === null) {
-                  throw new TypeError('deckhand.respond(value) needs a value; null is not an answer');
-                }
+                if (value === undefined || value === null) throw new TypeError('deckhand.respond(value) needs a value; null is not an answer');
                 post({ kind: 'respond', json: JSON.stringify(value) });
               },
               close: function () { post({ kind: 'close' }); }
@@ -106,6 +112,59 @@ public enum ArtifactPage {
           });
         })();
         """
+    }
+
+    /// What the app watches a page for, so that a control can appear when the page is holding
+    /// something worth talking into or about.
+    ///
+    /// Two facts and **only** two, both booleans in effect: something is selected, or a field has
+    /// focus. Never the text. A message handler is reachable from any script on the page, so
+    /// anything a page says about itself is a claim — and a page that could claim a selection it
+    /// does not have could put words in somebody's mouth on the review card. What these reports
+    /// can do at worst is show a control that then has nothing to work on. The passage itself is
+    /// read out of the page by the host, at the moment it is wanted.
+    ///
+    /// Its own script rather than part of the bridge: the bridge is the page's own API, and this is
+    /// the app's eyes. A page can remove these listeners and lose itself the control, which is the
+    /// same deal as a page that paints nothing losing itself a screen.
+    ///
+    /// Every look is deferred a turn. `focusout` arrives *before* the focus it is losing has landed
+    /// anywhere, so reading the document mid-change reports nothing focused for an instant — which
+    /// is a control blinking out and back every time a thumb moves between two fields.
+    ///
+    /// A password field is deliberately not a field here. Dictation goes to the Mac and back; a
+    /// password does not make that trip.
+    public static let watcher = """
+    (function () {
+      let last = '';
+      const look = () => {
+        const at = document.activeElement;
+        const typing = !!at && (at.tagName === 'TEXTAREA' || at.isContentEditable
+          || (at.tagName === 'INPUT' && /^(|text|search|url|email|tel|number)$/i.test(at.type)));
+        const holds = typing ? 'field' : (String(window.getSelection()).trim() ? 'quote' : 'none');
+        if (holds === last) return;
+        last = holds;
+        window.webkit.messageHandlers.\(handlerName).postMessage({ kind: 'holds', holds: holds });
+      };
+      const soon = () => window.setTimeout(look, 0);
+      document.addEventListener('selectionchange', soon);
+      document.addEventListener('focusin', soon);
+      document.addEventListener('focusout', soon);
+      window.addEventListener('pageshow', soon);
+    })();
+    """
+
+    /// One JSON value, or `null` where there is nothing to put there.
+    ///
+    /// The text is interpolated into the bridge as a JavaScript expression, so empty text would
+    /// leave `answer: ,` — a syntax error that takes `window.deckhand` with it and loses the
+    /// page its only way to answer at all. Emptiness is the one thing that cannot be checked on
+    /// the far side, so it is checked here. What the text *says* is the client's to guarantee: it
+    /// re-serialises the Mac's answer rather than forwarding the bytes, so this is already JSON
+    /// the phone has parsed.
+    private static func literal(_ json: String) -> String {
+        let text = json.trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? "null" : text
     }
 
     /// `{id, title}` as a JSON literal. Built by the encoder rather than by interpolation: a

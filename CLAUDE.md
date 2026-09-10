@@ -279,6 +279,27 @@ unauthenticated route; everything else needs the `x-deckhand-token` header, and 
   (with `onPressingChanged` for hold-to-talk's release, which is why there is no drag in it) and
   `.onTapGesture` for the tap, whose meaning `TalkControl.tapped` decides. `UITests` holds all
   three down, including that a press must not open the session.
+- **A custom item cannot be added to a `WKWebView`'s text-selection menu on iOS 18.** Measured
+  against the iPhoneOS 26.5 SDK headers, because every route that sounds right is a dead end:
+  `WKUIDelegate.webView(_:willPresentEditMenuWithAnimator:)` hands over a
+  `UIEditMenuInteractionAnimating`, whose entire protocol is `addAnimations(_:)` and
+  `addCompletion(_:)` — it can animate the menu, it cannot see it or change it. WebKit exposes no
+  equivalent of `UITextViewDelegate`'s `editMenuForTextIn:suggestedActions:`. UIKit builds the edit
+  menu with `menuElementsFromResponderChain:…:includeMenuControllerItems:`, so the only way in for a
+  custom selector is the deprecated `UIMenuController.menuItems` bridge, gated by a private
+  `_includeMenuControllerItems` flag that WebKit never sets (no reference to the selector in its
+  binary). `UIContextMenuSystem`, which would be the supported answer, is iOS 26. So the app's own
+  surface is the answer: `ArtifactPage.watcher` reports *that* there is a selection and
+  `SayOnPage` appears under the page. Reconsider when the floor reaches iOS 26.
+- **Host-initiated script is not what the artifact policy is about.** `evaluateJavaScript` and
+  `callAsyncJavaScript` run in the page's world as the app asking the document a question, not as
+  script the page loaded — and the policy allows inline script anyway, which is how the bridge runs
+  at all. So reading a selection out of a page and laying dictated words into its focused field
+  needed nothing loosened in `ArtifactPage.policy`, and nothing there is to be loosened for anything
+  else either. What a page *says about itself* over the message handler is a different matter: any
+  script on the page can post to the handler, so `holds` carries no text. A page could claim a
+  selection it does not have; at worst that shows a control with nothing to work on, because the
+  passage is read out of the page by the host at the moment it is wanted.
 - **Never call a public type `Context` in DeckhandKit.** Inside a `UIViewRepresentable`,
   `Context` is already a typealias for `UIViewRepresentableContext<Self>`, so a module-level
   `Context` imported beside SwiftUI silently breaks the conformance of anything spelling
