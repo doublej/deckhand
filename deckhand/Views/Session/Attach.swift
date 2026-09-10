@@ -73,3 +73,45 @@ struct PictureMenu: View {
             }
     }
 }
+
+    /// What is pinned, and the way into each one.
+    ///
+    /// A tap opens the picture to be marked up — the same marking a file gets. It used to take the
+    /// picture off instead, and one tap cannot mean both: the two are as far apart as two meanings
+    /// get, and the one that loses something was the one happening by accident. So taking a picture
+    /// off lives inside the sheet the tap opens, where it is a full-sized button nobody reaches for
+    /// while aiming at something else, and the 12pt cross that used to sit in the corner of a 48pt
+    /// thumbnail — too small to hit on purpose, easy to hit by mistake — is gone with it.
+///
+/// Its own view because `ReviewCard` is at its line cap, and this belongs beside the menu that
+/// puts the pictures there in the first place.
+struct PinnedStrip: View {
+    let snaps: [Snap]
+    let compact: Bool
+    let tap: (Snap) -> Void
+
+    var body: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: Spacing.xxs) {
+                ForEach(snaps) { snap in
+                    Image(uiImage: snap.picture)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: thumb, height: thumb)
+                        .clipShape(RoundedRectangle(cornerRadius: Radius.small, style: .continuous))
+                        .contentShape(Rectangle())
+                        .onTapGesture { tap(snap) }
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityLabel("Mark up the attached picture")
+                }
+            }
+        }
+        .scrollIndicators(.hidden)
+        .frame(height: thumb)
+    }
+
+    /// A thumbnail is a control, so it is the size a finger needs rather than the size a picture
+    /// looks right at: 44pt even in a list row, where the strip used to be 34. The same raw
+    /// number `ReviewActions` and `FilesView` write — no spacing token means "a finger".
+    private var thumb: CGFloat { compact ? 44 : 56 }
+}

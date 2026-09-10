@@ -81,7 +81,12 @@ struct ReviewCard: View {
         VStack(alignment: .leading, spacing: Spacing.extraSmall) {
             staging
             if !compact {
-                attachments.padding(.horizontal, Self.gutter)
+                // Twice the stack's own spacing under it. This line belongs to the box above
+                // — two more ways of filling it — and at eight points on both sides it read as
+                // the top of the button row instead, which is the one group it is not part of.
+                attachments
+                    .padding(.horizontal, Self.gutter)
+                    .padding(.bottom, Spacing.extraSmall)
                 actions
                 // Under the row you press, and still the only thing that may be: it is a receipt
                 // rather than a fourth verb, so nothing below Send is both pressable and
@@ -116,7 +121,9 @@ struct ReviewCard: View {
                 .font(Typography.hint)
                 .foregroundStyle(accent)
                 .lineLimit(1)
-                .frame(minHeight: Self.touch, alignment: .trailing)
+                // Bottom of the box, for the reason `SayRest.face` gives: these two sit on the
+                // card's foot row and centred ink floats above the edge it belongs on.
+                .frame(minHeight: Self.touch, alignment: .bottomTrailing)
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -203,7 +210,14 @@ struct ReviewCard: View {
             // alone in the state's own colour, never a label inside a capsule that reads as
             // something you press — and there is a real button an inch below this one.
             if let refusal = filtered?.refusal { aside(refusal, in: Palette.lcdRed) }
-            if !snaps.isEmpty { pinned }
+            if !snaps.isEmpty {
+                PinnedStrip(snaps: snaps, compact: compact) { snap in
+                    mark?(snap, words)
+                    // Handed over, so the card reads them out of the model from here
+                    // on — which is where the remarks about it are about to land.
+                    draft = nil
+                }
+            }
             if compact { actions }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -259,42 +273,4 @@ struct ReviewCard: View {
         }
     }
 
-    /// What is pinned, and the way into each one.
-    ///
-    /// A tap opens the picture to be marked up — the same marking a file gets. It used to take the
-    /// picture off instead, and one tap cannot mean both: the two are as far apart as two meanings
-    /// get, and the one that loses something was the one happening by accident. So taking a picture
-    /// off lives inside the sheet the tap opens, where it is a full-sized button nobody reaches for
-    /// while aiming at something else, and the 12pt cross that used to sit in the corner of a 48pt
-    /// thumbnail — too small to hit on purpose, easy to hit by mistake — is gone with it.
-    private var pinned: some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: Spacing.xxs) {
-                ForEach(snaps) { snap in
-                    Image(uiImage: snap.picture)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: Self.thumb(compact), height: Self.thumb(compact))
-                        .clipShape(RoundedRectangle(cornerRadius: Radius.small, style: .continuous))
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            mark?(snap, words)
-                            // Handed over, so the card reads them out of the model from here on —
-                            // which is where the remarks about this picture are about to land.
-                            draft = nil
-                        }
-                        .accessibilityAddTraits(.isButton)
-                        .accessibilityLabel("Mark up the attached picture")
-                }
-            }
-        }
-        .scrollIndicators(.hidden)
-        .frame(height: Self.thumb(compact))
-    }
-
-    /// A thumbnail is a control now, so it is the size a finger needs rather than the size a
-    /// picture looks right at: 44pt even in a list row, where the strip used to be 34. The same
-    /// raw number `ReviewActions` and `FilesView` write, for the same reason — no spacing token
-    /// means "a finger".
-    private static func thumb(_ compact: Bool) -> CGFloat { compact ? 44 : 56 }
 }

@@ -87,7 +87,12 @@ struct SayRest: View {
         // and this is the one card where a control indented from the words it continues reads
         // as belonging to something else.
         .padding(.leading, -Self.chip.leading)
-        .frame(minHeight: Self.touch, alignment: .leading)
+        // Bottom-aligned inside the 44, not centred in it. An 11pt word centred in a 44pt box
+        // has fifteen points of air under it, and on the foot row of a card that air read as
+        // the card being bottom-heavy — the words looked stranded above their own edge. The
+        // finger keeps all 44 points; the box simply grows upward into the gap above the row,
+        // which was slack anyway.
+        .frame(minHeight: Self.touch, alignment: .bottomLeading)
         .contentShape(.rect)
         .animation(Motion.word, value: word(state))
         .accessibilityAddTraits(.isButton)
