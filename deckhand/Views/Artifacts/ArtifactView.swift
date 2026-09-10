@@ -47,8 +47,8 @@ struct ArtifactView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Palette.surfaceGround.ignoresSafeArea())
-        // Above the keyboard when there is one, which is where the thumb already is — the same
-        // arrangement `PinWords` uses for the same problem. An inset rather than something floating
+        // Above the keyboard when there is one, which is where the thumb already is. An inset
+        // rather than something floating
         // over the page, because the page is the screen and a control over it would cover the very
         // words it is about.
         .safeAreaInset(edge: .bottom) { saying }

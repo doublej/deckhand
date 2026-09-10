@@ -28,6 +28,9 @@ struct SayInto: View {
     let heard: (String) async -> Void
     /// A glyph in a row's control slot, rather than a word on a line with room for one.
     var compact = false
+    /// The word on the capsule where there is room for one. "Replace" rather than "Say" wherever
+    /// pressing it writes over something already said, because those are two different promises.
+    private var label = "Say"
 
     /// Into a field: under what it already holds, never over it.
     ///
@@ -43,8 +46,12 @@ struct SayInto: View {
 
     /// Somewhere that is not a field. The caller owns what happens to the words, including whether
     /// anything is appended to anything — `Underneath.words` is there to be called if it is.
-    init(say: Dictation, compact: Bool = false, heard: @escaping (String) async -> Void) {
+    init(say: Dictation,
+         label: String = "Say",
+         compact: Bool = false,
+         heard: @escaping (String) async -> Void) {
         self.say = say
+        self.label = label
         self.compact = compact
         self.heard = heard
     }
@@ -101,7 +108,7 @@ struct SayInto: View {
             // Outline while it waits, filled while it listens. A filled glyph sitting beside two
             // plain toolbar words was a third weight on a sheet that only needs one, and the fill
             // is worth more as the thing that changes than as the thing that is always there.
-            Label("Say", systemImage: glyph)
+            Label(label, systemImage: glyph)
         }
     }
 

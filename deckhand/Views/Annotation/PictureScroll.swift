@@ -21,6 +21,9 @@ final class PictureScroll: UIScrollView, UIScrollViewDelegate, PKCanvasViewDeleg
     /// `Marker.onScreen` for why that is the choice.
     private var markers: [UILabel] = []
     private var pins: [Pin] = []
+    /// Which pin wears the chosen ring. Here rather than above because `place()` is the one thing
+    /// that knows where a marker is, and both the ring and the reported point come out of it.
+    private var picked: UUID?
     /// The strokes as they are kept: in the picture's pixels, not the canvas's points.
     private var strokes = PKDrawing()
     /// The last thing written *into* the canvas, so the change it reports back can be told from a
@@ -36,6 +39,10 @@ final class PictureScroll: UIScrollView, UIScrollViewDelegate, PKCanvasViewDeleg
     var dropped: ((CGPoint) -> Void)?
     var opened: ((Pin) -> Void)?
     var drew: ((PKDrawing) -> Void)?
+    /// Where the chosen marker currently is, in **this view's** coordinates rather than the
+    /// content's — the controls beside it are drawn over the top of this and do not scroll, so a
+    /// content point would put them in the right place exactly once. Nil when nothing is chosen.
+    var moved: ((CGPoint?) -> Void)?
 
     init(image: UIImage) {
         super.init(frame: .zero)
@@ -146,6 +153,12 @@ final class PictureScroll: UIScrollView, UIScrollViewDelegate, PKCanvasViewDeleg
         place()
     }
 
+    /// A pan moves no marker — they are the content's children and travel with it — but it does
+    /// move them relative to *this view*, which is the space the controls beside one are drawn in.
+    func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        report()
+    }
+
     func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
         guard canvasView.drawing != pushed, pixels.width > 0, canvas.bounds.width > 0 else { return }
         let scale = pixels.width / canvas.bounds.width
@@ -201,9 +214,33 @@ final class PictureScroll: UIScrollView, UIScrollViewDelegate, PKCanvasViewDeleg
         while markers.count > pins.count { markers.removeLast().removeFromSuperview() }
         while markers.count < pins.count { markers.append(addMarker()) }
         for (index, marker) in markers.enumerated() {
+            let mine = pins[index].id == picked
             marker.text = "\(index + 1)"
             marker.center = Fitting.point(of: pins[index].spot, of: pixels, drawn: picture.frame)
+            // A thicker ring and a touch larger. Not a different colour: the tint is what says
+            // "this is a marker", and a second colour would read as a second kind of mark.
+            marker.layer.borderWidth = mine ? 3 : 1.5
+            marker.transform = mine ? CGAffineTransform(scaleX: 1.15, y: 1.15) : .identity
         }
+        report()
+    }
+
+    /// Where the chosen marker is now, less what has been scrolled past. Called from `place()`, so
+    /// every zoom, pan, fit and turn of the phone carries the controls with the marker.
+    private func report() {
+        guard let index = pins.firstIndex(where: { $0.id == picked }), index < markers.count else {
+            moved?(nil)
+            return
+        }
+        let spot = markers[index].center
+        moved?(CGPoint(x: spot.x - contentOffset.x, y: spot.y - contentOffset.y))
+    }
+
+    /// Which marker is chosen. Nil puts the ring away and reports no position.
+    func choose(_ pin: UUID?) {
+        guard picked != pin else { return }
+        picked = pin
+        place()
     }
 
     private func addMarker() -> UILabel {

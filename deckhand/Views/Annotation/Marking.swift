@@ -5,68 +5,124 @@ import UIKit
 
 /// The picture, and everything that can be said about it by pointing.
 ///
-/// Tap a place and a numbered marker lands there with its keyboard already up: the number on the
-/// picture and the number in the remark are the same number, which is the whole trick — it is how
-/// several complaints about one screenshot stop having to be said out loud, in order, with nothing
-/// to point at. Tap a marker again to fix what it says, or take it off. Switch the pencil on and
-/// the picture is handed to PencilKit instead, for a circle or an arrow round something a single
-/// point cannot describe.
+/// Tap a place and a numbered marker lands there, chosen: the number on the picture and the number
+/// in the remark are the same number, which is the whole trick — it is how several complaints about
+/// one screenshot stop having to be said out loud, in order, with nothing to point at. The chosen
+/// marker grows its controls beside it, so the picture stays in view while you say what is wrong
+/// with it. Tap a marker to choose it, tap it again or tap the picture to put the controls away.
+/// Switch the pencil on and the picture is handed to PencilKit instead, for a circle or an arrow
+/// round something a single point cannot describe.
+///
+/// The controls used to be a full-height sheet with a field in it. Two things were wrong with that
+/// and both were the same thing: it hid the picture the remark is about, and it led with a box to
+/// type in. `PinCallout` has no field at all.
 struct Marking: View {
     let picture: UIImage
     @Binding var markup: Markup
     /// Whether the freehand layer has the touches. A mode, not a second picture.
     let pencilling: Bool
-    /// Lent straight through to the remark, which is the only field on this picture.
+    /// Lent straight through to the callout, which is the only thing on this picture that records.
     var say: Dictation?
-    /// The place whose words are being written. A tap drops the pin and opens this straight away: a
-    /// numbered marker with nothing said about it is a question nobody asked.
-    @State private var writing: Pin?
+    /// The place whose controls are showing. An id rather than a `Pin`, because a pin compares by
+    /// its words as well and those are exactly what is about to change.
+    @State private var chosen: Pin.ID?
+    /// Where that marker is on screen, as the scroll view last put it. Not the pin's own spot,
+    /// which is in the picture's pixels and says nothing about where the picture currently is.
+    @State private var onScreen: CGPoint?
+    /// How tall the controls came out. Measured rather than guessed, because it decides whether
+    /// they go above the marker or below it.
+    @State private var high: CGFloat = 0
+
+    /// Clear of the marker, which is `Marker.onScreen` across and centred on its spot.
+    private static let gap: CGFloat = 22
 
     var body: some View {
         MarkedPicture(picture: picture,
                       markup: $markup,
                       pencilling: pencilling,
+                      chosen: chosen,
                       dropped: drop,
-                      opened: { writing = $0 })
-            .sheet(item: $writing) { pin in
-                PinWords(place: place(of: pin),
-                         words: said(at: pin),
-                         say: say,
-                         keep: { wrote($0, at: pin) },
-                         drop: { remove(pin) })
-            }
+                      opened: choose,
+                      moved: { onScreen = $0 })
+            .overlay { controls }
+            // A pin cannot be chosen while the pencil has the touches, and a callout left over
+            // from before the switch would sit over the drawing taking taps meant for it.
+            .onChange(of: pencilling) { chosen = nil }
     }
 
+    /// Beside the marker, inside the picture's own bounds. A `GeometryReader` in an overlay reads
+    /// the size of what it is over and lays out nothing of its own, so this costs the picture
+    /// underneath nothing.
+    @ViewBuilder private var controls: some View {
+        GeometryReader { box in
+            if let pin = selected, let spot = onScreen {
+                PinCallout(place: place(of: pin),
+                           words: pin.words,
+                           say: say,
+                           heard: { await wrote($0, at: pin) },
+                           drop: { remove(pin) })
+                    .frame(width: min(PinCallout.wide, box.size.width - Spacing.medium * 2))
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { high = $0 }
+                    .offset(x: sideways(spot, in: box.size), y: upright(spot, in: box.size))
+                    .animation(.easeOut(duration: 0.12), value: spot)
+            }
+        }
+    }
+
+    private var selected: Pin? {
+        chosen.flatMap { id in markup.pins.first { $0.id == id } }
+    }
+
+    /// Centred on the marker where it fits, and shouldered off the edge where it does not — never
+    /// hanging over it, because the half outside the picture is the half holding the microphone.
+    private func sideways(_ spot: CGPoint, in size: CGSize) -> CGFloat {
+        let wide = min(PinCallout.wide, size.width - Spacing.medium * 2)
+        let want = spot.x - wide / 2
+        return min(max(Spacing.medium, want), max(Spacing.medium, size.width - wide - Spacing.medium))
+    }
+
+    /// Below the marker, or above it when there is no room below. Decided by the measured height
+    /// rather than by where the marker is in the picture: the same marker needs one answer with a
+    /// line of words under it and the other with three.
+    private func upright(_ spot: CGPoint, in size: CGSize) -> CGFloat {
+        let below = spot.y + Self.gap
+        if below + high <= size.height - Spacing.small { return below }
+        return max(Spacing.small, spot.y - Self.gap - high)
+    }
+
+    /// A tap on the picture. While something is chosen this puts the controls away rather than
+    /// dropping a pin: a tap beside the callout is how you dismiss it, and leaving a stray marker
+    /// behind every one of those would fill the picture with places nobody asked about.
     private func drop(at pixel: CGPoint) {
+        if chosen != nil { return chosen = nil }
         let pin = Pin(spot: pixel)
         markup.pins.append(pin)
-        writing = pin
+        chosen = pin.id
     }
 
-    /// The number this pin is wearing on the picture, so the sheet says the same one. Found by id:
-    /// a pin compares by its words too, and the sheet is open precisely because those are about to
-    /// change.
+    /// A tap on a marker: choose it, or put it away if it was already the chosen one.
+    private func choose(_ pin: Pin) {
+        chosen = chosen == pin.id ? nil : pin.id
+    }
+
+    /// The number this pin is wearing on the picture, so the callout says the same one. Found by
+    /// id, for the same reason `chosen` is an id.
     private func place(of pin: Pin) -> Int {
         (markup.pins.firstIndex { $0.id == pin.id } ?? markup.pins.count - 1) + 1
     }
 
-    private func said(at pin: Pin) -> String {
-        markup.pins.first { $0.id == pin.id }?.words ?? ""
-    }
-
-    /// Not `say`, which is now the microphone this view lends the remark: one of the two had to
-    /// give, and a method and a property of the same name reading differently is how.
-    private func wrote(_ words: String, at pin: Pin) {
+    /// Over what was there, not after it. A remark said twice at one place is a remark corrected —
+    /// this is the one dictation in the app that deliberately does not call `Underneath.words`.
+    private func wrote(_ words: String, at pin: Pin) async {
         guard let index = markup.pins.firstIndex(where: { $0.id == pin.id }) else { return }
         markup.pins[index].words = words
-        writing = nil
     }
 
     /// Taken off the picture, and the rest renumbered — which happens by itself, because a pin's
     /// number is its place in the list and is not stored anywhere.
     private func remove(_ pin: Pin) {
         markup.pins.removeAll { $0.id == pin.id }
-        writing = nil
+        chosen = nil
     }
 }
 
@@ -80,9 +136,13 @@ struct MarkedPicture: UIViewRepresentable {
     let picture: UIImage
     @Binding var markup: Markup
     let pencilling: Bool
+    /// Which marker wears the chosen ring.
+    let chosen: Pin.ID?
     /// A place was tapped that has no pin on it yet, in the picture's own pixels.
     let dropped: (CGPoint) -> Void
     let opened: (Pin) -> Void
+    /// Where the chosen marker now is, in this view's own space. Nil when nothing is chosen.
+    let moved: (CGPoint?) -> Void
 
     func makeUIView(context: Context) -> PictureScroll {
         PictureScroll(image: picture)
@@ -91,12 +151,17 @@ struct MarkedPicture: UIViewRepresentable {
     /// The callbacks are handed over on every pass, not once at the start: the one captured at
     /// `makeUIView` closes over the binding as it was then, and a stroke drawn ten minutes later
     /// has to land in the state as it is now.
+    ///
+    /// `moved` goes in before `chosen`, because setting `chosen` is what reports a position and a
+    /// closure assigned after that report is a callout that never appears.
     func updateUIView(_ view: PictureScroll, context: Context) {
         view.dropped = dropped
         view.opened = opened
+        view.moved = moved
         view.drew = { markup.drawing = $0 }
         view.show(picture)
         view.mark(markup)
+        view.choose(chosen)
         view.pencil(pencilling)
     }
 }

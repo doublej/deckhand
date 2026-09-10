@@ -28,11 +28,23 @@ struct SnapView: View {
     /// The marks, seeded from whatever was marked last time and kept when the sheet closes.
     @State private var markup = Markup()
     @State private var pencilling = false
+    /// This sheet's own, for the same reason `AssetView` owns one: a recorder has to outlive the
+    /// callout being opened, closed and opened again, and the session page's is two sheets away.
+    @State private var recorder = Recorder()
     @Environment(\.dismiss) private var dismiss
+
+    /// What a place's callout is lent so the remark can be said out loud. A picture attached to the
+    /// card is the same job as a picture on the Mac — you are holding it and pointing at it — so it
+    /// gets the same control rather than a lesser one.
+    private var say: Dictation {
+        Dictation(recorder: recorder, mode: model.preferences.talkMode) {
+            await model.dictated($0, for: session)
+        }
+    }
 
     var body: some View {
         NavigationStack {
-            Marking(picture: snap.picture, markup: $markup, pencilling: pencilling)
+            Marking(picture: snap.picture, markup: $markup, pencilling: pencilling, say: say)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Palette.surfaceGround)
                 // What this phone calls the file is `photo.jpg`, and the Mac renames it to a
