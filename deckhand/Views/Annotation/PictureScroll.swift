@@ -42,7 +42,11 @@ final class PictureScroll: UIScrollView, UIScrollViewDelegate, PKCanvasViewDeleg
     /// Where the chosen marker currently is, in **this view's** coordinates rather than the
     /// content's — the controls beside it are drawn over the top of this and do not scroll, so a
     /// content point would put them in the right place exactly once. Nil when nothing is chosen.
-    var moved: ((CGPoint?) -> Void)?
+    ///
+    /// It carries the pin's id as well as the point, and that is not bookkeeping: the surface above
+    /// draws the controls only while the id matches the pin it thinks is chosen, so a report that
+    /// never arrives shows nothing rather than showing the last marker's position.
+    var moved: (((UUID, CGPoint)?) -> Void)?
 
     init(image: UIImage) {
         super.init(frame: .zero)
@@ -228,19 +232,34 @@ final class PictureScroll: UIScrollView, UIScrollViewDelegate, PKCanvasViewDeleg
     /// Where the chosen marker is now, less what has been scrolled past. Called from `place()`, so
     /// every zoom, pan, fit and turn of the phone carries the controls with the marker.
     private func report() {
-        guard let index = pins.firstIndex(where: { $0.id == picked }), index < markers.count else {
+        guard let picked,
+              let index = pins.firstIndex(where: { $0.id == picked }),
+              index < markers.count
+        else {
             moved?(nil)
             return
         }
         let spot = markers[index].center
-        moved?(CGPoint(x: spot.x - contentOffset.x, y: spot.y - contentOffset.y))
+        moved?((picked, CGPoint(x: spot.x - contentOffset.x, y: spot.y - contentOffset.y)))
     }
 
     /// Which marker is chosen. Nil puts the ring away and reports no position.
+    ///
+    /// The position is reported again on the next tick, and that second report is the whole reason
+    /// this is not one line. This is called from `updateUIView`, which runs inside SwiftUI's own
+    /// update pass, and a state change made in there is dropped. Choosing a *second* marker kept
+    /// the first one's position for exactly that reason: dropping a new pin also mutates the
+    /// markup binding, which buys another pass that picks the change up, and a plain change of
+    /// selection buys nothing. So the synchronous report stands for the case where it works, and
+    /// the deferred one covers the case where it does not.
     func choose(_ pin: UUID?) {
         guard picked != pin else { return }
         picked = pin
         place()
+        DispatchQueue.main.async { [weak self] in
+            guard let self, picked == pin else { return }
+            report()
+        }
     }
 
     private func addMarker() -> UILabel {

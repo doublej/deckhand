@@ -16,6 +16,15 @@ import UIKit
 /// The controls used to be a full-height sheet with a field in it. Two things were wrong with that
 /// and both were the same thing: it hid the picture the remark is about, and it led with a box to
 /// type in. `PinCallout` has no field at all.
+/// A marker's position, and whose it is. The pairing is the point — see `Marking.placed`.
+private struct Spotted: Equatable {
+    let id: Pin.ID
+    /// In the scroll view's own coordinates. Deliberately not called `spot`, which is `Pin`'s word
+    /// for a place in the picture's pixels — the two are the same point in two spaces, and the
+    /// whole difficulty of marking up a picture that zooms is keeping them apart.
+    let onScreen: CGPoint
+}
+
 struct Marking: View {
     let picture: UIImage
     @Binding var markup: Markup
@@ -26,9 +35,15 @@ struct Marking: View {
     /// The place whose controls are showing. An id rather than a `Pin`, because a pin compares by
     /// its words as well and those are exactly what is about to change.
     @State private var chosen: Pin.ID?
-    /// Where that marker is on screen, as the scroll view last put it. Not the pin's own spot,
-    /// which is in the picture's pixels and says nothing about where the picture currently is.
-    @State private var onScreen: CGPoint?
+    /// Where a marker is on screen, as the scroll view last put it — and *which* marker, which is
+    /// the part that matters. Not the pin's own spot, which is in the picture's pixels and says
+    /// nothing about where the picture currently is.
+    ///
+    /// The controls draw only while this names the pin that is chosen. A position that belongs to
+    /// the previously chosen marker is worse than none: it puts the controls on the wrong place and
+    /// looks deliberate. So a report that has not arrived yet shows nothing, and one frame without
+    /// the callout is invisible where a callout in the wrong place is not.
+    @State private var placed: Spotted?
     /// How tall the controls came out. Measured rather than guessed, because it decides whether
     /// they go above the marker or below it.
     @State private var high: CGFloat = 0
@@ -43,7 +58,7 @@ struct Marking: View {
                       chosen: chosen,
                       dropped: drop,
                       opened: choose,
-                      moved: { onScreen = $0 })
+                      moved: { found in placed = found.map { Spotted(id: $0.0, onScreen: $0.1) } })
             .overlay { controls }
             // A pin cannot be chosen while the pencil has the touches, and a callout left over
             // from before the switch would sit over the drawing taking taps meant for it.
@@ -55,7 +70,7 @@ struct Marking: View {
     /// underneath nothing.
     @ViewBuilder private var controls: some View {
         GeometryReader { box in
-            if let pin = selected, let spot = onScreen {
+            if let pin = selected, let spot = placed?.onScreen, placed?.id == pin.id {
                 PinCallout(place: place(of: pin),
                            words: pin.words,
                            say: say,
@@ -64,7 +79,6 @@ struct Marking: View {
                     .frame(width: min(PinCallout.wide, box.size.width - Spacing.medium * 2))
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { high = $0 }
                     .offset(x: sideways(spot, in: box.size), y: upright(spot, in: box.size))
-                    .animation(.easeOut(duration: 0.12), value: spot)
             }
         }
     }
@@ -146,8 +160,9 @@ struct MarkedPicture: UIViewRepresentable {
     /// A place was tapped that has no pin on it yet, in the picture's own pixels.
     let dropped: (CGPoint) -> Void
     let opened: (Pin) -> Void
-    /// Where the chosen marker now is, in this view's own space. Nil when nothing is chosen.
-    let moved: (CGPoint?) -> Void
+    /// Where the chosen marker now is, in this view's own space, and which marker that is. Nil
+    /// when nothing is chosen.
+    let moved: ((UUID, CGPoint)?) -> Void
 
     func makeUIView(context: Context) -> PictureScroll {
         PictureScroll(image: picture)
