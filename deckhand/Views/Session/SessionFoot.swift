@@ -1,4 +1,5 @@
 import DeckhandKit
+import PhotosUI
 import SwiftUI
 
 /// One slot at the foot of a session's page, and two things that can be in it: the mark you hold
@@ -19,6 +20,11 @@ struct SessionFoot: View {
     /// Whether the archive is open. Presented from this slot because this slot holds the mark the
     /// gesture is on, and the archive is about every clip rather than about this session.
     @State private var browsing = false
+    /// Whether the press that is not talking has been made. It went straight to the archive; there
+    /// are three things behind it now, so what it opens is the list of them.
+    @State private var reaching = false
+    @State private var picking = false
+    @State private var picked: [PhotosPickerItem] = []
 
     var body: some View {
         Group {
@@ -28,6 +34,50 @@ struct SessionFoot: View {
         .padding(.bottom, Spacing.extraSmall)
         .sheet(item: $marking) { SnapView(model: model, session: $0.session, snap: $0.snap) }
         .sheet(isPresented: $browsing) { ArchiveSheet(model: model) }
+        .confirmationDialog("", isPresented: $reaching, titleVisibility: .hidden) { reach }
+        .photosPicker(isPresented: $picking,
+                      selection: $picked,
+                      maxSelectionCount: nil,
+                      selectionBehavior: .ordered,
+                      matching: .images,
+                      photoLibrary: .shared())
+        .onChange(of: picked) { _, items in pin(items) }
+    }
+
+    /// The three things the press that is not talking can do, the nearest thumb last.
+    ///
+    /// A `.confirmationDialog` and deliberately **not** a `.contextMenu`: a context menu installs
+    /// a long press of its own, and a long press applied over this control takes the touch from
+    /// the tap under it — which is exactly how tap-to-talk broke once already. The press stays
+    /// the one `TalkGesture` already owns, and all that changed is what it opens.
+    ///
+    /// Clips is last because a dialog stacks upwards from the bottom of the screen, so the last
+    /// entry is the one a thumb coming off the mark meets first — and it is the one that was here
+    /// before, which should not cost a reach as well as a press. The two picture words are the
+    /// review card's own, so the two ways to the same two verbs are recognisably the same thing.
+    ///
+    /// Nothing says any of this at rest. The mark says nothing at rest, and this is discovered by
+    /// holding it exactly as the archive already was.
+    @ViewBuilder private var reach: some View {
+        Button("Photos") { picking = true }
+        Button("Clipboard") { model.attachFromClipboard(to: session) }
+        Button("Clips") { browsing = true }
+    }
+
+    /// The picker hands back items, not bytes, and the bytes come over a moment later. One at a
+    /// time and in the order they were chosen, so the card opens on the first picture rather than
+    /// after the slowest one — and `attach` is what opens it, since from here there is no card.
+    private func pin(_ items: [PhotosPickerItem]) {
+        guard !items.isEmpty else { return }
+        Task {
+            for item in items {
+                if let bytes = try? await item.loadTransferable(type: Data.self),
+                   let snap = Snap(picked: bytes) {
+                    model.attach(snap, to: session)
+                }
+            }
+            picked = []
+        }
     }
 
     /// The mark is the button. utt's mark, because recording is utt's job — it takes the
@@ -39,15 +89,15 @@ struct SessionFoot: View {
     /// review card does not move — it is tall, and pushing its foot under the indicator would put
     /// Send where the system's own gesture lives.
     ///
-    /// The one surface that also carries the way to the archive: it is the only place a mark has
-    /// no other job for the press talking does not use. A row in the sessions list spends its tap
-    /// on opening the session and a deck column spends its own, so neither is handed one.
+    /// The one surface that also carries the press talking does not use: it is the only place a
+    /// mark has no other job for it. A row in the sessions list spends its tap on opening the
+    /// session and a deck column spends its own, so neither is handed one.
     private var talk: some View {
         TalkControl(
             recorder: recorder,
             mode: model.preferences.talkMode,
             isMine: true,
-            onArchive: { browsing = true },
+            onReach: { reaching = true },
             onStart: { model.status = "Recording for \(session.name)" },
             onClip: { await model.upload(clip: $0, to: session, spans: recorder.spans) },
             content: {

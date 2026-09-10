@@ -57,14 +57,16 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   Mac today and draws nothing — the gate is `UploadReceipt.uttRewrote`, which asks utt's `stages`
   and never `raw != text`, exactly as utt's own `ProcessedTranscript.changed` does.
 - **There is no longer hold to give a second gesture.** A hold of any length already *is* the
-  recording, from `TalkGesture.settle` onwards, so the archive gets the press each mode does not
-  use: a tap where talking is a hold, a long press where talking is a tap (`ReachGesture`). One
+  recording, from `TalkGesture.settle` onwards, so the other three things get the press each mode
+  does not use: a tap where talking is a hold, a long press where talking is a tap. One
   physical press reaches both, because a release arrives as a tap a moment later — so everything
   goes through `TalkControl.claimed()`, which lets the first gesture claim the touch for
-  `sameTouch`. Only `SessionFoot` passes `onArchive`: a sessions row spends its tap on opening the
+  `sameTouch`. Only `SessionFoot` passes `onReach`: a sessions row spends its tap on opening the
   session and its swipe on starting it, and a deck column spends its own, so neither is handed a
-  third meaning on the same touch. It is the one thing labelled at rest (`TalkMark.reach`),
-  because it is the one thing here nobody can discover by pressing.
+  third meaning on the same touch. That press opens a `confirmationDialog` — Photos, Clipboard,
+  Clips, in that order, so the one that was here before is the one nearest the thumb — and it must
+  stay a dialog: a `.contextMenu` installs a long press of its own and would take the touch from
+  the tap under it, which is this same bug for the third time. Nothing says any of it at rest.
 - **A gesture on a list row has to share the touch.** The sessions row has three jobs on one
   touch: tap to open, press to talk, swipe to star. `highPriorityGesture` and `ExclusiveGesture`
   both take the touch and broke the tap *and* the swipe; a `Button` takes it the other way and the
@@ -174,6 +176,15 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   line is tens of thousands of points wide, and past that CoreText renders **nothing** — a black
   screen, no error, no warning. It is one wrapped `Text` per line in a `LazyVStack` now, and it
   says how many lines arrived so that empty never looks like broken again.
+- **A picture is never pinned to nothing.** `AppModel.attach` opens the review card holding just
+  the picture when there is not one already. Every caller but the mark's own menu has a card on
+  screen by definition, so the guard is dead code for them; without it a picture put up from the
+  mark at rest went into `attached` with nowhere to draw it — not lost, since the next clip
+  transcribed opens a card already holding it, but off the screen until then, which from the
+  outside is a picture that was dropped. An empty card is the surface for talking about a picture
+  and it already exists: `SayRest` is on it, a tap on the thumbnail opens the marking sheet, and
+  Discard throws the picture away with the words. `hold("")` is still the one door in, so the
+  chain's notes stay nil rather than becoming an empty `Filtered` nothing wrote.
 - **A `PhotosPicker` cannot be a `Menu` item.** It is a control, not a button, and a menu row built
   from one opens nothing at all. `.photosPicker(isPresented:)` is the same picker with the trigger
   separated from it, which is what a menu needs — `ReviewCard.pictures`.

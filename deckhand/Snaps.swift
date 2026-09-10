@@ -29,6 +29,22 @@ struct Snap: Identifiable, Equatable {
         self.bytes = bytes
         self.name = name
     }
+
+    /// One out of the photo library, named by what the bytes actually are.
+    ///
+    /// The Mac decides by suffix and a library hands over whatever it happens to hold, so the
+    /// suffix is read off the first two bytes rather than guessed at from where they came from.
+    init?(picked bytes: Data) {
+        let head = bytes.prefix(2)
+        let suffix = if head.starts(with: [0x89, 0x50]) {
+            "png"
+        } else if head.starts(with: [0xFF, 0xD8]) {
+            "jpg"
+        } else {
+            "heic"
+        }
+        self.init(bytes: bytes, name: "photo.\(suffix)")
+    }
 }
 
 @MainActor
@@ -38,7 +54,20 @@ extension AppModel {
         attached[session.sessionId] ?? []
     }
 
+    /// A picture is never pinned to nothing, and the card is where it becomes visible.
+    ///
+    /// Every other way in already has a card on screen — the card's own attach menu, and a marked
+    /// copy taking the place of the picture it was made from — so the guard is dead code for all
+    /// of them. The mark at rest is the new one, and a picture added there would go into
+    /// `attached` with nowhere to draw it: not lost, since the next clip transcribed opens a card
+    /// already holding it, but off the screen for as long as it took to think of something to
+    /// say, which from the outside is indistinguishable from having dropped it.
+    ///
+    /// So the card opens here, holding the picture and no words. That is the surface for saying
+    /// something about a picture and it already exists: `SayRest` is on it, a tap on the thumbnail
+    /// opens the marking sheet, and Discard throws the picture away with the words.
     func attach(_ snap: Snap, to session: Session) {
+        if review[session.sessionId] == nil { hold("", for: session) }
         attached[session.sessionId, default: []].append(snap)
         status = "Picture attached"
     }

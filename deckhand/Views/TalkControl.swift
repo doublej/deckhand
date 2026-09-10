@@ -20,9 +20,10 @@ struct TalkControl<Content: View>: View {
     /// What a tap means on a surface that has another job: opening the session it names. Only
     /// while nothing is being recorded — once it is, a tap can only mean "send that".
     var onTap: (() -> Void)?
-    /// The way to everything this phone has recorded, or nil where there is no room for a second
-    /// gesture on this touch. See `ReachGesture` for which press it gets and why it is that one.
-    var onArchive: (() -> Void)?
+    /// The press that is not talking, or nil where there is no room for a second gesture on this
+    /// touch. What it opens is the caller's business — it went straight to the clip archive and
+    /// now offers three things — so this control knows only that there is a second press to give.
+    var onReach: (() -> Void)?
     let onStart: () -> Void
     let onClip: (URL) async -> Void
     @ViewBuilder let content: (TalkState) -> Content
@@ -56,7 +57,7 @@ struct TalkControl<Content: View>: View {
     /// spends this touch on something else. Written out rather than as a ternary because the
     /// two branches are a method reference and `nil`, and inference does badly with that pair.
     private var reaching: (() -> Void)? {
-        guard onArchive != nil else { return nil }
+        guard onReach != nil else { return nil }
         return reach
     }
 
@@ -78,33 +79,36 @@ struct TalkControl<Content: View>: View {
     /// the finger was down, so the press that opens the microphone is followed instantly by a
     /// tap that would close it again — or, worse, open the page you pressed the row to avoid.
     ///
-    /// A surface with no other job for a tap gets the archive instead, which is what makes the
-    /// left-hand pill work: it is a tap like any other and it means whatever a tap means here.
+    /// A surface with no other job for a tap gets the second press's menu instead, which is what
+    /// makes the left-hand pill work: it is a tap like any other and it means whatever a tap
+    /// means here.
     private func tapped() {
         guard claimed() else { return }
-        if isRecording { stop() } else if let onTap { onTap() } else { onArchive?() }
+        if isRecording { stop() } else if let onTap { onTap() } else { onReach?() }
     }
 
     /// A tap where tapping is how you talk.
     ///
     /// It goes through the same claim as everything else because of the long press beside it: one
     /// physical press reaches both gestures, and the tap its release makes must not start a
-    /// recording the instant the archive has opened.
+    /// recording the instant that menu has opened.
     private func toggled() {
         guard claimed() else { return }
         if isRecording { stop() } else { start() }
     }
 
-    /// The press this mode does not use for talking. Never while recording — the archive is a
-    /// list to read, and reaching it mid-clip would leave the microphone open behind it.
+    /// The press this mode does not use for talking. Never while recording — what it opens is
+    /// something to read or pick from, and reaching it mid-clip would leave the microphone open
+    /// behind it, which is also why nothing about the mark may change size while it is down.
     private func reach() {
         guard !isRecording, claimed() else { return }
-        onArchive?()
+        onReach?()
     }
 
     /// Claim this touch outright, so whatever it produces next is ignored. Used when a long
-    /// press has opened the archive: its release still arrives as a tap, and in tap-to-talk a
-    /// tap starts recording — so without this, reading your clips would open the microphone.
+    /// press has opened the second gesture's menu: its release still arrives as a tap, and in
+    /// tap-to-talk a tap starts recording — so without this, reaching for a picture would open
+    /// the microphone behind the menu.
     private func claim() { pressedAt = .now }
 
     /// True when this touch has not already been answered, and claims it when it has not.
@@ -128,8 +132,8 @@ struct TalkControl<Content: View>: View {
     private func stop() {
         guard let clip = recorder.stop() else { return }
         // Letting go of a hold arrives as a tap a moment later, and on a control that can reach
-        // the archive a tap is the gesture that does it. Claiming the touch here is what stops a
-        // clip being sent and the archive opening over the top of it on the same press.
+        // that menu a tap is the gesture that opens it. Claiming the touch here is what stops a
+        // clip being sent and the menu opening over the top of it on the same press.
         pressedAt = .now
         busy = true
         Task {
@@ -171,8 +175,8 @@ private struct TalkGesture: ViewModifier {
     let press: () -> Void
     let tapped: () -> Void
     let toggled: () -> Void
-    /// The way to the clip archive, where this surface has one. Installed here rather than in a
-    /// modifier of its own, and that is the entire fix for tap-to-talk: as a second modifier it
+    /// The press that is not talking, where this surface has one. Installed here rather than in
+    /// a modifier of its own, and that is the entire fix for tap-to-talk: as a second modifier it
     /// wrapped this one, so its long press sat *outside* the tap and took the touch before the
     /// tap could have it. Every working pair in this file is long press inner, tap outer.
     let reach: (() -> Void)?
@@ -213,9 +217,9 @@ private struct TalkGesture: ViewModifier {
         }
     }
 
-    /// Both gestures, in this order. The long press reads your clips; the tap talks. Its release
-    /// arrives as a tap a moment later, so the claim on letting go is what stops the archive
-    /// opening and the microphone opening on the same press.
+    /// Both gestures, in this order. The long press opens the other three things; the tap talks.
+    /// Its release arrives as a tap a moment later, so the claim on letting go is what stops the
+    /// menu opening and the microphone opening on the same press.
     private func reaching(_ content: Content) -> some View {
         content
             .onLongPressGesture(minimumDuration: Self.longer) { down in

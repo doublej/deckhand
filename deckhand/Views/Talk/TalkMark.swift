@@ -18,9 +18,6 @@ struct TalkMark: View {
     /// Whether the words are held for reading before they go. It changes what a tap does, so it
     /// changes what the pill may promise: a tap that opens a review card has not sent anything.
     var confirms = true
-    /// Whether this mark can reach the clip archive. The one thing about this control that cannot
-    /// be worked out by pressing it, so it is the one thing said at rest — see `reach`.
-
     /// The screen's accent, which is already the recording colour by the time this mark is open —
     /// the page it floats over sets it from the same recorder. It used to switch on its own,
     /// which is how the mark went orange on a page that stayed teal around it.
