@@ -86,6 +86,31 @@ struct MarkupTests {
         #expect(!Pin.prose(pins).contains("original"))
     }
 
+    /// A marker sits on top of the thing it is about, so the unmarked copy is not a spare — it is
+    /// the only view of whatever marker 3 is covering. It goes up beside the marked one, and this
+    /// is the sentence that says so.
+    @Test("both copies attached says both are there and still names no path")
+    func attachedWithOriginal() {
+        let pins = [Pin(spot: CGPoint(x: 12, y: 30), words: "this arrow points at the wrong cell")]
+        let text = Pin.prose(pins, withOriginal: true)
+
+        #expect(text.hasPrefix("Feedback on the attached picture, marked on it:"))
+        #expect(text.contains("1. this arrow points at the wrong cell"))
+        #expect(text.contains("Both copies are attached"))
+        #expect(text.contains("unmarked"))
+        // The same rule as ever: there is no path until Send uploads it, so none is invented.
+        #expect(!text.contains("`"))
+        #expect(!text.contains("/"))
+    }
+
+    @Test("a drawing with both copies attached still says both are there")
+    func drawnWithOriginal() {
+        let text = Pin.prose([], withOriginal: true)
+
+        #expect(text.hasPrefix("Feedback drawn on the attached picture."))
+        #expect(text.contains("Both copies are attached"))
+    }
+
     @Test("an attached picture with only a drawing on it says so and stops")
     func attachedDrawnOnly() {
         #expect(Pin.prose([]) == "Feedback drawn on the attached picture.")

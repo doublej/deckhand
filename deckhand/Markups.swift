@@ -23,6 +23,11 @@ import SwiftUI
 /// one is sending the feedback or discarding it, and both of those go through this file.
 @MainActor private var marked: [String: Markup] = [:]
 
+/// What a marked copy's filename ends in, which is the only record on this phone that a picture
+/// already carries markers — the bytes look like any other picture and the Mac renames the file
+/// on the way in anyway.
+private let markedTail = "-marked"
+
 @MainActor
 extension AppModel {
     /// What is already on this picture, so reopening the sheet finds the pins where they were.
@@ -80,15 +85,14 @@ extension AppModel {
         marked[key(of: snap)] = nil
     }
 
-    /// Flattens it, puts the marked copy in the unmarked one's place, and lays the numbered
-    /// remarks under whatever the card is already holding.
+    /// Flattens it, puts the marked copy in the unmarked one's place with the original behind it,
+    /// and lays the numbered remarks under whatever the card is already holding.
     ///
-    /// In its place rather than beside it, which is the one way this differs from a file. A file's
-    /// unmarked original stays on the Mac and `Pin.prose` names it, so the marked copy is a second
-    /// picture worth having. An attachment has no original anywhere else — it is bytes on this
-    /// phone until Send — so keeping both would upload two pictures a session cannot tell apart,
-    /// with no path available to say which of them the remarks are about. The marks are in the
-    /// picture from here on, exactly as they are once a file's feedback has been handed over.
+    /// Both copies, which is the one way this differs from a file. A file's unmarked original
+    /// stays on the Mac and `Pin.prose` names its path, so there is always a view of what a marker
+    /// is sitting on top of. An attachment has no original anywhere else — it is bytes on this
+    /// phone until Send — so the only way to keep one is to send it too, and `Pin.prose` says both
+    /// are there rather than trying to name a path that will not exist until the upload.
     func feedback(_ markup: Markup, of snap: Snap, in session: Session) {
         guard !markup.isEmpty else { return }
         guard let copy = Snap(flattened(markup, onto: snap.picture),
@@ -96,13 +100,16 @@ extension AppModel {
             status = "Could not draw the marked copy of the picture"
             return
         }
+        // Not a second copy of something that already carries markers. Marking up a marked copy is
+        // an ordinary thing to do, and what it would keep is not an original.
+        let original = !isMarked(snap)
         // The picture first, the words second. Remarks about an attachment that is no longer
         // attached are the one lie this order rules out.
-        guard replace(snap, with: copy, in: session) else {
+        guard pair(copy, over: snap, keepingOriginal: original, in: session) else {
             status = "That picture is no longer attached"
             return
         }
-        append(Pin.prose(markup.pins), to: session)
+        append(Pin.prose(markup.pins, withOriginal: original), to: session)
         forget(markupOf: snap)
         status = landed(markup.pins.count, on: "the picture")
     }
@@ -121,7 +128,15 @@ extension AppModel {
     /// name — the markers burnt into the only copy there is.
     private func pngName(marking name: String) -> String {
         let stem = (name as NSString).deletingPathExtension
-        return "\(stem.isEmpty ? "picture" : stem)-marked.png"
+        guard !stem.isEmpty else { return "picture\(markedTail).png" }
+        // Marking up a marked copy again gives `shot-marked.png`, not `shot-marked-marked.png`.
+        return stem.hasSuffix(markedTail) ? "\(stem).png" : "\(stem)\(markedTail).png"
+    }
+
+    /// Whether this picture is itself a marked copy, which is the one case with no original to
+    /// keep: the markers are already burnt into the bytes the sheet just opened.
+    private func isMarked(_ snap: Snap) -> Bool {
+        (snap.name as NSString).deletingPathExtension.hasSuffix(markedTail)
     }
 
     /// What the status line says, which is how this app tells you anything happened at all. The

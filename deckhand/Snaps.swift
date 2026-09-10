@@ -57,18 +57,26 @@ extension AppModel {
         attached[session.sessionId]?.removeAll { $0.id == snap.id }
     }
 
-    /// The marked copy in the unmarked one's place, keeping its spot in the strip — the pictures
-    /// reach the session in the order they were attached, and the remarks about them were laid
-    /// into the card in that same order, so taking one off the end and adding it back would put
-    /// the words and the pictures out of step.
+    /// The marked copy in the unmarked one's place, and — unless it is a copy of a copy — the
+    /// original kept right behind it.
+    ///
+    /// Both, because a marker sits on top of the thing it is about. At a twentieth of the shorter
+    /// side it covers a control, a word, a face, and that is very often exactly what the remark
+    /// beside it is about. A file's original stays on the Mac and `Pin.prose` names its path; an
+    /// attachment has no original anywhere else — it is bytes on this phone until Send — so
+    /// sending it is the only way there is one.
+    ///
+    /// In that place rather than on the end because the pictures reach the session in the order
+    /// they were attached, and the remarks about them were laid into the card in that same order.
     ///
     /// False when that picture is not attached any more, which is the one case where the remarks
     /// must not be written at all. See `feedback(_:of:in:)`.
-    func replace(_ snap: Snap, with copy: Snap, in session: Session) -> Bool {
+    func pair(_ copy: Snap, over snap: Snap, keepingOriginal: Bool, in session: Session) -> Bool {
         guard let spot = attached[session.sessionId]?.firstIndex(where: { $0.id == snap.id }) else {
             return false
         }
-        attached[session.sessionId]?[spot] = copy
+        attached[session.sessionId]?.replaceSubrange(spot...spot,
+                                                     with: keepingOriginal ? [copy, snap] : [copy])
         return true
     }
 

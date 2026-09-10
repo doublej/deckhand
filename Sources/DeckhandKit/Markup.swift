@@ -51,10 +51,22 @@ public struct Pin: Identifiable, Equatable, Sendable {
     /// never sees. Either would be a sentence pointing at nothing, which is worse than no sentence:
     /// the marked copy *is* the attachment, so "the attached picture" is the whole of what can
     /// honestly be said, and the numbered markers are burnt into the very file the session opens.
-    public static func prose(_ pins: [Pin]) -> String {
-        guard !pins.isEmpty else { return "Feedback drawn on the attached picture." }
-        return (["Feedback on the attached picture, marked on it:", ""] + numbered(pins))
-            .joined(separator: "\n")
+    ///
+    /// `withOriginal` where the unmarked picture went up beside the marked one. It says the two
+    /// are there and nothing about which path is which, because there is no path to name and no
+    /// order to promise: a session that opens both can see in a moment which one has the numbers
+    /// drawn on it, which is a more reliable answer than any sentence written before the upload.
+    public static func prose(_ pins: [Pin], withOriginal: Bool = false) -> String {
+        // A marker sits on top of the thing it is about, so the unmarked copy is not a spare —
+        // it is the only view of whatever marker 3 is covering.
+        let both = "Both copies are attached: the one with the marks on it, and the same picture "
+            + "unmarked, for wherever a marker covers what it is about."
+        guard !pins.isEmpty else {
+            let alone = "Feedback drawn on the attached picture."
+            return withOriginal ? "\(alone)\n\n\(both)" : alone
+        }
+        let lines = ["Feedback on the attached picture, marked on it:", ""] + numbered(pins)
+        return (withOriginal ? lines + ["", both] : lines).joined(separator: "\n")
     }
 
     /// The remarks, numbered by where their markers are in the list and nothing else. Shared by
