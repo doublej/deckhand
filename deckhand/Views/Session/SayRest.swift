@@ -26,6 +26,8 @@ struct SayRest: View {
 
     /// The minimum a finger can be asked to hit. The same raw number `ReviewActions`, `SayInto`
     /// and `FilesView` write, and for the same reason: no spacing token means "a finger".
+    ///
+    /// Here it is the *target* only and no longer the drawn size — see `face`.
     private static let touch: CGFloat = 44
 
     var body: some View {
@@ -46,13 +48,22 @@ struct SayRest: View {
     /// verb among four and read as one; alone under a prompt, "Add" on its own could be adding
     /// anything, and the microphone is the whole of the difference.
     ///
-    /// `Radius.small`, not a capsule, for the reason `ReviewActions.face` gives: a 22pt corner
-    /// nested 16pt inside the card's own 12pt one is the pair that reads as a clash. The frame is
-    /// untouched by that — the shape changes, the size does not, and the size is what a finger
-    /// mid-hold is standing on.
+    /// **It is drawn small and left unfilled at rest.** It used to be a 14pt word in a filled
+    /// 44pt tile, which is the size and weight of the buttons that send and discard — and it is
+    /// not one of those. It makes more of the prompt; they finish it. Two rows above it,
+    /// `ReviewCard`'s own Command and Add-attachments controls are `Typography.hint` in the
+    /// accent with nothing behind them, and they are the same kind of thing as this one: part of
+    /// writing a prompt rather than something you do with a written one. So it looks like them.
+    ///
+    /// **The ink shrank; the target did not.** The fill and the words sit inside a 44pt frame
+    /// whose `contentShape` is the whole of it, so a finger still lands on 44 points even though
+    /// far less than that is drawn — which matters more here than anywhere else in the card,
+    /// because in hold mode the finger stays on this control for the length of the clip.
+    ///
+    /// A capsule, now that it is small and outside everything: the corner that used to clash was
+    /// a 22pt one nested inside the card, and nothing about a 24pt chip is nested in anything.
     private func face(_ state: TalkState) -> some View {
-        let live = state.isRecording || state.busy
-        return HStack(spacing: Spacing.xxs) {
+        HStack(spacing: Spacing.xxs) {
             if state.busy {
                 ProgressView().controlSize(.mini).tint(.white)
             } else {
@@ -60,13 +71,14 @@ struct SayRest: View {
             }
             Text(word(state))
         }
-        .font(.system(size: 14))
-        .foregroundStyle(live ? Color.white : accent)
+        .font(Typography.hint)
+        .foregroundStyle(fill(state) == .clear ? accent : Color.white)
         .lineLimit(1)
-        .padding(.horizontal, Spacing.small)
-        .frame(minHeight: Self.touch)
-        .background(RoundedRectangle(cornerRadius: Radius.small, style: .continuous).fill(fill(state)))
-        .contentShape(.rect(cornerRadius: Radius.small, style: .continuous))
+        .padding(.horizontal, Spacing.extraSmall)
+        .padding(.vertical, Spacing.xxs)
+        .background(Capsule().fill(fill(state)))
+        .frame(minHeight: Self.touch, alignment: .leading)
+        .contentShape(.rect)
         .animation(Motion.word, value: word(state))
         .accessibilityAddTraits(.isButton)
         .accessibilityLabel(spoken(state))
@@ -89,12 +101,19 @@ struct SayRest: View {
         return state.isRecording && state.mode == .toggle ? "Done" : "Add"
     }
 
+    /// Nothing at rest, and the accent the moment it is doing something.
+    ///
+    /// The resting tile is gone with the rest of the weight: a filled chip under a prompt reads
+    /// as a button you are meant to press next, and this one is optional. Recording and sending
+    /// still fill, because that is not decoration — it is the only thing on screen saying the
+    /// microphone is open, and a control that goes quiet while listening is the one failure this
+    /// cannot have.
     private func fill(_ state: TalkState) -> Color {
         if state.isRecording { return accent }
         // Still filled, dimmed: the clip is on the wire and the words are a moment away, which is
         // neither still listening nor nothing happening.
         if state.busy { return accent.opacity(0.45) }
-        return Palette.tileIdle
+        return .clear
     }
 
     private func spoken(_ state: TalkState) -> String {

@@ -63,7 +63,60 @@ struct ReviewCard: View {
 
     private var words: String { draft ?? text }
 
+    /// The card, the row you press, and the receipt — three things stacked, not one box holding
+    /// all three.
+    ///
+    /// The buttons used to be the last row *inside* the container. They are outside it now, and
+    /// that is the answer to a corner clash rather than a taste: a 44pt control is a 22pt corner,
+    /// the card's was 12, and nesting the wider curve inside the tighter one is what read as
+    /// wrong. `ReviewActions.face` tightened the button to match and left a row of small hard
+    /// rectangles at the foot of a soft card. Taking the row out of the box removes the nesting
+    /// instead of arguing about the radii: outside, nothing is concentric with anything, the
+    /// buttons are capsules the way iOS makes 44pt controls, and the card is free to be as round
+    /// as it likes. Which it now is — `Radius.extraLarge`, not `medium`.
+    ///
+    /// The container is also honest about what it holds now: the prompt and the things that make
+    /// more of it. Everything you do *with* a finished prompt happens below the box it is in.
+    ///
+    /// A deck column keeps all of it inside, because 240 points has no room for a row of capsules
+    /// standing on their own.
     var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.extraSmall) {
+            staging
+            if !compact {
+                actions
+                // Under the row you press, and still the only thing that may be: it is a receipt
+                // rather than a fourth verb, so nothing below Send is both pressable and
+                // consequential. Its stages open onto a slab of their own — see `ClipCost`.
+                if let cost { ClipCost(timing: cost) }
+            }
+        }
+        .sheet(isPresented: $editing) {
+            Editor(words: words, target: target, say: say) { edited in
+                draft = edited
+                editing = false
+            }
+        }
+        .sheet(isPresented: $choosing) {
+            if let commands {
+                // Into the draft, not out of the card: the whole point is that the words are
+                // still yours to change afterwards, and what you said is still under it.
+                CommandPicker(load: commands) { draft = $0.infront(of: words) }
+            }
+        }
+    }
+
+    private var actions: some View {
+        ReviewActions(route: target,
+                      words: words,
+                      discard: discard,
+                      edit: { editing = true },
+                      send: send,
+                      compact: compact)
+    }
+
+    /// The prompt itself and everything that adds to it, in the bordered box.
+    private var staging: some View {
         VStack(alignment: .leading, spacing: Spacing.extraSmall) {
             attachments
             // The words and the way to say more of them, tight together: the second lands on the
@@ -101,40 +154,22 @@ struct ReviewCard: View {
             // something you press — and there is a real button an inch below this one.
             if let refusal = filtered?.refusal { aside(refusal, in: Palette.lcdRed) }
             if !snaps.isEmpty { pinned }
-            ReviewActions(route: target,
-                          words: words,
-                          discard: discard,
-                          edit: { editing = true },
-                          send: send,
-                          compact: compact)
-            // Under the row you press, and the only thing that may be: it is a receipt rather
-            // than a fourth verb, so nothing below Send is both pressable and consequential.
-            if let cost, !compact { ClipCost(timing: cost) }
-        }
-        .sheet(isPresented: $editing) {
-            Editor(words: words, target: target, say: say) { edited in
-                draft = edited
-                editing = false
-            }
-        }
-        .sheet(isPresented: $choosing) {
-            if let commands {
-                // Into the draft, not out of the card: the whole point is that the words are
-                // still yours to change afterwards, and what you said is still under it.
-                CommandPicker(load: commands) { draft = $0.infront(of: words) }
-            }
+            if compact { actions }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(compact ? Spacing.extraSmall : Spacing.medium)
         .background(
-            RoundedRectangle(cornerRadius: Radius.medium, style: .continuous)
+            RoundedRectangle(cornerRadius: corner, style: .continuous)
                 .fill(Palette.surfacePrimary)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: Radius.medium, style: .continuous)
+            RoundedRectangle(cornerRadius: corner, style: .continuous)
                 .strokeBorder(accent.opacity(0.4), lineWidth: 1)
         )
     }
+
+    /// A deck column stays at `Radius.medium`: 20pt corners on a 240pt tile eat the tile.
+    private var corner: CGFloat { compact ? Radius.medium : Radius.extraLarge }
 
     /// A line under the words, quiet, and in a deck column too: there is no size of card on which
     /// it is acceptable to show somebody a word they did not say without saying so.
@@ -211,7 +246,7 @@ struct ReviewCard: View {
                 Task {
                     for item in items {
                         if let bytes = try? await item.loadTransferable(type: Data.self),
-                           let snap = Snap(bytes: bytes, name: "photo.\(suffix(of: bytes))") {
+                           let snap = Snap(picked: bytes) {
                             attach(snap)
                         }
                     }
@@ -219,15 +254,6 @@ struct ReviewCard: View {
                 }
             }
         }
-    }
-
-    /// What a photo library hands over can be anything; the Mac decides by suffix, so the
-    /// suffix has to match the bytes rather than the guess.
-    private func suffix(of bytes: Data) -> String {
-        let head = bytes.prefix(4)
-        if head.starts(with: [0x89, 0x50]) { return "png" }
-        if head.starts(with: [0xFF, 0xD8]) { return "jpg" }
-        return "heic"
     }
 
     /// What is pinned, and the way into each one.
@@ -268,21 +294,4 @@ struct ReviewCard: View {
     /// raw number `ReviewActions` and `FilesView` write, for the same reason — no spacing token
     /// means "a finger".
     private static func thumb(_ compact: Bool) -> CGFloat { compact ? 44 : 56 }
-}
-
-/// A glyph, and the word beside it where there is room for one. A deck column has room for two
-/// glyphs and nothing else. Its own view because a picker's label is built outside the main
-/// actor, which a method on the card cannot be.
-private struct Attach: View {
-    let word: String
-    let symbol: String
-    let compact: Bool
-
-    var body: some View {
-        if compact {
-            Image(systemName: symbol).font(.system(size: 13, weight: .semibold))
-        } else {
-            Label(word, systemImage: symbol)
-        }
-    }
 }

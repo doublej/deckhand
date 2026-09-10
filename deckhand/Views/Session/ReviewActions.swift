@@ -4,8 +4,8 @@ import SwiftUI
 /// The foot of the review card: where the words are going, and the things you can do about them.
 ///
 /// It was one line of 11pt words eight points apart, Discard close enough to Edit to be taken for
-/// it. A control here is at the app's reading size with 44pt of finger under it, and its corner is
-/// `Radius.small` rather than the capsule `FilesView`'s selector uses — see `face`.
+/// it. A control here is at the app's reading size with 44pt of finger under it, and it is a
+/// capsule — see `face` for why that stopped being a clash.
 ///
 /// Three things, not four, and not three of a kind. Edit and Send are the two you press, so they
 /// are the two filled ones and they stand together at the end you press things at. Discard is the
@@ -90,16 +90,22 @@ struct ReviewActions: View {
             .lineLimit(1)
             .padding(.horizontal, Spacing.extraSmall)
             .frame(minHeight: Self.touch)
-            .contentShape(.rect)
+            .contentShape(.capsule)
     }
 
     /// One button. Equal width to its sibling, 44pt tall, and the label centred in it.
     ///
-    /// Not a capsule, and that is the whole of the corner audit: a 44pt capsule is a 22pt corner
-    /// sitting 16pt inside a card whose own corner is 12, so the inner curve is *wider* than the
-    /// one it is nested in and the two read as fighting. Nested corners get tighter inwards.
-    /// `Radius.small` is the token below the card's own, which is as near concentric as this
-    /// scale goes without inventing a radius.
+    /// A capsule, and the corner audit is what changed rather than the arithmetic. The audit was
+    /// right: a 44pt capsule is a 22pt corner, and sitting 16pt inside a card whose own corner is
+    /// 12 the inner curve is *wider* than the one it is nested in, which reads as fighting. The
+    /// answer it reached — tighten the button to `Radius.small` — fixed the arithmetic and left a
+    /// row of small hard rectangles at the foot of a soft card, which is what JJ was looking at
+    /// when he said he hated it.
+    ///
+    /// So the nesting went instead of the radius. This row is drawn *outside* the card now (see
+    /// `ReviewCard.body`), on the page's own ground, nested in nothing — and a control nested in
+    /// nothing is free to be the shape iOS makes a 44pt control. Nothing is concentric with
+    /// anything here, so nothing can clash with it.
     private func face(
         _ label: String,
         ink: Color,
@@ -115,7 +121,7 @@ struct ReviewActions: View {
             .minimumScaleFactor(0.85)
             .padding(.horizontal, Spacing.extraSmall)
             .frame(maxWidth: .infinity, minHeight: Self.touch)
-            .background(RoundedRectangle(cornerRadius: Radius.small, style: .continuous).fill(fill))
-            .contentShape(.rect)
+            .background(Capsule().fill(fill))
+            .contentShape(.capsule)
     }
 }
