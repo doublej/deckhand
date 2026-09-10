@@ -18,6 +18,10 @@ struct ProjectListView: View {
     let opened: (Session) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var typed = ""
+    /// The project whose own page is open. A long press rather than a control on the row: every
+    /// row here has one job — start a session — and a second button on four hundred rows is four
+    /// hundred chances to press the wrong one.
+    @State private var configuring: Project?
     @FocusState private var searching: Bool
 
     private var shown: [Project] {
@@ -40,6 +44,7 @@ struct ProjectListView: View {
             }
         }
         .task { await model.loadProjects() }
+        .sheet(item: $configuring) { ProjectSettingsView(model: model, project: $0) }
     }
 
     private var field: some View {
@@ -127,6 +132,11 @@ struct ProjectListView: View {
             // The one row that cannot work says so rather than being hidden: hidden is a project
             // you go looking for, and greyed out with no word is a row you press twice.
             .opacity(project.trusted ? 1 : 0.55)
+            .contextMenu {
+                Button("Project settings", systemImage: "slider.horizontal.3") {
+                    configuring = project
+                }
+            }
             .accessibilityIdentifier("project-row")
     }
 

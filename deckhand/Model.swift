@@ -84,6 +84,7 @@ final class AppModel {
     var showsHidden = false
     /// The project picker's own state, in its own object — see `Starting.swift`.
     var picker = ProjectPicker()
+    var wants = Switchboard()
     /// Everything the Mac can do to words on their way in, as the Mac describes it. Global,
     /// because what this Mac *can* do genuinely is: only the chain is per session. The phone
     /// holds no list of its own — `Filtering.swift` is the whole of what it knows about filters.

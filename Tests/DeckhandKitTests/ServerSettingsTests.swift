@@ -83,3 +83,87 @@ struct PreferencesTests {
         #expect(prefs.favorites.isEmpty)
     }
 }
+
+/// What this Mac has been set to do, and the one decoding trap that would quietly lose it.
+///
+/// No stub in here: all of it is pure, so it stays out of `ClientTests` and its serialization.
+@Suite("Wants")
+struct WantsTests {
+    private func document(_ path: String) -> Settings {
+        var over = Overrides()
+        over.chase = false
+        over.summaryModel = "claude-opus-5"
+        return Settings(everywhere: Wants(finished: true, slips: false, chase: true),
+                        projects: [path: over])
+    }
+
+    /// Per key, not per object. This is the whole point of the override shape: a folder given one
+    /// answer keeps every other one, and goes on following the Mac when the Mac changes.
+    @Test("a folder overrides one answer and follows the Mac for the rest")
+    func resolves() {
+        let here = document("/a").resolved(for: "/a")
+        #expect(here.chase == false)
+        #expect(here.summaryModel == "claude-opus-5")
+        #expect(here.finished == true)
+        #expect(here.slips == false)
+        // A folder nobody has an opinion about is the global answer, whole.
+        #expect(document("/a").resolved(for: "/b").chase == true)
+        #expect(document("/a").overridden("/b") == false)
+        #expect(document("/a").overridden("/a") == true)
+    }
+
+    /// `convertFromSnakeCase` rewrites **dictionary keys** as well as struct keys, and the keys of
+    /// `projects` are folder paths. This tree has `_archive` and `_sandbox` in it, so the trap is
+    /// not hypothetical: the converter renames the folder and the override filed under it is
+    /// gone.
+    ///
+    /// Measured, and it is worse *and* better than expected. Spelling the two snake-case fields
+    /// out in `CodingKeys` means the converting decoder cannot find `session_model` either, so it
+    /// throws rather than quietly handing back a document with the overrides missing. Both facts
+    /// are asserted, because the loud failure is what the spelled-out keys buy: without them this
+    /// would decode cleanly and lose the folder in silence.
+    @Test("a folder path with an underscore survives decoding")
+    func keepsPaths() throws {
+        let path = "/Users/jj/dev/_sandbox/my_thing"
+        let body = Data("""
+        {"finished": false, "slips": true, "called": true, "chase": true, "subagents": false,
+         "session_model": "opus", "summary_model": "",
+         "projects": {"\(path)": {"chase": false}},
+         "offers": {"session": ["opus"], "summary": ["claude-opus-5"]}}
+        """.utf8)
+        let settings = try JSONDecoder().decode(Settings.self, from: body)
+        #expect(settings.projects[path]?.chase == false)
+        #expect(settings.everywhere.sessionModel == "opus")
+        #expect(settings.everywhere.finished == false)
+        #expect(settings.offers.summary == ["claude-opus-5"])
+
+        let converting = JSONDecoder()
+        converting.keyDecodingStrategy = .convertFromSnakeCase
+        #expect(throws: DecodingError.self) {
+            try converting.decode(Settings.self, from: body)
+        }
+    }
+
+    /// The Mac drops an override that says nothing, so the phone must not draw a folder as
+    /// configured on the strength of an empty object.
+    @Test("an override that says nothing is not an override")
+    func emptyIsNothing() {
+        #expect(Overrides().isEmpty)
+        var one = Overrides()
+        one.slips = true
+        #expect(!one.isEmpty)
+    }
+
+    /// The global answers sit at the top level of the same object, so a round trip has to put
+    /// them back there rather than nesting them under a key the Mac has never heard of.
+    @Test("the document goes back out the shape it came in")
+    func roundTrips() throws {
+        let sent = try JSONEncoder().encode(document("/a"))
+        let back = try JSONDecoder().decode(Settings.self, from: sent)
+        #expect(back.everywhere.slips == false)
+        #expect(back.projects["/a"]?.summaryModel == "claude-opus-5")
+        let raw = try #require(try JSONSerialization.jsonObject(with: sent) as? [String: Any])
+        #expect(raw["summary_model"] as? String == "")
+        #expect(raw["finished"] as? Bool == true)
+    }
+}

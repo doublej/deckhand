@@ -41,6 +41,12 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   the other nine at rest — the same arrangement the deck uses for its columns. The accent is
   per-card for the same reason: the card being talked into goes utt orange and the rest stay teal,
   which is the only way a screen full of marks says which one is listening.
+- **A control that fires a request has to say so where the thumb is.** The slip's send button
+  answered, delivered, and looked dead: the only receipt was in the bar at the top of the screen
+  and the button is at the foot of a long scroll. It got pressed again, and every press was
+  another answer into the session. So it says "Sending…", it refuses a second tap while one is
+  in flight, and success closes the screen — a web slip closes itself with `deckhand.close()`,
+  and anything the app draws in place of a page has to do that job itself.
 - **The talk control is a mark and nothing else.** It floats over the pane rather than sitting
   under it, and the scrolling panes add `TalkMark.clearance` to the end of their content so
   nothing is stuck behind it. No bar, no ground, no resting label: a band of furniture across the

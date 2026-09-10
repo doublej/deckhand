@@ -17,6 +17,13 @@ Design is its own packet (`Design/CLAUDE.md`).
   setting would silently vanish. So `filters()` and `saveFilters()` decode through a decoder with
   no key strategy while the rest of the client keeps the conversion. Nothing on the filters wire
   is snake case, so nothing is lost either way; a test asserts `max_words` survives a real call.
+- **The settings document decodes with no key strategy, and the reason is worse than filters'.**
+  `convertFromSnakeCase` rewrites dictionary keys, and the keys of `Settings.projects` are folder
+  paths — this tree has `_archive` and `_sandbox` in it, so `/dev/_sandbox/my_thing` would arrive
+  renamed and the override filed under it would be gone. `session_model` and `summary_model` are
+  spelled out in `CodingKeys` instead, which buys a second thing: the converting decoder then
+  cannot find them and *throws*, so the mistake is loud rather than a document quietly missing
+  its overrides. A test asserts both halves.
 - **`delivered: true` is not the same as "it was said".** The daemon can answer `delivered: true`
   alongside a filter's stop, so every screen asks `Delivery.went` — `delivered && stoppedBy == nil`
   — and never `delivered` alone.
