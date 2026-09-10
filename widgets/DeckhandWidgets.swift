@@ -39,18 +39,27 @@ struct DeckWidget: Widget {
         .keylineTint(Palette.tint)
     }
 
+    /// The expanded island is three regions stacked around the camera, and the height they are
+    /// given between them is not generous. Two things that were wrong here:
+    ///
+    /// The regions each carry their own inset already, so the extra eight points on the leading
+    /// one put the mark eight points to the right of the words below it — every horizontal edge
+    /// in the panel lined up except the one at the top left, which is the one you look at first.
+    ///
+    /// And the mark was 26. The top row cannot go below the camera's own height whatever is in
+    /// it, so those points bought nothing and only made the mark the loudest thing in a panel
+    /// that exists to show a sentence.
     @DynamicIslandExpandedContentBuilder
     private func expanded(_ state: Deck.ContentState) -> DynamicIslandExpandedContent<some View> {
         DynamicIslandExpandedRegion(.leading) {
-            DotMark(DotGlyph.anchor, size: 26)
-                .padding(.leading, Spacing.extraSmall)
+            DotMark(DotGlyph.anchor, size: 22)
         }
         DynamicIslandExpandedRegion(.trailing) {
             StateWord(state.waiting > 0 ? .idle : .busy)
-                .padding(.trailing, Spacing.extraSmall)
         }
         DynamicIslandExpandedRegion(.bottom) {
-            Waiting(state: state, compact: false)
+            Waiting(state: state)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
@@ -64,7 +73,7 @@ private struct LockScreen: View {
     var body: some View {
         HStack(alignment: .top, spacing: Spacing.extraSmall) {
             DotMark(DotGlyph.anchor, size: 34, hotCore: 0.3)
-            Waiting(state: state, compact: false)
+            Waiting(state: state)
             Spacer(minLength: 0)
             VStack(alignment: .trailing, spacing: Spacing.xxs) {
                 StateWord(state.waiting > 0 ? .idle : .busy)
@@ -84,23 +93,31 @@ private struct LockScreen: View {
 /// — "is anything waiting for me" — and the name and line answer the follow-up.
 private struct Waiting: View {
     let state: Deck.ContentState
-    let compact: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.xxs) {
-            HStack(spacing: Spacing.xxs) {
+            HStack(alignment: .firstTextBaseline, spacing: Spacing.xxs) {
                 Text(headline)
                     .font(Typography.railRowSelected)
                     .foregroundStyle(Palette.textPrimary)
+                    .lineLimit(1)
                 Text(state.moment, style: .relative)
                     .font(Typography.hint)
                     .foregroundStyle(Palette.textTertiary)
+                    // Never the one that gives way, the same call `Statusline` makes: a clipped
+                    // age is a wrong number, where a clipped session name is only an ugly one.
+                    .fixedSize()
             }
             if !state.line.isEmpty {
                 Text(state.line)
                     .font(Typography.hint)
                     .foregroundStyle(Palette.textSecondary)
-                    .lineLimit(compact ? 1 : 2)
+                    .lineLimit(2)
+                    // Why the second line was sliced through the middle in the island. A `Text`
+                    // draws whatever height it is offered and clips the rest; the island offers
+                    // the stack one line's worth unless something in it asks for its own ideal
+                    // height. This is that ask, and it is what makes the region grow instead.
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

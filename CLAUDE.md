@@ -395,6 +395,25 @@ unauthenticated route; everything else needs the `x-deckhand-token` header, and 
   and `APNS_KEY_ID` out of 1Password, for the same launchd reason as ever. The key itself is
   created by hand once in the developer portal (Keys → new key with APNs enabled). Without it
   everything works up to the send and the log says `no push key on this Mac`.
+- **A `Text` in a Dynamic Island region clips rather than grows.** The expanded island's second
+  line of the session's own words was sliced through the middle: a `Text` draws into whatever
+  height it is offered and clips the rest, and the island offers a stack one line's worth unless
+  something in it asks for its own ideal height. `.fixedSize(horizontal: false, vertical: true)`
+  is that ask. Two other things there are worth keeping: each region carries its own inset
+  already, so padding the leading one puts the mark out of line with the words underneath it,
+  and the top row cannot go below the camera's own height whatever is in it — so a bigger mark
+  up there buys nothing and only makes the mark the loudest thing in the panel.
+- **A `PhotosPicker` cannot be a `Menu` item.** It is a control, not a button, and a menu row
+  built from one opens nothing at all. `.photosPicker(isPresented:)` is the same picker with the
+  trigger separated from it, which is what a menu needs — `ReviewCard.pictures`.
+- **A marker drawn on a picture wears no Deckhand colour.** Everywhere else a mark is teal
+  because teal is what says Deckhand; a marker is drawn over somebody else's picture, and that
+  picture is very often a screenshot of this app, where a teal disc on a teal button is a marker
+  you have to hunt for. So it is achromatic and double-ringed: black figure, white face, black
+  ring, white ring — the white one holds it off a dark picture and the black one off a light one,
+  and there is no colour a photograph can be that it disappears into. `Marker.bands` draws it
+  into the flattened copy and `Marker.label()` builds the same thing as a view; on screen the
+  outer ring is a shadow with no blur, because one label carries one border.
 - **The APNs host must match the entitlement.** The app signs `aps-environment: development`, so
   the daemon talks to `api.sandbox.push.apple.com`; a token minted for one host is refused by the
   other. A TestFlight or App Store build flips both.
