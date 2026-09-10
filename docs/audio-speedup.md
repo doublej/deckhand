@@ -64,6 +64,13 @@ interleaved measurements estimates the inference cost cleanly. Min-of-4 on one c
 1.64, 1.66, 1.66 s. The contaminated readings are still visible in the raw data as isolated
 20 s spikes, and they are what the minimum discards.
 
+This is not one investigation's odd luck. `transcribe.inside()` records the same thing from the
+other side, independently: *"The clip sits in the jobs folder until `ExtensionJobs.interval`
+comes round, and behind whatever else is already queued — measured here at **2.1 s and 10.1 s
+for the same clip**, minutes apart."* A five-fold spread on identical bytes is the normal
+condition of this lane, not an anomaly, and **any single-shot utt timing on this Mac should be
+treated as an upper bound rather than a measurement.**
+
 | Clip | Audio | 1.0× | 1.5× | 2.0× | 2.0× vs 1.0× |
 |---|---|---|---|---|---|
 | `3d5c3ed8` | 3.39 s | 1.65 s | — | 1.64 s | 99% |
@@ -173,10 +180,13 @@ it:
 
 - **Take a minimum over repeats, not a single reading.** This is the whole difference between
   r = 0.113 and R² = 0.925, and it needs no cooperation from utt.
-- **Record queue wait separately from work.** utt is adding per-stage millisecond timings
-  (decode, replacements, cleanup, formatting, filter, hints) on `feature/job-answer`. Those come
-  off a monotonic clock inside utt and are immune to contention by construction. Once they land,
-  ten clips give a cleaner number than ninety do today.
+- **Record queue wait separately from work.** The daemon half of this has since landed:
+  `transcribe.inside()` splits utt's span into the stages utt measured plus a derived `waiting`
+  lead, and `saying.py` writes one line per clip to `timings.jsonl`. It returns empty today,
+  because no shipped utt sends a `timings` key yet — so it is the right instrument and it is not
+  usable until utt's side ships. **When it does, note that it derives the queue wait rather than
+  removing it**, so a single reading is still a reading taken through a queue. Minimum-over-
+  repeats stays the honest estimator; the two are complements, not alternatives.
 - **Refuse to run while the daemon is serving**, and check the machine is otherwise quiet. A
   sweep makes JJ's own dictation slower for its whole duration, and a sweep run against a busy
   Neural Engine produces numbers that look like data and are not.
