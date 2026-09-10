@@ -13,6 +13,8 @@ struct SettingsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: Spacing.medium) {
                     mac
+                    buzz
+                    models
                     talking
                     route
                     hidden
@@ -20,6 +22,7 @@ struct SettingsView: View {
                 }
                 .padding(Spacing.medium)
             }
+            .task { await model.loadSettings() }
             .background(Palette.surfaceGround)
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
@@ -62,6 +65,72 @@ struct SettingsView: View {
                 .buttonStyle(.bordered)
                 .tint(Palette.tint)
             }
+        }
+    }
+
+    /// The Mac's own answer about when it may interrupt you. Every project follows this until
+    /// it says otherwise on its own page, which is why the foot says where that is — a switch
+    /// that is quietly overridden somewhere is a switch you stop believing.
+    private var buzz: some View {
+        SettingsGroup("Buzz my phone when") {
+            trigger("A session finishes", "It stopped and is waiting on you.", \.finished)
+            trigger("A slip is waiting", "It wrote you a page and nothing has answered it.", \.slips)
+            trigger("An agent asks for me", "In its own words, rather than the Mac noticing.",
+                    \.called)
+            trigger("Chase a quiet session", "The Mac asks it about the asks still on its list. "
+                    + "Not a notification — the Mac speaking to the session.", \.chase)
+            trigger("Summarise subagents", "Let the summariser read what a session's subagents "
+                    + "did, not only what it said.", \.subagents)
+            SettingRow("Per project", detail: overridesLine) {
+                EmptyView()
+            }
+        }
+    }
+
+    /// What runs where, when nothing local says otherwise. Offered by the Mac rather than listed
+    /// here: a phone offering a model the daemon refuses writes a setting that does not stick.
+    private var models: some View {
+        SettingsGroup("Models") {
+            choice("New sessions", model.wants.settings?.offers.session ?? [], \.sessionModel)
+            choice("Summaries", model.wants.settings?.offers.summary ?? [], \.summaryModel)
+        }
+    }
+
+    private var overridesLine: String {
+        guard let count = model.wants.settings?.projects.count, count > 0 else {
+            return "Hold a row in the project picker to set one project apart from these."
+        }
+        return count == 1
+            ? "One project overrides some of these on its own page."
+            : "\(count) projects override some of these on their own pages."
+    }
+
+    private func trigger(_ words: String, _ detail: String,
+                         _ key: WritableKeyPath<Wants, Bool>) -> some View {
+        SettingRow(words, detail: detail) {
+            Toggle(words, isOn: Binding(
+                get: { model.wants.everywhere[keyPath: key] },
+                set: { value in Task { await model.everywhere { $0[keyPath: key] = value } } }
+            ))
+            .labelsHidden()
+            .tint(Palette.tint)
+            .disabled(model.wants.settings == nil)
+        }
+    }
+
+    private func choice(_ words: String, _ offered: [String],
+                        _ key: WritableKeyPath<Wants, String>) -> some View {
+        SettingRow(words, detail: nil) {
+            Picker(words, selection: Binding(
+                get: { model.wants.everywhere[keyPath: key] },
+                set: { value in Task { await model.everywhere { $0[keyPath: key] = value } } }
+            )) {
+                Text("Default").tag("")
+                ForEach(offered, id: \.self) { Text($0).tag($0) }
+            }
+            .pickerStyle(.menu)
+            .tint(Palette.tint)
+            .disabled(model.wants.settings == nil)
         }
     }
 

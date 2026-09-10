@@ -61,6 +61,14 @@ extension AppModel {
         }
     }
 
+    /// What the Mac does everywhere, changed and written. The counterpart of `override`, and
+    /// the one a folder with no opinion of its own is following.
+    func everywhere(_ change: (inout Wants) -> Void) async {
+        guard var document = wants.settings else { return }
+        change(&document.everywhere)
+        await save(document)
+    }
+
     /// One folder's opinion, changed and written. Handed the overrides rather than the whole
     /// document, because every caller of this is a switch on one project's page.
     func override(_ path: String, _ change: (inout Overrides) -> Void) async {
