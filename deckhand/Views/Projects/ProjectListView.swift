@@ -48,7 +48,7 @@ struct ProjectListView: View {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Palette.textTertiary)
-                TextField("Project, folder or what it is for", text: $typed)
+                TextField("Name, folder, framework or domain", text: $typed)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .font(Typography.primaryRow)
@@ -132,16 +132,7 @@ struct ProjectListView: View {
 
     private func face(_ project: Project) -> some View {
         HStack(alignment: .center, spacing: Spacing.small) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(project.name)
-                    .font(Typography.primaryRow)
-                    .foregroundStyle(Palette.textPrimary)
-                    .lineLimit(1)
-                Text(project.line)
-                    .font(Typography.hint)
-                    .foregroundStyle(Palette.textTertiary)
-                    .lineLimit(1)
-            }
+            words(project)
             Spacer(minLength: Spacing.extraSmall)
             trailing(project)
         }
@@ -151,6 +142,30 @@ struct ProjectListView: View {
             RoundedRectangle(cornerRadius: Radius.medium, style: .continuous)
                 .fill(Palette.surfacePrimary)
         )
+    }
+
+    /// Three lines at most, whatever is known: what it is called, where it is and what it is for,
+    /// and then the short true things about it. The third line is teal rather than a third shade of
+    /// grey — it is a different kind of fact from the description above it, and a fourth grey line
+    /// is how a row of four hundred becomes a wall.
+    private func words(_ project: Project) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(project.name)
+                .font(Typography.primaryRow)
+                .foregroundStyle(Palette.textPrimary)
+                .lineLimit(1)
+            Text(project.line)
+                .font(Typography.hint)
+                .foregroundStyle(Palette.textTertiary)
+                .lineLimit(1)
+            if !project.facts.isEmpty {
+                Text(project.facts.joined(separator: " · "))
+                    .font(Typography.hint)
+                    .foregroundStyle(Palette.tint.opacity(0.8))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+        }
     }
 
     @ViewBuilder private func trailing(_ project: Project) -> some View {

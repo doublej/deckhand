@@ -94,6 +94,56 @@ struct ProjectTests {
         #expect(!project.matches("banana"))
     }
 
+    /// The third line of a row. Ordered, because a row that reorders its own facts between two
+    /// projects is a row you have to read rather than scan.
+    @Test("a row's facts are the short true things, and a dirty tree is a star")
+    func statesTheFacts() {
+        #expect(rich().facts == ["node", "sveltekit", "bun", "develop*", ":5188", "3 open",
+                                 "utt.jurrejan.com"])
+        // A project atlas could tell nothing about draws no third line at all, rather than a line
+        // of empty separators.
+        #expect(make(trusted: true, live: 0).facts == ["swift"])
+        #expect(Project(name: "bare", path: "/b").facts.isEmpty)
+    }
+
+    /// A domain is the thing a person says out loud, and about four projects in a hundred have
+    /// one — which is exactly what makes typing one the shortest way to the folder behind it.
+    @Test("a project is findable by what it is built with and the name it answers on")
+    func matchesTheNewFields() {
+        #expect(rich().matches("sveltekit"))
+        #expect(rich().matches("bun"))
+        #expect(rich().matches("jurrejan.com"))
+        #expect(rich().matches("develop"))
+        // Two words still narrow, and they may land on different fields.
+        #expect(rich().matches("sveltekit shop"))
+        #expect(!rich().matches("sveltekit banana"))
+    }
+
+    /// A daemon that predates any of this sends eight keys, not sixteen. Every one of the rest
+    /// has to decode as its empty value rather than throwing the listing away.
+    @Test("an older Mac's payload still decodes")
+    func decodesAnOlderPayload() throws {
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        let old = try decoder.decode(Project.self, from: Data("""
+        {"name": "shop", "path": "/Users/jj/dev/web/shop", "relative": "web/shop",
+         "description": "", "kind": "node", "touched_at": 12.5, "live": 0, "trusted": true}
+        """.utf8))
+        #expect(old.touchedAt == 12.5)
+        #expect(old.framework.isEmpty)
+        #expect(old.domains.isEmpty)
+        #expect(old.facts == ["node"])
+    }
+
+    private func rich() -> Project {
+        Project(
+            name: "shop", path: "/Users/jj/dev/web/shop", relative: "web/shop",
+            description: "the shop", kind: "node", touchedAt: 0, live: 0, trusted: true,
+            framework: "sveltekit", runner: "bun", branch: "develop", dirty: true,
+            issues: 3, port: 5188, domains: ["utt.jurrejan.com"], sessions: 184
+        )
+    }
+
     private func make(trusted: Bool, live: Int) -> Project {
         Project(
             name: "deckhand",

@@ -66,6 +66,29 @@ class Project:
     #: tells you afterwards which ones could never have worked is a worse picker than one that
     #: says so first.
     trusted: bool = False
+    #: What it is built with — `sveltekit`, `fastapi`, `expo`. atlas works this out from the
+    #: manifest and then throws the manifest away, so this one word is the whole of what any
+    #: source on this Mac knows about a project's libraries. See the note in `_project`.
+    framework: str = ""
+    #: What runs it: `bun`, `uv`, `pnpm`. The one fact that decides what a person types first.
+    runner: str = ""
+    #: The branch it is sitting on, and whether the tree is dirty. Together because they are one
+    #: question — "can I start here without standing on something" — and apart they are two rows.
+    branch: str = ""
+    dirty: bool = False
+    #: Open beads, where the project tracks any. A folder with eleven open issues is a different
+    #: proposition from one with none, and it is the only number here about the work rather than
+    #: about the code.
+    issues: int = 0
+    #: The port it serves on, where it has one reserved.
+    port: int = 0
+    #: The domains it answers on. Thin on the ground — atlas knows one for about four projects in
+    #: a hundred — but they are the names a person actually says out loud, so they are worth
+    #: carrying and worth searching even when most rows have none.
+    domains: tuple[str, ...] = ()
+    #: How many Claude sessions this folder has ever had. History, not liveness: `live` is the
+    #: ones running now.
+    sessions: int = 0
 
     def to_json(self) -> dict:
         return {
@@ -77,6 +100,14 @@ class Project:
             "touched_at": self.touched_at,
             "live": self.live,
             "trusted": self.trusted,
+            "framework": self.framework,
+            "runner": self.runner,
+            "branch": self.branch,
+            "dirty": self.dirty,
+            "issues": self.issues,
+            "port": self.port,
+            "domains": list(self.domains),
+            "sessions": self.sessions,
         }
 
 
@@ -172,6 +203,7 @@ def _project(row: object) -> Project | None:
         return None
     claude = row.get("claudeSessions")
     last_session = claude.get("lastAt") if isinstance(claude, dict) else None
+    beads = row.get("beads")
     return Project(
         name=str(row.get("name") or Path(path).name),
         path=path,
@@ -181,7 +213,41 @@ def _project(row: object) -> Project | None:
         # The later of the two: a folder whose files have not changed since a session talked
         # about it all afternoon is still the folder you were working in.
         touched_at=max(_epoch(row.get("modifiedAt")), _epoch(last_session)),
+        # Everything below is carried when a source has it and absent when it does not, which is
+        # the same deal `description` and `kind` are already on. A hand-written projects.json has
+        # none of it and still works.
+        framework=_word(row.get("framework")),
+        runner=_word(row.get("runner")),
+        branch=str(row.get("gitBranch") or ""),
+        # atlas answers `clean`, `dirty`, `no-repo` or `error`. Only one of those is a warning,
+        # and reading it as a boolean here means the phone never has to know the other three.
+        dirty=row.get("git") == "dirty",
+        issues=_count(beads.get("open")) if isinstance(beads, dict) else 0,
+        port=_count(row.get("port")),
+        domains=_names(row.get("domains")),
+        sessions=_count(claude.get("count")) if isinstance(claude, dict) else 0,
     )
+
+
+def _word(value: object) -> str:
+    """One of atlas's enum words, minus the one that means it could not tell.
+
+    `unknown` is three hundred of five hundred rows, and a picker that prints it three hundred
+    times has printed nothing. Absent says the same thing and takes no room.
+    """
+    word = str(value or "").strip()
+    return "" if word in ("", "unknown", "none", "generic") else word
+
+
+def _names(value: object) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        return ()
+    return tuple(name for item in value if (name := str(item or "").strip()))
+
+
+def _count(value: object) -> int:
+    """A number atlas wrote, or nothing. Never a negative one — these are all tallies."""
+    return max(0, int(value)) if isinstance(value, int | float) else 0
 
 
 def _epoch(stamp: object) -> float:
