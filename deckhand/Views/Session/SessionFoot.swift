@@ -190,6 +190,20 @@ struct SessionFoot: View {
                 commands: { await model.commands(for: session) }
             )
             .frame(maxWidth: .infinity)
+            // Down into the safe area, the same move the mark makes and inside the same ceiling.
+            //
+            // The arithmetic is `talk`'s, because the geometry is: the stack this slot overlays
+            // ends 34pt above the glass, the slot's own `Spacing.extraSmall` puts its bottom edge
+            // 8pt above that, so there are 42 points under it and the system's swipe-up zone is
+            // the last 20 — **22 is the ceiling**. 16 takes most of what is going and leaves the
+            // zone alone.
+            //
+            // It was ruled out once, on the grounds that the card is tall and this would put Send
+            // where the system's own gesture lives. That was true when Send was the last thing
+            // here. It is not: the round-trip line sits under it now, so what reaches down into
+            // the margin is a receipt — and the one control on this card that costs nothing to
+            // press by accident is the right one to have nearest the edge.
+            .offset(y: Spacing.medium)
             .shadow(color: .black.opacity(0.18), radius: 10, y: 3)
             .transition(.move(edge: .bottom).combined(with: .opacity))
             // The last span of the whole path: the Mac has answered, and here is the card.
