@@ -109,7 +109,8 @@ the session. `?deliver=false` transcribes without sending, for the review card, 
 - `GET /filters` — every filter this Mac has; `GET|PUT /sessions/{id}/filters` — the chain one
   session is actually running
 - `GET /sessions/{id}/files`, `GET /sessions/{id}/file?path=` — what the session touched
-- `GET|POST /sessions/{id}/artifacts` — slips
+- `GET /sessions/{id}/artifacts`, `GET|POST /sessions/{id}/artifacts/{aid}/answer` — slips.
+  A session writes one as a file in its own `.deckhand/artifacts/`, never over HTTP
 - `POST /sessions/{id}/image`, `POST /sessions/{id}/focus`, `POST /sessions/{id}/control`
 - `POST /sessions/{id}/name` — rename, by typing Claude Code's own `/rename` into the pane
 - `GET /projects`, `POST /projects/session` — the folders on this Mac, and starting a session in one
