@@ -164,6 +164,15 @@ dir-check:
     exit $err
 
 [group('quality')]
+roots:
+    #!/usr/bin/env zsh
+    roots=(${(f)"$(git rev-list --max-parents=0 --branches)"})
+    (( ${#roots} == 1 )) && exit 0
+    echo "error: branches descend from ${#roots} roots; only 7b260ed (chore: scaffold project) is this project"
+    for r in $roots; do echo "  $r: $(git branch --format='%(refname:short)' --contains $r | tr '\n' ' ')"; done
+    exit 1
+
+[group('quality')]
 check:
     @echo '→ Checking Justfile format...'
     just just-fmt-check

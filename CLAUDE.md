@@ -87,6 +87,12 @@ Full glossary: ./GLOSSARY.md
   never a Python string.
 - **`.quality.json` caps a source file at 400 lines and a directory at 16 files** (`.swift` and
   `.py` only). It is why several files exist as `+Feature` splits.
+- **The public repo is a squashed snapshot, not this history.** `github.com/doublej/deckhand` is
+  one orphan commit of a scrubbed tree; the private history before it carries a real email and is
+  never pushed. The remote is named `public` and is push-only: it gets a fresh re-squash from a
+  temporary worktree, never `develop` or `main`. Agent worktrees branch from `HEAD`
+  (`worktree.baseRef` in `.claude/settings.json`) because three branched from that snapshot in one
+  day and none could merge. `just roots` proves every branch still shares the one root.
 
 ## The wire
 
