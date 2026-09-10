@@ -202,6 +202,28 @@ def test_the_envelope_and_the_machinery_come_off_a_mid_run_message(claude_home):
     assert [(t.role, t.text) for t in transcripts.read_turns(SID)] == [("user", "ship it")]
 
 
+def test_a_mid_run_message_carrying_a_picture_is_still_a_turn(claude_home):
+    """The shape that made a message with a screenshot vanish off the phone.
+
+    A typed prompt is filed as a plain string. One that carries a picture is filed as a list of
+    content blocks instead, with `imagePasteIds` beside it — so reading only the string form
+    dropped exactly the messages that had a screenshot attached, which is the kind JJ sends when
+    something on screen is wrong. Taken from a live transcript: `[{"type": "text", "text": …}]`.
+    """
+    write_transcript(
+        claude_home,
+        [
+            queued_command([{"type": "text", "text": "\x15Feedback on the attached picture"}]),
+            assistant([{"type": "text", "text": "Looking"}]),
+        ],
+    )
+
+    assert [(t.role, t.text) for t in transcripts.read_turns(SID)] == [
+        ("user", "Feedback on the attached picture"),
+        ("assistant", "Looking"),
+    ]
+
+
 def test_a_mid_run_message_does_not_cut_a_tool_run_off_from_its_results(claude_home):
     """It lands inside somebody else's run, so the run stays whole and settles as it would have."""
     write_transcript(

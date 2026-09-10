@@ -136,7 +136,17 @@ def absorbed(entry: dict) -> str | None:
     if not isinstance(attachment, dict) or attachment.get("type") != "queued_command":
         return None
     prompt = attachment.get("prompt")
-    if not isinstance(prompt, str) or MACHINE.match(prompt):
+    # Two shapes, and only one of them was being read. A typed message is a plain string; one
+    # that carries a picture is a list of content blocks instead, with `imagePasteIds` beside
+    # it. So a message with a screenshot attached vanished from the phone while the same words
+    # typed alone came through — which reads as the app losing what you said, not as a shape it
+    # could not parse.
+    if isinstance(prompt, list):
+        prompt = "\n".join(
+            block.get("text", "") for block in prompt
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+    if not isinstance(prompt, str) or not prompt or MACHINE.match(prompt):
         return None
     return unwrap(prompt) or None
 
