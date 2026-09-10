@@ -1,6 +1,16 @@
 # Driving the app from a command interface
 
-> A plan, not a build. JJ: "at some point I want to build it, but for now plan it."
+> A plan, and now partly a build. **The agent is built** — one Claude Agent SDK conversation
+> inside the daemon, an eleven-tool facade over its modules, and a panel one swipe left of the
+> rail: `docs/manager.md`. What that build took from this document is Phase 5's transport (a
+> poll, not a long-poll, and no second token yet) and the six most valuable verbs of Phase 1.
+> Everything below still stands for the rest, and the ordering below is still the ordering.
+>
+> What is genuinely done: `AppModel.current` is still a mirror rather than a source, so the
+> phone's own navigation is driven by `ManagerDesk.route` and `.pane` — two slots the owning
+> views drain — rather than by the router this document asks for. Six of the twenty-two
+> presentation gates are reachable. The other sixteen are unchanged, and each is one line on
+> `ManagerDesk` plus one case in `ManagerRoute` when it is wanted.
 
 The question was whether Deckhand could be driven entirely by a command interface — MCP or CLI —
 with a real-time agent inside the app controlling every state it holds, and whether today's code
@@ -72,6 +82,10 @@ About a week and a half, and the first day is worth more than the rest put toget
 
 A surface that can drive the app is a surface that can speak as the person. That is the same
 authority question the delivery routes already answer, and the answer has to be the same one.
+
+The manager built above agrees with all four, and enforces the middle two by having no tool for
+them at all. It does **not** yet have its own token, which is the one item on this list that is
+still only a default. See `docs/manager.md`.
 
 - **Its own token, not the pairing token.** The pairing token is what the phone holds; a command
   channel that shares it means anything that can read a screenshot of Settings can drive the app.

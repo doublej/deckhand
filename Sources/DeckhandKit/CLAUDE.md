@@ -12,6 +12,14 @@ Design is its own packet (`Design/CLAUDE.md`).
 
 ## Invariants
 
+- **`ManagerRole` decodes an unknown role as `.note` rather than throwing.** The Mac is upgraded
+  by a git pull and the phone by a rebuild, so they are routinely a version apart — and a daemon
+  that grows a sixth kind of entry would otherwise take the whole conversation down on a phone
+  nobody has rebuilt. The text of that entry is still worth reading whatever kind it is. Same
+  argument `Turn`'s tolerant decoder is written for, one level down.
+- **`ManagerFeed.newest` is the cursor, never `entries.last?.id`.** A poll that brought nothing
+  back still has to leave the phone asking for the right thing, or the next one re-fetches the
+  whole conversation. A test holds it down.
 - **`convertFromSnakeCase` rewrites dictionary keys too, not only struct keys.** A filter taking a
   `max_words` setting would be handed back `maxWords`, a key it has never heard of, and the
   setting would silently vanish. So `filters()` and `saveFilters()` decode through a decoder with

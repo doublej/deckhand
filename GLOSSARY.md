@@ -44,6 +44,20 @@ the wire.** Everywhere else the word is the same on both sides.
 | **chain** | The ordered list of steps. Order is run order; a step is a position, not a key. | pipeline, config |
 | **verdict** | What a filter returns: carry on, or stop. | result, decision |
 
+## The manager
+
+| Word | Means | Not |
+|---|---|---|
+| **manager** | The one Claude session living inside the daemon that the phone's panel talks to. Always "the manager" — there is one. | agent, assistant, bot, copilot |
+| **panel** | The screen it is talked to on, one swipe left of the rail. | chat, console, tab |
+| **entry** | One line of that conversation, numbered. Five kinds: person, manager, act, command, note. | message, event |
+| **act** | One tool the manager ran, drawn as a line rather than a card. | action, tool call (in the UI) |
+| **command** | Something the manager asked the phone to do. | instruction, deep link |
+| **cursor** | The last entry id this phone has seen. What the next poll asks for everything after. | offset, page, since |
+
+**Never: the manager "types".** It cannot, and the word is the whole invariant — everything it
+says to a session goes down that session's inbox socket as another agent. See `manager/doing.py`.
+
 ## What a session leaves behind
 
 | Word | Means | Not |

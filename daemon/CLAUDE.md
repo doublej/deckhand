@@ -26,6 +26,7 @@ orders/         # one session's standing orders, and how they get in front of a 
 filters/        # what happens to a prompt between the phone and the session
 projects/       # the folders on this Mac, and starting a session in one of them
 prompts/        # every prompt this daemon sends a model, and nothing else
+manager/       # the manager: its conversation, its facade of tools, its run, its routes
 briefings.py    # where briefings are kept, and the one worker that keeps them current
 summarize.py    # what happened since you last spoke, via the Claude Agent SDK
 tasks.py        # the person's list of asks, and the only three tools that may change it
@@ -38,6 +39,9 @@ push.py         # what the Lock Screen says, when it changes, and how it gets th
 ```
 
 Before editing under `reading/`, `filters/` or `prompts/`, read that folder's own CLAUDE.md.
+`manager/` carries its own context in its `__init__.py` docstring, and `manager/doing.py`'s
+docstring is the one to read before adding a tool — the line it draws is an authority decision,
+not a convenience.
 `projects/` carries its own context in its `__init__.py` docstring — read that first; it is the
 one lane that *makes* a session rather than speaking to one.
 
@@ -243,6 +247,29 @@ summariser read what a folder's subagents did. `GET|PUT /settings` is the whole 
 - Anything the summariser or the transcriber needs must be reachable without a person present.
   The summariser passes `setting_sources=[]` for the same reason it is fast: loading the user
   settings starts every configured MCP server, which cost more than a minute.
+
+## The manager
+
+One Claude Agent SDK conversation living in this daemon, reached from the phone's own panel. The
+whole of it is `docs/manager.md`; three things are worth having here.
+
+- **The conversation is a file with a cursor, and the phone never waits for a model.**
+  `POST /manager/say` answers the moment the words are written down, `manager.agent.watch()`
+  answers into the same file, and `GET /manager?since=` brings back what is new. Same shape as
+  `briefings`, same reason: a run takes seconds and an HTTP client waits twenty.
+- **One `query()` per turn, carrying `resume=`, never a live `ClaudeSDKClient`.** This daemon is
+  restarted often enough that a long-lived subprocess would be the first thing to break, and the
+  SDK session id lives in the conversation file so a restart taken mid-sentence keeps the thread.
+  A resume that fails is retried once *without* one and the panel is told — otherwise a pruned
+  SDK transcript leaves a manager that answers every message with the same error, permanently,
+  with no way back from the phone.
+- **The refusals are enforced by absence, not by a check.** `say_to_session` has no route
+  parameter; there is no tool for stop, compact, clear, rename, answering a slip or writing a
+  filter chain, and `set_switch` does not offer `route`. The manager is a Claude session, so its
+  words reach another session down that session's inbox socket carrying none of the person's
+  authority — that is the same invariant the delivery routes answer and it decides the surface.
+  `start_session` *is* allowed, unlike in `docs/agent-surface.md`, because it only ever runs
+  because somebody spoke into the panel and both existing gates are unchanged.
 
 ## Files, and why the listing is the permission
 

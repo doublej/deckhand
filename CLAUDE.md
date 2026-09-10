@@ -13,6 +13,11 @@ the Mac stores the clip, transcribes it with utt, and writes the text straight i
 own inbox socket, the way one Claude session messages another. The daemon is controlled from its
 own page inside utt.
 
+One swipe left of the sessions list is **the manager** — a Claude Agent SDK conversation living
+inside the daemon that reads every session, speaks into them, starts new ones, changes this Mac's
+switches and moves the phone's own screen. What it may not do is one sentence and it is
+load-bearing: it never types into a pane. See [docs/manager.md](docs/manager.md).
+
 ## Stack
 
 - **Daemon** — Python 3.13, FastAPI, uv. Port **4180**, binds `0.0.0.0`, launchd agent
@@ -22,6 +27,9 @@ own page inside utt.
   the network.
 - **Summaries** — the Claude Agent SDK, Haiku 4.5, thinking off, three task tools and nothing else.
   The daemon owns the schedule; the phone only ever reads.
+- **The manager** — the Claude Agent SDK again, Sonnet 5, thinking off, eleven in-process tools
+  over this daemon's own modules. One `query()` per thing said, carrying `resume=`; the
+  conversation is a file with a cursor, never a stream.
 - **App** — Swift 6.2, SwiftUI, iOS 18. `DeckhandKit` (SwiftPM) holds the models, the HTTP client
   and the design layer so they are testable on the Mac; the app target comes from XcodeGen.
 - **Lock Screen** — a Live Activity, driven from the Mac over APNs. Bundle id
@@ -34,6 +42,7 @@ own page inside utt.
 | Folder | Its job |
 |---|---|
 | `daemon/` | The Mac half: sessions, projects, transcripts, delivery, briefings, utt, APNs. |
+| `daemon/…/manager/` | The manager: its conversation, its facade of tools, its run, its routes. |
 | `Sources/DeckhandKit/` | Models, HTTP client, pure logic, design layer — everything `just test` can reach. |
 | `Sources/IconMaker/` | Draws the app icon from the same grid as the in-app mark (`just icon`). |
 | `deckhand/` | The iOS app target: `Model`, the recorders, and `Views/`. |
@@ -54,12 +63,14 @@ and none of them is visible in the code.
 - `Sources/DeckhandKit/CLAUDE.md` — the wire, decoding traps, slips
 - `Sources/DeckhandKit/Design/CLAUDE.md` — the design language, ported from utt
 - `deckhand/CLAUDE.md` — the screens, the gestures, running on hardware
+- `docs/manager.md` — the manager, its facade, and what it refuses
 - `deckhand/Views/Annotation/CLAUDE.md` — marking up a picture
 - `widgets/CLAUDE.md` — the Live Activity and its wire contract
 
 <vocabulary>
 Canonical terms are defined in GLOSSARY.md — this project's ubiquitous language. Use them exactly.
-Top concepts: session, pane, turn, inbox, briefing, ask, route, filter, slip, rail, mark, surface.
+Top concepts: session, pane, turn, inbox, briefing, ask, route, filter, slip, rail, mark, surface,
+manager, panel, entry.
 Say **slip** to the person holding the phone; write **artifact** in code, paths and endpoints.
 Full glossary: ./GLOSSARY.md
 </vocabulary>
@@ -87,6 +98,10 @@ Full glossary: ./GLOSSARY.md
 - **A screen is one of two surfaces**: the rail (dark, `Palette.lcdGround`) or a page (the
   system's light ground). The app forces no colour scheme — it did once, and lost the distinction
   the whole design language rests on.
+- **The manager never types into a pane.** It is a Claude session, so its words reach another
+  session down that session's inbox socket carrying none of the person's authority — and from
+  that one rule follow every refusal on its surface: no stop, compact or clear, no rename, no
+  answering a slip, no editing a filter chain. They are enforced by absence: there is no tool.
 - **The design layer is a port of utt's** (`swift/utt/Utt/Design/`). Values are copied from there,
   never re-picked, so a change in utt is a diff here and not a redesign.
 - **Everything the daemon says to a model is a file** in `daemon/src/deckhand_daemon/prompts/`,
@@ -134,6 +149,10 @@ the session. `?deliver=false` transcribes without sending, for the review card, 
 - `POST /sessions/{id}/name` — rename, by typing Claude Code's own `/rename` into the pane
 - `GET /projects`, `POST /projects/session` — the folders on this Mac, and starting a session in one
 - `POST /live/token` — the phone hands over its Live Activity push tokens; the Mac does the sending
+- `GET /manager?since=` — the manager's conversation after the last entry id this phone saw, plus
+  whether a run is still in flight. `POST /manager/say` and `POST /manager/audio` speak to it and
+  answer with the entry rather than the reply; `POST /manager/clear` drops the conversation and
+  the SDK thread behind it, both together
 
 `/health` is the only unauthenticated route; everything else needs the `x-deckhand-token` header.
 Both `/health` and `/sessions` carry an `iterm` field saying whether pane data is trustworthy.
