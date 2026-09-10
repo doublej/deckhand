@@ -18,6 +18,10 @@ struct ArtifactView: View {
     /// The HTML, once the Mac has handed it over. Fetched here rather than with the listing:
     /// a page is kilobytes, and nobody wants every artifact in memory to read one.
     @State private var html: String?
+    /// What the person answered last time, as JSON text for the bridge. Set before `html` is, so
+    /// the one gate below guarantees a page is never built without it — a page drawing itself blank
+    /// and then filling in a moment later is worse than the empty form this replaces.
+    @State private var answer = "null"
     @State private var failed: String?
     /// What became of the last answer. Not cleared on a timer — it is the only receipt there is.
     @State private var said: Said?
@@ -41,7 +45,11 @@ struct ArtifactView: View {
 
     @ViewBuilder private var page: some View {
         if let html {
-            ArtifactWeb(artifact: artifact, html: html, respond: answer, close: { dismiss() })
+            ArtifactWeb(artifact: artifact,
+                        html: html,
+                        answer: answer,
+                        respond: respond,
+                        close: { dismiss() })
                 .accessibilityIdentifier("artifact-page")
         } else {
             waiting
@@ -104,10 +112,17 @@ struct ArtifactView: View {
         .padding(Spacing.large)
     }
 
+    /// Both halves at once, and the answer lands first. Together rather than one after the other
+    /// because they are two requests to the same Mac about the same file, and the page cannot be
+    /// shown until both are in.
     private func fetch() async {
+        async let said = model.answered(to: artifact, in: session)
+        async let page = model.page(of: artifact, in: session)
         do {
-            html = try await model.page(of: artifact, in: session)
+            answer = await said
+            html = try await page
         } catch {
+            _ = await said
             failed = reason(error)
         }
     }
@@ -124,7 +139,7 @@ struct ArtifactView: View {
 
     /// The page called `window.deckhand.respond`. Straight on to the Mac: the answer is the
     /// person's own and nothing here edits it or asks them to confirm it twice.
-    private func answer(_ json: String) {
+    private func respond(_ json: String) {
         Task {
             do {
                 let sent = try await model.answer(artifact, in: session, valueJSON: json)

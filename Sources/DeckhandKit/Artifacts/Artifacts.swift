@@ -78,6 +78,28 @@ public extension DeckhandClient {
         return html
     }
 
+    /// What the person answered last time, as the JSON text of the value — `"null"` where nobody
+    /// has, which is not an error.
+    ///
+    /// Text rather than a decoded value, and for the same reason `answer` *takes* text: this is
+    /// handed to the page as a JavaScript literal and the app never reads it. It is re-serialised
+    /// from what the Mac sent rather than forwarded byte for byte, so what reaches the bridge is
+    /// JSON this phone has parsed and not a string it was handed.
+    ///
+    /// Anything unreadable is `"null"` as well. The Mac already answers null for an answer file it
+    /// cannot parse, and a page that cannot find a previous answer draws itself blank — which is
+    /// what every page did before any of this existed.
+    func answered(_ id: String, in sessionId: String) async throws -> String {
+        let path = "sessions/\(sessionId)/artifacts/\(slug(id))/answer"
+        let body = try JSONSerialization.jsonObject(with: try await send(request(.get, path)))
+        guard let value = (body as? [String: Any])?["value"], !(value is NSNull),
+              let text = try? JSONSerialization.data(withJSONObject: value,
+                                                    options: [.fragmentsAllowed]) else {
+            return "null"
+        }
+        return String(bytes: text, encoding: .utf8) ?? "null"
+    }
+
     /// The person's answer, on its way to the file beside the page and into the session itself.
     ///
     /// `valueJSON` is the text `JSON.stringify` made of whatever the page passed to

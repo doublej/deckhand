@@ -25,6 +25,10 @@ struct ArtifactWeb: UIViewRepresentable {
     let artifact: Artifact
     /// The HTML as the agent wrote it. Armoured on the way in, never before.
     let html: String
+    /// What the person answered last time, as JSON text, or `"null"`. Handed over with the page
+    /// rather than fetched after it: a page that draws blank and then repopulates is worse than
+    /// one that was never told.
+    let answer: String
     /// What the person answered, as the JSON text `JSON.stringify` made of it.
     let respond: (String) -> Void
     let close: () -> Void
@@ -65,7 +69,7 @@ struct ArtifactWeb: UIViewRepresentable {
         // under another name, and every tap on one would be a way off this page.
         settings.dataDetectorTypes = []
         settings.userContentController.addUserScript(
-            WKUserScript(source: ArtifactPage.bridge(for: artifact),
+            WKUserScript(source: ArtifactPage.bridge(for: artifact, answer: answer),
                          injectionTime: .atDocumentStart,
                          forMainFrameOnly: true)
         )

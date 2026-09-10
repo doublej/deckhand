@@ -25,6 +25,16 @@ extension AppModel {
         return try await client.page(of: artifact.id, in: session.sessionId)
     }
 
+    /// What the person answered last time, as JSON text for the bridge — `"null"` where nobody has.
+    ///
+    /// Never throws, unlike the page it travels with. A page that cannot be fetched is a screen
+    /// with nothing on it and has to say so; an answer that cannot be fetched is a page that draws
+    /// itself empty, which is exactly what it did before it could read its own answer at all.
+    func answered(to artifact: Artifact, in session: Session) async -> String {
+        guard let client = settings.client() else { return "null" }
+        return (try? await client.answered(artifact.id, in: session.sessionId)) ?? "null"
+    }
+
     /// What the person answered, on its way to the Mac. Throws rather than reporting into
     /// `status`, because the viewer covers the screen the status line lives on and has to say
     /// this itself.

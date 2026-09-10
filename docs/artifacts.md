@@ -63,6 +63,7 @@ One function, injected before the page runs:
 window.deckhand.respond(value)   // any JSON value. May be called more than once.
 window.deckhand.close()          // dismiss the viewer
 window.deckhand.artifact         // { id, title }
+window.deckhand.answer           // what was answered last time, or null
 ```
 
 `respond` hands the value to the app, which sends it to the Mac. The daemon then does two
@@ -74,6 +75,31 @@ things, and both matter:
    speaking takes. An agent that has stopped is woken by it rather than having to poll.
 
 The answer is the person's own, so it travels as the person's words, not as a peer agent's.
+
+## Reading back what was answered
+
+`window.deckhand.answer` is the value the person last responded with, in exactly the shape it was
+responded with, or `null` where nobody has. It is in place before the page's first line runs — the
+app fetches it with the HTML and draws neither until both are in — so a page reads it while it is
+building its controls and never has to repaint.
+
+**A page is expected to use it.** An answered page that reopens showing an empty form is lying: the
+row that opened it says "answered". So read `window.deckhand.answer` once, and where it is not
+`null`, prefill from it — tick the option that was picked, fill the fields that were filled, put the
+sliders where they were left. Then let the person change their mind and call `respond` again; the
+Mac simply rewrites the answer file. The value is not frozen, so it can be edited in place.
+
+It is the page's own value, so the page is the only thing that can read it: Deckhand never inspects
+the shape and never normalises it. A page whose controls have changed since it was last answered is
+the page's problem to survive — treat an unexpected shape as nothing answered.
+
+Under it is one request, for agents that want the same fact from the Mac:
+
+```
+GET /sessions/{session_id}/artifacts/{artifact_id}/answer   ->  {"value": <whatever was responded>}
+```
+
+`{"value": null}` is "nobody has answered", not an error. A missing page is still a 404.
 
 ## How an agent uses one
 
