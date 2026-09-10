@@ -114,6 +114,47 @@ struct MarkdownTests {
     private func asset(_ name: String) -> Asset {
         Asset(path: "/tmp/\(name)", name: name, kind: "text", size: 10, modified: 1)
     }
+
+    /// The case a transcript adds to the ones a report already had.
+    ///
+    /// A turn is drawn through this renderer now, and the turns in this repo are full of sessions
+    /// showing each other the machine tags the daemon strips. Inside a fence they are code — the
+    /// walk must not read the hash, the dash or the tag, and must hand every line back whole.
+    @Test("a fence holding the tags the daemon strips is code, line for line")
+    func quotedTagsSurvive() {
+        let quoted = [
+            #"<teammate-message teammate_id="mate" summary="y">"#,
+            "# not a heading",
+            "- not a bullet",
+            "</teammate-message>"
+        ]
+        let fence = ["What comes off:", "", "```"] + quoted
+            + ["```", "", "and `<system-reminder>` inline."]
+
+        #expect(Markdown.Block.parse(fence.joined(separator: "\n")) == [
+            .paragraph("What comes off:"),
+            .verbatim(quoted),
+            .paragraph("and `<system-reminder>` inline.")
+        ])
+    }
+
+    /// What one session writes to another, in the shape the daemon hands it over: the label it
+    /// gained where its envelope was, and the markdown it was always written in.
+    @Test("a peer's message is a document, not a line of punctuation")
+    func peerTurn() {
+        let blocks = Markdown.Block.parse("""
+        **From the mate:** main fast-forwarded
+
+        ## What landed
+
+        - `just check` exit 0
+        1. nothing pushed
+        """)
+
+        #expect(shape(blocks) == ["p", "h2", "b0", "n1"])
+        #expect(blocks[0] == .paragraph("**From the mate:** main fast-forwarded"))
+        #expect(blocks[2] == .bullet(0, "`just check` exit 0"))
+    }
 }
 
 /// The one fence whose contents are not the answer.
@@ -160,43 +201,5 @@ struct DiagramTests {
     func forgetsBetweenFences() {
         let blocks = Markdown.Block.parse("```mermaid\ngraph TD\n```\n```\nnot a diagram\n```")
         #expect(blocks == [.diagram(["graph TD"]), .verbatim(["not a diagram"])])
-    }
-}
-
-/// Lifting a diagram out of text that is otherwise shown exactly as it was written.
-@Suite("Fenced")
-struct FencedTests {
-    @Test("text with no mermaid in it comes back whole, as one part")
-    func leavesTextAlone() {
-        #expect(Fenced.parts("just words") == [.words("just words")])
-        // A swift fence keeps its backticks: that is what a transcript did before any of this.
-        #expect(Fenced.parts("a\n```swift\nlet x = 1\n```\nb")
-                == [.words("a\n```swift\nlet x = 1\n```\nb")])
-    }
-
-    @Test("a diagram comes out and the words either side stay put")
-    func splits() {
-        let parts = Fenced.parts("Before.\n\n```mermaid\ngraph LR\n  A --> B\n```\n\nAfter.")
-        #expect(parts == [.words("Before."), .diagram("graph LR\n  A --> B"), .words("After.")])
-    }
-
-    /// A diagram with nothing above or below it must not leave an empty line of text behind.
-    @Test("a turn that is only a diagram is only a diagram")
-    func onlyADiagram() {
-        #expect(Fenced.parts("```mermaid\ngraph TD\n```") == [.diagram("graph TD")])
-    }
-
-    /// Losing the back half of somebody's message to a missing line of backticks is far worse
-    /// than not drawing a picture, so an unterminated fence stays words — the fence line too.
-    @Test("an unterminated fence is still the words it was")
-    func neverLosesText() {
-        let parts = Fenced.parts("Look:\n```mermaid\ngraph TD\n  A --> B")
-        #expect(parts == [.words("Look:\n```mermaid\ngraph TD\n  A --> B")])
-    }
-
-    @Test("two diagrams in one turn both come out")
-    func handlesTwo() {
-        let parts = Fenced.parts("```mermaid\none\n```\nmiddle\n```mermaid\ntwo\n```")
-        #expect(parts == [.diagram("one"), .words("middle"), .diagram("two")])
     }
 }

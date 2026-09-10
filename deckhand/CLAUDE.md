@@ -87,6 +87,13 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   the other nine at rest — the same arrangement the deck uses for its columns. The accent is
   per-card for the same reason: the card being talked into goes utt orange and the rest stay teal,
   which is the only way a screen full of marks says which one is listening.
+- **A turn is drawn as the document it is, through `Markdown` rather than `Prose`.** The two
+  renderers differ by what their contract is for: `Prose` shows anything outside its four blocks
+  as the characters the model typed, because a summary is written against a prompt this repo owns
+  and a briefing that broke that contract must look broken. A turn has no contract to break — it
+  is whatever a person dictated or another session wrote, and what another session writes is
+  markdown. `Prose` is not to be widened to cover it, and a third renderer would be a third place
+  the fence rule could drift out of step.
 - **A mermaid fence draws, and the seam is the environment.** `Markdown` (in DeckhandKit) knows a
   diagram when it parses one; drawing it needs a web view, which cannot live in that module. So
   the app hands the renderer in at the root with `.diagrams { }` and `Views/Diagrams/MermaidBlock`

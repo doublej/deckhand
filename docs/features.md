@@ -135,7 +135,8 @@ Root `~/Library/Application Support/Deckhand/`, overridable by `DECKHAND_DATA_DI
 |---|---|---|
 | Find a session's transcript | id matched `[A-Za-z0-9_-]{6,64}`, then glob `~/.claude/projects/*/<id>.jsonl`, newest mtime wins; `DECKHAND_CLAUDE_HOME` overrides | `D/reading/transcripts.py:74-80`, `:70` |
 | Tail-only reads | `TAIL_WINDOWS = (512 KB, 4 MB, 32 MB)`; first line of a partial read dropped as a fragment | `D/reading/transcripts.py:18`, `:218-225` |
-| Turn parsing | `MAX_TEXT=4000` per message; system-reminders, `<command-*>` and non-printables stripped | `D/reading/transcripts.py:83-107`, `:20` |
+| Turn parsing | `MAX_TEXT=4000` per message; the wrappers opened by `machinery`, then non-printables stripped | `D/reading/transcripts.py:83-107` |
+| Machine wrappers | a known-names list, never a shape: `NOISE` dropped whole, `PEER` folded to a `**From <who>:** <summary>` label over the body, `task-notification` down to its summary and result, an `idle_notification` frame down to its `result`; fences sacred to everything and backticked spans sacred to the tag stripping; an unclosed tag loses the tag and keeps the words | `D/reading/machinery.py:78`, `:96`, `:104` |
 | Tool dots under a turn | one shown input at `MAX_DETAIL=140` (preference `command,file_path,pattern,path,description,prompt,url,query`), full call/result at `MAX_FULL=4000`, matched by `tool_use_id` | `D/reading/transcripts.py:29-35`, `:299-372` |
 | Thinking | collected like tools; `redacted_thinking` deliberately skipped | `D/reading/transcripts.py:237-252` |
 | A message absorbed mid-turn is a turn | `attachment/queued_command` read as an ordinary user turn, no tools hung on it | `D/reading/transcripts.py:124-141` |
@@ -493,7 +494,6 @@ Routes the client never calls: `GET /filters` (the per-session call carries `kno
 | `ClipArchive` | clips move into Application Support **before** the upload, so no window exists where the only copy is in tmp; `keep`, `finish`, `markSent`, `remove`, `sweep` (7 days, delivered only), atomic index write | `Clips/ClipArchive.swift:58-162` |
 | `Markup` | `Pin.prose` in two forms, numbering shared so a marker and its remark can never disagree | `Markup.swift:34`, `:59`, `:75` |
 | `Preferences` | stars, hidden, route, talk mode, confirm, markdown; `setHidden` un-stars | `Preferences.swift:39`, `:88` |
-| `Fenced` | lifts only ```` ```mermaid ```` fences out of a transcript; an unterminated fence stays words | `Design/Drawn.swift:37-93` |
 | `Markdown.Block.parse` | fence state, table runs, `#`–`###`, `3. ` keeps the document's own number, one step of nesting max | `Design/MarkdownBlocks.swift:19-86` |
 
 ### 15.4 Design layer (a port of utt's `swift/utt/Utt/Design/`)
@@ -509,10 +509,10 @@ Routes the client never calls: `GET /filters` (the per-session call carries `kno
 | `DotMatrix` | `rect(for:)`, `tick` 0.05 s, 6 s cycle → 0.1 s geometric, `quietestGlow` 0.45, dBFS loudness curve; `DotGlyph.anchor` plus seven session glyphs, `forName` via **FNV-1a** so a face survives a cold start | `Design/DotMatrix.swift:10-81` |
 | `DotPatterns` | utt's ~130-frame show copied verbatim | `Design/DotPatterns.swift:10` |
 | `DotMatrixDriver` | one shared observable clock — per-view timers drift and two marks would never agree | `Design/DotMatrixDriver.swift:13` |
-| `Drawn` | `@Entry var diagram`, `.diagrams(_:)`, and `Fenced`; nil is a working default, which keeps a web view out of the module | `Design/Drawn.swift:17-37` |
+| `Drawn` | `@Entry var diagram` and `.diagrams(_:)`; nil is a working default, which keeps a web view out of the module | `Design/Drawn.swift:17`, `:22` |
 | `Fade` | `floor` 0.5, `grace` 120 s, `span` 8 h, logarithmic contrast (1 h ≈ 0.69); a busy session is always 1 because `updated_at` is a change, not a heartbeat | `Design/Fade.swift:19-48` |
 | `Links` | local host set, `NSDataDetector` leaving markdown links alone, UTF-16 range conversion, `choices(for:mac:paired:)` | `Design/Links.swift:12-69` |
-| `Markdown` | headings 20/17/14, body 14 with 6 pt line spacing, bullets as a 4 pt grid dot, numbered keeps the document's number, `Verbatim` one `Text` per line inside a horizontal scroll (one wide `Text` renders nothing past a few thousand points) | `Design/Markdown.swift:15-212` |
+| `Markdown` | the renderer for a markdown file **and for a turn** (a turn has no contract to break, and one session writes another markdown); headings 20/17/14, body 14 with 6 pt line spacing, bullets as a 4 pt grid dot, numbered keeps the document's number, `Verbatim` one `Text` per line inside a horizontal scroll (one wide `Text` renders nothing past a few thousand points) | `Design/Markdown.swift:15-212` |
 | `Prose` | the summary renderer — exactly four things, a contract shared with the daemon's prompt; compact deck sizes 9/11/8 | `Design/Prose.swift:12-113` |
 | `StateWord` | ON/OFF/WAIT/IDLE/BUSY/ERR/REC as 9 pt mono tracked 2, **no badge, no capsule**; `GlyphTile` = the mark at 0.62 of the tile | `Design/StateWord.swift:5-57` |
 
