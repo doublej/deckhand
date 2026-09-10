@@ -30,8 +30,57 @@ final class DeckLoopTests: XCTestCase {
             app.swipeLeft()
             add(screenshot(app, named: pane))
         }
-        // And back out the way it came in, which only the first pane may do.
+        // A swipe in the content pages and does not leave: the mark is still here, and the
+        // fourth pane is the one we landed on.
         XCTAssertTrue(talk.exists, "the mark went away while paging")
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "file-filter")
+            .firstMatch.waitForExistence(timeout: 10), "three swipes did not reach Files")
+        // And the one control the way out must never take a touch from. The mark floats over
+        // the panes and does not reach into the leading 20 points the edge strip lives in.
+        XCTAssertGreaterThan(talk.frame.minX, 20, "the talk mark reaches into the edge strip")
+    }
+
+    /// The way out is a drag from the leading edge, and it has to work from every pane. On any
+    /// but the first, the page view under it wants that same drag — this is the test that fails
+    /// if it ever gets it.
+    func testTheLeadingEdgeLeavesTheSessionFromEveryPane() throws {
+        let app = try launch()
+        let firstSession = app.descendants(matching: .any).matching(identifier: "session-row").firstMatch
+        let talk = app.descendants(matching: .any).matching(identifier: "talk-mark").firstMatch
+        XCTAssertTrue(firstSession.waitForExistence(timeout: 20), "the deck stayed empty")
+
+        for paged in 0..<4 {
+            firstSession.tap()
+            XCTAssertTrue(talk.waitForExistence(timeout: 15), "the session never opened")
+            for _ in 0..<paged { app.swipeLeft() }
+            drag(app, from: 0.01, to: 0.75)
+            XCTAssertTrue(firstSession.waitForExistence(timeout: 5),
+                          "an edge swipe on pane \(paged) did not leave the session")
+        }
+    }
+
+    /// One drag does one thing. A drag from the edge that is too short to leave must not page
+    /// either — if the page view were seeing the touch as well, a fling that size would take it.
+    func testAnEdgeDragTooShortToLeaveDoesNotPageEither() throws {
+        let app = try launch()
+        let firstSession = app.descendants(matching: .any).matching(identifier: "session-row").firstMatch
+        XCTAssertTrue(firstSession.waitForExistence(timeout: 20), "the deck stayed empty")
+        firstSession.tap()
+        let files = app.descendants(matching: .any).matching(identifier: "file-filter").firstMatch
+        for _ in 0..<3 { app.swipeLeft() }
+        XCTAssertTrue(files.waitForExistence(timeout: 15), "three swipes did not reach Files")
+
+        drag(app, from: 0.01, to: 0.14)
+        let talk = app.descendants(matching: .any).matching(identifier: "talk-mark").firstMatch
+        XCTAssertTrue(talk.exists, "a short edge drag left the session")
+        XCTAssertTrue(files.exists, "a short edge drag paged instead of doing nothing")
+    }
+
+    /// A drag across the middle of the page, from one fraction of the width to another.
+    private func drag(_ app: XCUIApplication, from start: CGFloat, to end: CGFloat) {
+        let edge = app.coordinate(withNormalizedOffset: CGVector(dx: start, dy: 0.5))
+        let across = app.coordinate(withNormalizedOffset: CGVector(dx: end, dy: 0.5))
+        edge.press(forDuration: 0.05, thenDragTo: across)
     }
 
     /// A press is how you talk to a session without opening it, so a press must not open it:

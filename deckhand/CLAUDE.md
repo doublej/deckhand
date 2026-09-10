@@ -79,9 +79,14 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   outside the row's own fill, and it swallows `swipeActions` so a swipe never reveals them. The
   sessions list uses a plain `Button` and `navigationDestination(item:)` instead. The UI test
   caught the second one ("no star action on the row"); nothing catches the first.
-- **Hiding the navigation bar takes swipe-back with it.** `SessionView` catches its own: a
-  `simultaneousGesture` that only fires for a drag starting within 28pt of the leading edge,
-  simultaneous so it never competes with scrolling the transcript.
+- **Hiding the navigation bar takes swipe-back with it.** `SessionView` catches its own, and where
+  the gesture lives is the load-bearing part. It is a clear 20pt strip **overlaid on the panes**
+  (`SessionView.back`), not a `simultaneousGesture` on the page: the panes are a `TabView(.page)`,
+  whose paging is a UIKit pan inside the view, so a simultaneous gesture is recognised *beside* it
+  and one drag would page and pop at once. An overlay takes the touch before that pan sees it.
+  The edge is the **leading** one — `layoutDirection`, not `startLocation.x < 28`, which was the
+  wrong side of the screen in a right-to-left reading. The price is that the leading 20pt of a
+  pane no longer scroll vertically; the panes are padded wider than that.
 - **Ten talk marks on one screen need `isMine`, not ten recorders.** `AloudCards` draws a mark per
   question against the *one* recorder handed down to it, and `TalkControl(isMine:)` is what keeps
   the other nine at rest — the same arrangement the deck uses for its columns. The accent is
@@ -115,11 +120,12 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   the mark floats. The indicator is four dots on the header's meter row instead, which was already
   being drawn and had the space spare, so the whole change costs nothing and returns a band. Two
   things follow. The dots are not a control — four dots you can hit are four dots somebody will
-  try to hit — and the page's own edge-swipe-to-dismiss now fires **only on the first pane**, or a
-  drag from the left edge would page back and leave the session on the same gesture.
+  try to hit — and the page's own edge-swipe-to-leave has to be arbitrated against the paging
+  rather than restricted to the first pane. It fires from **every** pane, and the strip that
+  catches it wins by being drawn over them.
 - **The session header is a name and a menu, and everything else is the row under it.** The
-  chevron and the glyph tile both went: the panes are swiped between and a swipe from the left
-  edge of the first one leaves the session, so the arrow was a second way to do what the page
+  chevron and the glyph tile both went: the panes are swiped between and a swipe from the leading
+  edge of any of them leaves the session, so the arrow was a second way to do what the page
   already does, and a session's glyph tells one row from another in a *list* of them — on the
   session's own page there is only one session. The way out is still named in the menu, because
   a gesture nobody is told about is not a way out for somebody using VoiceOver. Under the name

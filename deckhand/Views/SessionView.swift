@@ -23,6 +23,8 @@ struct SessionView: View {
     /// which is nearly all of it — see `landing`.
     @State private var landed: Pane?
     @Environment(\.dismiss) private var dismiss
+    /// Which way this language reads, so the edge that leaves the page is the leading one.
+    @Environment(\.layoutDirection) private var direction
 
     /// What the confirmation is about to do, in that control's own words.
     private var asking: Caution? { confirming?.caution(about: session.name) }
@@ -80,6 +82,10 @@ struct SessionView: View {
                 // there against the rounded corner. A few points of fade at each end is what
                 // makes both read as "there is more of this" instead.
                 .mask(edges)
+                // The way out, and the one strip of this page a sideways drag does not page.
+                // On the panes rather than on the stack, so it is over the thing it has to beat
+                // and clear of the mark at the foot. See `back`.
+                .overlay(alignment: .leading) { back }
                 .overlay(alignment: .top) { landing }
         }
         // Over the content, not under it. Stacked below, the bar took a band off every tab to
@@ -153,23 +159,6 @@ struct SessionView: View {
         } message: {
             Text(asking?.because ?? "")
         }
-        // Hiding the bar takes the system's swipe-back with it, so the page catches its own:
-        // started at the leading edge, mostly sideways, and simultaneous so it never competes
-        // with scrolling the transcript or opening a tool call.
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 30, coordinateSpace: .global)
-                .onEnded { drag in
-                    // Only from the first pane. The panes are swiped between now, so a drag from
-                    // the left edge on any other one means "back a pane" and the page takes it —
-                    // catching it here as well would page and dismiss on the same gesture. From
-                    // the first there is nothing to its left, so leaving is what it can only mean.
-                    guard showing == Pane.allCases.first,
-                          drag.startLocation.x < 28,
-                          drag.translation.width > 80,
-                          abs(drag.translation.height) < 80 else { return }
-                    dismiss()
-                }
-        )
         // Anything waiting on you lives in the transcript, so do not leave it on a tab the
         // person is not looking at.
         .task {
@@ -205,6 +194,35 @@ struct SessionView: View {
             LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
                 .frame(height: 12)
         }
+    }
+
+    /// The strip down the leading edge that leaves this page, from whichever pane you are on.
+    ///
+    /// Clear, and as wide as the screen edge UIKit reserves for its own pop. It is an overlay on
+    /// the panes rather than a gesture on the page because it has to *win*: over the panes it
+    /// takes the touch before the page view's pan can see it, and that is the whole reason one
+    /// drag cannot both page and leave. Anywhere else in the content a sideways drag still pages,
+    /// which is the convention every other iOS app is teaching the same thumb.
+    ///
+    /// It costs the leading 20 points of a pane their vertical scrolling. The panes are padded
+    /// wider than that, so what sits under this strip is margin.
+    private var back: some View {
+        Color.clear
+            .frame(width: 20)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 30, coordinateSpace: .global)
+                    .onEnded { drag in
+                        // Leading, not left. In a right-to-left reading both this edge and the
+                        // drag that leaves it are mirrored, and the `startLocation.x < 28` this
+                        // replaces was watching the wrong side of the screen entirely.
+                        let away = direction == .rightToLeft
+                            ? -drag.translation.width : drag.translation.width
+                        guard away > 80, abs(drag.translation.height) < 80 else { return }
+                        dismiss()
+                    }
+            )
+            .accessibilityHidden(true)
     }
 
     /// The name of the pane you just landed on, for as long as it takes to read it.
