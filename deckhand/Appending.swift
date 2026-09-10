@@ -84,6 +84,10 @@ extension AppModel {
             if let words = receipt.words {
                 self.append(words, to: session)
                 self.reviewFiltered[session.sessionId] = self.standing(receipt, for: session)
+                // And the cost goes, for the reason the note does: it is what one clip cost,
+                // and the card now holds two. A total standing under words half of it never
+                // measured is the same lie in numbers.
+                self.reviewTiming[session.sessionId] = nil
             }
             self.status = self.outcome(of: receipt, to: session, held: true)
         }
