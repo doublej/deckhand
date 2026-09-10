@@ -26,6 +26,16 @@ struct RailFoot: View {
             // inside it — grey word, accent period — are utt's and are untouched.
             Wordmark(size: 11)
                 .opacity(0.5)
+                // Down into the margin rather than down the layout, so the controls above do
+                // not rise to pay for it — the same move `SessionFoot` makes for the talk mark,
+                // and for the same reason: their height is a decision that was already made.
+                //
+                // The arithmetic. The ink on this page stops at the safe area, 34pt above the
+                // glass on this phone; 16 of those points put the mark 18pt up, which is clear
+                // of the home indicator's own pill. It is a signature and not a control, so it
+                // is the one thing here that may sit in that margin at all — nothing is aimed
+                // at it, so nothing is lost to the system's swipe-up zone below it.
+                .offset(y: Spacing.medium)
         }
         .frame(maxWidth: .infinity)
         // The room the mark takes comes out of the bottom margin rather than pushing the

@@ -1,5 +1,4 @@
 import DeckhandKit
-import PhotosUI
 import SwiftUI
 
 /// What was heard, held until you say so. Borrowed from utt's own review HUD: the transcript,
@@ -52,8 +51,6 @@ struct ReviewCard: View {
     /// The names this session answers to, fetched when the picker opens. Nil where there is
     /// nobody to ask — a deck column, or a card built from words with no session behind them.
     var commands: (() async -> [SlashCommand])?
-    @State private var picked: [PhotosPickerItem] = []
-    @State private var picking = false
     @State private var editing = false
     @State private var choosing = false
     @Environment(\.accent) private var accent
@@ -84,6 +81,7 @@ struct ReviewCard: View {
         VStack(alignment: .leading, spacing: Spacing.extraSmall) {
             staging
             if !compact {
+                attachments
                 actions
                 // Under the row you press, and still the only thing that may be: it is a receipt
                 // rather than a fourth verb, so nothing below Send is both pressable and
@@ -106,6 +104,36 @@ struct ReviewCard: View {
         }
     }
 
+    /// Edit, in the top right of the box, drawn the way `SayRest` is drawn.
+    ///
+    /// A glyph and a word with nothing behind them: a pill here would be a third pill on a card
+    /// that already has two, and this is the quietest of the three things you can do — it does
+    /// not send and it does not throw away, it just opens the words. 44pt of finger under 11pt
+    /// of ink, the same trade `SayRest` makes and for the same reason.
+    private var editCorner: some View {
+        HStack(spacing: 0) {
+            Spacer(minLength: 0)
+            Button { editing = true } label: {
+                Label("Edit", systemImage: "square.and.pencil")
+                    .font(Typography.hint)
+                    .foregroundStyle(accent)
+                    .lineLimit(1)
+                    .padding(.leading, Spacing.extraSmall)
+                    .frame(minHeight: Self.touch, alignment: .trailing)
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("edit-prompt")
+        }
+        // The row exists only to hold it, so it may not add height of its own on top of the
+        // 44pt the control already stands on.
+        .frame(height: Self.touch)
+    }
+
+    /// The minimum a finger can be asked to hit. The same raw number `ReviewActions`, `SayRest`
+    /// and `FilesView` write, and for the same reason: no spacing token means "a finger".
+    private static let touch: CGFloat = 44
+
     private var actions: some View {
         ReviewActions(route: target,
                       words: words,
@@ -115,10 +143,22 @@ struct ReviewCard: View {
                       compact: compact)
     }
 
-    /// The prompt itself and everything that adds to it, in the bordered box.
+    /// The prompt itself, in the box, and the one control that changes it in the corner.
+    ///
+    /// Command and Add-attachments used to head this stack and are under the box now. They are
+    /// not the prompt — they are two ways of putting something into it — and heading the card
+    /// with them meant the first thing read inside the box was not what was said. Under it they
+    /// sit with the other things you do to a held prompt, and the box holds only the prompt.
+    ///
+    /// Edit came the other way, out of the row of buttons and into the corner. It was a filled
+    /// half-width pill beside Send, which made it look like a decision of the same weight; it is
+    /// not, it is a way into the words themselves. In the corner of the box holding those words
+    /// it is where the thing it changes is, and it is drawn like `SayRest` — glyph, word, no
+    /// fill — because the two are the same kind of thing: they alter the prompt rather than
+    /// dispose of it.
     private var staging: some View {
         VStack(alignment: .leading, spacing: Spacing.extraSmall) {
-            attachments
+            if !compact { editCorner }
             // The words and the way to say more of them, tight together: the second lands on the
             // line under the first, so the control belongs where the caret would be.
             VStack(alignment: .leading, spacing: Spacing.xxs) {
@@ -203,57 +243,11 @@ struct ReviewCard: View {
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("pick-command")
                 }
-                if attach != nil { pictures }
+                if let attach { PictureMenu(attach: attach, paste: paste, compact: compact) }
                 Spacer(minLength: 0)
             }
             .font(Typography.hint)
             .foregroundStyle(accent)
-        }
-    }
-
-    /// The two ways a picture gets in, behind one word. Both are always offered: the clipboard one
-    /// was hidden whenever the clipboard held no image, which from the outside is a button that
-    /// comes and goes for no visible reason.
-    ///
-    /// The picker is presented by the menu rather than being the label of one, because a
-    /// `PhotosPicker` is a control and not a menu item — putting one inside a `Menu` gives a row
-    /// that opens nothing. `.photosPicker(isPresented:)` is the same picker with the trigger
-    /// separated from it, which is what a menu needs.
-    ///
-    /// As many photos as you like in one trip, numbered as they are chosen. One per trip was a
-    /// picker reopened four times to say one thing about four screenshots, and `.ordered` is what
-    /// makes the order they arrive in the order they were picked rather than the order the library
-    /// happens to hold them — which is the order the words about them end up in.
-    @ViewBuilder private var pictures: some View {
-        if let attach {
-            Menu {
-                Button("Photos", systemImage: "photo.badge.plus") { picking = true }
-                if let paste { Button("Clipboard", systemImage: "doc.on.clipboard", action: paste) }
-            } label: {
-                Attach(word: "Add attachments", symbol: "paperclip", compact: compact)
-            }
-            .accessibilityIdentifier("add-attachments")
-            .photosPicker(isPresented: $picking,
-                          selection: $picked,
-                          maxSelectionCount: nil,
-                          selectionBehavior: .ordered,
-                          matching: .images,
-                          photoLibrary: .shared())
-            // The picker hands back items, not bytes; the bytes come over a moment later.
-            // One at a time and in the order they were chosen, so each thumbnail appears as its
-            // picture arrives rather than all of them after the slowest one.
-            .onChange(of: picked) { _, items in
-                guard !items.isEmpty else { return }
-                Task {
-                    for item in items {
-                        if let bytes = try? await item.loadTransferable(type: Data.self),
-                           let snap = Snap(picked: bytes) {
-                            attach(snap)
-                        }
-                    }
-                    picked = []
-                }
-            }
         }
     }
 

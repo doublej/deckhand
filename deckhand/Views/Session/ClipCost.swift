@@ -38,6 +38,13 @@ struct ClipCost: View {
 
     /// Named rather than left as a bare number. Under the buttons it has no words above it to be
     /// read against, so "29.24 s ›" on its own is a quantity of nothing in particular.
+    /// Centred, and standing clear of the row above it.
+    ///
+    /// Everything else on this card is a left-hand column — the words, the controls, the row of
+    /// verbs all start on one vertical. A receipt reading along that same edge joins the column
+    /// and reads as one more line of the prompt. Centred it is plainly not part of it, which is
+    /// what it is: a fact about the clip, not a thing to do with it. The gap above it says the
+    /// same in the other direction.
     private var line: some View {
         HStack(spacing: Spacing.xxs) {
             Text("Round trip \(TimingsView.spelled(timing.total))")
@@ -47,12 +54,12 @@ struct ClipCost: View {
             }
             Image(systemName: breakdown ? "chevron.up" : "chevron.down")
                 .font(.system(size: 9))
-            Spacer(minLength: 0)
         }
         .font(Typography.hint)
         .foregroundStyle(Palette.textTertiary)
         .lineLimit(1)
-        .frame(minHeight: 28, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: 28)
+        .padding(.top, Spacing.small)
         .contentShape(.rect)
     }
 

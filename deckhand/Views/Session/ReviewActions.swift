@@ -41,17 +41,13 @@ struct ReviewActions: View {
     /// stand side by side and the name is what tells one card from the next.
     private var roomy: some View {
         HStack(spacing: Spacing.xxs) {
-            Button(action: discard) { quiet("Discard") }
+            Button(action: discard) { quiet("Discard", glyph: "trash") }
                 .buttonStyle(.plain)
-            // Collapses to nothing but its minimum on a narrow phone, which is what keeps
-            // the two buttons the same width as each other at every size.
+            // Collapses to nothing but its minimum on a narrow phone, so Send takes whatever
+            // width is left over rather than a fixed half of the row.
             Spacer(minLength: Spacing.extraSmall)
-            Button(action: edit) {
-                face("Edit", ink: accent, fill: Palette.tileIdle)
-            }
-            .buttonStyle(.plain)
             Button { send(words) } label: {
-                face("Send", ink: .white, fill: accent, weight: .semibold)
+                face("Send", glyph: "paperplane.fill", ink: .white, fill: accent, weight: .semibold)
             }
             .buttonStyle(.plain)
         }
@@ -83,8 +79,12 @@ struct ReviewActions: View {
     /// The one that loses something, in the quiet colour with no fill under it. Still 44pt of
     /// finger and still the full width of the word, because a control that is easy to miss on
     /// purpose is a different thing from one that is hard to hit at all.
-    private func quiet(_ label: String) -> some View {
-        Text(label)
+    ///
+    /// The bin is the one glyph here that has to be read *before* the word rather than with it:
+    /// this is the control somebody hits by accident, and a shape carries further than four
+    /// letters in the quiet colour do.
+    private func quiet(_ label: String, glyph: String) -> some View {
+        Label(label, systemImage: glyph)
             .font(.system(size: 14))
             .foregroundStyle(Palette.textTertiary)
             .lineLimit(1)
@@ -108,11 +108,12 @@ struct ReviewActions: View {
     /// anything here, so nothing can clash with it.
     private func face(
         _ label: String,
+        glyph: String,
         ink: Color,
         fill: Color,
         weight: Font.Weight = .regular
     ) -> some View {
-        Text(label)
+        Label(label, systemImage: glyph)
             .font(.system(size: 14, weight: weight))
             .foregroundStyle(ink)
             .lineLimit(1)

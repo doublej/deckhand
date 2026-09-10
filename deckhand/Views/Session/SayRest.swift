@@ -30,6 +30,11 @@ struct SayRest: View {
     /// Here it is the *target* only and no longer the drawn size — see `face`.
     private static let touch: CGFloat = 44
 
+    /// What the chip is padded by, as one value because `face` then pulls the leading edge back
+    /// by exactly the leading inset and the two have to stay the same number.
+    private static let chip = EdgeInsets(top: Spacing.xxs, leading: Spacing.extraSmall,
+                                         bottom: Spacing.xxs, trailing: Spacing.extraSmall)
+
     var body: some View {
         TalkControl(recorder: more.recorder,
                     mode: more.mode,
@@ -74,9 +79,14 @@ struct SayRest: View {
         .font(Typography.hint)
         .foregroundStyle(fill(state) == .clear ? accent : Color.white)
         .lineLimit(1)
-        .padding(.horizontal, Spacing.extraSmall)
-        .padding(.vertical, Spacing.xxs)
+        .padding(Self.chip)
         .background(Capsule().fill(fill(state)))
+        // Pulled back by exactly the padding inside it, so the microphone starts on the same
+        // vertical as the first letter of the prompt above rather than eight points in. The
+        // padding stays: it is what stops the capsule cutting into the glyph while recording,
+        // and this is the one card where a control indented from the words it continues reads
+        // as belonging to something else.
+        .padding(.leading, -Self.chip.leading)
         .frame(minHeight: Self.touch, alignment: .leading)
         .contentShape(.rect)
         .animation(Motion.word, value: word(state))
