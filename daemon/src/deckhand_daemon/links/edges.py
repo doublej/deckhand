@@ -12,8 +12,8 @@ socket path against the `messagingSocketPath` in the live listing — the same r
 join the rest of the daemon is built on — which also means an edge only survives while both
 ends are still running, and a link with one end nowhere has nothing to draw between.
 
-This reads a transcript but does not live in `reading/`, because it carries an HTTP router and
-that package is reading and nothing else. It borrows `reading.transcripts`' tail helpers rather
+This reads a transcript but does not live in `reading/`, because the feature carries an HTTP
+router (`routes.py`, next door) and that package is reading and nothing else. It borrows `reading.transcripts`' tail helpers rather
 than opening the file its own way.
 
 Four things about the header, measured against the ~950 peer messages on this Mac rather than
@@ -40,17 +40,14 @@ assumed. Each is a way to get this quietly wrong:
 
 from __future__ import annotations
 
-import asyncio
 import re
 import time
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Query
-
-from .reading.transcripts import TAIL_WINDOWS, parse_line, tail_lines, transcript_path
-from .sessions import Session, live_sessions
+from ..reading.transcripts import TAIL_WINDOWS, parse_line, tail_lines, transcript_path
+from ..sessions import Session
 
 # Cheap pre-filter, applied to the raw bytes before anything is parsed as JSON.
 MENTION = b"cross-session-message"
@@ -62,9 +59,6 @@ SOCKET = re.compile(r"^uds:(?P<path>/.+)$")
 # hour the tail scan stops being cheap and the decay stops meaning anything.
 MIN_WINDOW = 30.0
 MAX_WINDOW = 3600.0
-
-router = APIRouter(tags=["links"])
-
 
 @dataclass(slots=True)
 class SessionLink:
@@ -78,28 +72,6 @@ class SessionLink:
 
     def to_json(self) -> dict:
         return asdict(self)
-
-
-@router.get("/sessions/links")
-async def session_links(
-    within: float = Query(
-        default=300.0,
-        ge=MIN_WINDOW,
-        le=MAX_WINDOW,
-        description="how many seconds back to look for messages between sessions",
-    ),
-) -> dict:
-    """Which sessions have messaged which, lately. Both ends are always on the listing.
-
-    The window is the phone's, not the Mac's: the same number decides how far back the scan
-    reads and how far back the screen draws, so the two cannot drift apart.
-
-    `/sessions/links` would only be ambiguous if some route were `/sessions/{id}` on its own.
-    None is, so this cannot be swallowed as a session id.
-    """
-    live = await asyncio.to_thread(live_sessions)
-    found = await asyncio.to_thread(read_links, live, within)
-    return {"links": [link.to_json() for link in found], "within": within}
 
 
 def read_links(live: list[Session], within: float) -> list[SessionLink]:
