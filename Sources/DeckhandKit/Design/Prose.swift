@@ -27,7 +27,7 @@ public struct Prose: View {
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { index, block in
-                row(block, lead: index == 0)
+                row(block, lead: index == 0, last: index == blocks.count - 1)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -36,7 +36,13 @@ public struct Prose: View {
     /// `lead` is the first block, which the brief guarantees is the sentence that stands on
     /// its own. It is set larger than everything under it: one big jump near the top does more
     /// for a page than several small ones spread through it.
-    @ViewBuilder private func row(_ block: Block, lead: Bool) -> some View {
+    ///
+    /// `last` takes the trailing air off the end. Every block pays for the gap beneath it, which
+    /// is right in the middle of a passage and wrong at the end of one: whatever comes after the
+    /// prose brings its own space above it, so the two used to add up and the briefing floated
+    /// half a section away from what followed it. The rule is that a section's air belongs above
+    /// its heading and nowhere else.
+    @ViewBuilder private func row(_ block: Block, lead: Bool, last: Bool) -> some View {
         switch block {
         case .heading(let text): heading(text)
         case .bullet(let text): bullet(text)
@@ -47,7 +53,7 @@ public struct Prose: View {
                 // Roughly 1.45x the type size. Text set solid reads as a wall; this is the
                 // single biggest thing separating a page you read from a page you skim past.
                 .lineSpacing(compact ? 3 : (lead ? 7 : 6))
-                .padding(.bottom, compact ? Spacing.extraSmall : (lead ? Spacing.large : Spacing.medium))
+                .padding(.bottom, last ? 0 : trailing(lead: lead))
         }
     }
 
@@ -66,6 +72,11 @@ public struct Prose: View {
     /// Under the body, never level with it: a section marker that competes with the sentences
     /// beneath it stops being a marker.
     private var headingSize: CGFloat { compact ? 8 : 9 }
+
+    private func trailing(lead: Bool) -> CGFloat {
+        if compact { return Spacing.extraSmall }
+        return lead ? Spacing.large : Spacing.medium
+    }
 
     private func paragraphFont(lead: Bool) -> Font {
         .system(size: lead ? leadSize : bodySize)

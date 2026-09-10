@@ -18,6 +18,7 @@ struct SessionHead: View {
     @Binding var renaming: Bool
     @Binding var reading: Bool
     @Binding var filtering: Bool
+    @Binding var configuring: Bool
     /// The page's colour, which goes utt orange while the mark at the foot of it is open. Read
     /// from the environment here: `SessionView` is the view that puts it there, and a view never
     /// sees what it hands its own children.
@@ -85,6 +86,11 @@ struct SessionHead: View {
             Button("Words on the way in…", systemImage: "line.3.horizontal.decrease") {
                 filtering = true
             }
+            // The folder's own page, reached from the session running in it rather than only
+            // from the project picker: this is where a person already is when they want to
+            // change what the Mac may do about this work. Keyed by the path, which outlives
+            // every session in it — a setting filed under a session id would be gone by morning.
+            Button("Project settings…", systemImage: "slider.horizontal.3") { configuring = true }
             // Always reachable, not only when something looks wrong: every other view here is
             // a reading of that file, and this is the file.
             Button("Raw transcript", systemImage: "scroll") { reading = true }
@@ -145,8 +151,12 @@ struct SessionHead: View {
         }
     }
 
+    /// Where it is and when it last spoke — minus the half that is already the title above it.
+    /// A session started from the picker is named after its own folder, so this read "deckhand"
+    /// over "deckhand · 2m ago": two lines of chrome to say one word and a time.
     private var subtitle: String {
         let ago = session.lastActive.formatted(.relative(presentation: .numeric, unitsStyle: .narrow))
-        return "\(session.folder) · \(ago)"
+        let sameWord = session.folder.caseInsensitiveCompare(session.name) == .orderedSame
+        return sameWord ? ago : "\(session.folder) · \(ago)"
     }
 }

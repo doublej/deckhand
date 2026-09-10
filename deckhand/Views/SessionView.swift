@@ -15,6 +15,7 @@ struct SessionView: View {
     @State private var renaming = false
     @State private var reading = false
     @State private var filtering = false
+    @State private var configuring = false
     /// Whether the Mac holds turns older than the ones on screen. Answered by every load, so
     /// the transcript can offer the way back without a request of its own to find out.
     @State private var earlier = false
@@ -57,7 +58,8 @@ struct SessionView: View {
                         confirming: $confirming,
                         renaming: $renaming,
                         reading: $reading,
-                        filtering: $filtering)
+                        filtering: $filtering,
+                        configuring: $configuring)
             pane
                 // Over the content, not under it. Stacked below, the bar took a band off every
                 // tab to offer one button; floating, it costs the page nothing and the panes
@@ -83,6 +85,13 @@ struct SessionView: View {
         .sheet(isPresented: $reading) { RawView(model: model, session: session) }
         .sheet(isPresented: $filtering) {
             SessionFilters(model: model, session: session, say: say)
+        }
+        // Built here rather than looked up in the picker's catalog: that page wants a path and a
+        // name, this session has both, and a folder with no atlas record is still a folder whose
+        // settings someone may want to change.
+        .sheet(isPresented: $configuring) {
+            ProjectSettingsView(model: model,
+                                project: Project(name: session.folder, path: session.cwd))
         }
         // A sheet rather than the alert this was, because an alert holds a field and buttons and
         // nothing in between — and what a name needs beside it is the mark. See `Renaming`.

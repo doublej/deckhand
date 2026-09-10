@@ -22,17 +22,14 @@ struct BriefingView: View {
                 prose
                 // Under the briefing, not above it: the first line of a briefing is what to do
                 // right now, and a checklist in front of that buries it.
+                //
+                // No rule between them any more. The gap and the eyebrow already say a section
+                // has started — a divider on top of both was a third separator doing the same
+                // job, and three of them read as clutter rather than as structure.
                 if let asks = model.tasks[session.sessionId], !asks.isEmpty {
-                    Divider()
                     AskList(asks: asks)
                 }
-                // The one thing in this app that costs money, said out loud rather than left
-                // to be discovered on a bill.
-                if let spent = model.spend[session.sessionId], spent.runs > 0 {
-                    Text(spent.line)
-                        .font(Typography.hint)
-                        .foregroundStyle(Palette.textTertiary)
-                }
+                spend
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, Spacing.medium)
@@ -48,6 +45,22 @@ struct BriefingView: View {
         // which slip it opens and what that slip is called. A directory listing on the Mac,
         // asked for when the tab is opened, exactly as the Slips tab asks for it.
         .task { await model.loadArtifacts(for: session) }
+    }
+
+    /// The one thing in this app that costs money, said out loud rather than left to be
+    /// discovered on a bill. A foot rather than a fourth section: a rule above it and pinned to
+    /// the end of the page, so it is the last thing read and never mistaken for a heading.
+    @ViewBuilder private var spend: some View {
+        if let spent = model.spend[session.sessionId], spent.runs > 0 {
+            VStack(alignment: .leading, spacing: Spacing.small) {
+                Rectangle()
+                    .fill(Palette.textTertiary.opacity(0.2))
+                    .frame(height: 1)
+                Text(spent.line)
+                    .font(Typography.hint)
+                    .foregroundStyle(Palette.textTertiary)
+            }
+        }
     }
 
     /// The slips this session is waiting on an answer for, newest first as the Mac sorted them.

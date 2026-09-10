@@ -16,15 +16,17 @@ struct AskList: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.small) {
-            Text("WHAT YOU ASKED FOR")
-                .font(Typography.eyebrow)
-                .tracking(1)
-                .foregroundStyle(Palette.textTertiary)
-            if asks.count > Self.shown {
-                Text("\(asks.count - Self.shown) older, on the Mac")
-                    .font(Typography.hint)
-                    .foregroundStyle(Palette.textTertiary)
+            // The whole list on one line, then the recent part of it underneath. The tally was
+            // only readable by counting the boxes, and the count of what is off the end sat
+            // between the label and the list as a third thing rather than a footnote to either.
+            HStack(alignment: .firstTextBaseline, spacing: Spacing.small) {
+                Text("WHAT YOU ASKED FOR")
+                Spacer(minLength: Spacing.extraSmall)
+                Text(tally)
             }
+            .font(Typography.eyebrow)
+            .tracking(1)
+            .foregroundStyle(Palette.textTertiary)
             VStack(alignment: .leading, spacing: Spacing.small) {
                 ForEach(asks.suffix(Self.shown)) { ask in
                     HStack(alignment: .firstTextBaseline, spacing: Spacing.small) {
@@ -40,8 +42,17 @@ struct AskList: View {
                     }
                 }
             }
+            if asks.count > Self.shown {
+                Text("\(asks.count - Self.shown) older, on the Mac")
+                    .font(Typography.hint)
+                    .foregroundStyle(Palette.textTertiary)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var tally: String {
+        "\(asks.filter { $0.progress == .done }.count) OF \(asks.count) DONE"
     }
 }
 
