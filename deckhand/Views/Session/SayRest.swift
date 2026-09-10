@@ -19,6 +19,13 @@ struct SayRest: View {
     let more: SayMore
     /// The words as they stand, which is what a second clip lands beneath.
     let words: String
+    /// True from the moment the clip goes to the Mac until its words are back.
+    ///
+    /// `TalkControl` keeps this state privately for its own label, and the card outside needs the
+    /// same fact for a different reason: Send must not be pressable while a sentence is still in
+    /// the air. Reported rather than read, because it is set around an `await` in an action
+    /// closure — the one place a view may change state without doing it mid-render.
+    @Binding var adding: Bool
     /// Called once the clip has been handed over, so the card can drop the draft it just passed
     /// up: the new words come back as the model's, and a stale draft would mask them.
     let finished: () -> Void
@@ -36,7 +43,9 @@ struct SayRest: View {
                     isMine: true,
                     onStart: {},
                     onClip: { clip in
+                        adding = true
                         await more.heard(clip, words)
+                        adding = false
                         finished()
                     },
                     content: { face($0) })

@@ -22,6 +22,12 @@ struct ReviewActions: View {
     let send: (String) -> Void
     /// A deck column, which is 240pt wide and has room for none of this.
     var compact = false
+    /// Something is still on its way into these words, so there is nothing final to send yet.
+    ///
+    /// Sending mid-clip would post the prompt without the sentence being spoken into it, and the
+    /// words would then land in the session a moment later with nowhere to go. Holding the button
+    /// for the two or three seconds a transcription takes is the whole fix — see `SayRest`.
+    var waiting = false
     @Environment(\.accent) private var accent
 
     /// The minimum a finger can be asked to hit. The same raw number `FilesView` writes, and for
@@ -50,6 +56,12 @@ struct ReviewActions: View {
                 face("Send", glyph: "paperplane.fill", ink: .white, fill: accent, weight: .semibold)
             }
             .buttonStyle(.plain)
+            .disabled(waiting)
+            // Dimmed as well as inert: `.plain` draws its own label, so `disabled` alone leaves a
+            // full-strength button that silently ignores a press, which reads as the app being
+            // broken rather than as it being busy.
+            .opacity(waiting ? 0.4 : 1)
+            .animation(Motion.word, value: waiting)
         }
     }
 
@@ -73,6 +85,7 @@ struct ReviewActions: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
                 .tint(accent)
+                .disabled(waiting)
         }
     }
 

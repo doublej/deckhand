@@ -53,6 +53,8 @@ struct ReviewCard: View {
     var commands: (() async -> [SlashCommand])?
     @State private var editing = false
     @State private var choosing = false
+    /// Set by `SayRest` while a clip it took is with the Mac. See `waiting`.
+    @State private var adding = false
     @Environment(\.accent) private var accent
     /// The words as they stand. Seeded from what was heard and kept across an edit, so opening
     /// the editor twice does not throw away the first correction.
@@ -154,7 +156,18 @@ struct ReviewCard: View {
                       discard: discard,
                       edit: { editing = true },
                       send: send,
-                      compact: compact)
+                      compact: compact,
+                      waiting: waiting)
+    }
+
+    /// Whether another sentence is still on its way into these words: the microphone is open, or
+    /// the clip is with the Mac and its words are not back. Sending in either state posts the
+    /// prompt without the part being added to it, and the missing sentence then arrives in the
+    /// session on its own a moment later. Recording is read straight off the recorder because the
+    /// slot holds the mark or this card and never both, so nothing else can be listening.
+    private var waiting: Bool {
+        guard let more else { return false }
+        return more.recorder.isRecording || adding
     }
 
     /// The prompt itself, in the box, and the one control that changes it in the corner.
@@ -200,7 +213,7 @@ struct ReviewCard: View {
                 // pair they are: the only things here that change the prompt rather than
                 // dispose of it.
                 HStack(spacing: 0) {
-                    if let more { SayRest(more: more, words: words) { draft = nil } }
+                    if let more { SayRest(more: more, words: words, adding: $adding) { draft = nil } }
                     Spacer(minLength: Spacing.small)
                     if !compact { openWords }
                 }
