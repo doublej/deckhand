@@ -55,7 +55,7 @@ struct DeckWidget: Widget {
             DotMark(DotGlyph.anchor, size: 22)
         }
         DynamicIslandExpandedRegion(.trailing) {
-            StateWord(state.waiting > 0 ? .idle : .busy)
+            StateWord(state.waiting > 0 ? .wait : .idle)
         }
         DynamicIslandExpandedRegion(.bottom) {
             Waiting(state: state)
@@ -66,6 +66,11 @@ struct DeckWidget: Widget {
 
 /// The card on the Lock Screen. utt's rail, because that is the surface this language uses
 /// whenever the phone is not showing a page: warm ground, dot mark, four-letter pill.
+///
+/// The word was `IDLE` when something was waiting and `BUSY` when nothing was — true of the
+/// *sessions*, and the wrong sentence for a card about you: `RunState.idle` is grey, so the one
+/// moment this card exists for was the one moment it had no colour on it at all. `wait` is the
+/// state's own word for "waiting on a person", and it is yellow.
 private struct LockScreen: View {
     let state: Deck.ContentState
     let mac: String
@@ -76,7 +81,7 @@ private struct LockScreen: View {
             Waiting(state: state)
             Spacer(minLength: 0)
             VStack(alignment: .trailing, spacing: Spacing.xxs) {
-                StateWord(state.waiting > 0 ? .idle : .busy)
+                StateWord(state.waiting > 0 ? .wait : .idle)
                 Text(mac)
                     .font(Typography.hint)
                     .foregroundStyle(Palette.textTertiary)
@@ -91,16 +96,31 @@ private struct LockScreen: View {
 
 /// The words, in both places they are needed. The count leads because it is the whole question
 /// — "is anything waiting for me" — and the name and line answer the follow-up.
+///
+/// The sizes are the point of this view. It was built out of `railRowSelected` and `hint` — 13
+/// and 11 — which are the sizes utt uses in a rail you are sitting a forearm away from. On a
+/// Lock Screen a foot and a half away, read in the second before you decide whether to pick the
+/// phone up, they are a grey smudge in the corner of a black card. `lead` and `prose` exist for
+/// exactly this distance and were already in the design layer, unused here.
 private struct Waiting: View {
     let state: Deck.ContentState
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.xxs) {
+            Text(headline)
+                .font(Typography.pageTitle)
+                .foregroundStyle(Palette.textPrimary)
+                .lineLimit(1)
+                // A long name shrinks rather than truncates: the name is how you tell which
+                // session this is, so half of it is worth more than an ellipsis.
+                .minimumScaleFactor(0.7)
             HStack(alignment: .firstTextBaseline, spacing: Spacing.xxs) {
-                Text(headline)
-                    .font(Typography.railRowSelected)
-                    .foregroundStyle(Palette.textPrimary)
-                    .lineLimit(1)
+                if state.waiting > 1 {
+                    Text(state.name)
+                        .font(Typography.hint)
+                        .foregroundStyle(Palette.textSecondary)
+                        .lineLimit(1)
+                }
                 Text(state.moment, style: .relative)
                     .font(Typography.hint)
                     .foregroundStyle(Palette.textTertiary)
@@ -110,7 +130,7 @@ private struct Waiting: View {
             }
             if !state.line.isEmpty {
                 Text(state.line)
-                    .font(Typography.hint)
+                    .font(Typography.prose)
                     .foregroundStyle(Palette.textSecondary)
                     .lineLimit(2)
                     // Why the second line was sliced through the middle in the island. A `Text`
@@ -122,13 +142,14 @@ private struct Waiting: View {
         }
     }
 
-    /// "3 waiting · utt" rather than "3": the number alone makes you open the app to learn
-    /// which one, which is the thing this is meant to save you.
+    /// The one line you read first, so it holds one fact and stays short enough to be set large.
+    /// The name moves under it when there are several waiting — "3 waiting · umber-tuatara" at
+    /// this size is a truncated name, which answers "which one" worse than not asking it to.
     private var headline: String {
         switch state.waiting {
         case 0: "Nothing waiting"
         case 1: state.name
-        default: "\(state.waiting) waiting · \(state.name)"
+        default: "\(state.waiting) waiting"
         }
     }
 }
