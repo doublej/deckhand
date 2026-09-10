@@ -137,6 +137,9 @@ Both `/health` and `/sessions` carry an `iterm` field saying whether pane data i
 - [agent.md](agent.md) — verify loop, auto-fix commands, boundaries
 - [docs/artifacts.md](docs/artifacts.md) — what a slip is, what it may contain, and the bridge
 - [docs/prompt-review.md](docs/prompt-review.md) — the standing prompt audit and its rollout order
+- [docs/agent-surface.md](docs/agent-surface.md) — what an agent *inside* a session needs to know
+  about Deckhand, why that is a skill rather than an MCP server, and the token that would make its
+  refusals real
 - [docs/control-surface.md](docs/control-surface.md) — what it would take to drive the whole app from a command interface, and what such a surface must refuse
 - `.claude/rules/` — Swift naming traps, and the shared agent journal protocol
 - `launchd/com.jurrejan.deckhand.plist` — registered in `multi-stack/project-atlas/shared/daemons.json`
