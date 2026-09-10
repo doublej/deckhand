@@ -28,7 +28,13 @@ from .log import LOG_FILE, log
 ID = "deckhand"
 DAEMON_LABEL = "com.jurrejan.deckhand"
 POLL = 1.0
-UTT = Path.home() / "Library" / "Application Support" / "dev.jurrejan.utt" / "extensions"
+SUPPORT = Path.home() / "Library" / "Application Support" / "dev.jurrejan.utt"
+# utt 1.2 renamed this folder from `plugins` to `extensions`, and the one that exists is
+# the one the *installed* utt makes at launch — not the one its source says. Naming either
+# outright breaks the file lane against the other build, and silently: a jobs folder that
+# is not there makes `transcribe` give up, so hold-to-talk stops working with nothing in
+# the log but a missing directory. So ask the disk, newest name first.
+NAMES = ("extensions", "plugins")
 # Routes are Deckhand's word; the page gets the person's. Same three choices either way.
 ROUTE_OPTIONS = {"whichever works": "auto", "typed into the terminal": "keyboard",
                  "sent as a message": "socket"}
@@ -36,8 +42,16 @@ DEFAULTS = {"route": "whichever works", "deliver": True, "attribution": "JJ, spo
 
 
 def plugins_dir() -> Path:
-    """utt makes this at launch. DECKHAND_PLUGIN_DIR points the tests somewhere harmless."""
-    return Path(os.environ.get("DECKHAND_PLUGIN_DIR", UTT))
+    """utt makes this at launch. DECKHAND_PLUGIN_DIR points the tests somewhere harmless.
+
+    Whichever of `NAMES` utt actually made, preferring the newer. Falling back to the first name
+    when neither exists keeps the failure the one it has always been — a folder that is not there
+    — rather than a second kind nobody has seen.
+    """
+    if named := os.environ.get("DECKHAND_PLUGIN_DIR"):
+        return Path(named)
+    return next((SUPPORT / name for name in NAMES if (SUPPORT / name).is_dir()),
+                SUPPORT / NAMES[0])
 
 
 def jobs_dir() -> Path:

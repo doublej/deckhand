@@ -96,6 +96,25 @@ def test_a_missing_page_is_not_an_error(tmp_path, monkeypatch):
     assert plugin.route() in {"auto", "keyboard", "socket"}
 
 
+def test_the_folder_is_whichever_one_utt_made(tmp_path, monkeypatch):
+    """utt 1.2 renamed `plugins` to `extensions`, and only the installed build decides which.
+
+    Naming one outright breaks the file lane against the other, and breaks it silently: a jobs
+    folder that is not there makes `transcribe` give up, so dictation stops with nothing in the
+    log. The disk is the only honest answer, newest name first.
+    """
+    monkeypatch.delenv("DECKHAND_PLUGIN_DIR", raising=False)
+    monkeypatch.setattr(plugin, "SUPPORT", tmp_path)
+
+    assert plugin.plugins_dir() == tmp_path / "extensions", "neither made: the newer name"
+
+    (tmp_path / "plugins").mkdir()
+    assert plugin.plugins_dir() == tmp_path / "plugins", "an older utt, so the older folder"
+
+    (tmp_path / "extensions").mkdir()
+    assert plugin.plugins_dir() == tmp_path / "extensions", "both there: prefer the newer"
+
+
 def _values(page, revision: int, values: dict) -> None:
     whole = dict(plugin.DEFAULTS) | values
     (page / "deckhand.values.json").write_text(
