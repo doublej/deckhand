@@ -226,7 +226,8 @@ public struct DeckhandClient: Sendable {
         return req
     }
 
-    private func get<T: Decodable>(_ path: String) async throws -> T {
+    /// Internal, not private: the `+Feature` splits in other files need it.
+    func get<T: Decodable>(_ path: String) async throws -> T {
         try decode(try await send(request(.get, path)))
     }
 

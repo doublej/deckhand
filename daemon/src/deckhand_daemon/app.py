@@ -27,7 +27,7 @@ from . import (
 from .filters import routes as filter_routes
 from .log import log
 from .projects import routes as project_routes
-from .reading import asked, commands, readable, transcripts
+from .reading import asked, commands, context, readable, transcripts
 from .settings import routes as settings_routes
 
 
@@ -148,7 +148,12 @@ def session_file(session_id: str, path: str = Query(description="one of /files")
     session = saying.session_or_404(session_id)
     # ponytail: re-reads the transcript tail per request (~10 ms). Cache it if a files tab
     # ever polls rather than being opened.
-    found = files.allowed(session_id, session.cwd, path)
+    #
+    # Two doors, and the second is the folder's own context tree: those documents are the
+    # standing instructions a session here already runs under, so they are readable whether this
+    # run happened to open them or not. Both sets are computed rather than supplied, which is
+    # what keeps this a window onto one session's work and not a file browser.
+    found = files.allowed(session_id, session.cwd, path) or context.allowed(session.cwd, path)
     if found is None:
         raise HTTPException(status_code=404, detail="that file is not in this session's transcript")
     size = found.stat().st_size
@@ -180,6 +185,19 @@ def session_turns(
         "queued": asked.queued(session_id) if before == 0 else [],
         "more": more,
     }
+
+
+@app.get("/sessions/{session_id}/context", dependencies=[Depends(require_token)])
+def session_context(session_id: str) -> dict:
+    """Every CLAUDE.md a session in this folder is loaded with, as a tree.
+
+    Not what it touched — that is `/files`, and the transcript bounds it. This is what it started
+    with, which is the other half of "why did it do that": a rule three folders up is invisible
+    in a transcript and is running all the same.
+    """
+    session = saying.session_or_404(session_id)
+    found = context.documents(session.cwd)
+    return {"documents": [d.to_json() for d in found], "tokens": sum(d.tokens for d in found)}
 
 
 @app.get("/sessions/{session_id}/raw", dependencies=[Depends(require_token)])

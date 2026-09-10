@@ -21,10 +21,18 @@ struct FilesView: View {
     @Bindable var model: AppModel
     let session: Session
     @State private var open: Asset?
-    /// The one suffix the list is showing, or nil for all of them. The tab opens on all of them
-    /// every time — which suffix you picked last is not something a file list should decide for
-    /// you on arrival. View state and not the model's, for the same reason.
-    @State private var only: String?
+    /// Which part of the tab is showing. It opens on all of them every time — what you picked
+    /// last is not something a file list should decide for you on arrival. View state and not
+    /// the model's, for the same reason.
+    @State private var only: Showing = .all
+    /// The standing instructions a session here runs under. Empty until the Mac answers, and
+    /// empty forever for a folder with no CLAUDE.md anywhere above or below it — in which case
+    /// there is no choice to offer and none is drawn.
+    @State private var context = ContextDocs()
+
+    /// The three things this tab can be. A suffix narrows the list; the tree is not a list at
+    /// all, which is why this is an enum rather than one more optional string.
+    private enum Showing: Hashable { case all, context, suffix(String) }
     /// This is a tab inside the session's page, not a surface of its own, so it goes orange with
     /// the rest of the page while the mark at the foot of it is open.
     @Environment(\.accent) private var accent
@@ -42,7 +50,8 @@ struct FilesView: View {
     /// falls back to all of them, which is what happens when the session's last PNG is renamed
     /// away while PNG is the one you are looking at.
     private var shown: [Asset] {
-        guard let only, let group = groups.first(where: { $0.suffix == only }) else { return assets }
+        guard case .suffix(let suffix) = only,
+              let group = groups.first(where: { $0.suffix == suffix }) else { return assets }
         return group.assets
     }
 
@@ -50,13 +59,20 @@ struct FilesView: View {
         VStack(spacing: 0) {
             // Above the scroll view rather than inside it, so it is still there after you have
             // scrolled past eleven screenshots looking for the one note.
-            if groups.count > 1 { selector }
-            list
+            if groups.count > 1 || !context.documents.isEmpty { selector }
+            if only == .context {
+                ContextTree(context: context) { open = $0 }
+            } else {
+                list
+            }
         }
         .frame(maxHeight: .infinity)
-        // Asked for once, when the tab is opened. Nobody watches a file list change, and it
-        // is a transcript scan on the Mac rather than a field on the session.
-        .task { await model.loadFiles(for: session) }
+        // Asked for once, when the tab is opened. Nobody watches either of these change, and
+        // both are a walk on the Mac rather than a field on the session.
+        .task {
+            await model.loadFiles(for: session)
+            context = await model.context(for: session)
+        }
         .sheet(item: $open) { AssetView(model: model, session: session, asset: $0) }
     }
 
@@ -90,8 +106,13 @@ struct FilesView: View {
     private var selector: some View {
         ScrollView(.horizontal) {
             HStack(spacing: Spacing.xxs) {
-                choice(nil, count: assets.count)
-                ForEach(groups) { choice($0.suffix, count: $0.assets.count) }
+                choice(.all, "All", count: assets.count)
+                // Second, not last: what a session was told is worth more than what it happened
+                // to open, and a row you have to scroll sideways to find is a row nobody finds.
+                if !context.documents.isEmpty {
+                    choice(.context, "CLAUDE", count: context.documents.count)
+                }
+                ForEach(groups) { choice(.suffix($0.suffix), $0.suffix, count: $0.assets.count) }
             }
             .padding(.horizontal, Spacing.medium)
             .padding(.vertical, Spacing.extraSmall)
@@ -103,11 +124,11 @@ struct FilesView: View {
     /// `nil` is all of them, written as a word rather than uppercased like the suffixes, because
     /// it is not one. One line is stated rather than assumed: `NO SUFFIX` is the only label here
     /// with a space in it, and it is the one that would wrap inside its capsule.
-    private func choice(_ suffix: String?, count: Int) -> some View {
-        let chosen = only == suffix
-        return Button { only = suffix } label: {
+    private func choice(_ what: Showing, _ words: String, count: Int) -> some View {
+        let chosen = only == what
+        return Button { only = what } label: {
             HStack(spacing: Spacing.extraSmall) {
-                Text(suffix ?? "All")
+                Text(words)
                 Text(count.formatted())
                     .foregroundStyle(chosen ? Color.white.opacity(0.75) : Palette.textTertiary)
             }
@@ -121,7 +142,7 @@ struct FilesView: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("file-filter")
-        .accessibilityLabel("\(suffix ?? "All"), \(count) files")
+        .accessibilityLabel("\(words), \(count) files")
         .accessibilityAddTraits(chosen ? [.isSelected] : [])
     }
 

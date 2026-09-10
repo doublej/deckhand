@@ -68,6 +68,19 @@ extension AppModel {
         return (arrived.count, more)
     }
 
+    /// The standing instructions a session in this folder runs under. Asked for when the tab is
+    /// opened, like the file list beside it, and handed back rather than kept: it is a directory
+    /// walk on the Mac and nothing else in the app wants it.
+    func context(for session: Session) async -> ContextDocs {
+        guard let client = settings.client() else { return ContextDocs() }
+        do {
+            return try await client.context(of: session.sessionId)
+        } catch {
+            status = "Could not read \(session.name)'s context"
+            return ContextDocs()
+        }
+    }
+
     /// Everything the transcript holds, as lines. Not kept on the model: it is large, it is
     /// asked for by hand, and nothing else in the app wants it.
     func raw(for session: Session) async -> [String]? {

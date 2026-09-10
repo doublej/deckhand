@@ -132,3 +132,68 @@ public struct Tool: Codable, Hashable, Sendable, Identifiable {
         }
     }
 }
+
+/// One CLAUDE.md a session in a folder is loaded with, ready to draw as a row of a tree.
+///
+/// Not a file the session touched — that is `Asset`, and the transcript bounds it. This is the
+/// standing instruction it started with, which is the other half of "why did it do that": a rule
+/// three folders up never appears in a transcript and is running all the same.
+///
+/// The connector arrives drawn. The Mac already knows which branches are still open at every
+/// level, and a phone re-deriving that from a depth number is a second implementation of one
+/// thing — so the tree is printed in a monospaced font exactly as the Mac laid it out, which is
+/// also what makes it the same picture `atlas tree` draws.
+public struct Doc: Codable, Hashable, Sendable, Identifiable {
+    public let path: String
+    /// The folder it speaks for, not the file name: every row is a `CLAUDE.md`, so the name
+    /// eighty times over says nothing.
+    public let label: String
+    /// `ancestor`, `root`, `project`, `descendant`, `glossary` or `rule` — atlas's own words.
+    public let kind: String
+    public let prefix: String
+    public let size: Int
+    public let tokens: Int
+
+    public init(path: String, label: String, kind: String, prefix: String,
+                size: Int, tokens: Int) {
+        self.path = path
+        self.label = label
+        self.kind = kind
+        self.prefix = prefix
+        self.size = size
+        self.tokens = tokens
+    }
+
+    public var id: String { path }
+
+    /// The tree opens a document the same way the files list opens a file, so it hands back the
+    /// same thing every screen downstream already knows how to read.
+    public var asset: Asset {
+        Asset(path: path, name: (path as NSString).lastPathComponent,
+              kind: "text", size: size, modified: 0)
+    }
+}
+
+/// A folder's whole context tree, and what it costs to load.
+///
+/// `ContextDocs` and not `Context`: inside a `UIViewRepresentable`, `Context` is already a
+/// typealias for `UIViewRepresentableContext<Self>`, so a public `Context` in this module
+/// silently breaks the conformance of every representable in the app and the errors all name the
+/// representable rather than the clash. It cost a build to relearn. See `ContextWindow`, which is
+/// spelled out for exactly the same reason.
+public struct ContextDocs: Codable, Sendable {
+    public let documents: [Doc]
+    public let tokens: Int
+
+    public init(documents: [Doc] = [], tokens: Int = 0) {
+        self.documents = documents
+        self.tokens = tokens
+    }
+}
+
+public extension DeckhandClient {
+    /// The CLAUDE.md tree a session in this folder is loaded with.
+    func context(of sessionId: String) async throws -> ContextDocs {
+        try await get("sessions/\(sessionId)/context")
+    }
+}

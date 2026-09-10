@@ -9,6 +9,7 @@ transcripts.py  # the last rounds, the activity blob a summary is written from, 
 asked.py        # what the person asked for, and what is still in the session's inbox
 commands.py     # the slash commands and skills a session could be handed by name
 readable.py     # the whole transcript as lines, for when the app's reading looks wrong
+context.py      # the CLAUDE.md tree a session in a folder is loaded with, before it says anything
 ```
 
 ## Where the file is, and how much of it is read
@@ -56,6 +57,17 @@ readable.py     # the whole transcript as lines, for when the app's reading look
 - **`updated_at` is the moment a session's status last changed, not a heartbeat.** Measured here:
   a session reporting `busy` with a 1553 s old stamp while it was mid-turn. So it is only the age
   of an *idle* session.
+- **The context tree is the other half of "why did it do that".** `context.py` answers what a
+  session *starts* with, where everything else here answers what it has said — a rule three
+  folders up never appears in a transcript and is shaping every answer all the same. It is
+  `atlas tree` reimplemented rather than shelled out to: atlas prints ascii and has no
+  machine-readable mode, so parsing it would be reading a picture. The one thing copied rather
+  than re-picked is the token estimate, `length / 2.5` from `atlas-cli/src/commands/prime.ts`, so
+  the two tools never disagree about the same file. The walk is pruned as it goes and capped at
+  `MAX_DEPTH`/`MAX_DOCS` — it once called `_walk` once per descendant and a folder with a dozen
+  of them timed the route out. And the tree is a *permission*: `context.allowed` is a second door
+  onto `GET /sessions/{id}/file`, so a CLAUDE.md this run never opened is still readable, because
+  it is running either way.
 - **Command names come from two places, project shadowing user.** `commands.py` reads `~/.claude`
   and the project's own `.claude` at every request; nested folders keep their `dir:name` namespace.
 

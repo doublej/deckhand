@@ -102,6 +102,8 @@ the session. `?deliver=false` transcribes without sending, for the review card, 
 - `POST /sessions/{id}/notify` — an agent asking for the person outright, in its own words
 - `GET /briefings` — every live session's last briefing at once, off disk, for a cold start
 - `GET /sessions/{id}/commands` — the slash commands and skills that session could be handed
+- `GET /sessions/{id}/context` — every CLAUDE.md a session in that folder is loaded with, as a
+  tree with the connectors already drawn, and what it costs
 - `GET /sessions/{id}/raw` — the transcript as readable lines, for when the app's reading looks wrong
 - `POST /sessions/{id}/queue/clear` — draw a line under an inbox holding prompts nothing will read
 - `GET /filters` — every filter this Mac has; `GET|PUT /sessions/{id}/filters` — the chain one
