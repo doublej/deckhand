@@ -176,14 +176,41 @@ def _receipt(
         # Milliseconds per stage, in the order they ran, `total` last. A list rather than an
         # object on purpose: the phone decodes with `convertFromSnakeCase`, which rewrites
         # dictionary *keys* as happily as struct ones, and a stage name is data.
-        "timings": [{"name": name, "ms": spent} for name, spent in ms.items()],
+        "timings": _staged(ms, heard),
     }
-    # Whatever utt said that this daemon has no name for, verbatim and never over the top of a
-    # key of ours. `raw`, `stages` and `cleanupSkipped` arrive this way the day utt sends them,
-    # with no change here and nothing stubbed in the meantime.
+    # Whatever utt said that this daemon has no name for, verbatim. `raw`, `stages` and
+    # `cleanupSkipped` arrive this way the day utt sends them, with no change here.
+    #
+    # `timings` is the one key both sides now use, and utt's is not a rival to ours — it is the
+    # inside of our `utt` span, and `_staged` has already nested it there. Any *other* collision
+    # is utt taking a name we answer with, and that is worth a line in the log: the old
+    # `setdefault` dropped it in silence, which is the failure nobody would ever notice.
     for key, value in heard.extra.items():
-        reply.setdefault(key, value)
+        if key == "timings":
+            continue
+        if key in reply:
+            log.warning("utt sent a %r of its own; kept this daemon's and dropped utt's", key)
+            continue
+        reply[key] = value
     return reply
+
+
+def _staged(ms: dict[str, float], heard: transcribe.Heard) -> list[dict]:
+    """This daemon's stages, with utt's own broken out inside the one that is utt's.
+
+    Nested rather than flattened, because they answer different questions: the top level is
+    where the time went across the whole path, and the inside of `utt` is where it went within
+    utt. A utt that measures nothing leaves the single opaque number that was always there.
+    """
+    stages = []
+    for name, spent in ms.items():
+        stage = {"name": name, "ms": spent}
+        if name == "utt":
+            parts = transcribe.inside(spent, heard)
+            if parts:
+                stage["inside"] = parts
+        stages.append(stage)
+    return stages
 
 
 def _record(
@@ -212,6 +239,10 @@ def _record(
         "error": heard.error,
         "delivered": went,
         "ms": ms,
+        # Everything utt said for itself, verbatim and in one place: `duration` (its own count of
+        # the audio, against the phone's `seconds` above), `timings`, `stages`, `raw`. Empty on
+        # every utt shipped today, and a line that reads the same either way.
+        "utt": heard.extra,
     }
     try:
         with (config.data_dir() / "timings.jsonl").open("a") as jsonl:

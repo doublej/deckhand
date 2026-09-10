@@ -129,7 +129,8 @@ extension AppModel {
              stoppedBy: receipt.stoppedBy,
              because: receipt.deliveryError,
              heard: receipt.transcript,
-             raw: receipt.uttRewrote ? receipt.raw : nil)
+             raw: receipt.uttRewrote ? receipt.raw : nil,
+             uttStages: receipt.uttStages)
         status = outcome(of: receipt, to: session, held: confirms)
     }
 

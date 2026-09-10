@@ -134,6 +134,68 @@ struct ClipTimingTests {
         #expect(Stage(name: "network", took: 1).side == .wire)
     }
 
+    // MARK: - utt measuring itself
+
+    @Test("utt's span opens into utt's own stages, with the wait in front of them")
+    func uttSpanNests() throws {
+        let receipt: UploadReceipt = try decoded("""
+        {"path":"/tmp/x.m4a","bytes":64,"received_at":1.0,"transcript":"go on","delivered":true,
+         "timings":[{"name":"utt","ms":3000.0,"inside":[
+            {"name":"waiting","ms":800.0},{"name":"decode","ms":1300.0},
+            {"name":"cleanup","ms":900.0}]},
+          {"name":"total","ms":3100.0}],
+         "raw":"go on","stages":["hints"]}
+        """)
+        let utt = try #require(receipt.timings.first { $0.name == "utt" })
+
+        #expect(utt.children.map(\.name) == ["waiting", "decode", "cleanup"])
+        // The wait is what the whole span cost minus everything utt accounted for. It is the
+        // difference between "utt is slow" and "utt was busy with somebody else's clip".
+        #expect(utt.children.first?.took == 800)
+        #expect(utt.children.first?.note != nil)
+        // And the span itself stops carrying the warning once its own wait row has it.
+        #expect(utt.note == nil)
+    }
+
+    @Test("A utt that measures nothing leaves one opaque span, warning and all")
+    func uttSpanStaysOneRow() throws {
+        let receipt: UploadReceipt = try decoded("""
+        {"path":"/tmp/x.m4a","bytes":64,"received_at":1.0,"transcript":"go on","delivered":true,
+         "timings":[{"name":"utt","ms":3000.0}]}
+        """)
+        let utt = try #require(receipt.timings.first { $0.name == "utt" })
+
+        #expect(utt.children.isEmpty)
+        #expect(utt.note == "up to 300 ms of this is utt not having looked yet")
+    }
+
+    @Test("A stage that ran and changed nothing says unchanged, and never says reviewed")
+    func timedIsNotTheSameQuestionAsChanged() {
+        var timing = ClipTiming.merged(phone: makeSpans(), mac: mac, macTotal: 1700,
+                                       changedByUtt: ["hints"])
+
+        // Both stages ran and both are timed. Only one of them moved the words, and utt reports
+        // those as two separate records on purpose — in Dutch, cleanup runs, succeeds and hands
+        // the text back identical, which on the wire looks like nothing at all without this.
+        #expect(timing.verdict(on: Stage(name: "cleanup", took: 900)) == "unchanged")
+        #expect(timing.verdict(on: Stage(name: "hints", took: 4)) == "changed the words")
+        // The recogniser produced the words rather than changing them, and the wait is this
+        // side's arithmetic. Neither can be unchanged, so neither says anything.
+        #expect(timing.verdict(on: Stage(name: "decode", took: 1300)) == nil)
+        #expect(timing.verdict(on: Stage(name: "waiting", took: 800)) == nil)
+
+        timing.cleanupSkipped = "guardrail"
+        #expect(timing.cleanupNote == "utt's cleanup did not run: the model's own content check fired")
+    }
+
+    @Test("The same name means two things, and where it sits is what tells them apart")
+    func hintsMeansTwoThings() {
+        // At the top level it is this daemon building the word list before the clip goes over.
+        #expect(Stage(name: "hints", took: 0.1).title == "Hints built")
+        // Inside utt's span it is utt applying it to what the recogniser heard.
+        #expect(Stage(name: "hints", took: 4).titleInsideUtt == "Applying the word list")
+    }
+
     private func decoded<T: Decodable>(_ json: String) throws -> T {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase

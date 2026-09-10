@@ -263,13 +263,29 @@ summariser read what a folder's subagents did. `GET|PUT /settings` is the whole 
   `stages` and `cleanupSkipped` and drops all three at the jobs boundary; the day it stops
   dropping them the review card starts showing what utt's cleanup rewrote, with no change here
   and nothing stubbed in the meantime. Nothing in this repo fabricates those fields.
-- **utt's span is one span, and up to 300 ms of it is utt not having looked yet.** It cannot
-  honestly be split: `ExtensionJobResult` carries no timings, `announce(ExtensionActivity(…))`
-  reaches in-process listeners only, and utt deletes the audio *after* writing the answer, so
-  the clip disappearing marks the end and never the start. `ExtensionJobs.interval` is 300 ms,
-  which is the difference between "utt is slow" and "utt has not noticed" — the app says so
-  under the number. `transcribe.POLL` is 20 ms for the matching reason: at the 0.2 s it used to
-  be, the largest stage in the whole path was measured with a fifth of a second of noise on it.
+- **utt's span opens into utt's own stages, and the wait in front of them is ours to derive.**
+  On `feature/job-answer` utt answers with a `timings` of its own — milliseconds keyed by
+  `TranscriptStage`'s raw values, `decode` for the recogniser. What it cannot report is the part
+  of our span that was over before utt looked, so `transcribe.inside` derives it: our span minus
+  everything utt accounted for, clamped, drawn as `waiting`. That is the number that matters
+  most here — measured at 2.1 s and 10.1 s for the *same clip* minutes apart, because
+  `ExtensionJobs.pending()` takes what is already queued first. On a utt that measures nothing
+  the span stays one opaque number carrying the 300 ms warning, and that is the degraded case
+  rather than the shape the code is built around. Never split it off `startedAt`/`finishedAt`:
+  those are whole-second ISO strings (a one-second quantum on a three-second span), and on a utt
+  older than that branch `finishedAt` is stamped at *pickup* and means the opposite of its name.
+  `transcribe.POLL` is 20 ms for the matching reason: at the 0.2 s it used to be, the largest
+  stage in the whole path was measured with a fifth of a second of noise on it.
+- **utt calls its breakdown `timings` and so do we, and only one of them may win.** utt's is the
+  inside of our `utt` stage, so `_staged` nests it there and the merge loop skips that key
+  outright. Every *other* collision is logged rather than dropped: the pass-through used to be a
+  `setdefault`, which would have taken a key utt newly claimed and lost it in silence — the one
+  failure mode nobody would ever have noticed.
+- **A timing and a `stage` are different records and disagree on purpose.** `stages` is what
+  *changed the words*; a timing is reported for anything that *ran*. In Dutch the cleanup model
+  runs, succeeds and hands the text back identical, so it is timed and absent from `stages`.
+  Absence from `stages` therefore means **unchanged** and nothing more — never "reviewed",
+  "approved" or "checked", in any language.
 - **Every clip's stages are answered and written down.** `log.took` is the one clock (`took` is
   in `log.py` rather than a `timing.py` because this directory sits on the 16-file cap).
   `/sessions/{id}/audio` answers with `timings` as an ordered **list** of `{name, ms}` — the
@@ -277,7 +293,8 @@ summariser read what a folder's subagents did. `GET|PUT /settings` is the whole 
   ones, and a stage name is data. The same numbers go to `timings.jsonl` in the data dir, keyed
   rather than ordered, one appended line per clip with the clip's bytes and the `seconds` the
   phone measured — the Mac never opens the audio, so without that query param a line cannot say
-  what a millisecond bought.
+  what a millisecond bought. Everything utt said for itself rides along under `utt`, so a run
+  can be compared against `duration`, utt's own count of the audio, the day utt sends one.
 - **Anything utt hands back has already been through utt, and possibly through another
   extension.** The jobs answer carries `text`, `error` and `finishedAt` — there is no `raw`, so
   the transcript as heard never crosses the lane. utt's cleanup stage has run on it, and so has

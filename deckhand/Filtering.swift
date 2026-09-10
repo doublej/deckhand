@@ -17,11 +17,15 @@ struct Filtered: Equatable {
     var heard: String?
     /// The words before utt's *own* pipeline rewrote them.
     ///
-    /// **Always nil today.** utt's jobs lane sends no `raw`, so nothing arrives to show and
-    /// nothing is drawn. The day it does, `UploadReceipt.uttRewrote` is what decides — it asks
-    /// utt's `stages`, never `raw != text`, because the pipeline trims and whitespace is not a
-    /// rewrite worth showing anybody. Same rule as utt's own `ProcessedTranscript.changed`.
+    /// Nil on every utt shipped today, and drawn only when `uttStages` says a stage actually
+    /// changed something — never on `raw != text`, because the pipeline trims and whitespace is
+    /// not a rewrite worth showing anybody. Same rule as utt's own `ProcessedTranscript.changed`.
     var raw: String?
+    /// Which of utt's stages changed the words, as utt named them. This is what the disclosure
+    /// is attributed with: `raw` is from before *everything*, and one of the stages between it
+    /// and the transcript is `hints` — which is this repo's own vocabulary list rather than
+    /// anything utt did. Naming utt for our own substitution would be the UI lying.
+    var uttStages: [String] = []
 }
 
 /// The chain of steps the Mac runs over words on their way into one session, from this side of it.
@@ -135,14 +139,16 @@ extension AppModel {
         stoppedBy: String? = nil,
         because reason: String? = nil,
         heard: String? = nil,
-        raw: String? = nil
+        raw: String? = nil,
+        uttStages: [String] = []
     ) {
         review[session.sessionId] = text
         reviewFiltered[session.sessionId] = text == nil ? nil : Filtered(
             note: notes.isEmpty ? nil : notes.joined(separator: " · "),
             refusal: stoppedBy.map { refusal(by: $0, because: reason) },
             heard: heard == text ? nil : heard,
-            raw: raw
+            raw: raw,
+            uttStages: uttStages
         )
     }
 

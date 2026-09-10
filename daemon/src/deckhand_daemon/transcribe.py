@@ -33,6 +33,10 @@ POLL = 0.02
 AUDIO_SUFFIXES = {".wav", ".m4a", ".mp3", ".aiff", ".flac", ".caf"}
 # What this daemon knows how to read out of utt's answer file. Everything else rides through.
 KNOWN = ("text", "error", "finishedAt")
+# The order utt's own stages run in. Its `timings` is a dict and a dict has no order, so this is
+# where the reading order comes from; anything utt adds later lands after these rather than
+# being dropped. Read off `TranscriptStage` on utt's own branch, not guessed.
+STAGE_ORDER = ("decode", "hints", "replacements", "cleanup", "formatting", "filter")
 
 
 @dataclass
@@ -162,3 +166,30 @@ def hints_for(name: str, cwd: str) -> list[str]:
     words = {*VOCABULARY, *name.replace("-", " ").split()}
     words.update(part for part in Path(cwd).parts[-2:] if part not in ("/", "Users"))
     return sorted(word for word in words if len(word) > 2)
+
+
+def inside(span: float, heard: Heard) -> list[dict]:
+    """utt's span, broken into the stretches utt measured, plus the wait in front of them.
+
+    utt answers with a `timings` of its own — milliseconds keyed by stage name, `decode` for the
+    recogniser and one entry per text stage that actually ran. It is deliberately **not** a
+    subset of `stages`: a stage that ran and left the words alone is timed all the same, which is
+    the whole point of having both.
+
+    What utt cannot tell us is the part of our span that was over before utt looked. The clip
+    sits in the jobs folder until `ExtensionJobs.interval` comes round, and behind whatever else
+    is already queued — measured here at 2.1 s and 10.1 s for the same clip, minutes apart. That
+    wait is our span minus everything utt accounted for, so it is derived rather than asked for,
+    and clamped: the two measurements have different ends and a negative sliver is noise.
+
+    Empty for a utt that sends no timings, which is every utt shipped today. The span then stays
+    the single opaque number it has always been.
+    """
+    measured = heard.extra.get("timings")
+    if not isinstance(measured, dict) or not measured:
+        return []
+    order = {name: spot for spot, name in enumerate(STAGE_ORDER)}
+    parts = sorted(measured.items(), key=lambda pair: (order.get(pair[0], len(order)), pair[0]))
+    waited = round(span - sum(value for _, value in parts), 1)
+    lead = [{"name": "waiting", "ms": waited}] if waited > 0 else []
+    return lead + [{"name": name, "ms": value} for name, value in parts]

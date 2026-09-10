@@ -165,6 +165,50 @@ def test_a_key_utt_gains_rides_through_to_the_phone(token, monkeypatch):
     assert [stage["name"] for stage in body["timings"]][-1] == "total"
 
 
+def test_utts_own_stages_nest_inside_the_span_they_belong_to(token, monkeypatch):
+    """utt calls its per-stage breakdown `timings`, and so do we.
+
+    Ours is the whole path and utt's is the inside of one stage of it, so utt's is nested rather
+    than merged — the old pass-through would have dropped it in silence, which is the one
+    failure nobody would ever have noticed.
+    """
+    monkeypatch.setattr(transcribe_module, "transcribe",
+                        lambda clip, hints: transcribe_module.Heard(
+                            text="ship it",
+                            stages={"handoff": 1.0, "utt": 3000.0, "answer": 0.2},
+                            extra={"raw": "ship it", "stages": ["hints"], "duration": 2.4,
+                                   "timings": {"cleanup": 900.0, "decode": 1300.0}}))
+
+    body = client(token).post(
+        f"/sessions/{SID}/audio?deliver=false",
+        files={"file": ("clip.m4a", b"x" * 64, "audio/m4a")},
+    ).json()
+
+    span = next(s for s in body["timings"] if s["name"] == "utt")
+    # Pipeline order, not the dict's: decode first, then the text stages. And the wait in front
+    # of them is what the span cost minus everything utt accounted for.
+    assert [part["name"] for part in span["inside"]] == ["waiting", "decode", "cleanup"]
+    assert span["inside"][0]["ms"] == 800.0
+    # utt's own `timings` never appears at the top level, where it would be read as ours.
+    assert all(isinstance(stage["ms"], float) for stage in body["timings"])
+    assert body["raw"] == "ship it"
+    assert body["duration"] == 2.4
+
+
+def test_a_utt_that_measures_nothing_leaves_the_span_whole(token, monkeypatch):
+    """Every utt shipped today. The span stays the single number it has always been."""
+    monkeypatch.setattr(transcribe_module, "transcribe",
+                        lambda clip, hints: transcribe_module.Heard(
+                            text="ship it", stages={"utt": 3000.0}))
+
+    body = client(token).post(
+        f"/sessions/{SID}/audio?deliver=false",
+        files={"file": ("clip.m4a", b"x" * 64, "audio/m4a")},
+    ).json()
+
+    assert "inside" not in next(s for s in body["timings"] if s["name"] == "utt")
+
+
 def test_say_puts_the_words_in_and_names_the_route(token, monkeypatch):
     seen = {}
 

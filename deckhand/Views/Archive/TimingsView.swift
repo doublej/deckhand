@@ -21,15 +21,52 @@ struct TimingsView: View {
             heading
             ForEach(Array(timing.stages.enumerated()), id: \.element.id) { spot, stage in
                 row(stage, under: spot == 0 ? nil : timing.stages[spot - 1].side)
+                // utt's span opens into the stretches utt measured, indented under it. A utt
+                // that measures nothing has no children and the span stays one row, which is
+                // the degraded case rather than the shape this is built around.
+                ForEach(stage.children) { child in inner(child) }
             }
-            if let note = timing.stages.first(where: { $0.note != nil })?.note {
-                Text(note)
+            asides
+        }
+    }
+
+    /// The sentences that belong under the table rather than in it.
+    @ViewBuilder private var asides: some View {
+        let notes = timing.stages.flatMap { [$0] + $0.children }.compactMap(\.note)
+        ForEach(notes + [timing.cleanupNote].compactMap { $0 }, id: \.self) { note in
+            Text(note)
+                .font(Typography.hint)
+                .foregroundStyle(Palette.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, Spacing.xxs)
+        }
+    }
+
+    /// One of utt's own stages, inside utt's span.
+    ///
+    /// The verdict beside it is the other half of the record and not the same question: the
+    /// number says a stage ran, `stages` says whether it changed anything, and utt reports them
+    /// separately on purpose. "Cleanup ran, 900 ms, unchanged" is a sentence that did not exist
+    /// before utt measured itself, and it is the one worth having.
+    private func inner(_ stage: Stage) -> some View {
+        HStack(spacing: Spacing.extraSmall) {
+            Text(stage.titleInsideUtt)
+                .font(Typography.hint)
+                .foregroundStyle(Palette.textSecondary)
+                .lineLimit(1)
+            if let verdict = timing.verdict(on: stage) {
+                Text(verdict)
                     .font(Typography.hint)
                     .foregroundStyle(Palette.textTertiary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.top, Spacing.xxs)
+                    .lineLimit(1)
             }
+            Spacer(minLength: Spacing.extraSmall)
+            Text(Self.spelled(stage.took))
+                .font(Typography.mono)
+                .foregroundStyle(Palette.textTertiary)
         }
+        .padding(.leading, Spacing.large)
+        .padding(.vertical, 1)
     }
 
     /// The two numbers worth reading first: the whole of it, and how much of the wait was the
@@ -47,11 +84,24 @@ struct TimingsView: View {
                     .font(Typography.mono)
                     .foregroundStyle(Palette.textPrimary)
             }
-            Text("\(Self.spelled(timing.spoken)) of it was talking")
+            Text(pace)
                 .font(Typography.hint)
                 .foregroundStyle(Palette.textTertiary)
         }
         .padding(.bottom, Spacing.extraSmall)
+    }
+
+    /// How long the wait was against how long the person talked. The one line here that says
+    /// whether a number is good, rather than only what it was: half a second is fine for a
+    /// sentence and poor for a word.
+    ///
+    /// Off the clip's own length as this phone recorded it, which every clip has. utt counts the
+    /// audio too and sends it as `duration`, but only on a utt new enough to — and this phone
+    /// already knows, so waiting for the Mac to say would be worse for no gain.
+    private var pace: String {
+        let spoken = Self.spelled(timing.spoken)
+        guard timing.spoken > 0 else { return "\(spoken) of it was talking" }
+        return "\(spoken) of it was talking · \(String(format: "%.1f", timing.total / timing.spoken))× that again waiting"
     }
 
     /// One stage. The side is named only where it changes, or the column reads PHONE PHONE

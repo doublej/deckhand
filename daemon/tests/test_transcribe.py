@@ -20,7 +20,13 @@ def jobs(tmp_path, monkeypatch):
 
 def fake_utt(jobs, answer: dict, deadline: float = 30.0):
     """Answers the first finished clip, exactly as the guide describes: pick up the audio,
-    write the answer beside it, delete the audio and the hints.
+    write the answer beside it **atomically**, delete the audio and the hints.
+
+    The atomic write is the contract, not tidiness — `ExtensionGuide` promises a poll can never
+    see a partial file, and the real utt writes to a temporary name and renames. This fake used
+    a plain `write_text`, which was invisible while our poll was 0.2 s and started losing races
+    the moment it became 0.02. A fake less careful than the thing it stands for tests a contract
+    nobody has.
 
     The deadline only stops a leaked thread outliving the run — it is not what the test is
     measuring, and it must stay well clear of `transcribe.TIMEOUT` (180s) or the fake is the one
@@ -31,7 +37,10 @@ def fake_utt(jobs, answer: dict, deadline: float = 30.0):
         stop = time.monotonic() + deadline
         while time.monotonic() < stop:
             for clip in jobs.glob("*.wav"):
-                clip.with_suffix(".json").write_text(json.dumps(answer))
+                written = clip.with_suffix(".json")
+                part = written.with_name(written.name + ".writing")
+                part.write_text(json.dumps(answer))
+                part.rename(written)
                 clip.unlink()
                 return
             time.sleep(0.01)
@@ -70,10 +79,14 @@ def test_nothing_is_visible_to_utt_until_it_is_complete(jobs, monkeypatch):
     at_rename: dict = {}
     real = Path.rename
 
+    # The first rename in this process is ours: the fake cannot see the clip, let alone rename
+    # its own answer into place, until we have renamed the audio. Recording only the first is
+    # what keeps this looking at the handoff rather than at the fake's atomic write.
     def record(self, target):
-        at_rename["name"] = self.name
-        at_rename["bytes"] = self.stat().st_size
-        at_rename["hints"] = [p.name for p in self.parent.glob("*.hints.json")]
+        if not at_rename:
+            at_rename["name"] = self.name
+            at_rename["bytes"] = self.stat().st_size
+            at_rename["hints"] = [p.name for p in self.parent.glob("*.hints.json")]
         return real(self, target)
 
     monkeypatch.setattr(Path, "rename", record)

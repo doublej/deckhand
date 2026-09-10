@@ -29,12 +29,26 @@ Design is its own packet (`Design/CLAUDE.md`).
   `timings` — so `uttStages` is spelled `case uttStages = "stages"` and every sibling had to be
   listed with it. The Mac's own stages travel as a **list** of `{name, ms}` rather than an object
   for the `convertFromSnakeCase` reason above: a stage name is data, and a key would be rewritten.
+- **`raw` is from before *everything*, hints included, so a rewrite is attributed off `stages`.**
+  utt's pipeline runs `hints` between `raw` and `text`, and those hints are this repo's own
+  vocabulary (`transcribe.VOCABULARY`). Comparing the two strings and naming utt would tell
+  somebody utt's cleanup rewrote "deck hand" when the word came out of a list in this codebase.
+  `Rewrites` therefore names the stages utt reported and nothing else, and `uttRewrote` is
+  `raw != nil && !uttStages.isEmpty` — the same test as utt's own `ProcessedTranscript.changed`,
+  which also keeps whitespace from reading as a rewrite.
+- **A stage being timed and a stage having changed the words are two questions.** utt reports
+  a timing for anything that *ran* and lists in `stages` only what *changed the words*, so the
+  breakdown may honestly show a stage `stages` never mentions. `ClipTiming.verdict(on:)` is the
+  only sentence allowed beside one: "unchanged", never "reviewed" or "approved" — absence from
+  `stages` says the words came out the same and says nothing about a stage having looked.
 - **What a clip cost is `ClipTiming`, and it is assembled on the phone.** The Mac measures its own
   stages, the recorder and the upload measure the phone's, and `ClipTiming.merged` puts them in
   the order the clip travelled. The network is *derived* — the upload span with the Mac's total
   taken out of it — because nothing on the phone can see when its request arrived; it is clamped
   at zero, since the two clocks are different clocks. `spoken` is beside the stages and not among
   them: a breakdown dominated by however long somebody talked says nothing about what is slow.
+  A `Stage` nests: utt's span carries its own stages as `children` (wire key `inside`) when utt
+  measured them, and stands alone when it did not.
 - **`delivered: true` is not the same as "it was said".** The daemon can answer `delivered: true`
   alongside a filter's stop, so every screen asks `Delivery.went` — `delivered && stoppedBy == nil`
   — and never `delivered` alone.
