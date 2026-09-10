@@ -109,17 +109,22 @@ def bearer() -> str | None:
     return token
 
 
-def show(card: Card, mac: str) -> str | None:
+def show(card: Card, mac: str, loud: bool = False) -> str | None:
     """Update the card, or raise one if none is on screen. Returns an error, or None.
 
     Update first, start second: an update to a card that is gone is refused cheaply, whereas
     starting one that already exists would put two identical cards on the Lock Screen.
+
+    `loud` is the difference between a card that changes and a card that reaches you. An update
+    with no `alert` is a silent redraw: iOS swaps the numbers on the Lock Screen and never lights
+    the screen, plays a sound or raises a banner. It is the right default — most updates here are
+    the card's own bookkeeping — and it was also the whole of it, so nothing ever interrupted.
     """
     if not (auth := bearer()):
         return "no push key on this Mac — run `just sync-apns`"
     held = tokens()
     if token := held.get("activity"):
-        if not (error := _post(token, _update(card), auth, "update")):
+        if not (error := _post(token, _update(card, loud), auth, "update")):
             return None
         log.info("lock screen: the open card would not take it (%s), starting a new one", error)
     if token := held.get("start"):
@@ -127,9 +132,19 @@ def show(card: Card, mac: str) -> str | None:
     return "the phone has not handed this Mac a Lock Screen token yet"
 
 
-def _update(card: Card) -> dict:
-    return {"aps": {"timestamp": int(card.when), "event": "update",
-                    "content-state": card.state()}}
+def _update(card: Card, loud: bool) -> dict:
+    aps = {"timestamp": int(card.when), "event": "update", "content-state": card.state()}
+    if loud:
+        aps["alert"] = _alert(card)
+    return {"aps": aps}
+
+
+def _alert(card: Card) -> dict:
+    """What makes the phone light up and make a noise. Live Activities need no notification
+    permission of their own, so this asks for nothing the person has not already allowed by
+    leaving the card switched on."""
+    return {"title": card.name or "Deckhand", "body": card.line or "waiting for you",
+            "sound": "default"}
 
 
 def _start(card: Card, mac: str) -> dict:
@@ -138,8 +153,7 @@ def _start(card: Card, mac: str) -> dict:
     return {"aps": {"timestamp": int(card.when), "event": "start",
                     "content-state": card.state(),
                     "attributes-type": "Deck", "attributes": {"mac": mac},
-                    "alert": {"title": card.name or "Deckhand",
-                              "body": card.line or "waiting for you"}}}
+                    "alert": _alert(card)}}
 
 
 def _post(token: str, payload: dict, auth: str, kind: str) -> str | None:
@@ -191,7 +205,9 @@ async def watch() -> None:
 def sweep() -> None:
     live = sessions.live_sessions()
     alive = {s.session_id for s in live}
-    stopped = False
+    # Two reasons to send, and only one of them is worth interrupting a person for.
+    loud = False
+    left = False
     for session in live:
         was, now = _seen.get(session.session_id), session.status
         _seen[session.session_id] = now
@@ -205,19 +221,19 @@ def sweep() -> None:
                 log.info("lock screen: %s stopped, but this folder is set quiet", session.name)
                 continue
             _waiting[session.session_id] = time.time()
-            stopped = True
+            loud = True
             log.info("lock screen: %s stopped and is waiting", session.name)
-        stopped = _slipped(session) or stopped
+        loud = _slipped(session) or loud
     for gone in set(_waiting) - alive:
         del _waiting[gone]
         _said.pop(gone, None)
-        stopped = True
+        left = True
     for gone in set(_seen) - alive:
         del _seen[gone]
     for gone in set(_slips) - alive:
         del _slips[gone]
-    if stopped:
-        announce(live)
+    if loud or left:
+        announce(live, loud=loud)
 
 
 def _slipped(session) -> bool:
@@ -254,7 +270,7 @@ def called(session, line: str) -> str | None:
         return "this folder is set not to be interrupted"
     _waiting[session.session_id] = time.time()
     _said[session.session_id] = " ".join(line.split())[:120]
-    announce(sessions.live_sessions())
+    announce(sessions.live_sessions(), loud=True)
     return None
 
 
@@ -265,7 +281,7 @@ def spoke_to(session_id: str) -> None:
         announce(sessions.live_sessions())
 
 
-def announce(live: list) -> None:
+def announce(live: list, loud: bool = False) -> None:
     by_id = {s.session_id: s for s in live}
     newest = max(_waiting, key=lambda sid: _waiting[sid], default=None)
     session = by_id.get(newest) if newest else None
@@ -275,7 +291,8 @@ def announce(live: list) -> None:
         line=(_said.get(newest) or _last_line(newest)) if newest else "",
         when=time.time(),
     )
-    if error := show(card, config.base_url().removeprefix("http://").split(":")[0]):
+    mac = config.base_url().removeprefix("http://").split(":")[0]
+    if error := show(card, mac, loud):
         log.info("lock screen: %s", error)
 
 
