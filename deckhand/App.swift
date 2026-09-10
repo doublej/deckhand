@@ -17,6 +17,11 @@ struct DeckhandApp: App {
                 // promise of running again soon. All this does is keep the Mac supplied with
                 // the tokens that let it, for as long as the app is alive.
                 .task {
+                    // The archive's own tidying, done on the way in rather than on a timer: being
+                    // opened is the only moment a phone app reliably gets, and the index is small
+                    // enough that reading it costs nothing. It only ever drops clips that were
+                    // actually said — see `ClipArchive.sweep`.
+                    model.archive.sweep()
                     live.begin { hex, kind in
                         try await model.settings.client()?.register(pushToken: hex, kind: kind)
                     }

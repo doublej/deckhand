@@ -65,17 +65,22 @@ extension AppModel {
     /// holding what it has for the whole of it, which means a clip that fails to record, to
     /// transcribe or to arrive costs nothing but the saying of it again.
     func append(clip: URL, to session: Session, beneath said: String) async {
-        guard let client = settings.client() else { return }
+        guard let client = settings.client(), let kept = keep(clip, for: session) else { return }
         review[session.sessionId] = said
         status = "Transcribing…"
         // The clip is on the wire: locking here suspends the app and loses it.
         Awake.hold()
         defer { Awake.release() }
         await run {
-            let receipt = try await client.upload(
-                clip: clip, to: session.sessionId, route: self.preferences.route, deliver: false
-            )
-            try? FileManager.default.removeItem(at: clip)
+            let receipt = try await client.upload(clip: self.archive.url(of: kept),
+                                                  to: session.sessionId,
+                                                  route: self.preferences.route,
+                                                  deliver: false)
+            // The card now holds this clip's words too, so Send speaks for both of them. A throw
+            // never reaches here and does not need to: the recording is already filed, and an
+            // entry with no transcript on it is exactly what "never got past the Mac" looks like.
+            self.heldClips[session.sessionId, default: []].append(kept.id)
+            self.archive.finish(kept.id, transcript: receipt.words, delivered: false, failure: nil)
             if let words = receipt.words {
                 self.append(words, to: session)
                 self.reviewFiltered[session.sessionId] = self.standing(receipt, for: session)

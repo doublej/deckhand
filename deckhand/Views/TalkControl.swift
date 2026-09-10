@@ -20,12 +20,16 @@ struct TalkControl<Content: View>: View {
     /// What a tap means on a surface that has another job: opening the session it names. Only
     /// while nothing is being recorded — once it is, a tap can only mean "send that".
     var onTap: (() -> Void)?
+    /// The way to everything this phone has recorded, or nil where there is no room for a second
+    /// gesture on this touch. See `ReachGesture` for which press it gets and why it is that one.
+    var onArchive: (() -> Void)?
     let onStart: () -> Void
     let onClip: (URL) async -> Void
     @ViewBuilder let content: (TalkState) -> Content
 
     @State private var busy = false
-    /// When the press that opened the microphone landed. See `tapped`.
+    /// When this control last answered a press — the one that opened the microphone, the one that
+    /// closed it, or the other gesture entirely. See `claimed`.
     @State private var pressedAt: Date?
 
     private var isRecording: Bool { recorder.isRecording && isMine }
@@ -42,8 +46,17 @@ struct TalkControl<Content: View>: View {
                                   pressToStart: pressToStart,
                                   press: press,
                                   tapped: tapped,
-                                  start: start,
+                                  toggled: toggled,
                                   stop: stop))
+            .modifier(ReachGesture(mode: mode, reach: reaching))
+    }
+
+    /// Nil where nothing installs a second gesture at all, which is every surface that already
+    /// spends this touch on something else. Written out rather than as a ternary because the
+    /// two branches are a method reference and `nil`, and inference does badly with that pair.
+    private var reaching: (() -> Void)? {
+        guard onArchive != nil else { return nil }
+        return reach
     }
 
     private func start() {
@@ -63,9 +76,40 @@ struct TalkControl<Content: View>: View {
     /// The first of them is "none": a row that is also a button fires on release however long
     /// the finger was down, so the press that opens the microphone is followed instantly by a
     /// tap that would close it again — or, worse, open the page you pressed the row to avoid.
+    ///
+    /// A surface with no other job for a tap gets the archive instead, which is what makes the
+    /// left-hand pill work: it is a tap like any other and it means whatever a tap means here.
     private func tapped() {
-        if let pressedAt, Date.now.timeIntervalSince(pressedAt) < sameTouch { return }
-        if isRecording { stop() } else { onTap?() }
+        guard claimed() else { return }
+        if isRecording { stop() } else if let onTap { onTap() } else { onArchive?() }
+    }
+
+    /// A tap where tapping is how you talk.
+    ///
+    /// It goes through the same claim as everything else because of the long press beside it: one
+    /// physical press reaches both gestures, and the tap its release makes must not start a
+    /// recording the instant the archive has opened.
+    private func toggled() {
+        guard claimed() else { return }
+        if isRecording { stop() } else { start() }
+    }
+
+    /// The press this mode does not use for talking. Never while recording — the archive is a
+    /// list to read, and reaching it mid-clip would leave the microphone open behind it.
+    private func reach() {
+        guard !isRecording, claimed() else { return }
+        onArchive?()
+    }
+
+    /// True when this touch has not already been answered, and claims it when it has not.
+    ///
+    /// Two gestures now live on one control and a single press can reach both of them: a release
+    /// arrives as a tap a moment later, and a tap is one of the two. A release is not addressable,
+    /// so the only thing telling them apart is how close together they are.
+    private func claimed() -> Bool {
+        if let pressedAt, Date.now.timeIntervalSince(pressedAt) < sameTouch { return false }
+        pressedAt = .now
+        return true
     }
 
     /// Throw the clip away without transcribing it. Holding has its own way out — let go and
@@ -77,6 +121,10 @@ struct TalkControl<Content: View>: View {
 
     private func stop() {
         guard let clip = recorder.stop() else { return }
+        // Letting go of a hold arrives as a tap a moment later, and on a control that can reach
+        // the archive a tap is the gesture that does it. Claiming the touch here is what stops a
+        // clip being sent and the archive opening over the top of it on the same press.
+        pressedAt = .now
         busy = true
         Task {
             await onClip(clip)
@@ -116,7 +164,7 @@ private struct TalkGesture: ViewModifier {
     let pressToStart: Bool
     let press: () -> Void
     let tapped: () -> Void
-    let start: () -> Void
+    let toggled: () -> Void
     let stop: () -> Void
 
     /// A press has to settle before it counts as talking. Without the wait, a finger dragged
@@ -140,7 +188,7 @@ private struct TalkGesture: ViewModifier {
                 .onLongPressGesture(minimumDuration: Self.settle) { press() }
                 .onTapGesture { tapped() }
         case .toggle:
-            content.onTapGesture { isRecording ? stop() : start() }
+            content.onTapGesture { toggled() }
         }
     }
 
@@ -159,127 +207,33 @@ private struct TalkGesture: ViewModifier {
     }
 }
 
-/// The mark is the button, and it is the living one: utt's whole show, drifting slowly in
-/// Deckhand's teal at rest. While you talk it turns utt orange, speeds up with your voice and
-/// dims between words — recording is utt's job in every plugin, so it wears utt's colour. The
-/// colour is the screen's (`\.accent`) rather than one this mark picks, because the whole screen
-/// wears it: the mark speeding up is what is particular to the mark.
+/// The way to everything this phone has recorded, on the one press talking does not already use.
 ///
-/// At rest it is the only thing here: one mark, in the middle, over whatever you were reading.
-/// Nothing else — no bar, no label, no ground. Press it and the two things you can do slide out
-/// either side, each on its own pill and each centred in its half. They were a row that
-/// reflowed whenever the state changed, which moved the button itself, and then a bar behind
-/// all three, which put a band of furniture across the page to hold one button.
-struct TalkMark: View {
-    let state: TalkState
-    let level: Double
-    /// Whether the words are held for reading before they go. It changes what a tap does, so it
-    /// changes what the pill may promise: a tap that opens a review card has not sent anything.
-    var confirms = true
-    /// The screen's accent, which is already the recording colour by the time this mark is open —
-    /// the page it floats over sets it from the same recorder. It used to switch on its own,
-    /// which is how the mark went orange on a page that stayed teal around it.
-    @Environment(\.accent) private var accent
+/// A longer hold is not available and never was: a hold of any length *is* the recording, from
+/// `TalkGesture.settle` onwards, so there is no duration left to give this. What is left is the
+/// other press — a tap where talking is a hold, a long press where talking is a tap — and it is
+/// the opposite one in each mode for that reason rather than as a preference.
+///
+/// Its own modifier so that `TalkGesture` is untouched by it, and applied only where there is
+/// somewhere to reach: a row in the sessions list already spends its tap on opening the session
+/// and its swipe on starting it, and a third meaning on that touch is the thing this app has
+/// repeatedly learned not to do. Nothing installs a gesture there at all.
+private struct ReachGesture: ViewModifier {
+    let mode: TalkMode
+    let reach: (() -> Void)?
 
-    /// How much room a scrolling pane leaves at the end of its content for the mark to float
-    /// over: the mark, its tile, and the air around it.
-    static let clearance: CGFloat = 68
+    /// Longer than the settle a recording needs, because in this mode the two are in a race and
+    /// the recording is the one a slow finger means far more often.
+    private static let longer = 0.45
 
-    private var isRecording: Bool { state.isRecording }
-
-    var body: some View {
-        HStack(spacing: Spacing.extraSmall) {
-            // Tappable, not a caption: it says "tap to send", so tapping it sends. The mark
-            // does the same thing, and either is the obvious one to reach for.
-            wing(label,
-                 edge: .leading,
-                 tint: isRecording ? accent : Palette.textTertiary,
-                 action: state.tapped)
-            mark
-            wing(state.canCancel ? "CANCEL" : nil, edge: .trailing, tint: Palette.textSecondary) {
-                state.cancel()
-            }
+    @ViewBuilder func body(content: Content) -> some View {
+        switch (mode, reach) {
+        case (.hold, .some(let reach)):
+            content.onTapGesture(perform: reach)
+        case (.toggle, .some(let reach)):
+            content.onLongPressGesture(minimumDuration: Self.longer, perform: reach)
+        default:
+            content
         }
-        .padding(.vertical, Spacing.extraSmall)
-        .animation(.snappy(duration: 0.2), value: label)
-        .animation(.snappy(duration: 0.2), value: state.canCancel)
-    }
-
-    /// Its own ground and its own shadow, because there is nothing else behind it now — the
-    /// page it floats over is whatever you were reading.
-    private var mark: some View {
-        DotMark.live(
-            size: 40,
-            tint: accent,
-            recording: isRecording,
-            level: isRecording ? level : 0,
-            hotCore: 0.3
-        )
-        .padding(6)
-        .background(
-            RoundedRectangle(cornerRadius: Radius.large, style: .continuous)
-                .fill(Palette.lcdGround)
-                .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
-        )
-        .contentShape(.rect)
-        // The only thing on this page with no words on it, so it says what it is out loud —
-        // and it is what the UI test looks for now that nothing is labelled at rest.
-        .accessibilityAddTraits(.isButton)
-        .accessibilityLabel(isRecording ? "Recording, tap to send" : "Talk to this session")
-        .accessibilityIdentifier("talk-mark")
-    }
-
-    /// One half of the bar: a word on a pill, centred in that half, sliding in from its own
-    /// edge. Nothing to say takes the space but draws nothing and catches nothing.
-    @ViewBuilder
-    private func wing(_ word: String?,
-                      edge: Edge,
-                      tint: Color,
-                      action: (() -> Void)? = nil) -> some View {
-        ZStack {
-            if let word {
-                pill(word, tint: tint, action: action)
-                    .id(word)
-                    .transition(.move(edge: edge).combined(with: .opacity))
-            }
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    private func pill(_ word: String, tint: Color, action: (() -> Void)?) -> some View {
-        Text(word)
-            .font(Typography.state)
-            .tracking(1.4)
-            .foregroundStyle(tint)
-            .lineLimit(1)
-            .minimumScaleFactor(0.8)
-            .padding(.horizontal, Spacing.small)
-            .padding(.vertical, 6)
-            // The mark's own ground, because these slid out from under the mark: three pieces
-            // of one control, not two labels visiting from the page they float over.
-            .background(
-                Capsule(style: .continuous)
-                    .fill(Palette.lcdGround)
-                    .shadow(color: .black.opacity(0.18), radius: 8, y: 2)
-            )
-            // Which makes the ground dark whatever the page is, so the tokens that mean
-            // "quieter text" have to resolve against dark or they resolve into it.
-            .environment(\.colorScheme, .dark)
-            .contentShape(.capsule)
-            .onTapGesture { action?() }
-            .accessibilityAddTraits(.isButton)
-    }
-
-    /// Nothing at rest: the mark says what it is. Only once it is listening is there anything
-    /// to tell you, and then there are two things and they are both actions.
-    ///
-    /// It says what will actually happen. With the review step on, letting go does not send
-    /// anything — it transcribes and hands you the words to read — and a button that claims to
-    /// send and then does not is worse than one that says nothing.
-    private var label: String? {
-        if state.busy { return confirms ? "TRANSCRIBING" : "SENDING" }
-        guard isRecording else { return nil }
-        let what = confirms ? "PREVIEW" : "SEND"
-        return state.mode == .hold ? "RELEASE TO \(what)" : "TAP TO \(what)"
     }
 }

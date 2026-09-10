@@ -11,9 +11,11 @@ to edit**; change `project.yml` and run `just generate`.
 ## Mental model
 
 `Model` holds the listing and the selection; the files beside it are one feature each
-(`Dictating`, `Controlling`, `Filtering`, `Markups`, `Reading`, `Snaps`, `LiveUpdates`). `Views/`
-is the screens, `Views/Session/` the session page's parts, `Views/Artifacts/` slips,
-`Views/Annotation/` marking up a picture (its own packet — read it before touching that folder).
+(`Dictating`, `Controlling`, `Filtering`, `Keeping`, `Markups`, `Reading`, `Snaps`,
+`LiveUpdates`). `Views/` is the screens, `Views/Session/` the session page's parts,
+`Views/Artifacts/` slips,
+`Views/Annotation/` marking up a picture (its own packet — read it before touching that folder),
+`Views/Archive/` every clip this phone has recorded, `Views/Talk/` the mark itself.
 `Views/Artifacts/AloudCards.swift` is the other way a slip can be drawn — cards with the app's own
 talk mark, from a page that declared its questions (`Aloud`); `ArtifactView` is the one place that
 chooses between it and the web view. `Views/Projects/` is the picker that starts a new session; its state is `ProjectPicker`, in
@@ -21,6 +23,25 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
 
 ## Invariants
 
+- **No clip is ever the only copy in `tmp`.** A clip used to live in the temporary directory
+  until its upload succeeded, and the upload ran inside `run`, which swallows a throw — so a
+  sleeping Mac, a refused token or a timeout left the file there unreferenced and the words
+  nowhere at all. Every clip is now filed by `ClipArchive` *before* it goes on the wire
+  (`Keeping.swift`), and every outcome is written back onto its entry. Nothing in the app deletes
+  a clip: only the sweep, which drops what actually reached a session after seven days, and
+  the person, from the archive screen. A clip cut off *mid*-recording is still lost and always
+  will be — AAC writes its index on stop, so an unfinished clip is unplayable bytes anywhere.
+  `heldClips` is the join from a review card back to the clips its words came from, and it
+  is *replaced* on a fresh clip exactly as `hold` replaces the card.
+- **There is no longer hold to give a second gesture.** A hold of any length already *is* the
+  recording, from `TalkGesture.settle` onwards, so the archive gets the press each mode does not
+  use: a tap where talking is a hold, a long press where talking is a tap (`ReachGesture`). One
+  physical press reaches both, because a release arrives as a tap a moment later — so everything
+  goes through `TalkControl.claimed()`, which lets the first gesture claim the touch for
+  `sameTouch`. Only `SessionFoot` passes `onArchive`: a sessions row spends its tap on opening the
+  session and its swipe on starting it, and a deck column spends its own, so neither is handed a
+  third meaning on the same touch. It is the one thing labelled at rest (`TalkMark.reach`),
+  because it is the one thing here nobody can discover by pressing.
 - **A gesture on a list row has to share the touch.** The sessions row has three jobs on one
   touch: tap to open, press to talk, swipe to star. `highPriorityGesture` and `ExclusiveGesture`
   both take the touch and broke the tap *and* the swipe; a `Button` takes it the other way and the
