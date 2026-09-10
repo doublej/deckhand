@@ -62,6 +62,15 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   the row ids are positions, so a prepend renumbers everything: `TranscriptView.step` scrolls to
   index `added` afterwards, one runloop hop later, or the reader lands wherever the new page
   begins.
+- **The panes are swiped between, and there is no bar at the foot.** Four words across every
+  screen to choose between four screens was a band of chrome doing what a swipe does for free, so
+  `pane` is a `TabView(.page)` and the bar is gone — the panes are that much taller and the talk
+  mark sits where the bar was. Its native index display is **off**: those dots land exactly where
+  the mark floats. The indicator is four dots on the header's meter row instead, which was already
+  being drawn and had the space spare, so the whole change costs nothing and returns a band. Two
+  things follow. The dots are not a control — four dots you can hit are four dots somebody will
+  try to hit — and the page's own edge-swipe-to-dismiss now fires **only on the first pane**, or a
+  drag from the left edge would page back and leave the session on the same gesture.
 - **A control that fires a request has to say so where the thumb is.** The slip's send button
   answered, delivered, and looked dead: the only receipt was in the bar at the top of the screen
   and the button is at the foot of a long scroll. It got pressed again, and every press was

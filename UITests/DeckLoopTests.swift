@@ -23,13 +23,15 @@ final class DeckLoopTests: XCTestCase {
         add(screenshot(app, named: "session"))
         XCTAssertTrue(appeared, "the talk button never appeared")
 
-        // The other two tabs are their own screens and are worth seeing on their own.
-        for tab in ["transcript", "files"] {
-            let button = app.descendants(matching: .any).matching(identifier: "tab-\(tab)").firstMatch
-            XCTAssertTrue(button.waitForExistence(timeout: 5), "no \(tab) tab")
-            button.tap()
-            add(screenshot(app, named: tab))
+        // The other panes are their own screens and are worth seeing on their own. Swiped to,
+        // not tapped: the bar of tabs at the foot is gone and the four panes sit side by side,
+        // which is the one thing this test can prove still works.
+        for pane in ["slips", "transcript", "files"] {
+            app.swipeLeft()
+            add(screenshot(app, named: pane))
         }
+        // And back out the way it came in, which only the first pane may do.
+        XCTAssertTrue(talk.exists, "the mark went away while paging")
     }
 
     /// A press is how you talk to a session without opening it, so a press must not open it:

@@ -36,26 +36,48 @@ struct SayRest: View {
                     content: { face($0) })
     }
 
-    /// While it listens the capsule fills, which is feedback that costs no width: the word stays
-    /// the same word and the capsule stays the same size, so the control cannot move out from
-    /// under the finger holding it — the failure `TalkMark` records having made once already.
+    /// While it listens the capsule fills, and once the clip is on the wire it spins.
     ///
     /// A glyph beside the word now that it stands on its own. In the row at the foot it was one
     /// verb among four and read as one; alone under a prompt, "Add" on its own could be adding
     /// anything, and the microphone is the whole of the difference.
     private func face(_ state: TalkState) -> some View {
         let live = state.isRecording || state.busy
-        return Label("Add", systemImage: live ? "mic.fill" : "mic")
-            .font(.system(size: 14))
-            .foregroundStyle(live ? Color.white : accent)
-            .lineLimit(1)
-            .padding(.horizontal, Spacing.small)
-            .frame(minHeight: Self.touch)
-            .background(Capsule().fill(fill(state)))
-            .contentShape(.capsule)
-            .accessibilityAddTraits(.isButton)
-            .accessibilityLabel(spoken(state))
-            .accessibilityIdentifier("say-rest")
+        return HStack(spacing: Spacing.xxs) {
+            if state.busy {
+                ProgressView().controlSize(.mini).tint(.white)
+            } else {
+                Image(systemName: state.isRecording ? "mic.fill" : "mic")
+            }
+            Text(word(state))
+        }
+        .font(.system(size: 14))
+        .foregroundStyle(live ? Color.white : accent)
+        .lineLimit(1)
+        .padding(.horizontal, Spacing.small)
+        .frame(minHeight: Self.touch)
+        .background(Capsule().fill(fill(state)))
+        .contentShape(.capsule)
+        .animation(.snappy(duration: 0.2), value: word(state))
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel(spoken(state))
+        .accessibilityIdentifier("say-rest")
+    }
+
+    /// What the next press does, said only when a press is what comes next.
+    ///
+    /// The word used to be "Add" throughout, and the reasoning was sound for half the cases: in
+    /// hold mode the finger is on the capsule, so nothing about it may change size — that is the
+    /// failure `TalkMark` records having made once already. In tap mode the finger is off it and
+    /// a second tap is exactly what ends the recording, so a control that still says "Add" is
+    /// refusing to say the one thing the person needs to know.
+    ///
+    /// And then the clip goes to the Mac to be transcribed, which takes seconds and said nothing
+    /// at all — so it says that too, rather than leaving somebody to wonder whether the tap
+    /// landed and press it again.
+    private func word(_ state: TalkState) -> String {
+        if state.busy { return "Adding…" }
+        return state.isRecording && state.mode == .toggle ? "Done" : "Add"
     }
 
     private func fill(_ state: TalkState) -> Color {
@@ -67,7 +89,7 @@ struct SayRest: View {
     }
 
     private func spoken(_ state: TalkState) -> String {
-        if state.busy { return "Transcribing" }
+        if state.busy { return "Transcribing what you added" }
         let what = state.mode == .hold ? "let go" : "tap again"
         if state.isRecording { return "Recording, \(what) to add it under these words" }
         return state.mode == .hold ? "Hold to add to these words" : "Tap to add to these words"

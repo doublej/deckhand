@@ -19,6 +19,14 @@ struct SessionHead: View {
     @Binding var reading: Bool
     @Binding var filtering: Bool
     @Binding var configuring: Bool
+    /// How many panes there are and which one is showing. The page indicator lives here rather
+    /// than at the foot because the row it sits on was already being drawn — so the bar of four
+    /// words that used to be down there cost a band of the screen, and this costs nothing.
+    let pages: Int
+    let lit: Int
+    /// Whether the Mac is writing this session's briefing. It was in the tab bar, which is gone;
+    /// it belongs beside the other things this strip says about the session's state.
+    let working: Bool
     /// The page's colour, which goes utt orange while the mark at the foot of it is open. Read
     /// from the environment here: `SessionView` is the view that puts it there, and a view never
     /// sees what it hands its own children.
@@ -135,20 +143,44 @@ struct SessionHead: View {
         Task { await model.control(action, of: session) }
     }
 
-    /// How much of the window this session has left, on every tab: it is the one number that
-    /// changes what you would do next — compact it now, or carry on.
-    @ViewBuilder private var fullness: some View {
-        if let context = session.context {
-            HStack(spacing: Spacing.extraSmall) {
+    /// One slim row under the header carrying everything that is true of the session rather than
+    /// something you press: how much window it has left, whether the Mac is writing about it, and
+    /// which of the panes you are on.
+    ///
+    /// The meter is the one number that changes what you would do next — compact it now, or carry
+    /// on — so it is on every pane. The dots are here because this row exists anyway: the four
+    /// panes are swiped between now, and a bar of four words at the foot of the screen was a band
+    /// of chrome to say something four dots say in the space already spare on this line.
+    private var fullness: some View {
+        HStack(spacing: Spacing.extraSmall) {
+            if let context = session.context {
                 Meter(context.share, tint: Palette.pressure(context.pressure), thickness: 3)
                 Text(context.line)
                     .font(Typography.hint)
                     .monospacedDigit()
                     .foregroundStyle(Palette.textTertiary)
             }
-            .padding(.horizontal, Spacing.medium)
-            .padding(.bottom, Spacing.small)
+            Spacer(minLength: Spacing.extraSmall)
+            if working { ProgressView().controlSize(.mini) }
+            dots
         }
+        .padding(.horizontal, Spacing.medium)
+        .padding(.bottom, Spacing.small)
+    }
+
+    /// Where you are among the panes, and how many there are. Not a control: the panes are swiped
+    /// between, and four dots you can hit are four dots somebody will try to hit.
+    private var dots: some View {
+        HStack(spacing: 5) {
+            ForEach(0..<pages, id: \.self) { index in
+                Circle()
+                    .fill(index == lit ? accent : Palette.textTertiary.opacity(0.35))
+                    .frame(width: 5, height: 5)
+            }
+        }
+        .animation(.snappy(duration: 0.2), value: lit)
+        .accessibilityElement()
+        .accessibilityLabel("Pane \(lit + 1) of \(pages)")
     }
 
     /// Where it is and when it last spoke — minus the half that is already the title above it.

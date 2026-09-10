@@ -59,16 +59,19 @@ struct SessionView: View {
                         renaming: $renaming,
                         reading: $reading,
                         filtering: $filtering,
-                        configuring: $configuring)
+                        configuring: $configuring,
+                        pages: Pane.allCases.count,
+                        lit: Pane.allCases.firstIndex(of: showing) ?? 0,
+                        working: model.summarising.contains(session.sessionId))
             pane
                 // Over the content, not under it. Stacked below, the bar took a band off every
                 // tab to offer one button; floating, it costs the page nothing and the panes
                 // add its height to the end of their own content so anything can be read out
-                // from under it.
+                // from under it. And it reaches the foot of the screen now that the tab bar
+                // that used to sit under it is gone.
                 .overlay(alignment: .bottom) {
                     SessionFoot(model: model, session: session, recorder: recorder)
                 }
-            tabs
         }
         .animation(.snappy(duration: 0.22), value: model.review[session.sessionId])
         // The whole page goes utt orange while the mark at its foot is open, not only the mark:
@@ -125,7 +128,12 @@ struct SessionView: View {
         .simultaneousGesture(
             DragGesture(minimumDistance: 30, coordinateSpace: .global)
                 .onEnded { drag in
-                    guard drag.startLocation.x < 28,
+                    // Only from the first pane. The panes are swiped between now, so a drag from
+                    // the left edge on any other one means "back a pane" and the page takes it —
+                    // catching it here as well would page and dismiss on the same gesture. From
+                    // the first there is nothing to its left, so leaving is what it can only mean.
+                    guard showing == Pane.allCases.first,
+                          drag.startLocation.x < 28,
                           drag.translation.width > 80,
                           abs(drag.translation.height) < 80 else { return }
                     dismiss()
@@ -151,46 +159,24 @@ struct SessionView: View {
         }
     }
 
-    @ViewBuilder private var pane: some View {
-        switch showing {
-        case .summary: BriefingView(model: model, session: session)
-        case .transcript: TranscriptView(model: model, session: session, earlier: $earlier)
-        case .files: FilesView(model: model, session: session)
-        case .slips: ArtifactsView(model: model, session: session)
+    /// The four panes side by side, swiped between rather than chosen from a bar.
+    ///
+    /// The bar is gone and nothing replaced it at the foot: it was a band of chrome across every
+    /// screen to hold four words, and the four words are now four dots on a row the header was
+    /// already drawing. That is the whole saving — the panes are a tab bar's height taller and
+    /// the mark you hold to talk sits where the bar was.
+    ///
+    /// Its own index display is off. The native dots would land exactly where the mark floats,
+    /// which is the one place on this page something must not be drawn.
+    private var pane: some View {
+        TabView(selection: $showing) {
+            BriefingView(model: model, session: session).tag(Pane.summary)
+            ArtifactsView(model: model, session: session).tag(Pane.slips)
+            TranscriptView(model: model, session: session, earlier: $earlier).tag(Pane.transcript)
+            FilesView(model: model, session: session).tag(Pane.files)
         }
-    }
-
-    /// At the foot of the page, not under the title. Up there it sat a few points beneath the
-    /// folder and the timestamp and read as a third line of the same block; down here it is
-    /// plainly a control, and the header goes back to being only the header.
-    private var tabs: some View {
-        HStack(spacing: Spacing.xxs) {
-            ForEach(Pane.allCases, id: \.self) { pane in
-                Button { showing = pane } label: { tab(pane) }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("tab-\(pane.rawValue.lowercased())")
-            }
-            Spacer(minLength: 0)
-            if model.summarising.contains(session.sessionId) { ProgressView().controlSize(.mini) }
-        }
-        .padding(.horizontal, Spacing.small)
-        .padding(.vertical, Spacing.extraSmall)
-        .overlay(alignment: .top) { Divider() }
-    }
-
-    /// The chosen one wears a pill, which is the word this language already uses for state.
-    private func tab(_ pane: Pane) -> some View {
-        let chosen = showing == pane
-        return Text(pane.rawValue.uppercased())
-            .font(Typography.eyebrow)
-            .tracking(1)
-            .foregroundStyle(chosen ? Palette.textPrimary : Palette.textTertiary)
-            .padding(.horizontal, Spacing.small)
-            .padding(.vertical, 6)
-            .background(
-                Capsule().fill(chosen ? accent.opacity(0.18) : .clear)
-            )
-            .contentShape(.rect)
+        .tabViewStyle(.page(indexDisplayMode: .never))
+        .animation(.snappy(duration: 0.25), value: showing)
     }
 
 }
