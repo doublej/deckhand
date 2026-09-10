@@ -27,6 +27,8 @@ from . import (
 from .filters import routes as filter_routes
 from .links import routes as link_routes
 from .log import log
+from .manager import agent as manager_agent
+from .manager import routes as manager_routes
 from .orders import routes as order_routes
 from .projects import routes as project_routes
 from .reading import asked, commands, context, readable, transcripts
@@ -44,7 +46,8 @@ async def lifespan(_: FastAPI):
     being reinstalled or the folder being cleared, and it costs one file write."""
     plugin.install()
     watchers = [asyncio.create_task(plugin.watch()), asyncio.create_task(push.watch()),
-                asyncio.create_task(nudge.watch()), asyncio.create_task(briefings.watch())]
+                asyncio.create_task(nudge.watch()), asyncio.create_task(briefings.watch()),
+                asyncio.create_task(manager_agent.watch())]
     yield
     for watcher in watchers:
         watcher.cancel()
@@ -54,6 +57,7 @@ app = FastAPI(title="Deckhand", version=__version__, lifespan=lifespan)
 app.include_router(artifacts.router, dependencies=[Depends(require_token)])
 app.include_router(filter_routes.router, dependencies=[Depends(require_token)])
 app.include_router(link_routes.router, dependencies=[Depends(require_token)])
+app.include_router(manager_routes.router, dependencies=[Depends(require_token)])
 app.include_router(order_routes.router, dependencies=[Depends(require_token)])
 app.include_router(project_routes.router, dependencies=[Depends(require_token)])
 app.include_router(settings_routes.router, dependencies=[Depends(require_token)])
