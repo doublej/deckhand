@@ -162,3 +162,41 @@ struct DiagramTests {
         #expect(blocks == [.diagram(["graph TD"]), .verbatim(["not a diagram"])])
     }
 }
+
+/// Lifting a diagram out of text that is otherwise shown exactly as it was written.
+@Suite("Fenced")
+struct FencedTests {
+    @Test("text with no mermaid in it comes back whole, as one part")
+    func leavesTextAlone() {
+        #expect(Fenced.parts("just words") == [.words("just words")])
+        // A swift fence keeps its backticks: that is what a transcript did before any of this.
+        #expect(Fenced.parts("a\n```swift\nlet x = 1\n```\nb")
+                == [.words("a\n```swift\nlet x = 1\n```\nb")])
+    }
+
+    @Test("a diagram comes out and the words either side stay put")
+    func splits() {
+        let parts = Fenced.parts("Before.\n\n```mermaid\ngraph LR\n  A --> B\n```\n\nAfter.")
+        #expect(parts == [.words("Before."), .diagram("graph LR\n  A --> B"), .words("After.")])
+    }
+
+    /// A diagram with nothing above or below it must not leave an empty line of text behind.
+    @Test("a turn that is only a diagram is only a diagram")
+    func onlyADiagram() {
+        #expect(Fenced.parts("```mermaid\ngraph TD\n```") == [.diagram("graph TD")])
+    }
+
+    /// Losing the back half of somebody's message to a missing line of backticks is far worse
+    /// than not drawing a picture, so an unterminated fence stays words — the fence line too.
+    @Test("an unterminated fence is still the words it was")
+    func neverLosesText() {
+        let parts = Fenced.parts("Look:\n```mermaid\ngraph TD\n  A --> B")
+        #expect(parts == [.words("Look:\n```mermaid\ngraph TD\n  A --> B")])
+    }
+
+    @Test("two diagrams in one turn both come out")
+    func handlesTwo() {
+        let parts = Fenced.parts("```mermaid\none\n```\nmiddle\n```mermaid\ntwo\n```")
+        #expect(parts == [.diagram("one"), .words("middle"), .diagram("two")])
+    }
+}

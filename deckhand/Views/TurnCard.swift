@@ -8,6 +8,10 @@ struct TurnCard: View {
     /// False when the turn before this one was from the same speaker.
     let showsRole: Bool
     @Environment(\.accent) private var accent
+    /// How this screen draws a diagram, where it can. See `Drawn.swift`: a transcript is not
+    /// markdown and is not becoming markdown — a mermaid fence is the one thing lifted out of the
+    /// words, because it is the one whose contents are not the answer.
+    @Environment(\.diagram) private var diagram
 
     var body: some View {
         Card(spacing: Spacing.xxs) {
@@ -17,10 +21,9 @@ struct TurnCard: View {
                     .tracking(1)
                     .foregroundStyle(turn.isUser ? accent : Palette.textTertiary)
             }
-            Text(Links.marked(turn.text, in: accent))
-                .font(.system(size: 13))
-                .foregroundStyle(Palette.textPrimary)
-                .textSelection(.enabled)
+            ForEach(Array(Fenced.parts(turn.text).enumerated()), id: \.offset) { _, part in
+                said(part)
+            }
         }
         .overlay(alignment: .leading) {
             if turn.isUser {
@@ -30,6 +33,26 @@ struct TurnCard: View {
                     .fill(accent)
                     .frame(width: 3)
                     .padding(.vertical, Spacing.extraSmall)
+            }
+        }
+    }
+
+    /// One run of a turn: the words as they were written, or the picture a mermaid fence meant.
+    @ViewBuilder private func said(_ part: Fenced.Part) -> some View {
+        switch part {
+        case .words(let text):
+            Text(Links.marked(text, in: accent))
+                .font(.system(size: 13))
+                .foregroundStyle(Palette.textPrimary)
+                .textSelection(.enabled)
+        case .diagram(let source):
+            if let draw = diagram {
+                draw(source)
+            } else {
+                Text(source)
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(Palette.textSecondary)
+                    .textSelection(.enabled)
             }
         }
     }
