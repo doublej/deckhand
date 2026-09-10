@@ -80,6 +80,47 @@ struct ClipArchiveTests {
         #expect(listed.failure == nil)
     }
 
+    /// Which clips have another attempt left in them. The audio is what is tried again, so it has
+    /// to still be here; the words have no say, because a clip whose transcription failed has
+    /// none and is exactly the clip somebody wants another go at.
+    @Test("a clip can be tried again while its audio is here and nobody has heard it")
+    func retryable() throws {
+        let archive = makeArchive()
+        let said = try archive.keep(try makeClip(), for: "s1", named: "one")
+        let refused = try archive.keep(try makeClip(), for: "s1", named: "two")
+        let mute = try archive.keep(try makeClip(), for: "s1", named: "three")
+        let lost = try archive.keep(try makeClip(), for: "s1", named: "four")
+        archive.markSent([said.id])
+        archive.finish(refused.id, transcript: "fix the build", delivered: false, failure: "no route")
+        archive.finish(mute.id, transcript: nil, delivered: false, failure: "no words came back")
+        try FileManager.default.removeItem(at: archive.url(of: lost))
+        // The archive's own copies: `markSent` and `finish` write the file, not the value the
+        // test is holding, and `canRetry` answers about the entry it is handed.
+        func listed(_ kept: KeptClip) throws -> KeptClip {
+            try #require(archive.clips().first { $0.id == kept.id })
+        }
+
+        #expect(!archive.canRetry(try listed(said)))
+        #expect(archive.canRetry(try listed(refused)))
+        #expect(archive.canRetry(try listed(mute)))
+        #expect(!archive.canRetry(try listed(lost)))
+    }
+
+    /// A row that keeps naming the dead session it was recorded for, after the clip has been
+    /// tried on a live one, is the row this list must never draw.
+    @Test("trying a clip on another session moves its entry to that session")
+    func retargets() throws {
+        let archive = makeArchive()
+        let kept = try archive.keep(try makeClip(), for: "s1", named: "one")
+
+        archive.retarget(kept.id, to: "s2", named: "two")
+
+        let listed = try #require(archive.clips().first)
+        #expect(listed.sessionId == "s2")
+        #expect(listed.sessionName == "two")
+        #expect(FileManager.default.fileExists(atPath: archive.url(of: listed).path))
+    }
+
     @Test("the list is newest first, whatever order they were filed in")
     func newestFirst() throws {
         let archive = makeArchive()

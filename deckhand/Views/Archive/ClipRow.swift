@@ -16,6 +16,10 @@ struct ClipRow: View {
     let sessions: [Session]
     let play: () -> Void
     let send: (Session) -> Void
+    /// The clip itself, up to the Mac again. Nil where there is nothing to try: a clip whose
+    /// words already reached a session, or one whose audio has gone. Nil rather than a second
+    /// flag, so the row cannot draw the menu item and then have nothing behind it.
+    let tryAgain: ((Session) -> Void)?
     let remove: () -> Void
     /// Shut, because the breakdown is fourteen numbers and the row is here to be read for its
     /// words. One tap, and only on a clip that has one — a clip from before any of this was
@@ -111,14 +115,18 @@ struct ClipRow: View {
         }
     }
 
-    /// Everything you can do with words that were said to nobody. Copying is first because it is
+    /// Everything you can do with a clip that was said to nobody. Copying is first because it is
     /// the one that works with the Mac switched off.
+    ///
+    /// Only the first two need words. Trying the clip again does not — a clip with no words is
+    /// the one it is for — so it sits outside that check, which is where it used to be trapped.
     private var more: some View {
         Menu {
             if let transcript = kept.transcript {
                 Button("Copy the words") { UIPasteboard.general.string = transcript }
                 sending
             }
+            trying
             Button("Delete", systemImage: "trash", role: .destructive, action: remove)
         } label: {
             Image(systemName: "ellipsis")
@@ -137,6 +145,18 @@ struct ClipRow: View {
             Menu("Send to…") {
                 ForEach(sessions) { session in
                     Button(session.name) { send(session) }
+                }
+            }
+        }
+    }
+
+    /// The audio back up to the Mac, to be heard afresh. The same shape as `sending` and empty
+    /// under the same rule, because the choice being made is the same one: which live session.
+    @ViewBuilder private var trying: some View {
+        if let tryAgain, !sessions.isEmpty {
+            Menu("Try again on…") {
+                ForEach(sessions) { session in
+                    Button(session.name) { tryAgain(session) }
                 }
             }
         }

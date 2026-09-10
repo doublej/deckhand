@@ -10,10 +10,13 @@ public struct KeptClip: Codable, Hashable, Identifiable, Sendable {
     /// already the thing the audio is found by; a second field could only disagree with it.
     public let id: String
     public let recordedAt: Date
-    public let sessionId: String
-    /// Who it was recorded for, under the name that session went by then. Names change and
+    /// Where the clip is aimed — the session it was recorded for until somebody tries it on
+    /// another one, and that session from then on. `var`, because a clip tried again elsewhere
+    /// whose entry still named the session it never reached is a row telling a lie.
+    public var sessionId: String
+    /// The name that session went by when the clip was last aimed at it. Names change and
     /// sessions end, and this list has to say something months later either way.
-    public let sessionName: String
+    public var sessionName: String
     /// What the Mac heard, once it has been asked. Nil while nothing has reached a Mac at all —
     /// which is exactly the case this archive exists for.
     public var transcript: String?
@@ -85,6 +88,20 @@ public struct ClipArchive: Sendable {
         folder.appendingPathComponent(kept.id)
     }
 
+    /// Whether there is another attempt in this clip: audio still on disk to send, and nobody
+    /// who has heard it yet.
+    ///
+    /// The audio is the thing tried again, not the words — a clip whose transcription failed has
+    /// no words, and that is precisely the clip somebody wants another go at. So the transcript
+    /// has no say here. `delivered` does: a clip that actually reached a session has nothing left
+    /// to try, and offering it anyway would read as a second, different send.
+    ///
+    /// Reads the disk, so it belongs here rather than on `KeptClip`, which has no folder to look
+    /// in. Answers about the entry it is handed — read the list again after a change.
+    public func canRetry(_ kept: KeptClip) -> Bool {
+        !kept.delivered && FileManager.default.fileExists(atPath: url(of: kept).path)
+    }
+
     // MARK: - writing
 
     /// Moves the clip in and files an entry for it. Called before the upload, never after: the
@@ -140,6 +157,21 @@ public struct ClipArchive: Sendable {
             all[spot].failure = nil
         }
         write(all)
+    }
+
+    /// The clip is aimed at another session now, because somebody chose one to try it on.
+    ///
+    /// Written when the attempt is made rather than when it lands: the person has pointed this
+    /// clip at a session, so the row names that session whatever happens next, and the reason
+    /// underneath is a reason about the session the row names. Retargeting only on success would
+    /// leave the two disagreeing on exactly the rows this list exists for.
+    ///
+    /// The audio does not move — it is found by `id`, which never changes.
+    public func retarget(_ id: String, to sessionId: String, named: String) {
+        change(id) { kept in
+            kept.sessionId = sessionId
+            kept.sessionName = named
+        }
     }
 
     /// By hand, and the only way a clip that was never said leaves. The audio goes with it.

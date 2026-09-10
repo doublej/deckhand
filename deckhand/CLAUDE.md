@@ -33,6 +33,18 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   will be — AAC writes its index on stop, so an unfinished clip is unplayable bytes anywhere.
   `heldClips` is the join from a review card back to the clips its words came from, and it
   is *replaced* on a fresh clip exactly as `hold` replaces the card.
+- **What a clip's menu offers is gated on the audio, never on the words.** Copying and "Send to…"
+  need a transcript and were once wrapped around the whole menu, so a clip whose transcription
+  failed — the exact clip the archive exists for — was left with nothing but Delete. "Try again
+  on…" sits outside that check and asks `ClipArchive.canRetry`: audio still on disk, and not
+  already delivered. Not `failure != nil`, which would miss the clip whose upload never answered
+  at all, and not "always", which would offer a confusing second send on a clip that arrived.
+  `AppModel.tryAgain` re-uploads through `deliver`, so the same bookkeeping writes the outcome —
+  a second failure lands on the row the way the first one did. Its phone-side spans are honestly
+  zero except `spoken`, carried over from the original: nothing was armed, recorded or filed this
+  time. And the entry is retargeted at the moment the session is chosen, not when it lands, or a
+  failed retry would leave the row naming a dead session while the red line beneath it talked
+  about the live one.
 - **The clock starts where a press becomes a recording, not where a finger lands.** `TalkGesture`
   waits a fixed 200 ms before a press counts as talking at all, and no gesture on this phone can
   report the moment a touch began — so `Recorder.spans.arming` measures everything after the

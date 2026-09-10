@@ -192,4 +192,31 @@ extension AppModel {
             self.status = self.said("Sent to \(session.name)", notes: sent.notes)
         }
     }
+
+    /// The clip itself, up to the Mac again, on whichever session is running now.
+    ///
+    /// `resend` is the sibling for a clip that already has words; this is for the one whose
+    /// transcription failed, which has none to send and is the clip somebody most wants another
+    /// go at. The audio is still here — every clip is filed before it goes on the wire and only
+    /// what actually reached a session is ever swept — so this is the first attempt's own call
+    /// against the same file, and the whole of the bookkeeping runs again with it.
+    ///
+    /// The entry is retargeted before the attempt, not after: the person has aimed the clip at
+    /// this session, so the row names it whether or not it lands, and a second failure is written
+    /// onto the row by `deliver` exactly as the first one was.
+    func tryAgain(_ kept: KeptClip, on session: Session) async {
+        guard let client = settings.client() else { return }
+        archive.retarget(kept.id, to: session.sessionId, named: session.name)
+        // Nothing was armed, recorded or filed this time round, so those spans are honestly zero.
+        // The clip's own length is the one the Mac still needs: without it a line in
+        // `timings.jsonl` cannot say what a millisecond bought.
+        var spans = PhoneSpans()
+        spans.spoken = kept.timings?.spoken ?? 0
+        let confirms = preferences.confirms
+        status = confirms ? "Transcribing…" : "Sending to \(session.name)…"
+        logger.info("trying clip again on \(session.name, privacy: .public)")
+        Awake.hold()
+        defer { Awake.release() }
+        await deliver(kept, to: session, with: client, confirms: confirms, spans: spans)
+    }
 }

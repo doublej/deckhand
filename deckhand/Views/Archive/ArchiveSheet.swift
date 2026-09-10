@@ -64,6 +64,7 @@ struct ArchiveSheet: View {
                 sessions: model.visibleSessions,
                 play: { listen(to: kept) },
                 send: { session in hand(kept, to: session) },
+                tryAgain: model.archive.canRetry(kept) ? { session in retry(kept, on: session) } : nil,
                 remove: { drop(kept.id) })
     }
 
@@ -90,6 +91,16 @@ struct ArchiveSheet: View {
     private func hand(_ kept: KeptClip, to session: Session) {
         Task {
             await model.resend(kept, to: session)
+            clips = model.archive.clips()
+        }
+    }
+
+    /// The clip itself, up to the Mac again, when the first attempt gave back no words at all.
+    /// The list is read again for the reason `hand` reads it, and one more: the row now names
+    /// the session it was tried on, and it says so from here.
+    private func retry(_ kept: KeptClip, on session: Session) {
+        Task {
+            await model.tryAgain(kept, on: session)
             clips = model.archive.clips()
         }
     }
