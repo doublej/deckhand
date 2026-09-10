@@ -123,6 +123,10 @@ extension AppModel {
             return false
         }
         attached[session.sessionId] = nil
+        // The clips these words came from can stop saying they never arrived. Until this
+        // point every clip held for reading is filed as not yet delivered, which is true and is
+        // also why the archive would otherwise never sweep a single one of them.
+        markSent(for: session)
         status = said("Sent to \(session.name) by \(sent.deliveredBy ?? "the Mac")",
                       notes: sent.notes)
         return true

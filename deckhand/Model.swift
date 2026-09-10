@@ -99,8 +99,18 @@ final class AppModel {
     /// Edited and not yet sent. The save happens on the way off the page rather than on each
     /// change, because a text field changes on every letter.
     var filtersDirty = false
+    /// Every clip this phone has recorded, on disk. A clip is moved in here before its upload is
+    /// attempted, so a Mac that cannot be reached costs the words rather than the clip —
+    /// see `Keeping.swift`, which is the other half of this.
+    let archive = ClipArchive()
+    /// Which archived clips the words in each session's review card came from. The card holds
+    /// words that exist and have been said to nobody, and this is how sending them finally marks
+    /// the clips they came from as having arrived.
+    var heldClips: [String: [String]] = [:]
 
-    private let logger = Logger(subsystem: "dev.jurrejan.deckhand", category: "app")
+    /// Not private: `Keeping.swift` is another half of this type, and a clip going out is the one
+    /// thing in this app worth a line in the log whether or not it worked.
+    let logger = Logger(subsystem: "dev.jurrejan.deckhand", category: "app")
 
     init(settings: ServerSettings = .load(), preferences: Preferences = .load()) {
         self.settings = settings
@@ -179,57 +189,17 @@ final class AppModel {
         }
     }
 
-    func upload(clip: URL, to session: Session) async {
-        guard let client = settings.client() else { return }
-        let confirms = preferences.confirms
-        status = confirms ? "Transcribing…" : "Sending to \(session.name)…"
-        logger.info("uploading clip for \(session.name, privacy: .public)")
-        // The clip is on the wire: locking here suspends the app and loses it.
-        Awake.hold()
-        defer { Awake.release() }
-        await run {
-            let receipt = try await client.upload(
-                clip: clip,
-                to: session.sessionId,
-                route: self.preferences.route,
-                deliver: !confirms
-            )
-            self.logger.info("transcript: \(receipt.transcript ?? "none", privacy: .public)")
-            try? FileManager.default.removeItem(at: clip)
-            self.received(receipt, for: session, confirms: confirms)
-        }
-    }
-
-    /// Either it is already on its way, or it is waiting to be read first.
+    /// A clip on its way to a session lives in `Keeping.swift`, because it is filed on this phone
+    /// before it is anything else.
     ///
-    /// Words are held for two reasons and they meet here: because reading first is the setting,
-    /// and because a filter refused them — a refusal on the way out is still words that exist and
-    /// were said to nobody, and the card is the one place in this app that can hold those.
-    private func received(_ receipt: UploadReceipt, for session: Session, confirms: Bool) {
-        guard let text = receipt.words, confirms || receipt.stoppedBy != nil else {
-            status = outcome(of: receipt, to: session)
-            // Fetch rather than fake it: the words are in the session's own transcript within
-            // a moment, and showing them from there means they are shown once, in order, and
-            // looking like every other thing said in this conversation.
-            if receipt.went { Task { await self.loadTurns(for: session) } }
-            return
-        }
-        // What the chain made of them, not what utt heard, and what the chain said about them
-        // alongside: a word the card shows differing silently from the word that was spoken is
-        // the lie this card exists to prevent.
-        hold(text,
-             for: session,
-             notes: receipt.notes,
-             stoppedBy: receipt.stoppedBy,
-             because: receipt.deliveryError)
-        status = outcome(of: receipt, to: session, held: confirms)
-    }
-
     /// Sending what was held for review lives in `Snaps.swift`: the words may have pictures
     /// pinned to them, and those have to reach the Mac before the message that names them.
 
+    /// The words go. The clips they came from stay — a clip nobody said is the clip the
+    /// archive is most for, and "discard" here has only ever meant the text in the card.
     func discard(for session: Session) {
         hold(nil, for: session)
+        unheld(for: session)
         attached[session.sessionId] = nil
         status = "Discarded"
     }

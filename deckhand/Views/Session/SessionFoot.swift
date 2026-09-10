@@ -16,6 +16,9 @@ struct SessionFoot: View {
     /// Which pinned picture is being marked up, if any. Here rather than in the card because the
     /// card holds no model and no session, and the marking sheet needs both.
     @State private var marking: Pinned?
+    /// Whether the archive is open. Presented from this slot because this slot holds the mark the
+    /// gesture is on, and the archive is about every clip rather than about this session.
+    @State private var browsing = false
 
     var body: some View {
         Group {
@@ -24,6 +27,7 @@ struct SessionFoot: View {
         .padding(.horizontal, Spacing.small)
         .padding(.bottom, Spacing.extraSmall)
         .sheet(item: $marking) { SnapView(model: model, session: $0.session, snap: $0.snap) }
+        .sheet(isPresented: $browsing) { ArchiveSheet(model: model) }
     }
 
     /// The mark is the button. utt's mark, because recording is utt's job — it takes the
@@ -34,17 +38,23 @@ struct SessionFoot: View {
     /// floating in the middle of nothing. This leaves it just clear of the indicator itself. The
     /// review card does not move — it is tall, and pushing its foot under the indicator would put
     /// Send where the system's own gesture lives.
+    ///
+    /// The one surface that also carries the way to the archive: it is the only place a mark has
+    /// no other job for the press talking does not use. A row in the sessions list spends its tap
+    /// on opening the session and a deck column spends its own, so neither is handed one.
     private var talk: some View {
         TalkControl(
             recorder: recorder,
             mode: model.preferences.talkMode,
             isMine: true,
+            onArchive: { browsing = true },
             onStart: { model.status = "Recording for \(session.name)" },
             onClip: { await model.upload(clip: $0, to: session) },
             content: {
                 TalkMark(state: $0,
                          level: recorder.level,
-                         confirms: model.preferences.confirms)
+                         confirms: model.preferences.confirms,
+                         clips: true)
             }
         )
         .offset(y: Spacing.small)

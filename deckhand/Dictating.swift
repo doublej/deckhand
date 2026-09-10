@@ -37,12 +37,16 @@ extension AppModel {
         // The clip is on the wire: locking here suspends the app and loses it.
         Awake.hold()
         defer { Awake.release() }
+        // Out here rather than after the upload, because `run` swallows a throw and the removal
+        // would then never happen — the clip would sit in `tmp` with nothing referencing it. This
+        // one is not archived: a dictated clip is spoken into a field the person is looking at, so
+        // nothing came back is a visibly empty field and not work quietly lost.
+        defer { try? FileManager.default.removeItem(at: clip) }
         var heard: String?
         await run {
             let receipt = try await client.upload(
                 clip: clip, to: session.sessionId, route: self.preferences.route, deliver: false
             )
-            try? FileManager.default.removeItem(at: clip)
             heard = receipt.words
             // The one place this can be read is the rail, behind whatever sheet the field is on.
             // The control itself says it is listening and says it is waiting; what it cannot say
