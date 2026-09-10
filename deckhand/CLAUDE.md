@@ -97,6 +97,14 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   not parse posts zero and the block falls back to the source lines, which is what every surface
   did before any of this existed. Slips do **not** get this yet: an artifact page is sandboxed by
   its own CSP and nothing injects mermaid into one.
+- **The orders pane writes on a sheet, and it has to.** `OrdersView` shows what a session has been
+  told to keep in mind and opens `Editor` to change it. A field on the pane itself would put a
+  second `TalkControl` on a screen that already floats one over it: two controls reading the one
+  recorder, both live, one filling a box and the other sending to the session — the `isMine`
+  arrangement `AloudCards` uses cannot help, because these two do different things with the same
+  clip. A sheet covers the mark, so the only control listening is the one under your thumb, and
+  `Editor` already opens focused with the keyboard up. Its own loading rather than an `AppModel`
+  extension, because `deckhand/` sits on its 16-file gate and nothing outside that pane wants it.
 - **The transcript poll asks for what is on screen, not for a fixed page.** It fetched the newest
   eight every five seconds and replaced the list with them, so a step back into the conversation
   was taken away again before it could be read — which is what "I cannot see the whole transcript
@@ -117,14 +125,6 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   things follow. The dots are not a control — dots you can hit are dots somebody will try to
   hit — and the page's own edge-swipe-to-dismiss now fires **only on the first pane**, or a
   drag from the left edge would page back and leave the session on the same gesture.
-- **The orders pane writes on a sheet, and it has to.** `OrdersView` shows what a session has been
-  told to keep in mind and opens `Editor` to change it. A field on the pane itself would put a
-  second `TalkControl` on a screen that already floats one over it: two controls reading the one
-  recorder, both live, one filling a box and the other sending to the session — the `isMine`
-  arrangement `AloudCards` uses cannot help, because these two do different things with the same
-  clip. A sheet covers the mark, so the only control listening is the one under your thumb, and
-  `Editor` already opens focused with the keyboard up. Its own loading rather than an `AppModel`
-  extension, because `deckhand/` sits on its 16-file gate and nothing outside that pane wants it.
 - **The session header is a name and a menu, and everything else is the row under it.** The
   chevron and the glyph tile both went: the panes are swiped between and a swipe from the left
   edge of the first one leaves the session, so the arrow was a second way to do what the page
