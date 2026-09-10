@@ -131,7 +131,7 @@ struct ProjectListView: View {
     }
 
     private func face(_ project: Project) -> some View {
-        HStack(alignment: .center, spacing: Spacing.small) {
+        HStack(alignment: .top, spacing: Spacing.small) {
             words(project)
             Spacer(minLength: Spacing.extraSmall)
             trailing(project)
@@ -144,27 +144,44 @@ struct ProjectListView: View {
         )
     }
 
-    /// Three lines at most, whatever is known: what it is called, where it is and what it is for,
-    /// and then the short true things about it. The third line is teal rather than a third shade of
-    /// grey — it is a different kind of fact from the description above it, and a fourth grey line
-    /// is how a row of four hundred becomes a wall.
+    /// What it is called, where it lives, what it is for, and the short true things about it.
+    ///
+    /// The description gets two lines of its own rather than sharing one with the folder. Those
+    /// were a single truncated line — `multi-stack/deckhand · iOS remote for live Cl…` — where the
+    /// half worth reading is the half that gets cut. A row is taller now, which is the trade: the
+    /// list is searched far more often than it is scrolled.
     private func words(_ project: Project) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 3) {
             Text(project.name)
                 .font(Typography.primaryRow)
                 .foregroundStyle(Palette.textPrimary)
                 .lineLimit(1)
-            Text(project.line)
+            Text(project.relative)
                 .font(Typography.hint)
                 .foregroundStyle(Palette.textTertiary)
                 .lineLimit(1)
-            if !project.facts.isEmpty {
-                Text(project.facts.joined(separator: " · "))
-                    .font(Typography.hint)
-                    .foregroundStyle(Palette.tint.opacity(0.8))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-            }
+            detail(project)
+        }
+    }
+
+    /// The two lines that are only there when there is something in them, so a project atlas
+    /// knows nothing about stays a two-line row instead of a two-line row with gaps under it.
+    @ViewBuilder private func detail(_ project: Project) -> some View {
+        if !project.description.isEmpty {
+            Text(project.description)
+                .font(Typography.hint)
+                .foregroundStyle(Palette.textSecondary)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        if !project.facts.isEmpty {
+            // Teal rather than a third shade of grey: a different kind of fact from the
+            // description above it, and a fourth grey line is how four hundred rows become a wall.
+            Text(project.facts.joined(separator: " · "))
+                .font(Typography.hint)
+                .foregroundStyle(Palette.tint.opacity(0.8))
+                .lineLimit(1)
+                .truncationMode(.tail)
         }
     }
 

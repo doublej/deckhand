@@ -28,9 +28,11 @@ struct AloudCards: View {
     /// What the person answered last time, per question. Read into the fields once, at build
     /// time, so an answered slip that is reopened is already holding its answers.
     let was: [String: String]
-    /// The answer, as the JSON text of it — the same closure `ArtifactWeb` is handed, because the
-    /// screen above does not care which of the two drew the slip.
-    let respond: (String) -> Void
+    /// The answer, as the JSON text of it. Awaited, and it says whether the answer actually went:
+    /// a web page answers and then calls `deckhand.close()` itself, and a card stack has no page
+    /// to do that for it. Without the receipt this button fired, delivered, and looked dead —
+    /// which is a button somebody presses again, and again, each press a fresh answer.
+    let respond: (String) async -> Bool
 
     @State private var said: [String: String]
     /// Which question the recorder is currently working for, or none. What makes one card's mark
@@ -40,8 +42,14 @@ struct AloudCards: View {
     /// which is two screens behind this one.
     @State private var nothing: String?
     @FocusState private var editing: String?
+    /// On the wire. The one thing that must be visible from the button itself: it is at the foot
+    /// of a long scroll, and the receipt this screen already had is in the bar at the top of it.
+    @State private var sending = false
 
-    init(aloud: Aloud, say: Dictation, was: [String: String], respond: @escaping (String) -> Void) {
+    init(aloud: Aloud,
+         say: Dictation,
+         was: [String: String],
+         respond: @escaping (String) async -> Bool) {
         self.aloud = aloud
         self.say = say
         self.was = was
@@ -151,16 +159,16 @@ struct AloudCards: View {
     private var foot: some View {
         VStack(spacing: Spacing.extraSmall) {
             Button { send() } label: {
-                Text(answered == aloud.questions.count
-                     ? "Send all \(answered)"
-                     : "Send \(answered) of \(aloud.questions.count)")
+                Text(word)
                     .font(Typography.primaryRow)
                     .foregroundStyle(Color.white)
                     .frame(maxWidth: .infinity, minHeight: 44)
-                    .background(Capsule().fill(answered == 0 ? Palette.textTertiary : Palette.tint))
+                    .background(Capsule().fill(idle ? Palette.textTertiary : Palette.tint))
             }
             .buttonStyle(.plain)
-            .disabled(answered == 0)
+            // Both, and the second one matters: without it a tap while the first answer is still
+            // on the wire sends a second one, and every send is a message into the session.
+            .disabled(answered == 0 || sending)
             .accessibilityIdentifier("aloud-send")
             // Said plainly rather than left to be discovered: a slip can be answered more than
             // once, and half of these are worth sending before the other half are thought about.
@@ -184,9 +192,24 @@ struct AloudCards: View {
         said[question.id] = Underneath.words(words, under: said[question.id] ?? "", gap: " ")
     }
 
+    /// Grey while there is nothing to send and while one is going: a filled capsule that does
+    /// nothing when pressed is the thing this whole fix is about.
+    private var idle: Bool { answered == 0 || sending }
+
+    private var word: String {
+        if sending { return "Sending…" }
+        return answered == aloud.questions.count
+            ? "Send all \(answered)"
+            : "Send \(answered) of \(aloud.questions.count)"
+    }
+
     private func send() {
         editing = nil
-        guard let json = Aloud.value(of: said) else { return }
-        respond(json)
+        guard !sending, let json = Aloud.value(of: said) else { return }
+        sending = true
+        Task {
+            _ = await respond(json)
+            sending = false
+        }
     }
 }

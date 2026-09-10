@@ -64,7 +64,7 @@ struct ArtifactView: View {
             AloudCards(aloud: aloud,
                        say: say,
                        was: Aloud.said(in: answer),
-                       respond: respond)
+                       respond: answering)
                 .accessibilityIdentifier("artifact-aloud")
         } else if let html {
             ArtifactWeb(artifact: artifact,
@@ -184,13 +184,29 @@ struct ArtifactView: View {
     /// The page called `window.deckhand.respond`. Straight on to the Mac: the answer is the
     /// person's own and nothing here edits it or asks them to confirm it twice.
     private func respond(_ json: String) {
-        Task {
-            do {
-                let sent = try await model.answer(artifact, in: session, valueJSON: json)
-                said = sent.went ? .sent(sent.deliveredBy) : .refused(refusal(sent))
-            } catch {
-                said = .refused(reason(error))
-            }
+        Task { _ = await answering(json) }
+    }
+
+    /// The same answer, awaited, and it says whether it actually went.
+    ///
+    /// A web page answers and then calls `deckhand.close()` itself — every demo page does — so
+    /// the receipt in the bar at the top was the whole of what a slip needed to say. A card stack
+    /// has no page to close it, and its button is at the foot of a long scroll where that bar
+    /// cannot be seen: it sent, it delivered, and it looked dead. So the cards get told, and a
+    /// slip that went closes itself the way a page does.
+    ///
+    /// Only on `went`. A filter that stopped the prompt leaves the screen up with the reason on
+    /// it, because the words still exist here and nowhere else.
+    @discardableResult
+    private func answering(_ json: String) async -> Bool {
+        do {
+            let sent = try await model.answer(artifact, in: session, valueJSON: json)
+            said = sent.went ? .sent(sent.deliveredBy) : .refused(refusal(sent))
+            if sent.went { dismiss() }
+            return sent.went
+        } catch {
+            said = .refused(reason(error))
+            return false
         }
     }
 
