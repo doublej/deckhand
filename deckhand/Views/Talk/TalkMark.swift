@@ -26,6 +26,10 @@ struct TalkMark: View {
     /// which is how the mark went orange on a page that stayed teal around it.
     @Environment(\.accent) private var accent
 
+    /// When the words went out, so the wait can narrate itself. Nil at every other moment,
+    /// which is also what takes the narration's clock back down.
+    @State private var busySince: Date?
+
     /// How much room a scrolling pane leaves at the end of its content for the mark to float
     /// over: the mark, its tile, and the air around it.
     static let clearance: CGFloat = 68
@@ -34,20 +38,36 @@ struct TalkMark: View {
 
     var body: some View {
         HStack(spacing: Spacing.extraSmall) {
-            // Tappable, not a caption: it says "tap to send", so tapping it sends. The mark
-            // does the same thing, and either is the obvious one to reach for.
-            wing(label,
-                 edge: .leading,
-                 tint: isRecording ? accent : Palette.textTertiary,
-                 action: state.tapped)
+            said
             mark
             wing(state.canCancel ? "CANCEL" : nil, edge: .trailing, tint: Palette.textSecondary) {
                 state.cancel()
             }
         }
         .padding(.vertical, Spacing.extraSmall)
-        .animation(.snappy(duration: 0.2), value: label)
         .animation(.snappy(duration: 0.2), value: state.canCancel)
+        .onChange(of: state.busy) { _, busy in busySince = busy ? .now : nil }
+    }
+
+    /// The left-hand pill, redrawn on the beats and on nothing else.
+    ///
+    /// Only this half is on a timeline: the mark beside it is animating off the microphone and
+    /// has no business being re-evaluated because a word changed. The schedule is a fixed list of
+    /// instants rather than a tick, so it runs out on its own once the last beat is up — and
+    /// `label` is read fresh at each of them, so `busy` going false wins immediately whatever
+    /// beat was due next.
+    ///
+    /// Tappable, not a caption: at rest it says "tap to send", so tapping it sends. The mark does
+    /// the same thing, and either is the obvious one to reach for.
+    private var said: some View {
+        TimelineView(.explicit(due)) { _ in
+            let word = label
+            wing(word,
+                 edge: .leading,
+                 tint: isRecording ? accent : Palette.textTertiary,
+                 action: state.tapped)
+                .animation(.snappy(duration: 0.2), value: word)
+        }
     }
 
     /// Its own ground and its own shadow, because there is nothing else behind it now — the
@@ -121,11 +141,30 @@ struct TalkMark: View {
     /// It says what will actually happen. With the review step on, letting go does not send
     /// anything — it transcribes and hands you the words to read — and a button that claims to
     /// send and then does not is worse than one that says nothing.
+    ///
+    /// Once the clip is out there is nothing left to promise, so the word turns into a story
+    /// about where the clip has got to (`ClipNarration`). One sequence for both settings: the
+    /// round trip is the same trip either way, and the promise about what happens at the end of
+    /// it was already made by the word the person read while their finger was down.
     private var label: String? {
-        if state.busy { return confirms ? "TRANSCRIBING" : "SENDING" }
+        if state.busy { return ClipNarration.word(after: waited) }
         guard isRecording else { return nil }
         let what = confirms ? "PREVIEW" : "SEND"
         return state.mode == .hold ? "RELEASE TO \(what)" : "TAP TO \(what)"
     }
 
+    /// When each beat falls due. One instant in the far past where nothing is out, because an
+    /// explicit schedule wants entries and a list built from `.now` would be a new list every
+    /// time this view is read.
+    private var due: [Date] {
+        guard let busySince else { return [.distantPast] }
+        return ClipNarration.schedule(from: busySince)
+    }
+
+    /// How long the clip has been out. Zero where nothing saw it leave, which shows the first
+    /// beat — the narration degrades to the one word it started as, never to nothing.
+    private var waited: TimeInterval {
+        guard let busySince else { return 0 }
+        return Date.now.timeIntervalSince(busySince)
+    }
 }
