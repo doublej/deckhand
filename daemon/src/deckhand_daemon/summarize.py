@@ -1,9 +1,9 @@
-"""What a session did while you were away, in four sentences a phone can show.
+"""What a session did while you were away, in a briefing a phone can show.
 
 The transcript tail is far too long to read on a phone, so a small model reads it instead. This
 module is only the writing of one: when a briefing is worth writing, and where the last one is
-kept, is `briefings`. Auth comes from the Claude Code keychain, which the SDK reaches through
-the `user` setting source — the daemon runs under launchd and has no API key.
+kept, is `briefings`. The daemon uses Claude Code's existing authentication without loading
+user settings or their MCP servers.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ import asyncio
 from . import tasks
 from .log import log
 
-MODEL = "claude-haiku-5"
+MODEL = "claude-haiku-4-5-20251001"
 TIMEOUT = 60
 MAX_TURNS = 16
 SYSTEM_PROMPT = """<task>
@@ -151,7 +151,7 @@ async def summarize(
 
 
 async def _run(activity: str, session_id: str) -> tuple[str | None, str | None, dict | None]:
-    """Low effort, and the only tools it has are the three that manage this session's list.
+    """No extended thinking; only the three tools that manage this session's list.
 
     Every expected failure comes back as a sentence. `bypassPermissions` is safe precisely
     because of how short that list of tools is: three in-process functions that write one JSON
@@ -166,13 +166,17 @@ async def _run(activity: str, session_id: str) -> tuple[str | None, str | None, 
     options = ClaudeAgentOptions(
         model=MODEL,
         system_prompt=SYSTEM_PROMPT,
+        # allowed_tools auto-approves calls; tools=[] actually removes built-in tools.
+        tools=[],
         mcp_servers={"tasks": tasks.server(session_id)},
+        strict_mcp_config=True,
         allowed_tools=list(tasks.TOOLS),
         permission_mode="bypassPermissions",
         # Enough turns to work through a list and then write: one call per change, and a dozen
         # changes at once only happens on a session nobody has looked at all day.
         max_turns=MAX_TURNS,
-        effort="low",
+        # Haiku 4.5 has no effort control. Avoid extended-thinking latency for briefings.
+        thinking={"type": "disabled"},
         # No setting sources: loading the user's config would start every MCP server the
         # person has configured, which took longer than the whole summary is worth.
         setting_sources=[],
