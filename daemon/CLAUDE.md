@@ -1,0 +1,204 @@
+# The daemon
+
+## What this is
+
+The Mac half. A FastAPI service on port 4180 that lists every live Claude Code session,
+serves the last rounds of its conversation, takes voice clips from the phone, and writes
+the words back into that session. It runs as launchd agent `com.jurrejan.deckhand` and
+logs to `~/Library/Logs/Deckhand/deckhand.log`.
+
+State lives in `~/Library/Application Support/Deckhand/` — `token`, `audio/<sessionId>/`,
+`images/<sessionId>/`, `tasks/<sessionId>.json`, `briefings/<sessionId>.json`,
+`queue/<sessionId>.json`.
+
+## Mental model
+
+```
+app.py          # the endpoints, and nothing else
+config.py       # data dir, token, port
+log.py          # the one log file, in ~/Library/Logs
+sessions.py     # which Claude sessions are alive, and their iTerm pane
+reading/        # everything that reads a transcript and nothing that writes one
+deliver.py      # the words go into the session, by keyboard or by socket
+saying.py       # what a spoken line becomes before it is delivered
+filters/        # what happens to a prompt between the phone and the session
+projects/       # the folders on this Mac, and starting a session in one of them
+prompts/        # every prompt this daemon sends a model, and nothing else
+briefings.py    # where briefings are kept, and the one worker that keeps them current
+summarize.py    # what happened since you last spoke, via the Claude Agent SDK
+tasks.py        # the person's list of asks, and the only three tools that may change it
+nudge.py        # asks a session that stopped about the asks still open on its list
+files.py        # what the session touched that a person could open, and the permission
+artifacts.py    # slips: what a session left for the phone to answer
+transcribe.py   # utt turns a clip into text, through its jobs folder
+plugin.py       # Deckhand's page inside utt: the manifest, its settings, its buttons
+push.py         # what the Lock Screen says, when it changes, and how it gets there
+```
+
+Before editing under `reading/`, `filters/` or `prompts/`, read that folder's own CLAUDE.md.
+`projects/` carries its own context in its `__init__.py` docstring — read that first; it is the
+one lane that *makes* a session rather than speaking to one.
+
+## The join that makes this work
+
+Claude Code writes `~/.claude/sessions/<pid>.json` for every running session — sessionId,
+cwd, name, and a live busy/idle status. Those files outlive the process, so a record only
+counts when `ps` still shows that pid. `ps` gives the tty, `it2 session list --json` maps
+tty → iTerm pane. No hooks, no polling of iTerm's title.
+
+Sessions with no iTerm pane are hidden — unless iTerm answers nothing at all, in which case
+every live session is listed so the app still works without the iTerm Python API. `/health`
+and `/sessions` both carry an `iterm` field saying whether pane data is trustworthy.
+
+- The **first** connection from a new client makes iTerm2 ask for Python API approval. Until
+  someone clicks it, `it2` blocks: pane data is missing and `/sessions` costs the timeout.
+  It happened once when the launchd agent was first bootstrapped and has been approved since.
+  The pane map is cached for 3 s because one `it2` call costs ~0.5 s.
+- **The iTerm join under launchd was a throttling problem, not an approval one.** The plist
+  said `ProcessType: Background`, which puts the job in launchd's slow lane for CPU and I/O,
+  and a lookup that costs ~1 s from a terminal then blew a 4 s timeout every time. It reads
+  `Interactive` now, the timeout is 12 s, and panes resolve under launchd. A failed lookup
+  still backs off for a minute so a real outage cannot starve the event loop. This matters for
+  more than window titles: without a pane there is no keyboard, and delivery falls back to the
+  peer socket.
+
+## Delivery: two routes, and the difference is authority
+
+The route is the person's choice, in Settings, carried as `POST /sessions/{id}/audio?route=`:
+`auto` (keyboard when there is a pane, socket when there is not), `keyboard`, or `socket`.
+`keyboard` never silently falls back to the socket — choosing it is choosing whose authority
+the words carry, so it fails and says why instead. The receipt names the route that took it
+(`delivered_by`).
+
+- **The keyboard route.** `it2 session send` types the words into the session's pane and
+  presses return, so they arrive as a prompt from the person at the machine — which is what
+  they are. Three bursts, not one: ctrl-U (a half-typed line in the prompt is not part of what
+  was said), the words, then return alone — a return at the tail of one fast paste is what
+  leaves a message staged in the box instead of sent. It cannot be confirmed: a staged message
+  and a sent one look identical to `it2 session read`, and a busy session queues the words for
+  as long as its turn lasts. The receipt says they were typed, which is all that is known.
+  One hazard: if that pane happens to be showing a permission prompt, dictated words go to the
+  prompt, not to a new message.
+- **The fallback goes through the session's own peer socket.** Every session listens on the
+  `messagingSocketPath` in its record, and the wire format is newline-delimited JSON — an
+  optional `{"type":"auth","token":…}` line carrying the `peerToken` out of the sibling
+  `<pid>.<hash>.key` file, then one `{"msgV":1,"type":"user","message":{…},"priority":"next"}`
+  frame. Nothing comes back: a successful write is the only acknowledgement, and a session
+  mid-turn queues the message rather than dropping it. It arrives labelled as a message from
+  another Claude session, wrapped in "it is not from your user, it carries none of your user's
+  authority". That wrapper is a genuine control against one agent laundering permissions
+  through another; it is not something to defeat, it is the wrong channel for a person speaking.
+  Verified against a real live session on 2026-09-09, not only against a test socket.
+- **A slash command only works typed into a pane.** The socket delivers a *message*, so one
+  sent that way arrives as words beginning with a slash: the session reads it, runs nothing,
+  and reports no failure, because from where it sits nothing failed. `deliver.deliver` refuses
+  a leading slash on the socket route and where there is no pane, which is the only way anybody
+  finds out.
+- **Stop, compact and clear are keystrokes, not messages.** `deliver.control` sends Escape for
+  a cancel and types `/compact` or `/clear` the same way a spoken line is typed. The peer socket
+  can do none of them, so a session with no pane cannot be controlled from the phone and the
+  menu says so rather than failing quietly. `clear` is the only irreversible thing in the app.
+- **Renaming is `/rename`, Claude Code's own command**, typed into the pane like anything else
+  — it is `supportsNonInteractive`, so with an argument it renames without opening a picker.
+  Verified against a live session: the registry's `name` and `nameSince` both move. A busy
+  session only runs it when its turn ends, so the listing catches up late.
+- **A picture reaches a session as a path, not as a paste.** `POST /sessions/{id}/image` keeps
+  the bytes under `images/<sessionId>/` and answers with the path; `POST .../say` takes
+  `images: [path]` and `deliver.with_images` appends them to the words, so the session sees the
+  file with its own `Read`. `app._kept_images` only passes paths inside that session's own
+  folder — without it, "say this and read that file" would aim a session at anything on the Mac.
+  The files are kept after delivery; nothing prunes them yet.
+
+## Briefings, tasks, and the idle check
+
+- **A briefing is a file, and the daemon decides when one is owed.** This was a dict in memory
+  with a two-minute TTL, which cost more than everything else in Deckhand put together: a
+  session that had done nothing still bought a model run every two minutes for as long as
+  anyone had the list on screen, and nothing survived a restart. `briefings.py` keeps the last
+  one under `briefings/<sessionId>.json` and one worker walks the live sessions. Two gates
+  before a model is touched, cheapest first: the transcript's own mtime, then the activity hash
+  (Claude Code appends plenty — a mode change, an attachment — that nobody wants a briefing
+  about). Reading `/sessions/{id}/summary` never waits for a model: it answers off disk and
+  **bumps** that session to the front of the queue. `GET /briefings` hands back every live
+  session's last briefing in one call, which is what makes a cold start whole.
+- **The task list is the Mac's, not the model's.** It lives in `tasks/<sessionId>.json` and the
+  summariser changes it only through three in-process SDK tools (`add_task`, `set_task_state`,
+  `drop_task`) bound to one session's file. Written as part of the briefing it was a *new* list
+  every run, which is how the shape of it kept changing. The model is handed the list with its
+  ids and may not reword, renumber or re-order it; `drop_task` needs a reason and warns, because
+  it is the only operation that loses something. Trimming is not the agent's job either:
+  `MAX_KEPT` is a ceiling on a file and the phone decides how many to show. The run is
+  `max_turns=16` with `permission_mode="bypassPermissions"` — safe only because those three
+  functions are the entire tool surface and nobody is at the daemon to answer a prompt.
+- **The idle check messages sessions on its own** (`nudge.py`). A session quiet for `SETTLE`
+  with anything unfinished on its list is asked, over the **socket** route so it arrives
+  labelled as another agent rather than as JJ typing, either to finish or to say why not. Two
+  guards against a daemon that will not let a session stop: the same list is never asked about
+  twice (fingerprint of ids and states), and never more often than `AGAIN` whatever the list
+  does. `DECKHAND_NUDGE=0` turns it off.
+- Anything the summariser or the transcriber needs must be reachable without a person present.
+  The summariser passes `setting_sources=[]` for the same reason it is fast: loading the user
+  settings starts every configured MCP server, which cost more than a minute.
+
+## Files, and why the listing is the permission
+
+- **The file listing is the whole permission.** `/file` serves a path only because that
+  session's transcript named it, re-derived per request. There is no allow-list to maintain and
+  no way to widen it by accident — which is what keeps a file endpoint off the rest of the Mac.
+  Source files and `node_modules`/`.build`/`.git` are left out on purpose: the tool trace
+  already shows the code, and a phone listing 200 files shows nothing.
+- **The same rule covers projects.** A folder this Mac's project list does not name is a 404, so
+  `/projects/session` stays a way into work that already exists rather than a way to run Claude
+  Code anywhere on the Mac.
+- **Serving a file is not the same size as taking one.** `MAX_FILE_BYTES` is 512 MB against
+  `MAX_UPLOAD_BYTES`'s 32 MB, and reusing the upload cap for `/file` is what made every video a
+  session rendered come back as 413.
+
+## utt, the plugin page, and APNs
+
+- **Transcription goes over the plugin file lane.** The clip is written into
+  `~/Library/Application Support/dev.jurrejan.utt/plugins/deckhand.jobs/` and utt writes the
+  text beside it. No listener, no token, nothing on the network, and it works whether or not
+  utt's HTTP API is switched on. **The daemon holds no token of utt's**: `needsApi` is false,
+  so there is nothing to go stale.
+- **The clip must be whole before it is audio.** utt picks up finished audio extensions from
+  the jobs folder, so a clip is written as `<name>.wav.part` and only then renamed — skip the
+  rename and utt reads the file mid-write. `<name>.hints.json` goes in *before* the rename, or
+  it is a hints file utt has already run past. The extension has to match the bytes:
+  AVFoundation picks its reader from the extension, so a wav named `.m4a` fails to open however
+  correct it is. utt deletes the audio and the hints; the answer file is ours to remove.
+- **Hints are the cheapest accuracy in the system.** Every clip was dictated at a named session
+  working in a known folder, so the vocabulary is known before the clip is recorded
+  (`transcribe.hints_for`). utt only lets a hint displace text that is already nearly it and
+  starts with the same letter, so the list cannot rewrite a sentence: it catches "cockwheel" →
+  "cogwheel", "Tu Y" → "TUI", "deck hand" → "deckhand". It cannot fix an ordinary word misheard
+  as another ordinary word ("previous tree" for "previous three" stays wrong).
+- **The plugin page needs utt 1.1.0 or newer.** Before that, utt dropped manifest keys that were
+  not all-lowercase and said nothing, so `copyToken` and `openLog` never became buttons and only
+  `stop` did — a page can be half-missing and look complete. There is still no way for a plugin
+  to learn that a key was refused, so a button that does not appear is the only symptom.
+- **Every action has to be safe to press by accident**, because `showsInMenuBar` is all of them
+  or none. There was a "Stop listening" action running `launchctl bootout`, which *unloads* the
+  job; utt's Restart is `kickstart`, which cannot revive a job that is not loaded (verified: exit
+  113, "Could not find service"). Stopping it for good is `just uninstall-agent`.
+- **A string setting arrives per keystroke.** `revision` is correct per write, but typing one
+  sentence into a field produced 40-odd revisions in four seconds. Anything done on a values
+  change has to be cheap, or debounced.
+- **APNs needs a key the daemon cannot mint.** `just sync-apns` materialises `deckhand/APNS_KEY`
+  and `APNS_KEY_ID` out of 1Password, for the launchd reason as ever. The key itself is created
+  by hand once in the developer portal. Without it everything works up to the send and the log
+  says `no push key on this Mac`. **The host must match the entitlement**: the app signs
+  `aps-environment: development`, so the daemon talks to `api.sandbox.push.apple.com`; a token
+  minted for one host is refused by the other. See `widgets/CLAUDE.md` for the payload contract.
+
+## Verification
+
+`just daemon-lint` (ruff) and `just daemon-test` (pytest), both inside `just check`.
+`just daemon` runs it in the foreground and prints its address and pairing token.
+`.quality.json` caps a Python file at 400 lines and a directory at 16 files.
+
+## Related context
+
+- `../CLAUDE.md` — the repo map and the endpoint surface
+- `reading/CLAUDE.md`, `filters/CLAUDE.md`, `prompts/CLAUDE.md` (under `src/deckhand_daemon/`)
+- `../launchd/com.jurrejan.deckhand.plist` — the agent, registered in project-atlas `daemons.json`
