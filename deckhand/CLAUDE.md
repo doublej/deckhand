@@ -162,6 +162,18 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   another answer into the session. So it says "Sending…", it refuses a second tap while one is
   in flight, and success closes the screen — a web slip closes itself with `deckhand.close()`,
   and anything the app draws in place of a page has to do that job itself.
+- **A sequenced gesture eats the tap beside it, and it does so silently.** `.gesture(LongPress
+  .sequenced(before: DragGesture(minimumDistance: 0)))` with `.onTapGesture` outside it claims the
+  touch on the way *down*, so the tap never fires however short it is — no error, no warning, the
+  handler simply never runs. That was `TalkGesture`'s `.hold` branch, which is the default mode,
+  which means the clip archive was unreachable from a session's page for as long as it was written
+  that way, and the three-option menu that replaced it inherited the silence. `.onLongPressGesture`
+  + `.onTapGesture` is the pairing that works — a list row has always used it for this exact job.
+  Both `.hold` branches are one case now. Two UI tests hold it down, one per mode, and the
+  *difference* between them is the diagnostic: the menu worked on a long press in tap-to-talk and
+  did nothing on a tap in hold-to-talk, which is what narrowed a screenful of suspects to one line.
+  Neither a titled dialog nor giving each presentation its own host changed anything, so four
+  presentations on one view is measured and fine rather than merely feared.
 - **Two gestures on one control means one modifier, and the order inside it is the bug.** The
   archive gesture went on as a second `ViewModifier` wrapping `TalkGesture`, which put its long
   press *outside* the tap — and a long press applied outside a tap takes the touch, so
