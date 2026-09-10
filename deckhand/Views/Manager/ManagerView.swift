@@ -37,7 +37,6 @@ struct ManagerView: View {
         .environment(\.colorScheme, .dark)
         .accent(accent)
         .overlay(alignment: .top) { arrival }
-        .accessibilityIdentifier("manager-panel")
         .task(id: desk.open) { await poll() }
         .onChange(of: desk.open) { _, now in
             named = now
@@ -146,6 +145,10 @@ struct ManagerView: View {
                 RoundedRectangle(cornerRadius: Radius.small, style: .continuous)
                     .fill(Palette.textPrimary.opacity(0.06))
             )
+            // Also what a UI test asks for to know the panel is open. An identifier on the
+            // panel's own container looked tidier and was wrong: SwiftUI pushes a container's
+            // identifier down onto every descendant, so the field, both buttons and the mark
+            // all came back called `manager-panel` and nothing could be addressed at all.
             .accessibilityIdentifier("manager-field")
     }
 
@@ -159,7 +162,7 @@ struct ManagerView: View {
             onStart: { typing = false },
             onClip: { await model.askManager(clip: $0) },
             content: { state in
-                TalkMark(state: state, level: recorder.level,
+                TalkMark(state: state, level: recorder.level, saying: "Talk to the manager",
                          // Nothing here is held for reading first: the review card exists
                          // because a prompt into a busy session cannot be undone, and a
                          // sentence to the manager can simply be followed by another.

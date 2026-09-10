@@ -22,7 +22,7 @@ struct ManagerLine: View {
                      showsRole: showsRole)
         case .manager:
             TurnCard(turn: Turn(role: "assistant", text: entry.text, timestamp: ""),
-                     showsRole: showsRole)
+                     showsRole: showsRole, theirWord: "MANAGER")
         case .act:
             note(entry.text, word: "DID", tint: Palette.textTertiary)
         case .command:

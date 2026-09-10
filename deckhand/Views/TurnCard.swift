@@ -7,6 +7,10 @@ struct TurnCard: View {
     let turn: Turn
     /// False when the turn before this one was from the same speaker.
     let showsRole: Bool
+    /// What the other speaker is called. A session's transcript is Claude; the manager panel is
+    /// the manager, and calling it Claude there would be the one screen where the word said
+    /// nothing — every session on that panel is Claude too.
+    var theirWord = "CLAUDE"
     @Environment(\.accent) private var accent
     /// Closed until asked. Thinking is the longest thing in a turn and the least often wanted —
     /// a transcript that opened every block by default would be a transcript nobody could skim.
@@ -15,7 +19,7 @@ struct TurnCard: View {
     var body: some View {
         Card(spacing: Spacing.xxs) {
             if showsRole {
-                Text(turn.isUser ? "YOU" : "CLAUDE")
+                Text(turn.isUser ? "YOU" : theirWord)
                     .font(Typography.eyebrow)
                     .tracking(1)
                     .foregroundStyle(turn.isUser ? accent : Palette.textTertiary)

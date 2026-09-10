@@ -15,6 +15,9 @@ import SwiftUI
 struct TalkMark: View {
     let state: TalkState
     let level: Double
+    /// What it says it does, for VoiceOver. A session's page is the default because that is
+    /// where the mark spends its life; the manager panel is the one screen it is not a session.
+    var saying = "Talk to this session"
     /// Whether the words are held for reading before they go. It changes what a tap does, so it
     /// changes what the pill may promise: a tap that opens a review card has not sent anything.
     var confirms = true
@@ -95,7 +98,7 @@ struct TalkMark: View {
         // The only thing on this page with no words on it, so it says what it is out loud —
         // and it is what the UI test looks for now that nothing is labelled at rest.
         .accessibilityAddTraits(.isButton)
-        .accessibilityLabel(isRecording ? "Recording, tap to send" : "Talk to this session")
+        .accessibilityLabel(isRecording ? "Recording, tap to send" : saying)
         .accessibilityIdentifier("talk-mark")
     }
 

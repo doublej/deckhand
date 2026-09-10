@@ -10,6 +10,10 @@ to edit**; change `project.yml` and run `just generate`.
 
 ## Mental model
 
+`Views/Manager/` is the manager panel and everything about it, including its own `AppModel`
+extension — `deckhand/` is on the 16-file gate, so `ManagerDesk.swift` holds the state object and
+the model's half of it together, the way `Views/Rail/Linking.swift` already does.
+
 `Model` holds the listing and the selection; the files beside it are one feature each
 (`Dictating`, `Controlling`, `Filtering`, `Keeping`, `Markups`, `Reading`, `Snaps`,
 `LiveUpdates`). `Views/` is the screens, `Views/Session/` the session page's parts,
@@ -267,6 +271,37 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   `UIPasteboard.general.image` is what triggers the system's paste consent, and only then.
 - **A busy session cannot be made to read early.** The queue drains when a turn ends, so the
   phone's "force" is Escape and the button says "Stop the run so it reads this".
+- **The manager panel is a shell around the root, not a `TabView(.page)` around the rail.** Every
+  row on the rail already spends its horizontal drag on `swipeActions`, and paging is a UIKit pan
+  *inside* the view — so wrapping the list in one is the arbitration fight `SessionView.back` had
+  to win with an overlay, against every row rather than one margin. `ManagerShell` puts the
+  gesture where it cannot collide: a 24pt clear strip overlaid on the trailing edge, drawn over
+  the rows so it takes the touch first, and the whole screen follows the finger. The price is the
+  same price the session page paid — the trailing 24pt of a row no longer reveals its actions,
+  and `ManagerPanelTests.testARowStillRevealsItsActions` is what notices if the strip grows.
+  `RailFoot` gets a glyph too: a gesture nobody is told about is not a way in for VoiceOver.
+- **An `accessibilityIdentifier` on a container renames every element under it.** The manager
+  panel wore `manager-panel` on its outermost `VStack`, and SwiftUI pushed that name down onto
+  the text field, both buttons and the talk mark — every one of them came back *called*
+  `manager-panel`, so `manager-field` and `manager-send` matched nothing and the panel read as a
+  screen with no controls on it. The failure is silent and the error says "no matches", which
+  points at the identifier that is missing rather than at the one that ate it. Identifiers go on
+  leaves. The panel is recognised in tests by its field, which exists on that screen and no other.
+- **The shell sits *outside* `RootView`'s `.ignoresSafeArea(.keyboard)`, deliberately.** The rail
+  and the deck ignore the keyboard because nothing on them is typed into. The panel is one long
+  field and has to rise for it, which it cannot do inside an ancestor that ignores it.
+- **What the manager asks of the phone lands in two slots, not one.** The rail owns which session
+  is pushed and the session's own page owns which pane shows — two gates, two views, so
+  `ManagerDesk` holds `route` and `pane` separately. One slot loses the first of them whenever a
+  run asks for both, which is exactly what "open deckhand and show me its slips" is, and it was
+  the first thing the manager actually did. The session page reads `pane` on the way in as well
+  as on a change: both were set before that view existed, so an `onChange` alone never fires.
+- **A command is obeyed only when it is newer than the cursor the panel opened with.** Without
+  that, every relaunch replays every piece of navigation the manager has ever asked for, in
+  order, at launch. `ManagerDesk.obeyFrom` is set once, to whatever the Mac's newest entry was.
+- **Nothing said to the manager is held for reading first.** The review card exists because a
+  prompt into a busy session cannot be undone; a sentence to the manager can simply be followed
+  by another, so `TalkMark(confirms: false)` and the clip goes straight up.
 - **ATS:** the app talks plain HTTP to a `.local` name, which needs `NSAllowsLocalNetworking` plus
   `NSLocalNetworkUsageDescription` — both in `project.yml`, not a checked-in plist.
 
