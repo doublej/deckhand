@@ -12,7 +12,11 @@ targets:
     type: application
     platform: iOS
     sources:
-      - deckhand
+      # Context packets are not resources. Two of them under this target's own root both flatten
+      # to `Deckhand.app/CLAUDE.md`, which fails the build outright as "multiple commands produce".
+      - path: deckhand
+        excludes:
+          - "**/CLAUDE.md"
       - deckhand/Assets.xcassets
     dependencies:
       - package: DeckhandKit
