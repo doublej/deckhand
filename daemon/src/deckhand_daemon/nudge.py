@@ -82,7 +82,7 @@ def _consider(session: sessions.Session, now: float) -> bool:
     if standing == about or now - when < AGAIN:
         return False
     route, error = deliver.deliver(
-        session, _question(open_asks), route=IDLE_CHECK.settings["route"])
+        session, _question(open_asks, session.name), route=IDLE_CHECK.settings["route"])
     if error:
         log.warning("idle check could not reach %s: %s", session.name, error)
         return False
@@ -96,7 +96,14 @@ def _fingerprint(open_asks: list[dict]) -> str:
     return "|".join(f"{task['id']}:{task['state']}" for task in open_asks)
 
 
-def _question(open_asks: list[dict]) -> str:
-    """The whole message. Says what it is, so nobody reads it as the person typing."""
+def _question(open_asks: list[dict], name: str) -> str:
+    """The whole message. Says what it is, so nobody reads it as the person typing.
+
+    It is addressed by name on purpose. The asks and the session they are sent to come from the
+    same `Session` in `_consider`, so this cannot pick up another session's list — but the socket
+    underneath can go to the wrong process if a record is stale or a pid was reused, and a message
+    saying only "this session" would arrive looking exactly right. Named, a misroute announces
+    itself, because the session reading it knows what it is called and this says what it expected.
+    """
     listed = "; ".join(f"{task['id']} [{task['state']}] {task['text']}" for task in open_asks)
-    return IDLE_CHECK.filled(listed=listed)
+    return IDLE_CHECK.filled(name=name, listed=listed)

@@ -24,8 +24,10 @@ def test_the_briefing_carries_the_three_tool_descriptions():
 
 def test_a_placeholder_left_unfilled_would_be_sent_to_a_live_session():
     """The failure this guards: rename {listed} in the file and the daemon ships the word."""
-    filled = prompts.load("idle-check").filled(listed="t1 [todo] ship it")
+    filled = prompts.load("idle-check").filled(
+        name="quiet-gannet", listed="t1 [todo] ship it")
     assert "t1 [todo] ship it" in filled
+    assert "quiet-gannet" in filled
     assert "{" not in filled
 
     crafted = prompts.load("crafting").filled(

@@ -100,3 +100,11 @@ def test_a_changed_list_waits_for_the_cooldown(deckhand_data, monkeypatch):
     assert nudge.sweep(now + 60) == []
     assert nudge.sweep(now + nudge.AGAIN + 1) == ["s1"]
     assert "crash on rotate" in sent[1]
+
+
+def test_the_question_is_addressed_to_the_session_by_name(deckhand_data, monkeypatch):
+    """A misrouted nudge must be answerable. Unnamed, another session's asks read as your own."""
+    asked = nudge._question([{"id": "t1", "state": "todo", "text": "ship it"}], "quiet-gannet")
+    assert "quiet-gannet" in asked
+    assert "misrouted" in asked
+    assert "{" not in asked, "a placeholder left unfilled goes to a live session as the word"
