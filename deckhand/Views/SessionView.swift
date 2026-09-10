@@ -97,14 +97,14 @@ struct SessionView: View {
         // Named on arrival and then gone. The dots say where you are among four; they cannot say
         // which four, and a pane you land on by accident is a pane you have to read to identify.
         .onChange(of: showing) { _, now in
-            withAnimation(.snappy(duration: 0.2)) { landed = now }
+            withAnimation(Motion.arriving) { landed = now }
             Task {
                 try? await Task.sleep(for: .seconds(1.1))
                 guard showing == now else { return }
-                withAnimation(.easeOut(duration: 0.35)) { landed = nil }
+                withAnimation(Motion.leaving) { landed = nil }
             }
         }
-        .animation(.snappy(duration: 0.22), value: model.review[session.sessionId])
+        .animation(Motion.opening, value: model.review[session.sessionId])
         // The whole page goes utt orange while the mark at its foot is open, not only the mark:
         // one decision, made here, that every accent inside the page reads out of the
         // environment. It is the recorder's own state, so the page is teal again the instant the
@@ -217,7 +217,7 @@ struct SessionView: View {
         if let landed {
             Text(landed.rawValue.uppercased())
                 .font(Typography.eyebrow)
-                .tracking(1.5)
+                .trackedCentred(1.5)
                 .foregroundStyle(Palette.textSecondary)
                 .padding(.horizontal, Spacing.small)
                 .padding(.vertical, 6)
@@ -250,7 +250,7 @@ struct SessionView: View {
             FilesView(model: model, session: session).tag(Pane.files)
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
-        .animation(.snappy(duration: 0.25), value: showing)
+        .animation(Motion.opening, value: showing)
     }
 
 }

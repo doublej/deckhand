@@ -27,6 +27,12 @@ struct TalkMark: View {
     /// which is also what takes the narration's clock back down.
     @State private var busySince: Date?
 
+    /// Which of the two word transitions is running, so both can be felt on the phone rather than
+    /// argued about from a description. `@AppStorage` and not `Preferences`: that type is a
+    /// persisted document with an initialiser, defaults and tests behind it, and this is a design
+    /// question with an answer coming — two lines to add and two to delete. See `WordRoll`.
+    @AppStorage("talk.letters") private var letters = false
+
     /// How much room a scrolling pane leaves at the end of its content for the mark to float
     /// over: the mark, its tile, and the air around it.
     static let clearance: CGFloat = 68
@@ -42,7 +48,7 @@ struct TalkMark: View {
             }
         }
         .padding(.vertical, Spacing.extraSmall)
-        .animation(.snappy(duration: 0.2), value: state.canCancel)
+        .animation(Motion.arriving, value: state.canCancel)
         .onChange(of: state.busy) { _, busy in busySince = busy ? .now : nil }
     }
 
@@ -63,7 +69,9 @@ struct TalkMark: View {
                  edge: .leading,
                  tint: isRecording ? accent : Palette.textTertiary,
                  action: state.tapped)
-                .animation(.snappy(duration: 0.2), value: word)
+                // Only the pill coming and going. A word replacing another is `WordRoll`'s, and
+                // it animates from in there — which is the whole of this fix.
+                .animation(Motion.arriving, value: word == nil)
         }
     }
 
@@ -93,6 +101,13 @@ struct TalkMark: View {
 
     /// One half of the bar: a word on a pill, centred in that half, sliding in from its own
     /// edge. Nothing to say takes the space but draws nothing and catches nothing.
+    ///
+    /// There is deliberately **no `.id(word)`** here. It was on the pill, so a new word tore the
+    /// whole capsule down and built another — invisible while a wait said one word, and the
+    /// button flashing six times once the wait learned to narrate itself. The capsule now comes
+    /// and goes only when there is something to say or nothing; the word changing inside it is
+    /// `WordRoll`'s job. Arriving and leaving are two different animations because they are two
+    /// different moments: a thing entering wants a soft landing, a thing leaving wants to be gone.
     @ViewBuilder
     private func wing(_ word: String?,
                       edge: Edge,
@@ -101,22 +116,21 @@ struct TalkMark: View {
         ZStack {
             if let word {
                 pill(word, tint: tint, action: action)
-                    .id(word)
-                    .transition(.move(edge: edge).combined(with: .opacity))
+                    .transition(.asymmetric(
+                        insertion: .move(edge: edge)
+                            .combined(with: .opacity).animation(Motion.arriving),
+                        removal: .move(edge: edge)
+                            .combined(with: .opacity).animation(Motion.leaving)))
             }
         }
         .frame(maxWidth: .infinity)
     }
 
+    /// The capsule, and nothing about the word: what the word is and how it changes is all in
+    /// `WordRoll`, including the room around it, because the mask that softens a word sliding out
+    /// has to reach the capsule's own edge.
     private func pill(_ word: String, tint: Color, action: (() -> Void)?) -> some View {
-        Text(word)
-            .font(Typography.state)
-            .tracking(1.4)
-            .foregroundStyle(tint)
-            .lineLimit(1)
-            .minimumScaleFactor(0.8)
-            .padding(.horizontal, Spacing.small)
-            .padding(.vertical, 6)
+        WordRoll(word: word, tint: tint, letters: letters)
             // The mark's own ground, because these slid out from under the mark: three pieces
             // of one control, not two labels visiting from the page they float over.
             .background(
@@ -129,6 +143,11 @@ struct TalkMark: View {
             .environment(\.colorScheme, .dark)
             .contentShape(.capsule)
             .onTapGesture { action?() }
+            // Split per letter the label is soup, so the whole wing is one element saying the
+            // whole word. The hit area is the capsule and never the glyphs — `contentShape` above
+            // is what keeps a two-letter word as easy to hit as a sentence.
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(word)
             .accessibilityAddTraits(.isButton)
     }
 

@@ -76,7 +76,9 @@ public struct DotMark: View {
         .onChange(of: driver.patternIndex) { _, _ in
             guard fixed == nil else { return }
             // Never let a transition outlast the cycle that triggered it, or a loud signal
-            // leaves every dot stuck mid-fade.
+            // leaves every dot stuck mid-fade. Deliberately not a `Motion` token: this is the
+            // meter's own clock rather than a state changing on screen, and pinning it to a
+            // number picked for pills would be the drift those tokens exist to stop.
             let fade = min(0.4, DotMatrix.cycleInterval(for: driver.level) * 0.5)
             withAnimation(.easeInOut(duration: fade)) { settle(to: current) }
         }

@@ -7,6 +7,10 @@ import SwiftUI
 struct SettingsView: View {
     @Bindable var model: AppModel
     @Environment(\.dismiss) private var dismiss
+    /// Which of the two talk-mark word transitions is running. `@AppStorage` rather than a field
+    /// on `Preferences`, which is a persisted document with an initialiser, defaults and tests
+    /// behind it: this is a design question with an answer coming, and two lines either way.
+    @AppStorage("talk.letters") private var letters = false
 
     var body: some View {
         NavigationStack {
@@ -139,6 +143,11 @@ struct SettingsView: View {
 
     private var talking: some View {
         SettingsGroup("Talking") {
+            SettingRow("Rolling letters", detail: "How the mark's word changes while it waits: letter by letter, or the whole word sliding.") {
+                Toggle("Rolling letters", isOn: $letters)
+                    .labelsHidden()
+                    .tint(Palette.tint)
+            }
             SettingRow("Button", detail: "Hold the mark down, or tap once to start and again to send.") {
                 Picker("Button", selection: talkMode) {
                     ForEach(TalkMode.allCases, id: \.self) { Text($0.label).tag($0) }

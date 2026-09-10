@@ -23,3 +23,25 @@ public enum Typography {
     /// The eyebrow on a turn card: YOU / CLAUDE.
     public static let eyebrow = Font.system(size: 9, weight: .semibold, design: .monospaced)
 }
+
+extension View {
+    /// Tracked text centred on its ink rather than on its layout box.
+    ///
+    /// `tracking` adds its space after *every* character, the last one included, so a tracked
+    /// word carries an empty column on its right that no ink occupies. Centre that box inside
+    /// symmetric padding and the ink sits half the tracking left of true centre — 0.7pt at the
+    /// talk pill's 1.4, which sounds like nothing and is plainly visible. Leading padding of the
+    /// full tracking puts it back: the box moves right by half of what is added, which is exactly
+    /// the error. Measured, not guessed: it widens the shape by the tracking and by nothing else.
+    ///
+    /// **CANCEL is where it shows**, and that is the tell rather than a coincidence. The error is
+    /// the same 0.7pt for every word; on the shortest one both gaps fall inside a single glance
+    /// and the eye compares them directly, where on `TAP TO PREVIEW` they are a pill apart and
+    /// nobody can.
+    ///
+    /// Only for text centred inside a shape. Tracked text aligned to a leading edge is already
+    /// right, and this would indent it — which is why it is not folded into `Typography` itself.
+    public func trackedCentred(_ points: CGFloat) -> some View {
+        tracking(points).padding(.leading, points)
+    }
+}

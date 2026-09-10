@@ -39,7 +39,7 @@ struct ToolTrace: View {
         }
         .padding(.horizontal, Spacing.extraSmall)
         .padding(.vertical, Spacing.xxs)
-        .animation(.snappy(duration: 0.18), value: depth)
+        .animation(Motion.opening, value: depth)
     }
 
     /// The dots are the closed state's whole content. Once the list is open they are stacked

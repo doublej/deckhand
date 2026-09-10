@@ -44,7 +44,7 @@ struct SayOnPage: View {
         // Nothing, not an empty row: the padding and the width belong to the two things that can be
         // in the slot, or a page holding neither would still lose a strip off its bottom edge to an
         // inset with nothing in it.
-        .animation(.snappy(duration: 0.2), value: talk.holds)
+        .animation(Motion.arriving, value: talk.holds)
         .onChange(of: talk.holds) { nothing = nil }
     }
 

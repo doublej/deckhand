@@ -149,6 +149,17 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   was tried as a footnote to the gesture nobody can discover by trying it, and it was on screen
   every second the app was open to explain a thing you do once. It is gone. Nothing is labelled
   at rest here — the rule has no exception, and the exception is what made it noise.
+- **The word changes, the pill does not.** `.id(word)` was on `TalkMark.pill`, so every new word
+  tore the whole capsule down — fill, shadow and all — and built another. Invisible while a wait
+  said one word; once the wait learned to narrate itself (`ClipNarration`) it was the button
+  flashing in and out six times. `WordRoll` is the fix and the *layout* rule inside it is the part
+  worth keeping: the incoming word is a hidden `Text` that owns the container's size and the pair
+  actually animating hangs off it as an overlay, out of layout entirely — so the capsule makes one
+  smooth resize from the first frame rather than settling after the letters land, and a staggered
+  letter arrives where it will finally sit instead of sliding into place. The mark cannot be
+  shoved either way: each wing is a `maxWidth: .infinity` half and the pill grows about its own
+  centre inside it. Two styles, switched by `@AppStorage("talk.letters")` and a row in Settings —
+  a design question with an answer coming, not a preference worth putting in `Preferences`.
 - **The talk control is a mark and nothing else.** It floats over the pane rather than sitting
   under it, and the scrolling panes add `TalkMark.clearance` to the end of their content so
   nothing is stuck behind it. No bar, no ground, no resting label: a band of furniture across the

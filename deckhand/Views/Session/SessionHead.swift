@@ -212,7 +212,7 @@ struct SessionHead: View {
                     .frame(width: 5, height: 5)
             }
         }
-        .animation(.snappy(duration: 0.2), value: lit)
+        .animation(Motion.opening, value: lit)
         .accessibilityElement()
         .accessibilityLabel("Pane \(lit + 1) of \(pages)")
     }

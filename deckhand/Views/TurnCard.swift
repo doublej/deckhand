@@ -50,7 +50,7 @@ struct TurnCard: View {
     /// the page like everything else and the poll keeps it current.
     @ViewBuilder private var thought: some View {
         if !turn.thoughts.isEmpty {
-            Button { withAnimation(.snappy(duration: 0.2)) { thinking.toggle() } } label: {
+            Button { withAnimation(Motion.opening) { thinking.toggle() } } label: {
                 HStack(spacing: Spacing.xxs) {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 9, weight: .semibold))

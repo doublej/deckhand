@@ -10,7 +10,7 @@ The one thing that is Deckhand's own is `Palette.tint` (#3EAFB4) and its mark, a
 same 6×6 dot grid utt's own mark lives on.
 
 ```
-Palette, Typography, Spacing   # utt's tokens, copied
+Palette, Typography, Spacing   # utt's tokens, copied; Radius and Motion live in Spacing.swift
 DotMatrix / DotPatterns   # the 6x6 geometry and the level curves; DotGlyph holds the shapes
 DotMatrixDriver # utt's shared clock, so a mark is never still
 DotMark         # a shape on the grid, and the wordmark
@@ -43,6 +43,22 @@ Markdown / MarkdownBlocks / Prose  # how a session's words are drawn
   `updated_at`, which is the age of an *idle* session only — a busy row is never faded whatever
   its timestamp says, or the hardest-working row on the rail would be the faintest one. Portrait
   only; `SessionRow` has no other caller.
+- **`Motion` is the one thing here that is not a port, and that is deliberate.** utt's design
+  layer has no motion tokens either, so there was nothing to copy and this is an addition rather
+  than an oversight — a candidate to push back to utt. It exists because every call site had been
+  picking its own: 0.18, 0.20, 0.22 and 0.25 across eleven files, four values nobody can tell
+  apart. All ease, no spring — `.snappy` is a spring with bounce in it, and a word landing beside
+  a button somebody is about to press should land rather than wobble. The tokens are named for
+  what the motion is *for* (`arriving`, `leaving`, `opening`, `fading`, `word`, `letter`), because
+  that is the question at a call site. Two sites keep their own numbers on purpose and say why:
+  `DotMark`'s dot settle is the meter's clock rather than a state change, and `TranscriptView`'s
+  `scrollTo` is the scroll view's own motion.
+- **`trackedCentred` is not a nicety.** `tracking` adds its space after every character including
+  the last, so a tracked word's box carries an empty column on its right and the ink sits half the
+  tracking left of centre inside symmetric padding. Leading padding of the full tracking puts it
+  back. It shows on the *shortest* word — CANCEL, where both gaps fall inside one glance — and not
+  on the longest, which is the tell. Only for text centred inside a shape; leading-aligned tracked
+  text is already right, which is why it is a modifier rather than part of `Typography`.
 - **Corners get tighter inwards, never wider.** A shape nested inside another takes the `Radius`
   token *below* its container's, because concentric corners want `inner = outer - the gap between
   them` and this scale has no negative step: a `Radius.medium` card with `Spacing.medium` padding

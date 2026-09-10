@@ -83,11 +83,18 @@ struct SessionFoot: View {
     /// The mark is the button. utt's mark, because recording is utt's job — it takes the
     /// recording tint and speeds up with the meter, exactly as it does in utt's own rail.
     ///
-    /// Nudged down into the safe area, and only the mark: it sat a whole home indicator's height
-    /// clear of the bottom, which on a screen whose content now runs all the way down read as
-    /// floating in the middle of nothing. This leaves it just clear of the indicator itself. The
-    /// review card does not move — it is tall, and pushing its foot under the indicator would put
-    /// Send where the system's own gesture lives.
+    /// Nudged down into the safe area, and only the row the mark is in: it sat a whole home
+    /// indicator's height clear of the bottom, which on a screen whose content now runs all the
+    /// way down read as floating in the middle of nothing. The review card does not move — it is
+    /// tall, and pushing its foot under the indicator would put Send where the system's own
+    /// gesture lives.
+    ///
+    /// The arithmetic, because the floor here is an interaction boundary and not taste. The stack
+    /// this slot is an overlay on ends at the safe area, 34pt above the glass on this phone; the
+    /// slot's own `Spacing.extraSmall` puts the row's bottom edge 8pt above that. So the offset
+    /// is measured down from 42pt, the system's swipe-up zone is the bottom 20pt, and **22 is the
+    /// ceiling**. `Spacing.medium` leaves 26pt of glass under the row — 6pt of margin over that
+    /// zone — where `Spacing.large` would put the row inside it.
     ///
     /// The one surface that also carries the press talking does not use: it is the only place a
     /// mark has no other job for it. A row in the sessions list spends its tap on opening the
@@ -106,7 +113,7 @@ struct SessionFoot: View {
                          confirms: model.preferences.confirms)
             }
         )
-        .offset(y: Spacing.small)
+        .offset(y: Spacing.medium)
     }
 
     /// Held for reading, over the top of whichever tab you were on — including the button you

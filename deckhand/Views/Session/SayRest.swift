@@ -67,7 +67,7 @@ struct SayRest: View {
         .frame(minHeight: Self.touch)
         .background(RoundedRectangle(cornerRadius: Radius.small, style: .continuous).fill(fill(state)))
         .contentShape(.rect(cornerRadius: Radius.small, style: .continuous))
-        .animation(.snappy(duration: 0.2), value: word(state))
+        .animation(Motion.word, value: word(state))
         .accessibilityAddTraits(.isButton)
         .accessibilityLabel(spoken(state))
         .accessibilityIdentifier("say-rest")

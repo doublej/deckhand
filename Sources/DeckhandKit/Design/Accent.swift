@@ -39,6 +39,6 @@ public extension View {
     func accent(_ colour: Color) -> some View {
         environment(\.accent, colour)
             .tint(colour)
-            .animation(.easeInOut(duration: 0.2), value: colour)
+            .animation(Motion.fading, value: colour)
     }
 }
