@@ -39,6 +39,24 @@ extension ClientTests {
         #expect(orders.inForce)
     }
 
+    /// A daemon with no such route and a session that has gone answer the same 404, and the pane's
+    /// honest content in both cases is "nothing standing" — see `artifacts(of:)` for the same call.
+    @Test("a daemon that has never heard of orders means none rather than an error")
+    func toleratesAMacWithoutTheRoute() async throws {
+        StubProtocol.respond(with: Data(#"{"detail":"Not Found"}"#.utf8), status: 404)
+        #expect(try await client().orders(of: "s") == Orders())
+    }
+
+    /// The read forgives a 404 and the write must not: the person has just typed a paragraph, and
+    /// a save that went nowhere and said nothing is the failure this app refuses.
+    @Test("a save that reaches nothing is an error, unlike a read")
+    func aRefusedSaveIsLoud() async throws {
+        StubProtocol.respond(with: Data(#"{"detail":"Not Found"}"#.utf8), status: 404)
+        await #expect(throws: DeckhandError.self) {
+            try await client().saveOrders("keep it short", of: "s")
+        }
+    }
+
     /// What comes back is what was *stored*, which is not what was sent: the Mac strips anything a
     /// terminal would act on and clamps what is too long.
     @Test("saving orders sends the words and takes back what the Mac kept")

@@ -25,14 +25,27 @@ public struct Orders: Codable, Sendable, Equatable {
 }
 
 public extension DeckhandClient {
-    /// This session's standing orders. A dead session is a 404, like everywhere else on this wire.
+    /// This session's standing orders, and none rather than an error where there is no route.
+    ///
+    /// Two different 404s answer the same way, exactly as `artifacts(of:)` reasons about its own:
+    /// a daemon older than this feature has no such path, and a session that has gone is a 404
+    /// everywhere. Neither is worth a red line on a pane whose honest content in both cases is
+    /// "nothing standing" — and a dead session is already failing loudly in every other request
+    /// on the page at the same moment.
     func orders(of sessionId: String) async throws -> Orders {
-        try await get("sessions/\(sessionId)/orders")
+        do {
+            return try await get("sessions/\(sessionId)/orders")
+        } catch DeckhandError.notLive {
+            return Orders()
+        }
     }
 
     /// Replace them, and take back what was *stored* rather than what was sent: the Mac strips
     /// anything a terminal would act on and clamps what is too long, so a screen that kept showing
     /// what it typed would be showing something the session will never be told.
+    ///
+    /// A 404 throws here, unlike the read. A save that went nowhere and said nothing is the one
+    /// failure this app is built to refuse — the person has just typed a paragraph.
     @discardableResult
     func saveOrders(_ text: String, of sessionId: String) async throws -> Orders {
         var req = request(.put, "sessions/\(sessionId)/orders")
