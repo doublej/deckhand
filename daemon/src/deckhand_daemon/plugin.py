@@ -58,6 +58,16 @@ def jobs_dir() -> Path:
     return plugins_dir() / f"{ID}.jobs"
 
 
+def turned_off() -> bool:
+    """Whether utt has been told to stop servicing Deckhand.
+
+    utt records this as an empty `<id>.disabled` file rather than a key in the manifest, because
+    the manifest is rewritten by the extension at every start-up and a marker survives that. It
+    is the whole state — there is nothing else to read.
+    """
+    return (plugins_dir() / f"{ID}.disabled").is_file()
+
+
 def route() -> str:
     """The route to use when the phone did not name one."""
     return ROUTE_OPTIONS.get(str(_values.get("route")), "auto")
@@ -79,6 +89,23 @@ def manifest() -> dict[str, Any]:
         "needsApi": False,
         "wantsTranscripts": False,
         "sendsAudio": True,
+        # What utt may not do to a clip Deckhand sends it.
+        #
+        # A prompt on its way into a coding session is not dictation into a text field: the
+        # capitals, the punctuation and the exact words are the payload. `formatting` is the
+        # stage that lowercases and strips punctuation, and its two switches
+        # (`lowercaseTranscripts`, `removePunctuation`) live in the person's own utt settings —
+        # so with this unset, one toggle meant for dictation elsewhere silently mangles every
+        # prompt this app delivers. Declaring it makes the phone lane deterministic whatever
+        # those are set to, and it applies only to Deckhand's own clips.
+        #
+        # `cleanup` and `replacements` are deliberately kept. Cleanup removes filler words,
+        # false starts and stuttered repeats and resolves a mid-sentence self-correction to
+        # what was meant — "at five, actually six" becomes "six" — which is exactly the shape a
+        # spoken prompt takes, and it is deletion-only with a budget and a whole-transcript
+        # fallback. An unknown stage name is dropped rather than refused, so this is safe to
+        # send to an older utt.
+        "skipsTextStages": ["formatting"],
         "tint": "#3EAFB4",
         "showsInMenuBar": True,
         "daemon": {"label": DAEMON_LABEL},

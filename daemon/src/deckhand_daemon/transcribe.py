@@ -34,6 +34,13 @@ def transcribe(clip: Path, hints: list[str] | None = None) -> tuple[str | None, 
     jobs = plugin.jobs_dir()
     if not jobs.is_dir():
         return None, "utt is not running on the Mac — open utt and try again"
+    # utt services a jobs folder only while the extension is enabled, and switching Deckhand off
+    # on its own page leaves the folder sitting there. Without this the clip is written, nothing
+    # ever reads it, and hold-to-talk blocks for the full three minutes before saying utt did not
+    # answer — which is true and useless. The marker is an empty file beside the folder, and its
+    # presence is the whole state.
+    if plugin.turned_off():
+        return None, "Deckhand is switched off in utt — turn it back on on its page there"
     job = jobs / f"{time.strftime('%Y%m%dT%H%M%S')}-{uuid.uuid4().hex[:8]}{clip.suffix.lower()}"
     try:
         return _run(job, clip, hints)

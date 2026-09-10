@@ -55,6 +55,23 @@ and `/sessions` both carry an `iterm` field saying whether pane data is trustwor
   someone clicks it, `it2` blocks: pane data is missing and `/sessions` costs the timeout.
   It happened once when the launchd agent was first bootstrapped and has been approved since.
   The pane map is cached for 3 s because one `it2` call costs ~0.5 s.
+- **What utt may do to a Deckhand clip is declared, not inherited.** The manifest names
+  `skipsTextStages: ["formatting"]`. A prompt on its way into a coding session is not dictation
+  into a text field — the capitals, the punctuation and the exact words are the payload — and
+  `formatting` is the stage that lowercases and strips punctuation, driven by two switches
+  (`lowercaseTranscripts`, `removePunctuation`) that live in the person's own utt settings. With
+  the key unset, one toggle meant for dictation elsewhere silently mangles every prompt this app
+  delivers. `cleanup` and `replacements` are kept on purpose: cleanup is deletion-only with a
+  budget and a whole-transcript fallback, and resolving "at five, actually six" to "six" is
+  exactly the shape a spoken prompt takes. An unknown stage name is dropped rather than refused,
+  so the key is safe against an older utt.
+- **utt stops servicing the jobs folder the moment Deckhand is switched off, and leaves the
+  folder there.** `ExtensionJobs.pending()` filters on `enabled`, so a disabled extension's clips
+  are written and never read — and hold-to-talk blocked for the whole `TIMEOUT` of 180 seconds
+  before reporting that utt did not answer, which is true and useless. `plugin.turned_off()`
+  reads the `<id>.disabled` marker (an empty file; its presence is the whole state, because a
+  marker survives the extension rewriting its manifest at every start-up) and `transcribe` says
+  so at once instead.
 - **The iTerm join under launchd was a throttling problem, not an approval one.** The plist
   said `ProcessType: Background`, which puts the job in launchd's slow lane for CPU and I/O,
   and a lookup that costs ~1 s from a terminal then blew a 4 s timeout every time. It reads

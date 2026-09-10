@@ -126,3 +126,20 @@ def _clip(jobs):
     clip = jobs.parent / "clip.wav"
     clip.write_bytes(b"RIFF....WAVE")
     return clip
+
+
+def test_a_switched_off_extension_says_so_rather_than_waiting(tmp_path, monkeypatch):
+    """utt stops servicing the jobs folder the moment Deckhand is disabled on its page, and the
+    folder stays where it was. Without noticing the marker the clip is written, nothing ever
+    reads it, and hold-to-talk blocks for the full three minutes to say utt did not answer."""
+    jobs = tmp_path / "deckhand.jobs"
+    jobs.mkdir()
+    (tmp_path / "deckhand.disabled").touch()
+    monkeypatch.setenv("DECKHAND_PLUGIN_DIR", str(tmp_path))
+    clip = tmp_path / "said.wav"
+    clip.write_bytes(b"pretend audio")
+    text, error = transcribe.transcribe(clip)
+    assert text is None
+    assert "switched off" in error
+    # And nothing was handed over: a folder utt is not reading must not be filled up.
+    assert not list(jobs.iterdir())
