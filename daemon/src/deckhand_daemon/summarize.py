@@ -13,7 +13,7 @@ import asyncio
 from . import tasks
 from .log import log
 
-MODEL = "claude-sonnet-5"
+MODEL = "claude-haiku-5"
 TIMEOUT = 60
 MAX_TURNS = 16
 SYSTEM_PROMPT = """You are writing the briefing a developer reads on their phone when they

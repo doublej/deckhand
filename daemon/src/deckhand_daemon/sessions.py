@@ -13,6 +13,7 @@ import os
 import subprocess
 import time
 from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 from .log import log
@@ -196,35 +197,67 @@ USAGE_WINDOW = 256 * 1024
 # `autoCompactWindow` in the person's own settings, which is what is read first — this is only
 # the floor under a machine that has never set one.
 DEFAULT_WINDOW = 200_000
+# A turn Claude Code wrote itself rather than one a model answered — an interrupt, an API error.
+# It carries a usage dict of zeros, so stopping at one reports an empty context window and names
+# `<synthetic>` as the model. The real last request is the entry before it.
+SYNTHETIC = "<synthetic>"
 
 
-def context_used(session_id: str) -> int:
-    """How much of the context window the session's last request filled.
+@dataclass(slots=True)
+class LastRequest:
+    """What the session's last request filled, and what answered it."""
+
+    used: int = 0
+    model: str = ""
+    effort: str = ""
+
+    def to_json(self, window: int) -> dict:
+        """The fragment a session's listing entry carries. Absent rather than empty when the
+        transcript has not said yet: a row with no model is one nothing has answered."""
+        return {
+            "context": {"used": self.used, "limit": window},
+            "model": self.model or None,
+            "effort": self.effort or None,
+        }
+
+
+def last_request(session_id: str) -> LastRequest:
+    """How much of the context window the session's last request filled, and what answered it.
 
     Every assistant entry carries the usage of the request that produced it, and the whole
     prompt is what was billed as input: what was newly written, what was newly cached, and what
     was read back from cache. Output is not in the window — it is what came out of it.
+
+    The model and the reasoning effort sit on that same entry, which is why they cost nothing:
+    the scan that finds the usage has already found both. A sidechain is skipped for the usage
+    and for them alike — a subagent runs whatever model it was given, not the session's.
 
     Read over a small window, because this is asked for every session on every listing and the
     answer is always in the last few entries of the file.
     """
     path = transcript_path(session_id)
     if path is None:
-        return 0
+        return LastRequest()
     for window in (USAGE_WINDOW, TAIL_WINDOWS[1]):
         for raw in reversed(tail_lines(path, window)):
             entry = parse_line(raw)
             if entry is None or entry.get("type") != "assistant" or entry.get("isSidechain"):
                 continue
-            usage = entry.get("message", {}).get("usage")
-            if isinstance(usage, dict):
-                return sum(
+            message = entry.get("message", {})
+            usage = message.get("usage")
+            if not isinstance(usage, dict) or message.get("model") == SYNTHETIC:
+                continue
+            return LastRequest(
+                used=sum(
                     value
                     for key in ("input_tokens", "cache_creation_input_tokens",
                                 "cache_read_input_tokens")
                     if isinstance(value := usage.get(key), int)
-                )
-    return 0
+                ),
+                model=message.get("model") or "",
+                effort=entry.get("effort") or "",
+            )
+    return LastRequest()
 
 
 def context_window() -> int:
@@ -235,3 +268,36 @@ def context_window() -> int:
     except (OSError, json.JSONDecodeError, AttributeError):
         return DEFAULT_WINDOW
     return configured if isinstance(configured, int) and configured > 0 else DEFAULT_WINDOW
+
+
+# The statusline's own cache, rewritten every minute by the `com.claude.statusline-cache` agent.
+# Deckhand counts no tokens of its own: it reads the object the terminal statusline is already
+# reading, so the phone and the Mac cannot quote different numbers at each other.
+WEEK_CACHE = "statusline-cache.json"
+
+
+def week_usage() -> dict | None:
+    """How much of the week's token window is spent, how far through the week that is, and how
+    long until it resets.
+
+    `pct_used` runs past 100 on a heavy week — the budget is an estimate, not a ceiling — so
+    nothing here clamps it. `pct_elapsed` is what makes it mean anything: 152% spent at 51%
+    through is the fact, the 152 alone is not.
+
+    None rather than zeros whenever there is nothing true to say: no cache (another Mac, or the
+    agent was never installed here), no week object in it, a field missing, or a window that has
+    already closed. A frozen cache answering for a week that ended on Sunday is worse than
+    answering nothing at all.
+    """
+    cache = sessions_dir().parent / WEEK_CACHE
+    try:
+        week = json.loads(cache.read_text())["week"]
+        ends = datetime.fromisoformat(week["end"])
+        spent = {
+            "pct_used": round(week["pct_used"]),
+            "pct_elapsed": round(week["pct_elapsed"]),
+            "days_remaining": float(week["days_remaining"]),
+        }
+    except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError):
+        return None
+    return spent if ends > datetime.now(UTC) else None
