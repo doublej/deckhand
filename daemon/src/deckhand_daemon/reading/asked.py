@@ -12,15 +12,13 @@ import json
 from datetime import UTC, datetime
 
 from ..config import data_dir
+from .entries import MACHINE, text_of, unwrap
 from .transcripts import (
-    MACHINE,
     TAIL_WINDOWS,
     describe,
     parse_line,
     tail_lines,
-    text_of,
     transcript_path,
-    unwrap,
 )
 
 # One ask, kept whole enough that the task list is written from their words and not a gist.

@@ -6,6 +6,7 @@ Everything that reads a Claude Code transcript and nothing that writes one.
 
 ```
 transcripts.py  # the last rounds, the activity blob a summary is written from, context fullness
+entries.py      # one entry: the words inside its envelope, and who put them there
 machinery.py    # the wrappers a message travels in, and how much of one is worth keeping
 asked.py        # what the person asked for, and what is still in the session's inbox
 commands.py     # the slash commands and skills a session could be handed by name
@@ -23,6 +24,15 @@ context.py      # the CLAUDE.md tree a session in a folder is loaded with, befor
 
 ## Invariants
 
+- **`role` does not say who wrote a turn.** A subagent's notice, another session's message and a
+  teammate's report all arrive as an ordinary `user` entry, so a reader going by `role` alone
+  labels every one of them YOU on the phone — the app putting words in JJ's mouth. `Turn.written_by`
+  carries the name `machinery.wrote` finds in the envelope and is empty only for the person
+  themselves; the phone's `Turn.isUser` asks for both.
+- **The name is in the envelope and nowhere else**, so it has to be read before the envelope comes
+  off — which is why `entries.blocks_of` exists apart from `text_of`. A subagent is named in the
+  notice's own `<summary>` as `Agent "…" finished`, and a third of those are written with the
+  quotes escaped: a pattern without `\?"` silently drops 247 of the 1112 on this Mac.
 - **A wrapper is caught by name, never by shape.** `machinery.py` knows six noise tags, two peer
   envelopes and `task-notification`, and everything else it sees is content: `Array<String>` in a
   prompt, `a < b`, an HTML snippet two sessions are discussing. This once swept every `<...>` out

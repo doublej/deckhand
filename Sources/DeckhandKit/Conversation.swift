@@ -9,6 +9,11 @@ public struct Turn: Codable, Hashable, Sendable {
     public let role: String
     public let text: String
     public let timestamp: String
+    /// Who wrote it, when it was not the person: a subagent by name, another session, or the
+    /// harness saying a background run has stopped. Empty is the person themselves. Every one of
+    /// these arrives with `role` "user", so without this the phone puts a subagent's report in
+    /// JJ's mouth — which is the one attribution that has to be right.
+    public var writtenBy: String = ""
     /// What the session ran on its way to saying this. Empty for anything you said.
     public var tools: [Tool] = []
     /// What it thought on the way there, in order, and empty for anything you said. Carried with
@@ -18,11 +23,12 @@ public struct Turn: Codable, Hashable, Sendable {
     /// few seconds and a session mid-turn has thoughts and no words yet.
     public var thoughts: [String] = []
 
-    public init(role: String, text: String, timestamp: String,
+    public init(role: String, text: String, timestamp: String, writtenBy: String = "",
                 tools: [Tool] = [], thoughts: [String] = []) {
         self.role = role
         self.text = text
         self.timestamp = timestamp
+        self.writtenBy = writtenBy
         self.tools = tools
         self.thoughts = thoughts
     }
@@ -35,11 +41,21 @@ public struct Turn: Codable, Hashable, Sendable {
         role = try box.decode(String.self, forKey: .role)
         text = try box.decode(String.self, forKey: .text)
         timestamp = try box.decode(String.self, forKey: .timestamp)
+        writtenBy = try box.decodeIfPresent(String.self, forKey: .writtenBy) ?? ""
         tools = try box.decodeIfPresent([Tool].self, forKey: .tools) ?? []
         thoughts = try box.decodeIfPresent([String].self, forKey: .thoughts) ?? []
     }
 
-    public var isUser: Bool { role == "user" }
+    /// Yours, and nobody else's. A turn somebody else wrote is a `user` entry too, so the role
+    /// alone is not the question.
+    public var isUser: Bool { role == "user" && writtenBy.isEmpty }
+
+    /// The name to put over it. `theirs` is what the other side of this particular screen is
+    /// called — a session is Claude, the manager panel is the manager — and it is used only when
+    /// nobody else signed the turn.
+    public func speaker(theirs: String = "CLAUDE") -> String {
+        writtenBy.isEmpty ? (isUser ? "YOU" : theirs) : writtenBy.uppercased()
+    }
 }
 
 /// The conversation as the phone reads it: what has been said, and what you have said that

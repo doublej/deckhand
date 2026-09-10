@@ -45,8 +45,19 @@ def test_turns_come_from_the_transcript(token, claude_home):
     )
     turns = client(token).get(f"/sessions/{SID}/turns?limit=4").json()["turns"]
     assert turns == [
-        {"role": "user", "text": "ping", "timestamp": "t", "tools": [], "thoughts": []}
+        {"role": "user", "text": "ping", "written_by": "", "timestamp": "t", "tools": [], "thoughts": []}
     ]
+
+
+def test_a_subagents_notice_is_not_labelled_as_the_person(token, claude_home):
+    """It arrives as a `user` entry, so only `by` keeps it out of JJ's mouth."""
+    notice = ('<task-notification><summary>Agent "recon" finished</summary>'
+              "<result>found it</result></task-notification>")
+    (claude_home / "projects" / "-Users-jj-dev" / f"{SID}.jsonl").write_text(
+        json.dumps({"type": "user", "message": {"content": notice}, "timestamp": "t"}) + "\n"
+    )
+    turns = client(token).get(f"/sessions/{SID}/turns?limit=4").json()["turns"]
+    assert turns[0]["written_by"] == "recon" and "found it" in turns[0]["text"]
 
 
 def test_audio_upload_lands_on_the_mac(token):

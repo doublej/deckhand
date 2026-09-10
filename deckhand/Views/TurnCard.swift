@@ -19,7 +19,7 @@ struct TurnCard: View {
     var body: some View {
         Card(spacing: Spacing.xxs) {
             if showsRole {
-                Text(turn.isUser ? "YOU" : theirWord)
+                Text(turn.speaker(theirs: theirWord))
                     .font(Typography.eyebrow)
                     .tracking(1)
                     .foregroundStyle(turn.isUser ? accent : Palette.textTertiary)

@@ -19,4 +19,26 @@ extension ClientTests {
         #expect(try await client().turns(of: "s", limit: 25, before: 25).more)
         #expect(StubProtocol.lastRequest?.url?.query == "limit=25&before=25")
     }
+
+    /// A subagent's notice and another session's message both arrive with role "user", so
+    /// `written_by` is the only thing keeping either of them out of the person's own mouth.
+    @Test("a turn somebody else wrote is signed with their name, not with YOU")
+    func namesWhoeverWroteIt() async throws {
+        StubProtocol.respond(with: Data(#"""
+        {"turns":[{"role":"user","text":"hi","written_by":"","timestamp":"t"},
+                  {"role":"user","text":"found it","written_by":"recon","timestamp":"t"}],
+         "queued":[],"more":false}
+        """#.utf8))
+        let turns = try await client().turns(of: "s", limit: 25, before: 0).turns
+        #expect(turns[0].isUser && turns[0].speaker() == "YOU")
+        #expect(!turns[1].isUser && turns[1].speaker() == "RECON")
+    }
+
+    /// The Mac and the phone are routinely a version apart, so a daemon that has never heard of
+    /// `written_by` must not cost the whole page.
+    @Test("a daemon that predates the signature still decodes")
+    func toleratesAnOlderDaemon() async throws {
+        StubProtocol.respond(with: Data(#"{"turns":[{"role":"user","text":"hi","timestamp":"t"}],"queued":[],"more":false}"#.utf8))
+        #expect(try await client().turns(of: "s", limit: 25, before: 0).turns[0].isUser)
+    }
 }

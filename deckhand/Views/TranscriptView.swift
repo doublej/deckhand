@@ -139,7 +139,7 @@ struct TranscriptView: View {
     /// False when the turn before this one was from the same speaker, so a run of replies
     /// carries one label rather than the same word over and over.
     private func startsRun(_ index: Int) -> Bool {
-        index == 0 || model.turns[index - 1].role != model.turns[index].role
+        index == 0 || model.turns[index - 1].speaker() != model.turns[index].speaker()
     }
 
     /// The newest thing the session ran, when it has run anything since it last spoke.

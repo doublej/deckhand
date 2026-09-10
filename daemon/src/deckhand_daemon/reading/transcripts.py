@@ -14,14 +14,10 @@ import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from . import machinery
+from .entries import absorbed, text_of, wrote_of
 
 # A session deep in a tool run can push its last words far back, so widen until turns appear.
 TAIL_WINDOWS = (512 * 1024, 4 * 1024 * 1024, 32 * 1024 * 1024)
-MAX_TEXT = 4000
-# Not everything that reaches a session is a person. Claude Code queues its own notices — a
-# finished background task, a reminder — and those are machinery, not something anybody said.
-MACHINE = re.compile(r"^\s*<\s*(?:task-notification|system-reminder|local-command-\w+)\b", re.IGNORECASE)
 
 
 # The input field worth showing for each tool, in the order the phone would want to read it.
@@ -51,6 +47,11 @@ class Turn:
     role: str
     text: str
     timestamp: str
+    #: Who wrote it, when it was not the person: a subagent by name, another session, or the
+    #: harness saying a background run stopped. Empty is the person themselves, and the phone
+    #: says YOU on exactly that — a notice from an agent labelled YOU is the app putting words
+    #: in JJ's mouth, which is the one attribution that has to be right.
+    written_by: str = ""
     # What the session ran on the way to saying this. Attached to the message that follows
     # them, because that is where they read as "how it got here" rather than as noise.
     tools: list[Tool] = field(default_factory=list)
@@ -76,81 +77,6 @@ def transcript_path(session_id: str) -> Path | None:
         projects_dir().glob(f"*/{session_id}.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True
     )
     return matches[0] if matches else None
-
-
-def text_of(entry: dict) -> str | None:
-    """The human-readable text of one transcript entry, or None if it carries none.
-
-    Tool calls, tool results, thinking blocks and subagent traffic are not part of the
-    conversation the phone shows.
-    """
-    if entry.get("isSidechain") or entry.get("isMeta"):
-        return None
-    message = entry.get("message")
-    if not isinstance(message, dict):
-        return None
-    content = message.get("content")
-    if isinstance(content, str):
-        parts = [content]
-    elif isinstance(content, list):
-        if any(b.get("type") == "tool_result" for b in content if isinstance(b, dict)):
-            return None
-        parts = [b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text"]
-    else:
-        return None
-    text = machinery.unwrapped("\n".join(p for p in parts if p))
-    # The keyboard route types ctrl-U before the words to clear whatever was half-written in the
-    # prompt, and that control character is part of the entry Claude Code writes down.
-    text = "".join(c for c in text if c.isprintable() or c.isspace()).strip()
-    return text[:MAX_TEXT] if text else None
-
-
-def unwrap(text: str) -> str:
-    """The words themselves, out of whatever envelope carried them to the session.
-
-    Deckhand's own socket route labels what it delivers, and a message from another session
-    arrives inside a tag. Neither is what the person said, and neither belongs on the phone.
-
-    Which tags come off is `machinery`'s list rather than "anything shaped like a tag": this
-    once swept every `<...>` out of a queued message, and a prompt saying `Array<String>` lost
-    the half of itself that mattered.
-    """
-    body = machinery.unwrapped(text)
-    # Control characters and all: the keyboard route types ctrl-U before the words to clear
-    # whatever was half-written in the prompt, and that ctrl-U travels with the message.
-    body = "".join(c for c in body if c.isprintable() or c.isspace()).strip()
-    _, marker, spoken = body.partition("transcribed:")
-    return " ".join((spoken if marker else body).split())[:MAX_TEXT]
-
-
-def absorbed(entry: dict) -> str | None:
-    """Something said to a session that was already working, out of the entry that records it.
-
-    A message that arrives mid-run never becomes a `user` entry — it is handed straight to the
-    running turn and written down as a `queued_command` attachment instead. So it *is* in the
-    transcript, at the moment it arrived, under a type nothing here was reading. Missing that is
-    what made those messages look lost: the phone kept its own copy and showed it at the end of
-    the conversation, where three answered prompts read as three that had gone unread.
-    """
-    if entry.get("type") != "attachment":
-        return None
-    attachment = entry.get("attachment")
-    if not isinstance(attachment, dict) or attachment.get("type") != "queued_command":
-        return None
-    prompt = attachment.get("prompt")
-    # Two shapes, and only one of them was being read. A typed message is a plain string; one
-    # that carries a picture is a list of content blocks instead, with `imagePasteIds` beside
-    # it. So a message with a screenshot attached vanished from the phone while the same words
-    # typed alone came through — which reads as the app losing what you said, not as a shape it
-    # could not parse.
-    if isinstance(prompt, list):
-        prompt = "\n".join(
-            block.get("text", "") for block in prompt
-            if isinstance(block, dict) and block.get("type") == "text"
-        )
-    if not isinstance(prompt, str) or not prompt or MACHINE.match(prompt):
-        return None
-    return unwrap(prompt) or None
 
 
 def activity_since_last_user(session_id: str, cap: int = 12_000) -> str:
@@ -285,7 +211,8 @@ def _scan(path: Path, window: int) -> list[Turn]:
         if (interjection := absorbed(entry)) is not None:
             # No tools hung on it: a mid-run message lands inside somebody else's run, and
             # splitting that run in two around it would cut it off from its own results.
-            turns.append(Turn(role="user", text=interjection, timestamp=entry.get("timestamp", "")))
+            turns.append(Turn(role="user", text=interjection, written_by=wrote_of(entry),
+                              timestamp=entry.get("timestamp", "")))
             continue
         if entry.get("type") not in ("user", "assistant"):
             continue
@@ -295,7 +222,8 @@ def _scan(path: Path, window: int) -> list[Turn]:
         text = text_of(entry)
         if text is None:
             continue
-        turns.append(Turn(role=entry["type"], text=text, timestamp=entry.get("timestamp", ""),
+        turns.append(Turn(role=entry["type"], text=text, written_by=wrote_of(entry),
+                          timestamp=entry.get("timestamp", ""),
                           tools=_settle(ran, answers), thoughts=thought))
         ran = []
         thought = []

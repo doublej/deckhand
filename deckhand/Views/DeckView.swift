@@ -199,7 +199,8 @@ private struct Column: View {
                     .foregroundStyle(Palette.textTertiary)
             }
             ForEach(Array(turns.enumerated()), id: \.offset) { index, turn in
-                DeckTurn(turn: turn, showsRole: index == 0 || turns[index - 1].role != turn.role)
+                DeckTurn(turn: turn,
+                         showsRole: index == 0 || turns[index - 1].speaker() != turn.speaker())
             }
         }
         .padding(Spacing.extraSmall)
@@ -260,7 +261,7 @@ private struct DeckTurn: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             if showsRole {
-                Text(turn.isUser ? "YOU" : "CLAUDE")
+                Text(turn.speaker())
                     .font(.system(size: 8, weight: .semibold, design: .monospaced))
                     .tracking(1)
                     .foregroundStyle(turn.isUser ? accent : Palette.textTertiary)
