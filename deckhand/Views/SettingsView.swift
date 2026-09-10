@@ -21,6 +21,7 @@ struct SettingsView: View {
                     models
                     talking
                     route
+                    linking
                     hidden
                     footline
                 }
@@ -175,6 +176,28 @@ struct SettingsView: View {
         }
     }
 
+    private var linking: some View {
+        SettingsGroup("Sessions talking") {
+            SettingRow(
+                "Show for",
+                detail: """
+                    Sessions that messaged each other inside this go on the rail as light \
+                    running between them, fading as it ages. The Mac reads back exactly this \
+                    far, so nothing is drawn that was not looked for.
+                    """
+            ) {
+                Picker("Show for", selection: linkWindow) {
+                    ForEach(Preferences.linkWindows, id: \.self) {
+                        Text(Preferences.windowLabel($0)).tag($0)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .tint(Palette.tint)
+            }
+        }
+    }
+
     @ViewBuilder private var hidden: some View {
         if !model.preferences.hidden.isEmpty {
             SettingsGroup("Hidden") {
@@ -212,6 +235,10 @@ struct SettingsView: View {
 
     private var routeChoice: Binding<DeliveryRoute> {
         Binding(get: { model.preferences.route }, set: { model.setRoute($0) })
+    }
+
+    private var linkWindow: Binding<TimeInterval> {
+        Binding(get: { model.preferences.linkWindow }, set: { model.setLinkWindow($0) })
     }
 }
 

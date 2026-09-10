@@ -51,6 +51,16 @@ public struct Preferences: Equatable, Sendable {
     /// file — so the next report opens in whatever was last chosen, which is the answer you
     /// wanted both times.
     public var formatsMarkdown: Bool
+    /// How far back the rail draws sessions messaging each other, and — because the phone
+    /// sends it to the Mac — how far back the Mac reads for them. One number for both, so the
+    /// scan and the picture cannot disagree about what "lately" means.
+    public var linkWindow: TimeInterval
+
+    /// What the window may be set to. Five minutes is the middle of it and the default: long
+    /// enough that a conversation is still on screen when you pick the phone up, short enough
+    /// that the rail is empty most of the time. Every value is inside the daemon's own
+    /// `MIN_WINDOW`/`MAX_WINDOW`, which refuses anything outside 30 s–1 h with a 422.
+    public static let linkWindows: [TimeInterval] = [60, 300, 900, 1800]
 
     public init(
         favorites: Set<String> = [],
@@ -58,7 +68,8 @@ public struct Preferences: Equatable, Sendable {
         talkMode: TalkMode = .hold,
         route: DeliveryRoute = .auto,
         confirms: Bool = true,
-        formatsMarkdown: Bool = true
+        formatsMarkdown: Bool = true,
+        linkWindow: TimeInterval = 300
     ) {
         self.favorites = favorites
         self.hidden = hidden
@@ -66,6 +77,12 @@ public struct Preferences: Equatable, Sendable {
         self.route = route
         self.confirms = confirms
         self.formatsMarkdown = formatsMarkdown
+        self.linkWindow = linkWindow
+    }
+
+    /// "5 min", for the picker and for the sentence under it.
+    public static func windowLabel(_ seconds: TimeInterval) -> String {
+        seconds < 60 ? "\(Int(seconds)) s" : "\(Int(seconds / 60)) min"
     }
 
     public func isFavorite(_ name: String) -> Bool { favorites.contains(name) }
@@ -102,6 +119,7 @@ public struct Preferences: Equatable, Sendable {
     private static let routeKey = "deckhand.route"
     private static let confirmsKey = "deckhand.confirms"
     private static let formatsKey = "deckhand.formatsMarkdown"
+    private static let linkWindowKey = "deckhand.linkWindow"
 
     public static func load(from defaults: UserDefaults = .standard) -> Preferences {
         Preferences(
@@ -112,7 +130,8 @@ public struct Preferences: Equatable, Sendable {
             confirms: defaults.object(forKey: confirmsKey) as? Bool ?? true,
             // `object(forKey:)` rather than `bool(forKey:)`, because a missing key reads as
             // false and the default here is on.
-            formatsMarkdown: defaults.object(forKey: formatsKey) as? Bool ?? true
+            formatsMarkdown: defaults.object(forKey: formatsKey) as? Bool ?? true,
+            linkWindow: defaults.object(forKey: linkWindowKey) as? TimeInterval ?? 300
         )
     }
 
@@ -123,5 +142,6 @@ public struct Preferences: Equatable, Sendable {
         defaults.set(route.rawValue, forKey: Self.routeKey)
         defaults.set(confirms, forKey: Self.confirmsKey)
         defaults.set(formatsMarkdown, forKey: Self.formatsKey)
+        defaults.set(linkWindow, forKey: Self.linkWindowKey)
     }
 }
