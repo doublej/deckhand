@@ -9,7 +9,7 @@ import UIKit
 /// in the remark are the same number, which is the whole trick — it is how several complaints about
 /// one screenshot stop having to be said out loud, in order, with nothing to point at. The chosen
 /// marker grows its controls beside it, so the picture stays in view while you say what is wrong
-/// with it. Tap a marker to choose it, tap it again or tap the picture to put the controls away.
+/// with it. Tap a marker to choose it, and again to put the controls away.
 /// Switch the pencil on and the picture is handed to PencilKit instead, for a circle or an arrow
 /// round something a single point cannot describe.
 ///
@@ -90,17 +90,22 @@ struct Marking: View {
         return max(Spacing.small, spot.y - Self.gap - high)
     }
 
-    /// A tap on the picture. While something is chosen this puts the controls away rather than
-    /// dropping a pin: a tap beside the callout is how you dismiss it, and leaving a stray marker
-    /// behind every one of those would fill the picture with places nobody asked about.
+    /// A tap on the picture is always a new place, chosen — one tap per place, however many are
+    /// already on it.
+    ///
+    /// Dismissing on a tap instead was the obvious reading and it is wrong here, because of how the
+    /// taps are arbitrated: the single tap waits for the double tap to fail, so dismiss-then-drop is
+    /// two taps in one spot in quick succession, which *is* a double tap — and a double tap zooms.
+    /// Marking three places on a screenshot would have zoomed twice. The chosen marker is the way
+    /// out instead, and it is a 26pt target with a marker's width of reach around it.
     private func drop(at pixel: CGPoint) {
-        if chosen != nil { return chosen = nil }
         let pin = Pin(spot: pixel)
         markup.pins.append(pin)
         chosen = pin.id
     }
 
-    /// A tap on a marker: choose it, or put it away if it was already the chosen one.
+    /// A tap on a marker: choose it, or put its controls away if it was already the chosen one.
+    /// This is the only way to close a callout without answering it, which is why it is a toggle.
     private func choose(_ pin: Pin) {
         chosen = chosen == pin.id ? nil : pin.id
     }
