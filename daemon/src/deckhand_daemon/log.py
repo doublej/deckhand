@@ -8,6 +8,9 @@ from __future__ import annotations
 
 import logging
 import os
+import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 # Tests point this elsewhere: a test run must not write into the log a person is watching.
@@ -31,3 +34,22 @@ def setup() -> logging.Logger:
 
 
 log = setup()
+
+
+@contextmanager
+def took(stages: dict[str, float], name: str) -> Iterator[None]:
+    """Wall clock for one stage of a clip's journey, in milliseconds, into `stages`.
+
+    Wall clock rather than CPU: every interesting stage here is spent waiting for something else
+    — an `it2` subprocess, a disk, utt. Insertion order is the order the stages ran, which is why
+    the response and the JSONL both hand the dict straight out rather than sorting it.
+
+    Here rather than in a `timing.py` of its own: `daemon/src/deckhand_daemon/` sits on
+    `.quality.json`'s 16-file cap, and this is the module that already means "what the daemon
+    says about itself". Do not tidy it into a new file — the gate will fail.
+    """
+    start = time.perf_counter()
+    try:
+        yield
+    finally:
+        stages[name] = round((time.perf_counter() - start) * 1000, 1)

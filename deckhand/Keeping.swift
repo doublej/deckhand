@@ -16,16 +16,23 @@ extension AppModel {
     ///
     /// A clip that cannot even be moved into the archive is the one case worth stopping for: the
     /// alternative is uploading from a place nothing is keeping, which is the bug this replaces.
-    func upload(clip: URL, to session: Session) async {
+    ///
+    /// `spans` is what the recorder already measured of this clip — the microphone opening, the
+    /// clip's own length, closing the file. Handed in rather than fetched because the recorder
+    /// belongs to the screen the mark is on, and the model has never held one.
+    func upload(clip: URL, to session: Session, spans: PhoneSpans = PhoneSpans()) async {
         guard let client = settings.client() else { return }
+        var spans = spans
+        let filing = Date.now
         guard let kept = keep(clip, for: session) else { return }
+        spans.keeping = PhoneSpans.since(filing)
         let confirms = preferences.confirms
         status = confirms ? "Transcribing…" : "Sending to \(session.name)…"
         logger.info("uploading clip for \(session.name, privacy: .public)")
         // The clip is on the wire: locking here suspends the app and loses it.
         Awake.hold()
         defer { Awake.release() }
-        await deliver(kept, to: session, with: client, confirms: confirms)
+        await deliver(kept, to: session, with: client, confirms: confirms, spans: spans)
     }
 
     /// Its own step because `run` is not enough here. That helper reports a throw and lets it go,
@@ -34,13 +41,19 @@ extension AppModel {
     private func deliver(_ kept: KeptClip,
                          to session: Session,
                          with client: DeckhandClient,
-                         confirms: Bool) async {
+                         confirms: Bool,
+                         spans: PhoneSpans) async {
+        var spans = spans
         do {
+            let sent = Date.now
             let receipt = try await client.upload(clip: archive.url(of: kept),
                                                   to: session.sessionId,
                                                   route: preferences.route,
-                                                  deliver: !confirms)
+                                                  deliver: !confirms,
+                                                  seconds: spans.spoken / 1000)
+            spans.upload = PhoneSpans.since(sent)
             logger.info("transcript: \(receipt.transcript ?? "none", privacy: .public)")
+            note(receipt, cost: spans, on: kept.id, for: session)
             file(receipt, onto: kept, for: session, confirms: confirms)
             received(receipt, for: session, confirms: confirms)
         } catch {
@@ -48,6 +61,21 @@ extension AppModel {
             status = reason(error)
             logger.error("clip kept, upload failed: \(String(describing: error))")
         }
+    }
+
+    /// What the whole journey cost, onto the clip and onto the card.
+    ///
+    /// Both, because they are read in two places and neither can reach the other: the archive
+    /// is a file and the card is redrawn on every keystroke of an edit.
+    private func note(_ receipt: UploadReceipt,
+                      cost spans: PhoneSpans,
+                      on clip: String,
+                      for session: Session) {
+        let timing = ClipTiming.merged(phone: spans,
+                                       mac: receipt.timings,
+                                       macTotal: receipt.macTotal)
+        archive.record(timing, on: clip)
+        reviewTiming[session.sessionId] = timing
     }
 
     /// What the Mac made of the clip, onto the clip.
@@ -65,6 +93,9 @@ extension AppModel {
         // here would mark a clip whose words were thrown away as having reached its session, and
         // the sweep would then drop the clip a week later — the one outcome to avoid.
         if held { heldClips[session.sessionId] = [kept.id] }
+        // The last span of the whole path ends in a view appearing, so it is started here and
+        // closed by the card itself. Only where a card is coming: a clip sent outright has none.
+        answeredAt[session.sessionId] = held ? .now : nil
         archive.finish(kept.id,
                        transcript: receipt.words,
                        delivered: receipt.went,
@@ -88,11 +119,17 @@ extension AppModel {
         // What the chain made of them, not what utt heard, and what the chain said about them
         // alongside: a word the card shows differing silently from the word that was spoken is
         // the lie this card exists to prevent.
+        // `heard` is what utt gave before this Mac's chain swapped anything, and `raw` what the
+        // recogniser gave before utt's own pipeline did — the second is nil on every Mac today.
+        // `uttRewrote` asks utt's `stages`, not `raw != text`: the pipeline trims, and trimming
+        // is not something to show a person a before-and-after of.
         hold(text,
              for: session,
              notes: receipt.notes,
              stoppedBy: receipt.stoppedBy,
-             because: receipt.deliveryError)
+             because: receipt.deliveryError,
+             heard: receipt.transcript,
+             raw: receipt.uttRewrote ? receipt.raw : nil)
         status = outcome(of: receipt, to: session, held: confirms)
     }
 
@@ -108,6 +145,17 @@ extension AppModel {
             logger.error("archiving failed: \(String(describing: error))")
             return nil
         }
+    }
+
+    /// The card holding this clip's words is on screen. The one span nothing else here can
+    /// measure, because it ends in SwiftUI drawing something.
+    ///
+    /// Answered once per clip: the card comes back on screen every time somebody swipes between
+    /// panes, and only the first of those is the one the person waited for.
+    func cardAppeared(for session: Session) {
+        guard let answered = answeredAt.removeValue(forKey: session.sessionId),
+              let clip = heldClips[session.sessionId]?.last else { return }
+        archive.showed(clip, took: PhoneSpans.since(answered))
     }
 
     /// The words in a session's card have gone. The clips they came from can stop saying

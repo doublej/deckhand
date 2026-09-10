@@ -23,6 +23,9 @@ public struct KeptClip: Codable, Hashable, Identifiable, Sendable {
     /// Why they did not, in whatever words the failure arrived in. Nil while nothing has gone
     /// wrong, which is not the same as nil while nothing has been tried.
     public var failure: String?
+    /// What its journey cost, stage by stage, from the press to the words on screen. Nil for a
+    /// clip recorded before any of this was measured, and for one no Mac ever answered for.
+    public var timings: ClipTiming?
 
     public init(id: String, recordedAt: Date, sessionId: String, sessionName: String) {
         self.id = id
@@ -112,6 +115,18 @@ public struct ClipArchive: Sendable {
             kept.delivered = delivered
             kept.failure = failure
         }
+    }
+
+    /// What the clip cost, onto the clip. Its own call rather than another parameter on
+    /// `finish`, because the last span of the whole path is not known until the card that
+    /// shows the words appears — which is a view, and long after every other answer is in.
+    public func record(_ timing: ClipTiming, on id: String) {
+        change(id) { $0.timings = timing }
+    }
+
+    /// The card is up. Written separately for the same reason `record` exists at all.
+    public func showed(_ id: String, took: Double) {
+        change(id) { $0.timings?.showed(took) }
     }
 
     /// The words reached the session after all — sent from the review card, or handed to a session

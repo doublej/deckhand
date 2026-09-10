@@ -16,6 +16,7 @@ than one import in `app.py`.
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 import uuid
 from pathlib import Path
@@ -24,7 +25,7 @@ from typing import Annotated
 from fastapi import APIRouter, Body, HTTPException, Query, UploadFile
 
 from . import config, deliver, filters, plugin, push, sessions, transcribe
-from .log import log
+from .log import log, took
 
 router = APIRouter(tags=["saying"])
 
@@ -65,50 +66,95 @@ async def upload_audio(
         alias="deliver",
         description="false to transcribe only, when the person wants to read it first",
     ),
+    seconds: float | None = Query(
+        default=None,
+        description="how long the clip runs, as the phone measured it — recorded, never used",
+    ),
 ) -> dict:
     """Speaking to a session: the clip lands on the Mac and utt turns it into text."""
-    session = await live_session(session_id)
+    ms: dict[str, float] = {}
+    whole = time.perf_counter()
+    with took(ms, "session"):
+        session = await live_session(session_id)
     suffix = Path(file.filename or "clip.m4a").suffix.lower()
     if suffix not in AUDIO_SUFFIXES:
         raise HTTPException(status_code=415, detail=f"unsupported audio type {suffix!r}")
-    body = await file.read(config.MAX_UPLOAD_BYTES + 1)
+    with took(ms, "read"):
+        body = await file.read(config.MAX_UPLOAD_BYTES + 1)
     if len(body) > config.MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="clip larger than 32 MB")
     if not body:
         raise HTTPException(status_code=400, detail="empty clip")
     stamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime())
     path = config.audio_dir(session_id) / f"{stamp}-{uuid.uuid4().hex[:8]}{suffix}"
-    path.write_bytes(body)
+    with took(ms, "write"):
+        path.write_bytes(body)
     log.info("clip for %s: %d bytes", session.name, len(body))
-    hints = transcribe.hints_for(session.name, session.cwd)
-    text, error = await asyncio.to_thread(transcribe.transcribe, path, hints)
-    log.info("transcript for %s: %s", session.name, error or repr(text))
-    plugin.status(lastClip=f"{session.name}, {error or 'heard'}")
+    with took(ms, "hints"):
+        hints = transcribe.hints_for(session.name, session.cwd)
+    heard = await asyncio.to_thread(transcribe.transcribe, path, hints)
+    ms.update(heard.stages)
+    log.info("transcript for %s: %s", session.name, heard.error or repr(heard.text))
+    plugin.status(lastClip=f"{session.name}, {heard.error or 'heard'}")
+    taken, delivery_error, checked = await _handled(session, heard.text, route, deliver_now, ms)
+    ms["total"] = round((time.perf_counter() - whole) * 1000, 1)
+    _record(session, path, len(body), seconds, heard, taken is not None, ms)
+    return _receipt(path, body, heard, taken, delivery_error, checked, ms)
+
+
+async def _handled(
+    session: sessions.Session,
+    text: str | None,
+    route: str | None,
+    deliver_now: bool,
+    ms: dict[str, float],
+) -> tuple[str | None, str | None, filters.Outcome]:
+    """The chain, and the delivery when there is one to make."""
     taken, delivery_error, checked = None, None, filters.Outcome(text=text or "")
-    if text and deliver_now and plugin.delivers():
-        chosen = route or plugin.route()
-        checked = await _filtered(session, text, chosen, "spoken")
+    if not text:
+        return taken, delivery_error, checked
+    chosen = route or plugin.route()
+    if deliver_now and plugin.delivers():
+        with took(ms, "filters"):
+            checked = await _filtered(session, text, chosen, "spoken")
         if checked.delivered:
-            taken, delivery_error = await asyncio.to_thread(
-                deliver.deliver, session, checked.text, chosen)
+            with took(ms, "deliver"):
+                taken, delivery_error = await asyncio.to_thread(
+                    deliver.deliver, session, checked.text, chosen)
             log.info("delivery to %s: %s", session.name, delivery_error or f"{taken} took it")
-            push.spoke_to(session_id)
+            push.spoke_to(session.session_id)
         else:
             delivery_error = checked.reason
-            log.info("%s refused a clip for %s: %s", checked.stopped_by, session.name, checked.reason)
-    elif text:
-        # The card now shows the whole text with an Edit button, so what it shows is what the
-        # person believes they are sending: the chain runs here too and the words come back as
-        # `prepared`. Without this you dictate "deck hand", read "deck hand", press Send and the
-        # session receives "deckhand" — the swap was right and the card was lying.
-        #
-        # ponytail: the chain therefore runs twice for a clip that is read first — here, and
-        # again in `/say` when Send puts the words in. Free for word replacement, which is
-        # idempotent, and wrong for a translate or enhance filter, which would run on its own
-        # output. The fix when one of those lands is a flag on `/say` saying these words have
-        # already been through the chain. Nothing needs it yet, so nothing has it.
-        checked = await _filtered(session, text, route or plugin.route(), "spoken")
-    return {
+            log.info("%s refused a clip for %s: %s",
+                     checked.stopped_by, session.name, checked.reason)
+        return taken, delivery_error, checked
+    # The card now shows the whole text with an Edit button, so what it shows is what the
+    # person believes they are sending: the chain runs here too and the words come back as
+    # `prepared`. Without this you dictate "deck hand", read "deck hand", press Send and the
+    # session receives "deckhand" — the swap was right and the card was lying.
+    #
+    # ponytail: the chain therefore runs twice for a clip that is read first — here, and
+    # again in `/say` when Send puts the words in. Free for word replacement, which is
+    # idempotent, and wrong for a translate or enhance filter, which would run on its own
+    # output. The fix when one of those lands is a flag on `/say` saying these words have
+    # already been through the chain. Nothing needs it yet, so nothing has it.
+    with took(ms, "filters"):
+        checked = await _filtered(session, text, chosen, "spoken")
+    return taken, delivery_error, checked
+
+
+def _receipt(
+    path: Path,
+    body: bytes,
+    heard: transcribe.Heard,
+    taken: str | None,
+    delivery_error: str | None,
+    checked: filters.Outcome,
+    ms: dict[str, float],
+) -> dict:
+    """What the phone is handed back. Every key that was here before still means what it did."""
+    text = heard.text
+    reply = {
         "path": str(path),
         "bytes": len(body),
         "received_at": time.time(),
@@ -118,7 +164,7 @@ async def upload_audio(
         # declaring `filtersTranscripts`. This is the earliest form Deckhand can see; the notes
         # below say what *Deckhand's* own chain changed, which is a different question.
         "transcript": text,
-        "transcript_error": error,
+        "transcript_error": heard.error,
         # What the chain made of it, and null when it left the words alone — so the card shows
         # the transcript itself rather than a second copy of it under another name.
         "prepared": checked.text if text and checked.text != text else None,
@@ -127,7 +173,51 @@ async def upload_audio(
         "delivery_error": delivery_error,
         "notes": checked.notes,
         "stopped_by": checked.stopped_by,
+        # Milliseconds per stage, in the order they ran, `total` last. A list rather than an
+        # object on purpose: the phone decodes with `convertFromSnakeCase`, which rewrites
+        # dictionary *keys* as happily as struct ones, and a stage name is data.
+        "timings": [{"name": name, "ms": spent} for name, spent in ms.items()],
     }
+    # Whatever utt said that this daemon has no name for, verbatim and never over the top of a
+    # key of ours. `raw`, `stages` and `cleanupSkipped` arrive this way the day utt sends them,
+    # with no change here and nothing stubbed in the meantime.
+    for key, value in heard.extra.items():
+        reply.setdefault(key, value)
+    return reply
+
+
+def _record(
+    session: sessions.Session,
+    path: Path,
+    size: int,
+    seconds: float | None,
+    heard: transcribe.Heard,
+    went: bool,
+    ms: dict[str, float],
+) -> None:
+    """One line per clip in `timings.jsonl`, so two runs can be compared afterwards.
+
+    Beside the state the daemon already keeps, appended and never rewritten: a speed or
+    compression experiment wants the same keys from a fortnight ago as from this morning.
+    `seconds` is the phone's own measure of the clip — nothing on this side opens the audio.
+    """
+    line = {
+        "at": round(time.time(), 3),
+        "clip": path.name,
+        "session_id": session.session_id,
+        "session": session.name,
+        "bytes": size,
+        "seconds": seconds,
+        "chars": len(heard.text or ""),
+        "error": heard.error,
+        "delivered": went,
+        "ms": ms,
+    }
+    try:
+        with (config.data_dir() / "timings.jsonl").open("a") as jsonl:
+            jsonl.write(json.dumps(line) + "\n")
+    except OSError as error:
+        log.warning("could not record the timings for %s: %s", path.name, error)
 
 
 @router.post("/sessions/{session_id}/image")

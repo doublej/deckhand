@@ -33,6 +33,26 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   will be — AAC writes its index on stop, so an unfinished clip is unplayable bytes anywhere.
   `heldClips` is the join from a review card back to the clips its words came from, and it
   is *replaced* on a fresh clip exactly as `hold` replaces the card.
+- **The clock starts where a press becomes a recording, not where a finger lands.** `TalkGesture`
+  waits a fixed 200 ms before a press counts as talking at all, and no gesture on this phone can
+  report the moment a touch began — so `Recorder.spans.arming` measures everything after the
+  settle (permission and `AVAudioSession.setActive` are both in it, and both are real) and the
+  settle itself is named in the doc comment rather than guessed at. The one span that cannot be
+  closed where it is opened is the last: `AppModel.answeredAt` is set when the Mac answers and
+  `SessionFoot`'s `.onAppear` closes it, because "the card is on screen" is a fact only a view
+  has. It is answered once per clip — the card comes back every time somebody swipes between
+  panes, and only the first of those is the one the person waited for.
+- **A clip's breakdown is shown twice and drawn once.** `TimingsView` is the drawing; the review
+  card shows the total with the slowest stage beside it (`ClipCost`, which opens the same view in
+  a sheet) and the clip archive expands a row into it. Exact milliseconds, because a bar with no
+  number cannot answer "which stage and by how much" — the bars behind the rows are only there so
+  the answer can be found without reading fourteen numbers first.
+- **`Rewrites` is the before the card never had.** The note said *what* the chain swapped; it
+  could not show the sentence those words replaced, so a swap that was wrong read as a mishearing
+  and a mishearing read as a swap. utt's own cleanup and this Mac's filter chain are two rows
+  rather than one, because the answer to each is in a different app. utt's half is nil on every
+  Mac today and draws nothing — the gate is `UploadReceipt.uttRewrote`, which asks utt's `stages`
+  and never `raw != text`, exactly as utt's own `ProcessedTranscript.changed` does.
 - **There is no longer hold to give a second gesture.** A hold of any length already *is* the
   recording, from `TalkGesture.settle` onwards, so the archive gets the press each mode does not
   use: a tap where talking is a hold, a long press where talking is a tap (`ReachGesture`). One

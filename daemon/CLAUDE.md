@@ -9,7 +9,7 @@ logs to `~/Library/Logs/Deckhand/deckhand.log`.
 
 State lives in `~/Library/Application Support/Deckhand/` — `token`, `audio/<sessionId>/`,
 `images/<sessionId>/`, `tasks/<sessionId>.json`, `briefings/<sessionId>.json`,
-`queue/<sessionId>.json`.
+`queue/<sessionId>.json`, `timings.jsonl`.
 
 ## Mental model
 
@@ -257,6 +257,27 @@ summariser read what a folder's subagents did. `GET|PUT /settings` is the whole 
   starts with the same letter, so the list cannot rewrite a sentence: it catches "cockwheel" →
   "cogwheel", "Tu Y" → "TUI", "deck hand" → "deckhand". It cannot fix an ordinary word misheard
   as another ordinary word ("previous tree" for "previous three" stays wrong).
+- **Anything utt writes that this daemon has no name for rides through to the phone.**
+  `transcribe._read` keeps every key outside `KNOWN` and `saying._receipt` merges them into the
+  answer without ever writing over one of its own. utt's `ProcessedTranscript` holds `raw`,
+  `stages` and `cleanupSkipped` and drops all three at the jobs boundary; the day it stops
+  dropping them the review card starts showing what utt's cleanup rewrote, with no change here
+  and nothing stubbed in the meantime. Nothing in this repo fabricates those fields.
+- **utt's span is one span, and up to 300 ms of it is utt not having looked yet.** It cannot
+  honestly be split: `ExtensionJobResult` carries no timings, `announce(ExtensionActivity(…))`
+  reaches in-process listeners only, and utt deletes the audio *after* writing the answer, so
+  the clip disappearing marks the end and never the start. `ExtensionJobs.interval` is 300 ms,
+  which is the difference between "utt is slow" and "utt has not noticed" — the app says so
+  under the number. `transcribe.POLL` is 20 ms for the matching reason: at the 0.2 s it used to
+  be, the largest stage in the whole path was measured with a fifth of a second of noise on it.
+- **Every clip's stages are answered and written down.** `log.took` is the one clock (`took` is
+  in `log.py` rather than a `timing.py` because this directory sits on the 16-file cap).
+  `/sessions/{id}/audio` answers with `timings` as an ordered **list** of `{name, ms}` — the
+  phone decodes with `convertFromSnakeCase`, which rewrites dictionary keys as happily as struct
+  ones, and a stage name is data. The same numbers go to `timings.jsonl` in the data dir, keyed
+  rather than ordered, one appended line per clip with the clip's bytes and the `seconds` the
+  phone measured — the Mac never opens the audio, so without that query param a line cannot say
+  what a millisecond bought.
 - **Anything utt hands back has already been through utt, and possibly through another
   extension.** The jobs answer carries `text`, `error` and `finishedAt` — there is no `raw`, so
   the transcript as heard never crosses the lane. utt's cleanup stage has run on it, and so has

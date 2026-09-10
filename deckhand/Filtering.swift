@@ -11,6 +11,17 @@ struct Filtered: Equatable {
     var note: String?
     /// What will happen when Send is pressed, when what will happen is nothing. Nil otherwise.
     var refusal: String?
+    /// The words as utt heard them, before this Mac's own chain swapped anything. Nil when the
+    /// chain left them alone — the card is already showing them, and a second identical copy
+    /// under a heading saying it changed would be a lie of its own.
+    var heard: String?
+    /// The words before utt's *own* pipeline rewrote them.
+    ///
+    /// **Always nil today.** utt's jobs lane sends no `raw`, so nothing arrives to show and
+    /// nothing is drawn. The day it does, `UploadReceipt.uttRewrote` is what decides — it asks
+    /// utt's `stages`, never `raw != text`, because the pipeline trims and whitespace is not a
+    /// rewrite worth showing anybody. Same rule as utt's own `ProcessedTranscript.changed`.
+    var raw: String?
 }
 
 /// The chain of steps the Mac runs over words on their way into one session, from this side of it.
@@ -122,12 +133,16 @@ extension AppModel {
         for session: Session,
         notes: [String] = [],
         stoppedBy: String? = nil,
-        because reason: String? = nil
+        because reason: String? = nil,
+        heard: String? = nil,
+        raw: String? = nil
     ) {
         review[session.sessionId] = text
         reviewFiltered[session.sessionId] = text == nil ? nil : Filtered(
             note: notes.isEmpty ? nil : notes.joined(separator: " · "),
-            refusal: stoppedBy.map { refusal(by: $0, because: reason) }
+            refusal: stoppedBy.map { refusal(by: $0, because: reason) },
+            heard: heard == text ? nil : heard,
+            raw: raw
         )
     }
 

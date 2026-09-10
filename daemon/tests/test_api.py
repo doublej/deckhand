@@ -80,7 +80,8 @@ def test_focus_asks_iterm_for_that_pane(token, monkeypatch):
 
 
 def test_upload_answers_with_what_utt_heard(token, monkeypatch):
-    monkeypatch.setattr(transcribe_module, "transcribe", lambda clip, hints: ("Testing, one, two.", None))
+    monkeypatch.setattr(transcribe_module, "transcribe",
+                        lambda clip, hints: transcribe_module.Heard(text="Testing, one, two."))
     r = client(token).post(
         f"/sessions/{SID}/audio", files={"file": ("clip.m4a", b"audio bytes", "audio/m4a")}
     )
@@ -89,7 +90,8 @@ def test_upload_answers_with_what_utt_heard(token, monkeypatch):
 
 
 def test_a_clip_is_kept_even_when_utt_is_off(token, monkeypatch):
-    monkeypatch.setattr(transcribe_module, "transcribe", lambda clip, hints: (None, "utt is off"))
+    monkeypatch.setattr(transcribe_module, "transcribe",
+                        lambda clip, hints: transcribe_module.Heard(error="utt is off"))
     body = client(token).post(
         f"/sessions/{SID}/audio", files={"file": ("clip.m4a", b"audio bytes", "audio/m4a")}
     ).json()
@@ -100,7 +102,8 @@ def test_a_clip_is_kept_even_when_utt_is_off(token, monkeypatch):
 
 def test_a_clip_can_be_transcribed_without_being_delivered(token, monkeypatch):
     """Reading it first is the whole point: nothing reaches the session until the person says."""
-    monkeypatch.setattr(transcribe_module, "transcribe", lambda _clip, _hints: ("read me first", None))
+    monkeypatch.setattr(transcribe_module, "transcribe",
+                        lambda _clip, _hints: transcribe_module.Heard(text="read me first"))
     delivered = []
     monkeypatch.setattr(deliver_module, "deliver", lambda *a, **k: delivered.append(a))
     answer = client(token).post(
@@ -112,6 +115,54 @@ def test_a_clip_can_be_transcribed_without_being_delivered(token, monkeypatch):
     assert body["transcript"] == "read me first"
     assert body["delivered"] is False
     assert delivered == []
+
+
+def test_a_clip_answers_with_what_each_stage_cost_and_records_it(token, monkeypatch):
+    """Every stage of the path, in the order it ran, plus a line on disk to compare runs with.
+
+    A list rather than an object: the phone decodes with `convertFromSnakeCase`, which rewrites
+    dictionary keys as happily as struct ones, and a stage name is data.
+    """
+    monkeypatch.setattr(transcribe_module, "transcribe",
+                        lambda clip, hints: transcribe_module.Heard(
+                            text="how long did that take",
+                            stages={"handoff": 1.0, "utt": 900.0, "answer": 0.2}))
+    monkeypatch.setattr(deliver_module, "deliver", lambda *a, **k: ("keyboard", None))
+
+    body = client(token).post(
+        f"/sessions/{SID}/audio?seconds=4.25",
+        files={"file": ("clip.m4a", b"x" * 64, "audio/m4a")},
+    ).json()
+
+    named = [stage["name"] for stage in body["timings"]]
+    assert named == ["session", "read", "write", "hints", "handoff", "utt", "answer",
+                     "filters", "deliver", "total"]
+    assert dict(zip(named, [s["ms"] for s in body["timings"]]))["utt"] == 900.0
+    # And the same numbers again on disk, keyed rather than ordered, one line per clip.
+    line = json.loads((config.data_dir() / "timings.jsonl").read_text().splitlines()[-1])
+    assert line["bytes"] == 64
+    assert line["seconds"] == 4.25
+    assert line["chars"] == len("how long did that take")
+    assert line["delivered"] is True
+    assert line["ms"]["utt"] == 900.0
+
+
+def test_a_key_utt_gains_rides_through_to_the_phone(token, monkeypatch):
+    """`raw`, `stages` and `cleanupSkipped` do not exist on utt's jobs lane today. Nothing here
+    fabricates them; the day utt sends them they arrive with no change on this side."""
+    monkeypatch.setattr(transcribe_module, "transcribe",
+                        lambda clip, hints: transcribe_module.Heard(
+                            text="ship it",
+                            extra={"raw": "ship it,", "stages": ["cleanup"]}))
+    body = client(token).post(
+        f"/sessions/{SID}/audio?deliver=false",
+        files={"file": ("clip.m4a", b"x" * 64, "audio/m4a")},
+    ).json()
+
+    assert body["raw"] == "ship it,"
+    assert body["stages"] == ["cleanup"]
+    # And never over the top of a key of ours: `timings` is the daemon's, whatever utt calls its.
+    assert [stage["name"] for stage in body["timings"]][-1] == "total"
 
 
 def test_say_puts_the_words_in_and_names_the_route(token, monkeypatch):

@@ -79,6 +79,13 @@ final class AppModel {
     /// What the chain said about the words in that card: what it changed, and whether it is going
     /// to refuse them. Written only through `hold`, so neither can outlive the words it was about.
     var reviewFiltered: [String: Filtered] = [:]
+    /// What the clip in that card cost, press to card. Kept here rather than read back off the
+    /// archive, which is a file: the card is redrawn on every keystroke of an edit.
+    var reviewTiming: [String: ClipTiming] = [:]
+    /// When the Mac answered for a clip whose card has not appeared yet. The last span of the
+    /// whole path ends in a view, so it is the one that cannot be closed where it was opened —
+    /// see `cardAppeared(for:)`.
+    var answeredAt: [String: Date] = [:]
     /// Pictures pinned to those words, per session, until they are sent or discarded.
     var attached: [String: [Snap]] = [:]
     var showsHidden = false
@@ -199,6 +206,8 @@ final class AppModel {
     /// archive is most for, and "discard" here has only ever meant the text in the card.
     func discard(for session: Session) {
         hold(nil, for: session)
+        reviewTiming[session.sessionId] = nil
+        answeredAt[session.sessionId] = nil
         unheld(for: session)
         attached[session.sessionId] = nil
         status = "Discarded"

@@ -17,6 +17,10 @@ struct ClipRow: View {
     let play: () -> Void
     let send: (Session) -> Void
     let remove: () -> Void
+    /// Shut, because the breakdown is fourteen numbers and the row is here to be read for its
+    /// words. One tap, and only on a clip that has one — a clip from before any of this was
+    /// measured shows nothing rather than an empty state.
+    @State private var breakdown = false
 
     var body: some View {
         HStack(alignment: .top, spacing: Spacing.small) {
@@ -31,6 +35,7 @@ struct ClipRow: View {
                         .font(Typography.hint)
                         .foregroundStyle(Palette.lcdRed)
                 }
+                cost
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             more
@@ -75,6 +80,34 @@ struct ClipRow: View {
                 .font(Typography.prose)
                 .italic()
                 .foregroundStyle(Palette.textSecondary)
+        }
+    }
+
+    /// What the clip cost, one tap under the words it produced. The total is the resting state
+    /// because it is the one number worth glancing at; the stages are what you open when the
+    /// total is worse than it should be.
+    @ViewBuilder private var cost: some View {
+        if let timing = kept.timings {
+            Button { breakdown.toggle() } label: {
+                HStack(spacing: Spacing.xxs) {
+                    Text(TimingsView.spelled(timing.total))
+                    if let slowest = timing.slowest, !breakdown {
+                        Text("· \(slowest.title.lowercased()) \(TimingsView.spelled(slowest.took))")
+                            .foregroundStyle(Palette.textTertiary)
+                    }
+                    Image(systemName: breakdown ? "chevron.up" : "chevron.down")
+                }
+                .font(Typography.hint)
+                .foregroundStyle(Palette.tint)
+                .frame(minHeight: 28, alignment: .leading)
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("What this clip cost, stage by stage")
+            if breakdown {
+                TimingsView(timing: timing, compact: true)
+                    .padding(.top, Spacing.xxs)
+            }
         }
     }
 

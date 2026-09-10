@@ -49,7 +49,7 @@ struct SessionFoot: View {
             isMine: true,
             onArchive: { browsing = true },
             onStart: { model.status = "Recording for \(session.name)" },
-            onClip: { await model.upload(clip: $0, to: session) },
+            onClip: { await model.upload(clip: $0, to: session, spans: recorder.spans) },
             content: {
                 TalkMark(state: $0,
                          level: recorder.level,
@@ -71,6 +71,7 @@ struct SessionFoot: View {
                 send: { edited in Task { await model.send(edited, to: session) } },
                 discard: { model.discard(for: session) },
                 filtered: model.reviewFiltered[session.sessionId],
+                cost: model.reviewTiming[session.sessionId],
                 snaps: model.snaps(for: session),
                 attach: { model.attach($0, to: session) },
                 paste: { model.attachFromClipboard(to: session) },
@@ -100,6 +101,9 @@ struct SessionFoot: View {
             .frame(maxWidth: .infinity)
             .shadow(color: .black.opacity(0.18), radius: 10, y: 3)
             .transition(.move(edge: .bottom).combined(with: .opacity))
+            // The last span of the whole path: the Mac has answered, and here is the card.
+            // It can only be closed from inside a view, which is the reason it is closed here.
+            .onAppear { model.cardAppeared(for: session) }
         }
     }
 }

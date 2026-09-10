@@ -93,7 +93,9 @@ Full glossary: ./GLOSSARY.md
 `GET /sessions` → tap a row → `GET /sessions/{id}/turns` and `GET /sessions/{id}/summary` → hold
 to talk → `POST /sessions/{id}/audio`, which answers with the transcript and whether it reached
 the session. `?deliver=false` transcribes without sending, for the review card, and
-`POST /sessions/{id}/say` sends the text once the person has read it.
+`POST /sessions/{id}/say` sends the text once the person has read it. That answer also carries
+`timings` — milliseconds per stage in the order they ran — and every stage is written to
+`timings.jsonl` beside the daemon's other state, one line per clip.
 
 - `GET /projects` — every folder on this Mac a session could be started in, and which source
   said so; `POST /projects/session` opens a terminal there and answers with the session itself

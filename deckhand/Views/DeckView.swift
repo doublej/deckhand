@@ -100,7 +100,7 @@ struct DeckView: View {
     }
 
     private func heard(_ clip: URL, for session: Session) async {
-        await model.upload(clip: clip, to: session)
+        await model.upload(clip: clip, to: session, spans: recorder.spans)
         active = nil
     }
 

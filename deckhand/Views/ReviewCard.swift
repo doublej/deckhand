@@ -23,6 +23,10 @@ struct ReviewCard: View {
     /// chain will refuse: a greyed-out button with no sentence beside it leaves somebody holding
     /// words with no way to find out why, which is the worse half of this problem.
     var filtered: Filtered?
+    /// What this clip cost from the press to these words being here, one line under them. Nil
+    /// where the words came from somewhere other than a clip, and in a deck column, which has
+    /// room for the words and the buttons and nothing else.
+    var cost: ClipTiming?
     /// Small enough for a deck column, which has no room for a full card.
     var compact = false
     /// What is already pinned to these words, and the two ways to pin another. Left out where
@@ -81,10 +85,14 @@ struct ReviewCard: View {
             // Under the words, quiet, and in a deck column too: there is no size of card on which
             // it is acceptable to show somebody a word they did not say without saying so.
             if let note = filtered?.note { aside(note, in: Palette.textTertiary) }
+            // What the note cannot say: the sentence those words replaced. Without it a swap
+            // that was wrong reads as a mishearing, and a mishearing as a swap.
+            if let filtered, !compact { Rewrites(filtered: filtered) }
             // The colour is the whole of the difference, as everywhere else in this app: the words
             // alone in the state's own colour, never a label inside a capsule that reads as
             // something you press — and there is a real button an inch below this one.
             if let refusal = filtered?.refusal { aside(refusal, in: Palette.lcdRed) }
+            if let cost, !compact { ClipCost(timing: cost) }
             if !snaps.isEmpty { pinned }
             ReviewActions(route: target,
                           words: words,

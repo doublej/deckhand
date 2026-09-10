@@ -24,6 +24,17 @@ Design is its own packet (`Design/CLAUDE.md`).
   spelled out in `CodingKeys` instead, which buys a second thing: the converting decoder then
   cannot find them and *throws*, so the mistake is loud rather than a document quietly missing
   its overrides. A test asserts both halves.
+- **`UploadReceipt` is the one type here with a hand-written `CodingKeys`, and one key is why.**
+  utt calls its rewrite stages `stages`, and the receipt already has stages of its own under
+  `timings` — so `uttStages` is spelled `case uttStages = "stages"` and every sibling had to be
+  listed with it. The Mac's own stages travel as a **list** of `{name, ms}` rather than an object
+  for the `convertFromSnakeCase` reason above: a stage name is data, and a key would be rewritten.
+- **What a clip cost is `ClipTiming`, and it is assembled on the phone.** The Mac measures its own
+  stages, the recorder and the upload measure the phone's, and `ClipTiming.merged` puts them in
+  the order the clip travelled. The network is *derived* — the upload span with the Mac's total
+  taken out of it — because nothing on the phone can see when its request arrived; it is clamped
+  at zero, since the two clocks are different clocks. `spoken` is beside the stages and not among
+  them: a breakdown dominated by however long somebody talked says nothing about what is slow.
 - **`delivered: true` is not the same as "it was said".** The daemon can answer `delivered: true`
   alongside a filter's stop, so every screen asks `Delivery.went` — `delivered && stoppedBy == nil`
   — and never `delivered` alone.

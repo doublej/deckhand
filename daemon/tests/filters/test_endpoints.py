@@ -123,7 +123,7 @@ def test_a_stopped_prompt_never_reaches_the_session(token, monkeypatch):
 
 def test_a_filter_is_told_which_session_and_how_the_words_arrived(token, monkeypatch):
     """A slip of the tongue and a slip of the finger are not the same mistake, so `source` says."""
-    monkeypatch.setattr(transcribe_module, "transcribe", lambda clip, hints: ("spoken", None))
+    monkeypatch.setattr(transcribe_module, "transcribe", lambda clip, hints: transcribe_module.Heard(text="spoken"))
     monkeypatch.setattr(deliver_module, "deliver", lambda *a: ("socket", None))
     seen = []
     monkeypatch.setitem(
@@ -145,7 +145,7 @@ def test_a_filter_is_told_which_session_and_how_the_words_arrived(token, monkeyp
 def test_a_clip_read_first_shows_what_will_be_sent(token, monkeypatch):
     """The card has an Edit button, so it has to show the words that are actually going in."""
     monkeypatch.setattr(
-        transcribe_module, "transcribe", lambda clip, hints: ("the deck hand is broken", None))
+        transcribe_module, "transcribe", lambda clip, hints: transcribe_module.Heard(text="the deck hand is broken"))
     delivered = []
     monkeypatch.setattr(deliver_module, "deliver", lambda *a: delivered.append(a))
     c = client(token)
@@ -166,7 +166,7 @@ def test_a_clip_read_first_shows_what_will_be_sent(token, monkeypatch):
 
 def test_a_chain_that_changed_nothing_prepares_nothing(token, monkeypatch):
     """Null rather than a copy, so the card shows the transcript it already has."""
-    monkeypatch.setattr(transcribe_module, "transcribe", lambda clip, hints: ("nothing to fix", None))
+    monkeypatch.setattr(transcribe_module, "transcribe", lambda clip, hints: transcribe_module.Heard(text="nothing to fix"))
     body = client(token).post(
         f"/sessions/{SID}/audio?deliver=false", files={"file": ("clip.m4a", b"x" * 64, "audio/m4a")}
     ).json()
@@ -176,7 +176,7 @@ def test_a_chain_that_changed_nothing_prepares_nothing(token, monkeypatch):
 
 
 def test_a_clip_utt_could_not_hear_prepares_nothing(token, monkeypatch):
-    monkeypatch.setattr(transcribe_module, "transcribe", lambda clip, hints: (None, "utt is off"))
+    monkeypatch.setattr(transcribe_module, "transcribe", lambda clip, hints: transcribe_module.Heard(error="utt is off"))
     body = client(token).post(
         f"/sessions/{SID}/audio?deliver=false", files={"file": ("clip.m4a", b"x" * 64, "audio/m4a")}
     ).json()
@@ -186,7 +186,7 @@ def test_a_clip_utt_could_not_hear_prepares_nothing(token, monkeypatch):
 
 def test_a_clip_the_chain_will_refuse_says_so_before_it_is_sent(token, monkeypatch):
     """Better on the card than after pressing Send, and it costs nothing to say it here."""
-    monkeypatch.setattr(transcribe_module, "transcribe", lambda clip, hints: ("log the crash", None))
+    monkeypatch.setattr(transcribe_module, "transcribe", lambda clip, hints: transcribe_module.Heard(text="log the crash"))
     monkeypatch.setitem(
         filters.registry._known, "gate",
         filters.Filter(name="gate", title="gate", summary="gate",
@@ -205,7 +205,7 @@ def test_a_clip_the_chain_will_refuse_says_so_before_it_is_sent(token, monkeypat
 
 def test_a_clip_is_filtered_too_and_the_transcript_still_says_what_was_heard(token, monkeypatch):
     monkeypatch.setattr(
-        transcribe_module, "transcribe", lambda clip, hints: ("the deck hand", None))
+        transcribe_module, "transcribe", lambda clip, hints: transcribe_module.Heard(text="the deck hand"))
     seen = {}
     monkeypatch.setattr(
         deliver_module, "deliver",

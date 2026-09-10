@@ -190,23 +190,6 @@ public struct DeckhandClient: Sendable {
         _ = try await send(request(.post, "sessions/\(sessionId)/focus"))
     }
 
-    /// Upload a recorded clip. The Mac stores it, transcribes it, and answers with the text.
-    public func upload(
-        clip: URL,
-        to sessionId: String,
-        route: DeliveryRoute = .auto,
-        deliver: Bool = true
-    ) async throws -> UploadReceipt {
-        let boundary = "deckhand.\(UUID().uuidString)"
-        let query = "route=\(route.rawValue)&deliver=\(deliver)"
-        var req = request(.post, "sessions/\(sessionId)/audio?\(query)")
-        req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        // The Mac transcribes before answering, and utt's first request loads the model.
-        req.timeoutInterval = 200
-        let data = try multipart(boundary: boundary, clip: clip)
-        return try decode(try await send(req, body: data))
-    }
-
     // MARK: - plumbing
 
     // Whatever one of this type's other files reaches for is internal rather than private:
@@ -253,7 +236,8 @@ public struct DeckhandClient: Sendable {
         return try decoder.decode(T.self, from: data)
     }
 
-    private func multipart(boundary: String, clip: URL) throws -> Data {
+    /// Internal, not private: `Clips/DeckhandClient+Clips.swift` is this same type.
+    func multipart(boundary: String, clip: URL) throws -> Data {
         try multipart(boundary: boundary,
                       name: clip.lastPathComponent,
                       bytes: try Data(contentsOf: clip),
