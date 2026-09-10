@@ -112,11 +112,19 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   screen to choose between four screens was a band of chrome doing what a swipe does for free, so
   `pane` is a `TabView(.page)` and the bar is gone — the panes are that much taller and the talk
   mark sits where the bar was. Its native index display is **off**: those dots land exactly where
-  the mark floats. The indicator is four dots on the header's meter row instead, which was already
-  being drawn and had the space spare, so the whole change costs nothing and returns a band. Two
-  things follow. The dots are not a control — four dots you can hit are four dots somebody will
-  try to hit — and the page's own edge-swipe-to-dismiss now fires **only on the first pane**, or a
+  the mark floats. The indicator is a dot per pane on the header's meter row instead, which was
+  already being drawn and had the space spare, so the whole change costs nothing and returns a band. Two
+  things follow. The dots are not a control — dots you can hit are dots somebody will try to
+  hit — and the page's own edge-swipe-to-dismiss now fires **only on the first pane**, or a
   drag from the left edge would page back and leave the session on the same gesture.
+- **The orders pane writes on a sheet, and it has to.** `OrdersView` shows what a session has been
+  told to keep in mind and opens `Editor` to change it. A field on the pane itself would put a
+  second `TalkControl` on a screen that already floats one over it: two controls reading the one
+  recorder, both live, one filling a box and the other sending to the session — the `isMine`
+  arrangement `AloudCards` uses cannot help, because these two do different things with the same
+  clip. A sheet covers the mark, so the only control listening is the one under your thumb, and
+  `Editor` already opens focused with the keyboard up. Its own loading rather than an `AppModel`
+  extension, because `deckhand/` sits on its 16-file gate and nothing outside that pane wants it.
 - **The session header is a name and a menu, and everything else is the row under it.** The
   chevron and the glyph tile both went: the panes are swiped between and a swipe from the left
   edge of the first one leaves the session, so the arrow was a second way to do what the page
