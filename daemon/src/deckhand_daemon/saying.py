@@ -24,7 +24,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Body, HTTPException, Query, UploadFile
 
-from . import config, deliver, filters, plugin, push, sessions, transcribe
+from . import config, deliver, filters, orders, plugin, push, sessions, transcribe
 from .log import log, took
 
 router = APIRouter(tags=["saying"])
@@ -54,6 +54,27 @@ async def _filtered(
     return await filters.run(filters.Prompt(
         text=text, session_id=session.session_id, session_name=session.name, cwd=session.cwd,
         route=route, source=source, images=images or []))
+
+
+def _with_orders(session: sessions.Session, text: str) -> str:
+    """The words, with this session's standing orders in front. Unchanged when it has none.
+
+    After the chain and never before it. A filter judges what the *person* said — a word swap is
+    aimed at what they dictated, a word count is a count of their words, and prompt crafting would
+    happily rewrite the orders into a version of themselves. Putting them in afterwards keeps every
+    filter looking at the same thing it was written to look at.
+
+    Here rather than in `deliver`, which is the other place both doors meet, because `deliver` also
+    carries the idle check and a slip's answer — neither of which is the person speaking, and the
+    person's standing orders have no business riding on a message they did not send. These two call
+    sites are the two doors a prompt from the phone comes through, and that is exactly the set.
+
+    Not applied on the `?deliver=false` path, so the review card still shows what the person said
+    rather than what the session will read. The card is editable, and orders that appeared in it
+    would be orders somebody could edit by accident from the wrong screen — they have a pane. What
+    the session was actually sent is in the transcript, which Deckhand never rewrites.
+    """
+    return orders.carry(session.session_id, text)
 
 
 @router.post("/sessions/{session_id}/audio", status_code=201)
@@ -120,7 +141,7 @@ async def _handled(
         if checked.delivered:
             with took(ms, "deliver"):
                 taken, delivery_error = await asyncio.to_thread(
-                    deliver.deliver, session, checked.text, chosen)
+                    deliver.deliver, session, _with_orders(session, checked.text), chosen)
             log.info("delivery to %s: %s", session.name, delivery_error or f"{taken} took it")
             push.spoke_to(session.session_id)
         else:
@@ -298,7 +319,7 @@ async def say(
                else await _filtered(session, text, chosen, "typed", kept))
     taken, error = None, checked.reason or None
     if checked.delivered:
-        said = deliver.with_images(checked.text, kept)
+        said = deliver.with_images(_with_orders(session, checked.text), kept)
         taken, error = await asyncio.to_thread(deliver.deliver, session, said, chosen)
         log.info("delivery to %s: %s", session.name, error or f"{taken} took it")
         push.spoke_to(session_id)

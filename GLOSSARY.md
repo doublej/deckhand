@@ -38,6 +38,7 @@ the wire.** Everywhere else the word is the same on both sides.
 | **keyboard route** | `it2 session send` typing into the pane, as the person at the machine. | type route, direct |
 | **socket route** | The session's own peer socket, labelled as another agent. | fallback (in code), IPC |
 | **delivered** | The daemon accepted and wrote it. Never on its own — ask `Delivery.went`. | sent, said |
+| **orders** | What the person has told one session to keep in mind, carried in front of every prompt it is sent. "Standing orders" in prose — a ship's hold for every watch, and so do these. They are the person's; the **context** (`/context`) is the project's CLAUDE.md and is a different thing. | rules, memory, context, system prompt |
 | **control** | Stop, compact, clear: a keystroke, not a message (`Control`, `deliver.control`). | command, action |
 | **filter** | One step that may change or stop a prompt on its way in. | rule, middleware, hook |
 | **chain** | The ordered list of steps. Order is run order; a step is a position, not a key. | pipeline, config |

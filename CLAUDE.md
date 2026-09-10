@@ -107,6 +107,8 @@ the session. `?deliver=false` transcribes without sending, for the review card, 
   said so; `POST /projects/session` opens a terminal there and answers with the session itself
 - `GET|PUT /settings` — what this Mac has been set to do, globally and per folder; `GET
   /settings/project?path=` is the resolved answer for one of them
+- `GET|PUT /sessions/{id}/orders` — what this session is to keep in mind, carried in front of
+  every prompt it is sent. Empty adds nothing at all
 - `POST /sessions/{id}/notify` — an agent asking for the person outright, in its own words
 - `GET /briefings` — every live session's last briefing at once, off disk, for a cold start
 - `GET /sessions/{id}/commands` — the slash commands and skills that session could be handed
