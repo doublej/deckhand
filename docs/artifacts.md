@@ -7,6 +7,11 @@ phone. It is how a session asks something that a sentence cannot ask well: pick 
 four, fill in these six fields, confirm this before I do it, choose a number on this slider.
 The person answers on the page and the answer goes back into the session.
 
+**On the phone it is called a slip.** That is the tab's name and the word to use when you tell
+the person there is one waiting — "I have put a slip on your phone", never "an artifact". The
+folder, the endpoints and this document keep the older word because they are the plumbing, and
+"page" in here means the HTML itself.
+
 It is deliberately less than Claude's own artifacts. One page, no tabs, no router, no history,
 no network, phone-shaped only, and in Deckhand's own visual language rather than its own. The
 thing it has that a spoken reply does not is **structure**: a form returns fields, not prose.
@@ -29,7 +34,7 @@ piece of Deckhand's state lives. This is the one exception and it is the whole d
   its own cwd and nothing else is needed. "Agents can reuse earlier artifacts and edit,
   improve, duplicate them" costs exactly zero code because of this choice.
 - Artifacts are about the project, and they outlive the session that wrote one. Keyed by
-  session they would scatter one project's pages across every session that ever worked on it,
+  session they would scatter one project's slips across every session that ever worked on it,
   and the second session would not find the first one's work.
 
 `<id>` is a slug the agent picks and that a person could read: `release-check`, `palette-pick`,
@@ -111,15 +116,16 @@ Write the file, tell the person it is there, then read the answer:
 .deckhand/artifacts/which-branch.answer.json   <- Read, once it exists
 ```
 
-Nothing registers an artifact and nothing cleans one up. A page with no answer file beside it
-is open; a page with one has been answered and can be asked again by deleting the answer.
+Nothing registers an artifact and nothing cleans one up. A slip with no answer file beside it
+is open; one with an answer beside it has been answered, and can be asked again by deleting the
+answer.
 
-An open page is also the one thing the phone says without being asked. The session listing carries
+An open slip is also the one thing the phone says without being asked. The session listing carries
 `artifacts_waiting` and `artifacts_answered`, so the session's row on the overview says how far
-this project has got with its pages — "1 of 3 pages waiting" — beside how far it has got with what
-the person asked *it* for, and the session's summary offers the newest waiting page as the thing to
+this project has got with its slips — "1 of 3 slips waiting" — beside how far it has got with what
+the person asked *it* for, and the session's summary offers the newest waiting slip as the thing to
 press. An agent still tells the person it is there — a phone in a pocket says nothing — but nobody
-has to go looking through the list of pages to find it.
+has to open the Slips tab to find it.
 
 ## Talking at a page
 

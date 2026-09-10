@@ -67,7 +67,7 @@ struct SessionRow: View {
         // ink would leave a bright empty tile behind a dim name, which reads as a loading row.
         // Hit testing is unaffected by opacity, so a faded row is still as tappable as any.
         //
-        // A row with a page waiting on you keeps full contrast whatever the clock says, for the
+        // A row with a slip waiting on you keeps full contrast whatever the clock says, for the
         // same reason a busy one does: the fade spends contrast on how long ago something
         // happened, and a question nobody has answered has not happened yet. A session that
         // stopped to ask you something this morning is the row you most need to see at six.
@@ -76,7 +76,7 @@ struct SessionRow: View {
     }
 
     /// How far the two things you are in the middle of with this session have got: what you asked
-    /// it for, as one dot each, and the pages it asked you for, as the two numbers.
+    /// it for, as one dot each, and the slips it asked you for, as the two numbers.
     ///
     /// One band, because they are the same question — what is still open between the two of you —
     /// and a row has one place to answer it.
@@ -87,9 +87,9 @@ struct SessionRow: View {
             }
             if session.pages > 0 {
                 band("doc.richtext", in: session.waitingPages > 0 ? accent : Palette.textTertiary) {
-                    Text(pagesLine)
+                    Text(slipsLine)
                         .font(Typography.hint)
-                        .accessibilityLabel(pagesLine)
+                        .accessibilityLabel(slipsLine)
                 }
             }
         }
@@ -103,7 +103,7 @@ struct SessionRow: View {
     /// keeps a minimum height so a row with one band and a row with two have the same rhythm
     /// rather than the same total.
     ///
-    /// The glyph takes its line's colour rather than a fixed grey. A page waiting turns the whole
+    /// The glyph takes its line's colour rather than a fixed grey. A slip waiting turns the whole
     /// line accent, gutter included; anything quiet stays quiet all the way across. Half-tinting
     /// a line is what made these two clash when they shared one.
     private func band(
@@ -126,8 +126,8 @@ struct SessionRow: View {
     /// deliberately not a second run of the same mark: `AskDot` is a box you tick, its own note
     /// warns against a second thing reading as that mark, and two runs of identical marks in one
     /// row cannot be told apart without a label costing more than the words do.
-    private var pagesLine: String {
-        let noun = session.pages == 1 ? "page" : "pages"
+    private var slipsLine: String {
+        let noun = session.pages == 1 ? "slip" : "slips"
         return session.waitingPages > 0
             ? "\(session.waitingPages) of \(session.pages) \(noun) waiting"
             : "\(session.pages) \(noun) answered"

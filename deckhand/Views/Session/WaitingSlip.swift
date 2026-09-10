@@ -1,14 +1,14 @@
 import DeckhandKit
 import SwiftUI
 
-/// The page this session is waiting on an answer for, at the top of its summary.
+/// The slip this session is waiting on an answer for, at the top of its summary.
 ///
-/// A page with no answer file beside it is a session that has stopped and is waiting on a person,
-/// and until now the only way to find out was to open the page tab and look. So it is said on the
+/// A slip with no answer file beside it is a session that has stopped and is waiting on a person,
+/// and until now the only way to find out was to open the Slips tab and look. So it is said on the
 /// first screen of the session instead, as the one thing on it you press.
 ///
-/// Straight to the page rather than to the tab that lists them: the tap is for answering, and a
-/// list with one unanswered page in it is a step that exists only to be got past. The newest one
+/// Straight to the slip rather than to the tab that lists them: the tap is for answering, and a
+/// list with one unanswered slip in it is a step that exists only to be got past. The newest one
 /// when several are open — the Mac sorts them newest first, and the newest is the one the agent
 /// was talking about when it said there was something on your phone. The rest are a count, so
 /// nothing is hidden and the summary is not five bars deep.
@@ -16,15 +16,15 @@ import SwiftUI
 /// It looks pressable on purpose. The filled capsule is the shape `FilesView` uses for the thing
 /// you choose, not the badge shape this app has banned: that ban is on a capsule that only
 /// reports state while sitting next to things you can actually press, and this is the press.
-struct WaitingPage: View {
+struct WaitingSlip: View {
     @Bindable var model: AppModel
     let session: Session
-    /// The page the tap opens.
+    /// The slip the tap opens.
     let artifact: Artifact
     /// How many more are waiting behind it.
     let more: Int
     @State private var open = false
-    /// This row's own recorder, lent to the viewer so a passage can be commented on and the page's
+    /// This row's own recorder, lent to the viewer so a passage can be commented on and the slip's
     /// own fields can be spoken into. Owned here — the thing that presents the cover — because a
     /// recorder has to outlive the clip and a cover's content does not outlive much. The session
     /// page's own recorder is four hops up through a summary, which is the threading `AssetView`
@@ -41,9 +41,9 @@ struct WaitingPage: View {
     var body: some View {
         Button { open = true } label: { face }
             .buttonStyle(.plain)
-            .accessibilityIdentifier("waiting-page")
+            .accessibilityIdentifier("waiting-slip")
             .accessibilityLabel(spoken)
-            // A cover rather than a sheet, and for the reasons the page tab uses one: a sheet
+            // A cover rather than a sheet, and for the reasons the Slips tab uses one: a sheet
             // keeps a grabber, a corner radius and an inch of this page behind it, and all three
             // are the chrome the viewer is meant not to have. Answering is what makes this
             // disappear, so the listing is read again on the way back.
@@ -61,7 +61,7 @@ struct WaitingPage: View {
         HStack(spacing: Spacing.extraSmall) {
             Image(systemName: "doc.richtext")
                 .font(.system(size: 15, weight: .medium))
-            // The verb, then the page's own title: "Answer" is what makes it plainly a thing to
+            // The verb, then the slip's own title: "Answer" is what makes it plainly a thing to
             // press rather than a line reporting that something exists somewhere else.
             Text("Answer “\(artifact.title)”")
                 .lineLimit(1)

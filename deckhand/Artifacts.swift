@@ -7,7 +7,7 @@ import Foundation
 /// page was fetched at all.
 @MainActor
 extension AppModel {
-    /// The pages this session has written for the phone. Asked for when the section is opened
+    /// The slips this session has written for the phone. Asked for when the section is opened
     /// and again when the viewer closes, which is when `answered` can have changed. Not polled:
     /// it is a directory listing on the Mac and an agent writes one of these every few hours.
     func loadArtifacts(for session: Session) async {

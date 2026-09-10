@@ -19,9 +19,9 @@ struct SessionView: View {
 
     /// Four things you want on arriving, and they want different layouts: the briefing wants
     /// a page to itself, the transcript wants to be pinned to its newest line, and the files and
-    /// the pages this session put on the phone are lists you scroll from the top.
+    /// the slips this session put on the phone are lists you scroll from the top.
     enum Pane: String, CaseIterable {
-        case summary = "Summary", pages = "Pages", transcript = "Transcript", files = "Files"
+        case summary = "Summary", slips = "Slips", transcript = "Transcript", files = "Files"
     }
 
     /// The session as the Mac last described it, not as it was when the page opened. A compact,
@@ -135,7 +135,7 @@ struct SessionView: View {
         case .summary: BriefingView(model: model, session: session)
         case .transcript: TranscriptView(model: model, session: session)
         case .files: FilesView(model: model, session: session)
-        case .pages: ArtifactsView(model: model, session: session)
+        case .slips: ArtifactsView(model: model, session: session)
         }
     }
 

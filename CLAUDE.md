@@ -291,6 +291,11 @@ unauthenticated route; everything else needs the `x-deckhand-token` header, and 
   binary). `UIContextMenuSystem`, which would be the supported answer, is iOS 26. So the app's own
   surface is the answer: `ArtifactPage.watcher` reports *that* there is a selection and
   `SayOnPage` appears under the page. Reconsider when the floor reaches iOS 26.
+- **An artifact is a "slip" to the person holding the phone.** The tab says SLIPS, the row says
+  "1 of 3 slips waiting", and the message a session gets back says "Answered the slip …". The
+  folder (`.deckhand/artifacts/`), the endpoints (`/sessions/{id}/artifacts`) and `artifacts.py`
+  keep the older word, because renaming a path every agent already writes to buys nothing —
+  "page" in that code means the HTML itself. So: say slip to JJ, write artifact in the wire.
 - **Host-initiated script is not what the artifact policy is about.** `evaluateJavaScript` and
   `callAsyncJavaScript` run in the page's world as the app asking the document a question, not as
   script the page loaded — and the policy allows inline script anyway, which is how the bridge runs
@@ -455,6 +460,7 @@ tests, ruff, pytest. The app build needs the simulator named in the Justfile's `
 ## Related context
 
 - [agent.md](agent.md) — verify loop, auto-fix commands, boundaries
+- [docs/artifacts.md](docs/artifacts.md) — what a slip is, what it may contain, and the bridge
 - `.quality.json` — loc / dir thresholds
 - `launchd/com.jurrejan.deckhand.plist` — registered in `multi-stack/project-atlas/shared/daemons.json`
 

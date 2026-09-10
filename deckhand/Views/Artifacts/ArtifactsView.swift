@@ -3,10 +3,10 @@ import SwiftUI
 
 /// What this session has put on your phone: the questions it could not ask in a sentence.
 ///
-/// The pages live in the project rather than with the session — `.deckhand/artifacts/` beside
-/// the code — so they outlive the session that wrote one, and a second session working in the
-/// same folder finds the first one's work. That is why this is a listing of a folder on the Mac
-/// and not a thing the app keeps.
+/// A slip is one HTML page a session wrote. They live in the project rather than with the session
+/// — `.deckhand/artifacts/` beside the code — so they outlive the session that wrote one, and a
+/// second session working in the same folder finds the first one's work. That is why this is a
+/// listing of a folder on the Mac and not a thing the app keeps.
 struct ArtifactsView: View {
     @Bindable var model: AppModel
     let session: Session
@@ -30,7 +30,7 @@ struct ArtifactsView: View {
     private static let target: CGFloat = 44
 
     /// Waiting or answered, and all of them. Answered is a real thing to want to see — it is
-    /// what you said, and the page still holds the question you said it about.
+    /// what you said, and the slip still holds the question you said it about.
     private enum Show: String, CaseIterable, Identifiable {
         case all = "All", waiting = "Waiting", answered = "Answered"
         var id: Self { self }
@@ -48,14 +48,14 @@ struct ArtifactsView: View {
         }
     }
 
-    /// One choice is not a choice. With every page in the same state the row would be furniture,
+    /// One choice is not a choice. With every slip in the same state the row would be furniture,
     /// and the rows below already say which state that is.
     private var mixed: Bool { !waiting.isEmpty && !answered.isEmpty }
 
     var body: some View {
         VStack(spacing: 0) {
             // Above the scroll view rather than in it, so it is still there after you have
-            // scrolled past a dozen answered pages looking for the one that is not.
+            // scrolled past a dozen answered slips looking for the one that is not.
             if mixed { selector }
             list
         }
@@ -127,14 +127,14 @@ struct ArtifactsView: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("artifact-filter")
-        .accessibilityLabel("\(option.rawValue), \(count) pages")
+        .accessibilityLabel("\(option.rawValue), \(count) slips")
         .accessibilityAddTraits(chosen ? [.isSelected] : [])
     }
 
     private var empty: some View {
         Text(show == .all
              ? "Nothing this session has put on your phone"
-             : "No \(show.rawValue.lowercased()) pages")
+             : "No \(show.rawValue.lowercased()) slips")
             .font(Typography.subtitle)
             .foregroundStyle(Palette.textSecondary)
             .padding(.vertical, Spacing.small)
@@ -145,13 +145,13 @@ struct ArtifactsView: View {
     }
 }
 
-/// One page in the listing: what it is called, when it was written, and whether it is still
+/// One slip in the listing: what it is called, when it was written, and whether it is still
 /// waiting on you.
 ///
-/// A page you have answered is *done*, and has to look it from across the room. It used to say
-/// so in one grey word at the end of a caption, which read the same as a page that had not been
+/// A slip you have answered is *done*, and has to look it from across the room. It used to say
+/// so in one grey word at the end of a caption, which read the same as a slip that had not been
 /// answered at all — the whole row was identical but for a missing `WAIT`. Now the mark goes
-/// from the page's own colour to a tick in the quiet one, and the title recedes with it. The
+/// from the slip's own colour to a tick in the quiet one, and the title recedes with it. The
 /// listing stays in one order and rows do not move under you when one is answered.
 ///
 /// The waiting is still the word `WAIT` and nothing else — no dot, no capsule, no badge, which
@@ -197,7 +197,7 @@ private struct ArtifactRow: View {
             RoundedRectangle(cornerRadius: Radius.medium, style: .continuous)
                 .fill(Palette.surfacePrimary)
         )
-        // Answered pages stay readable and stay tappable — they are the record of what you said
+        // Answered slips stay readable and stay tappable — they are the record of what you said
         // — but they stop competing with the one that still wants something.
         .opacity(done ? 0.72 : 1)
         .contentShape(.rect)

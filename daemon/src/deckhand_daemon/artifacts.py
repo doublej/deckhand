@@ -242,11 +242,15 @@ def _brief(value: Any) -> str:
 def _message(written: dict) -> str:
     """What the session is told. The person's own answer, so it reads as the person saying it.
 
-    It names the page, carries the answer when it is short, and says where the whole of it is: a
+    It names the slip, carries the answer when it is short, and says where the whole of it is: a
     session that was waiting reads the file, and one that had stopped is woken by the message.
+
+    "Slip" rather than "artifact" because that is what the thing is called on the phone, and the
+    two have to be the same word: a session told about an artifact and a person looking at a tab
+    labelled Slips are talking about the same file, and neither should have to work that out.
     """
     return (
-        f"Answered the artifact {written['id']} on my phone: {_brief(written['value'])}. "
+        f"Answered the slip {written['id']} on my phone: {_brief(written['value'])}. "
         f"The whole answer is in {written['file']}."
     )
 
