@@ -71,6 +71,20 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   things follow. The dots are not a control — four dots you can hit are four dots somebody will
   try to hit — and the page's own edge-swipe-to-dismiss now fires **only on the first pane**, or a
   drag from the left edge would page back and leave the session on the same gesture.
+- **The session header is a name and a menu, and everything else is the row under it.** The
+  chevron and the glyph tile both went: the panes are swiped between and a swipe from the left
+  edge of the first one leaves the session, so the arrow was a second way to do what the page
+  already does, and a session's glyph tells one row from another in a *list* of them — on the
+  session's own page there is only one session. The way out is still named in the menu, because
+  a gesture nobody is told about is not a way out for somebody using VoiceOver. Under the name
+  sits everything that is true of the session rather than something you press: the window as a
+  13pt ring (a bar ran the width of the page to say one number, and read as the page's progress
+  rather than the session's), the count, BUSY or IDLE, and the pane dots. The relative time is
+  drawn **only when idle** — `updated_at` is the age of an idle session and nothing else.
+- **A swipe names where it landed, then stops.** Four dots say how many panes there are; they
+  cannot say which one this is, and a swipe can be accidental. So the pane's name slides in at
+  the top and leaves after a second. It takes no touch and it must never become permanent — a
+  label that stayed would be the tab bar again under another name.
 - **A control that fires a request has to say so where the thumb is.** The slip's send button
   answered, delivered, and looked dead: the only receipt was in the bar at the top of the screen
   and the button is at the foot of a long scroll. It got pressed again, and every press was

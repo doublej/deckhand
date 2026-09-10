@@ -19,6 +19,9 @@ struct SessionView: View {
     /// Whether the Mac holds turns older than the ones on screen. Answered by every load, so
     /// the transcript can offer the way back without a request of its own to find out.
     @State private var earlier = false
+    /// The pane just swiped to, while its name is still worth saying. Nil the rest of the time,
+    /// which is nearly all of it — see `landing`.
+    @State private var landed: Pane?
     @Environment(\.dismiss) private var dismiss
 
     /// What the confirmation is about to do, in that control's own words.
@@ -72,6 +75,17 @@ struct SessionView: View {
                 .overlay(alignment: .bottom) {
                     SessionFoot(model: model, session: session, recorder: recorder)
                 }
+                .overlay(alignment: .top) { landing }
+        }
+        // Named on arrival and then gone. The dots say where you are among four; they cannot say
+        // which four, and a pane you land on by accident is a pane you have to read to identify.
+        .onChange(of: showing) { _, now in
+            withAnimation(.snappy(duration: 0.2)) { landed = now }
+            Task {
+                try? await Task.sleep(for: .seconds(1.1))
+                guard showing == now else { return }
+                withAnimation(.easeOut(duration: 0.35)) { landed = nil }
+            }
         }
         .animation(.snappy(duration: 0.22), value: model.review[session.sessionId])
         // The whole page goes utt orange while the mark at its foot is open, not only the mark:
@@ -156,6 +170,32 @@ struct SessionView: View {
                 try? await Task.sleep(for: .seconds(5))
             }
             await written
+        }
+    }
+
+    /// The name of the pane you just landed on, for as long as it takes to read it.
+    ///
+    /// Subtle on purpose and never in the way: it is not a control, it does not take the touch,
+    /// and it leaves on its own after a second. A label that stayed would be the tab bar again
+    /// by another name — this exists only because a swipe can be accidental and the four dots
+    /// say how many panes there are without saying which one this is.
+    @ViewBuilder private var landing: some View {
+        if let landed {
+            Text(landed.rawValue.uppercased())
+                .font(Typography.eyebrow)
+                .tracking(1.5)
+                .foregroundStyle(Palette.textSecondary)
+                .padding(.horizontal, Spacing.small)
+                .padding(.vertical, 6)
+                .background(
+                    Capsule()
+                        .fill(.regularMaterial)
+                        .shadow(color: .black.opacity(0.08), radius: 6, y: 2)
+                )
+                .padding(.top, Spacing.extraSmall)
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
         }
     }
 

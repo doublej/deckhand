@@ -40,36 +40,30 @@ struct SessionHead: View {
         }
     }
 
+    /// The name and the way to everything else. Nothing more.
+    ///
+    /// The chevron went with the tab bar: the panes are swiped between now, and a swipe from the
+    /// left edge of the first one leaves the session — so the arrow was a second way to do a
+    /// thing the page already does, taking a corner of every screen to offer it. The way out is
+    /// still named in the menu, because a gesture nobody is told about is not a way out for
+    /// somebody using VoiceOver.
+    ///
+    /// The tile went too. A session's glyph tells one row from another in a list of them; on the
+    /// session's own page there is only one session, and it was 28 points of picture saying what
+    /// the name beside it already said.
     private var header: some View {
         HStack(spacing: Spacing.extraSmall) {
-            Button { dismiss() } label: {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(accent)
-                    .frame(width: 28, height: 34)
-                    .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Sessions")
-            GlyphTile(DotGlyph.forName(session.name), size: 28, ground: Palette.lcdGround)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(session.name)
-                    .font(Typography.pageTitle)
-                    .foregroundStyle(Palette.textPrimary)
-                    .lineLimit(1)
-                Text(subtitle)
-                    .font(Typography.hint)
-                    .foregroundStyle(Palette.textSecondary)
-                    .lineLimit(1)
-            }
+            Text(session.name)
+                .font(Typography.pageTitle)
+                .foregroundStyle(Palette.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
             Spacer(minLength: Spacing.extraSmall)
-            StateWord(session.isBusy ? .busy : .idle)
             controls
         }
-        .padding(.leading, Spacing.extraSmall)
+        .padding(.leading, Spacing.medium)
         .padding(.trailing, Spacing.small)
         .padding(.top, Spacing.xxs)
-        .padding(.bottom, Spacing.extraSmall)
     }
 
     /// Everything you can do to the session rather than say to it, behind one glyph: bringing
@@ -80,14 +74,51 @@ struct SessionHead: View {
     /// menu is there and says why rather than quietly doing nothing.
     private var controls: some View {
         Menu {
+            here
+            setup
+            inside
+            // Last and on their own, because this is the only group in the menu where a
+            // mis-tap costs something. Two of the four cannot be undone at all.
+            Section("Run") {
+                ForEach(Control.allCases, id: \.self) { action in
+                    Button(action.label, systemImage: action.symbol, role: role(action)) {
+                        if action.asksFirst { confirming = action } else { send(action) }
+                    }
+                    .disabled(hasNoPane)
+                }
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .font(.system(size: 16, weight: .semibold))
+                .frame(width: 28, height: 34)
+                .contentShape(.rect)
+        }
+        .tint(accent)
+        .foregroundStyle(accent)
+        .accessibilityLabel("Session controls")
+    }
+
+    /// Where you go from here. The way back is a menu item because the chevron is gone and a
+    /// left-edge swipe, which is what replaced it, is not something VoiceOver offers.
+    private var here: some View {
+        Section {
+            Button("Sessions", systemImage: "chevron.left") { dismiss() }
             Button("Show on the Mac", systemImage: "display") {
                 Task { await model.focus(session) }
             }
             .disabled(hasNoPane)
+        }
+    }
+
+    /// The three things you configure rather than do. All of them open a page, all of them are
+    /// rare, and none of them changes the session you are looking at right now — which is why
+    /// they are together and why they are not first.
+    private var setup: some View {
+        Section("Set up") {
             // The sheet seeds itself from the name this session has now, so there is no draft
             // for the page to hold on its behalf.
             Button("Rename…", systemImage: "text.cursor") { renaming = true }
-            .disabled(hasNoPane)
+                .disabled(hasNoPane)
             // What the Mac does to words on their way into this session — this session's own
             // setting rather than the Mac's, because what you want done to words going into one
             // project is not what you want done to words going into another.
@@ -99,6 +130,12 @@ struct SessionHead: View {
             // change what the Mac may do about this work. Keyed by the path, which outlives
             // every session in it — a setting filed under a session id would be gone by morning.
             Button("Project settings…", systemImage: "slider.horizontal.3") { configuring = true }
+        }
+    }
+
+    /// Looking at what the app is reading, and clearing what it cannot read for you.
+    private var inside: some View {
+        Section("Look inside") {
             // Always reachable, not only when something looks wrong: every other view here is
             // a reading of that file, and this is the file.
             Button("Raw transcript", systemImage: "scroll") { reading = true }
@@ -108,22 +145,7 @@ struct SessionHead: View {
                 Task { await model.clearQueue(for: session) }
             }
             .disabled((model.queued[session.sessionId] ?? []).isEmpty)
-            Divider()
-            ForEach(Control.allCases, id: \.self) { action in
-                Button(action.label, systemImage: action.symbol, role: role(action)) {
-                    if action.asksFirst { confirming = action } else { send(action) }
-                }
-                .disabled(hasNoPane)
-            }
-        } label: {
-            Image(systemName: "ellipsis.circle")
-                .font(.system(size: 16, weight: .semibold))
-                .frame(width: 28, height: 34)
-                .contentShape(.rect)
         }
-        .tint(accent)
-        .foregroundStyle(accent)
-        .accessibilityLabel("Session controls")
     }
 
     /// Whether the things in that menu which are keystrokes can work at all.
@@ -154,17 +176,29 @@ struct SessionHead: View {
     private var fullness: some View {
         HStack(spacing: Spacing.extraSmall) {
             if let context = session.context {
-                Meter(context.share, tint: Palette.pressure(context.pressure), thickness: 3)
+                Dial(context.share, tint: Palette.pressure(context.pressure))
                 Text(context.line)
                     .font(Typography.hint)
                     .monospacedDigit()
                     .foregroundStyle(Palette.textTertiary)
+                    .lineLimit(1)
+            }
+            // Only when it is idle. "How long since it last said anything" is the question you
+            // ask about a session that has stopped; a session mid-turn last spoke now, and the
+            // registry's own stamp is the age of an idle session and nothing else.
+            if !session.isBusy {
+                Text(subtitle)
+                    .font(Typography.hint)
+                    .foregroundStyle(Palette.textTertiary)
+                    .lineLimit(1)
             }
             Spacer(minLength: Spacing.extraSmall)
             if working { ProgressView().controlSize(.mini) }
+            StateWord(session.isBusy ? .busy : .idle)
             dots
         }
         .padding(.horizontal, Spacing.medium)
+        .padding(.top, Spacing.xxs)
         .padding(.bottom, Spacing.small)
     }
 
@@ -190,5 +224,39 @@ struct SessionHead: View {
         let ago = session.lastActive.formatted(.relative(presentation: .numeric, unitsStyle: .narrow))
         let sameWord = session.folder.caseInsensitiveCompare(session.name) == .orderedSame
         return sameWord ? ago : "\(session.folder) · \(ago)"
+    }
+}
+
+/// How full the window is, as a ring rather than a bar.
+///
+/// The bar ran the width of the page to say one number, which is a lot of screen for something
+/// you glance at — and a bar reads as a thing filling up over time, which is right, but it read
+/// as the *page's* progress rather than the session's. A ring is the same fact in thirteen
+/// points, beside the number it is about.
+///
+/// It never draws completely empty: a session with a barely-touched window would otherwise show
+/// a plain grey circle, which reads as "no data" rather than "hardly any".
+private struct Dial: View {
+    private let share: Double
+    private let tint: Color
+    private let size: CGFloat = 13
+    private let thickness: CGFloat = 2.5
+
+    init(_ share: Double, tint: Color) {
+        self.share = min(max(share, 0.03), 1)
+        self.tint = tint
+    }
+
+    var body: some View {
+        ZStack {
+            Circle().stroke(tint.opacity(0.22), lineWidth: thickness)
+            Circle()
+                .trim(from: 0, to: share)
+                .stroke(tint, style: StrokeStyle(lineWidth: thickness, lineCap: .round))
+                // From the top, the way a clock face is read, rather than from three o'clock.
+                .rotationEffect(.degrees(-90))
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
     }
 }
