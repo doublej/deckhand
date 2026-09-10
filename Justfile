@@ -179,6 +179,8 @@ roots:
 
 [group('quality')]
 check:
+    @echo '→ Checking every branch shares one root...'
+    just roots
     @echo '→ Checking Justfile format...'
     just just-fmt-check
     @echo '→ Checking file lengths...'
