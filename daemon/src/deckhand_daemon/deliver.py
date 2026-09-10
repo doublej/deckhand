@@ -128,6 +128,13 @@ def deliver(session: Session, text: str, route: str = "auto") -> tuple[str | Non
         return None, "nothing to deliver"
     if route not in ROUTES:
         return None, f"no such route {route!r}"
+    # A slash command is only a command where it is typed. Down the socket it is a *message* that
+    # happens to start with a slash — the receiving session reads it as words, runs nothing, and
+    # nothing anywhere reports a failure, because nothing failed. Refusing is the only way that
+    # is ever found out about.
+    if message.startswith("/") and (route == "socket" or not session.pane):
+        return None, (f"{message.split()[0]} is a slash command and only works typed into a "
+                      f"pane; {session.name} would receive it as words")
     if route != "socket" and session.pane:
         if _type_into_pane(session.pane.iterm_session_id, message):
             log.info("typed %d chars into %s's pane", len(message), session.name)

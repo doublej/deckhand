@@ -225,6 +225,37 @@ def test_exit_is_typed_and_returned_like_any_other_slash_command(inbox, claude_h
     ]
 
 
+def test_a_slash_command_is_refused_where_it_would_arrive_as_words(inbox, claude_home):
+    """The socket delivers a message, and a message beginning with a slash is not a command.
+
+    The receiving session reads it, runs nothing, and reports no failure — because from where it
+    sits nothing failed. Saying no is the only way anybody finds out, so this is a refusal rather
+    than a delivery.
+    """
+    session = session_for(inbox.getsockname())
+
+    # No pane, so `auto` would fall through to the socket.
+    route, error = deliver.deliver(session, "/feature a new branch")
+    assert route is None
+    assert "/feature is a slash command" in (error or "")
+
+    # And explicitly, with a pane there to type into: choosing the socket is still choosing words.
+    session.pane = a_pane()
+    route, error = deliver.deliver(session, "/feature a new branch", route="socket")
+    assert route is None
+    assert "would receive it as words" in (error or "")
+
+
+def test_ordinary_words_are_untouched_by_that_guard(inbox, claude_home):
+    """Only a leading slash. A sentence with a path in the middle of it is a sentence."""
+    session = session_for(inbox.getsockname())
+
+    route, error = deliver.deliver(session, "look in /Users/jj/dev for it")
+
+    assert error is None
+    assert route == "socket"
+
+
 def test_a_control_needs_a_pane_and_says_so(inbox, claude_home):
     """The peer socket delivers messages, and none of these is a message."""
     session = session_for(inbox.getsockname())
