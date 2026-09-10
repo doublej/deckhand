@@ -47,6 +47,61 @@ final class DeckLoopTests: XCTestCase {
         XCTAssertTrue(firstSession.exists, "the sessions list went away")
     }
 
+    /// Four presentations hang off one view in `SessionFoot` — two sheets, this dialog, and the
+    /// photo picker, which is itself a sheet. Multiple sheets on one view have been supported
+    /// since iOS 16, but that is exactly the place iOS goes quietly unreliable, and a picker that
+    /// silently opens nothing looks identical to a button nobody wired up. So it is asserted
+    /// rather than reasoned about.
+    ///
+    /// The gesture is a **tap** on the mark, not a hold, and that is not a mistake: talking is the
+    /// hold in the default mode, so the other three things get the press that mode leaves spare.
+    /// It is exactly where the clip archive already was — see `TalkGesture`.
+    ///
+    /// This is the test that found `.gesture(held)` swallowing that tap, so it is also the one
+    /// that would notice it coming back.
+    func testTheMarksOtherPressReachesPhotos() throws {
+        let app = try launch()
+        let firstSession = app.descendants(matching: .any).matching(identifier: "session-row").firstMatch
+        XCTAssertTrue(firstSession.waitForExistence(timeout: 20), "the deck stayed empty")
+        firstSession.tap()
+
+        let talk = app.descendants(matching: .any).matching(identifier: "talk-mark").firstMatch
+        XCTAssertTrue(talk.waitForExistence(timeout: 15), "the talk button never appeared")
+        talk.tap()
+
+        for word in ["Photos", "Clipboard", "Clips"] {
+            XCTAssertTrue(app.buttons[word].waitForExistence(timeout: 5), "no \(word) in the menu")
+        }
+        add(screenshot(app, named: "reach-menu"))
+
+        app.buttons["Photos"].tap()
+        // The picker is another process drawn into this one, so nothing here is a Deckhand view.
+        // Its Cancel is the one control it is guaranteed to put up whatever the library holds —
+        // an empty simulator library included, which is what would make a photo-shaped assertion
+        // fail for the wrong reason.
+        let picker = app.buttons["Cancel"]
+        let opened = picker.waitForExistence(timeout: 10)
+        add(screenshot(app, named: "photo-picker"))
+        XCTAssertTrue(opened, "Photos opened nothing — the picker needs a host of its own")
+    }
+
+    /// The same menu from the other mode, where it is a long press rather than a tap.
+    ///
+    /// Both are here because the difference between them is what found the bug: the menu worked
+    /// in tap-to-talk and did nothing at all in hold-to-talk, which is what narrowed a whole
+    /// screen's worth of suspects down to one gesture.
+    func testTapToTalkReachesTheMenuByHolding() throws {
+        let app = try launch(mode: "toggle")
+        let firstSession = app.descendants(matching: .any).matching(identifier: "session-row").firstMatch
+        XCTAssertTrue(firstSession.waitForExistence(timeout: 20), "the deck stayed empty")
+        firstSession.tap()
+        let talk = app.descendants(matching: .any).matching(identifier: "talk-mark").firstMatch
+        XCTAssertTrue(talk.waitForExistence(timeout: 15), "the talk button never appeared")
+
+        talk.press(forDuration: 1.0)
+        XCTAssertTrue(app.buttons["Photos"].waitForExistence(timeout: 6), "no menu on a hold")
+    }
+
     func testTheConnectionIsAlwaysStated() throws {
         let app = try launch()
         // Whatever happens, the bar says something: connected, reaching, or why not.
@@ -74,7 +129,10 @@ final class DeckLoopTests: XCTestCase {
         XCTAssertTrue(appeared, "landscape showed no columns")
     }
 
-    private func launch() throws -> XCUIApplication {
+    /// `mode` is nil for whatever the app is set to, which is hold-to-talk out of the box. Named
+    /// explicitly by the one test that needs the other, because which press means what is the
+    /// entire difference between the two.
+    private func launch(mode: String? = nil) throws -> XCUIApplication {
         let env = ProcessInfo.processInfo.environment
         let token = try XCTUnwrap(env["DECKHAND_TOKEN"], "run via `just ui-test`")
         let app = XCUIApplication()
@@ -83,6 +141,7 @@ final class DeckLoopTests: XCTestCase {
             "-deckhand.token", token,
             "-deckhand.favorites", "<array/>"
         ]
+        if let mode { app.launchArguments += ["-deckhand.talkMode", mode] }
         app.launch()
         return app
     }

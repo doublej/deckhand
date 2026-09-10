@@ -43,7 +43,6 @@ struct TalkControl<Content: View>: View {
                           stop: stop,
                           tapped: tapped))
             .modifier(TalkGesture(mode: mode,
-                                  isRecording: isRecording,
                                   pressToStart: pressToStart,
                                   press: press,
                                   tapped: tapped,
@@ -170,7 +169,6 @@ struct TalkState {
 /// touch the other way and the press never arrives. The UI test holds all three down.
 private struct TalkGesture: ViewModifier {
     let mode: TalkMode
-    let isRecording: Bool
     let pressToStart: Bool
     let press: () -> Void
     let tapped: () -> Void
@@ -194,18 +192,28 @@ private struct TalkGesture: ViewModifier {
 
     @ViewBuilder func body(content: Content) -> some View {
         switch mode {
-        case .hold where pressToStart:
+        case .hold:
             // Hold means let go to send, and `onPressingChanged` is where letting go is known
             // without a drag gesture in it — a drag is what a list reads as a swipe.
+            //
+            // One case for both surfaces now, and that is a bug fix rather than tidying. The
+            // floating mark used to take `.gesture(held)` — a long press *sequenced before* a
+            // zero-distance drag — with the tap outside it, and that pairing does not work: the
+            // sequence claims the touch on the way down, so the tap never arrived and the press
+            // this mode leaves spare reached nothing. Hold-to-talk is the default, so in the
+            // default mode the clip archive was unreachable from a session's page, and the menu
+            // that replaced it with it. `.onLongPressGesture` + `.onTapGesture` is the pairing
+            // that does work — it is what a list row has always used for the very same job, and
+            // what tap-to-talk's own reach uses. A UI test holds the difference down.
             content
                 .onLongPressGesture(minimumDuration: Self.settle, perform: press) { down in
                     if !down { stop() }
                 }
+                // `tapped()` and not `reach?() ?? tapped()`: it already routes to the reach when
+                // there is no other job for a tap here, and unlike `reach` it answers a tap made
+                // *while recording* by sending — which is what the mark's own accessibility label
+                // has been promising all along.
                 .onTapGesture { tapped() }
-        case .hold:
-            content
-                .gesture(held)
-                .onTapGesture { reach?() ?? tapped() }
         case .toggle where pressToStart:
             content
                 .onLongPressGesture(minimumDuration: Self.settle) { press() }
@@ -230,17 +238,4 @@ private struct TalkGesture: ViewModifier {
             .onTapGesture { toggled() }
     }
 
-    private var held: some Gesture {
-        LongPressGesture(minimumDuration: Self.settle)
-            .sequenced(before: DragGesture(minimumDistance: 0))
-            .onChanged { value in
-                if case .second(true, _) = value, !isRecording { press() }
-            }
-            .onEnded { _ in stop() }
-    }
-
-    private var pressed: some Gesture {
-        LongPressGesture(minimumDuration: Self.settle)
-            .onEnded { _ in press() }
-    }
 }
