@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// A markdown file on disk, read as a document rather than as its source.
+/// Text read as a document rather than as its source: a markdown file, and a turn.
 ///
 /// This is a second renderer beside ``Prose``, not a wider one. `Prose` draws exactly the four
 /// things a *summary* may contain and shows anything else as the literal characters the model
@@ -8,6 +8,9 @@ import SwiftUI
 /// that had broken it instead of making it obvious. A `report.md` a session wrote for a person
 /// is a different document: `#` and `###` headings, fenced code, numbered and nested lists,
 /// sometimes a table. Every one of those through `Prose` lands on screen as punctuation.
+///
+/// A turn is the same kind of document for a different reason — it has no contract to break, and
+/// one session writing to another writes markdown. See `TurnCard.said`.
 ///
 /// Blocks are split by hand here for the same reason they are split there: SwiftUI's own
 /// markdown parser is inline-only. It knows `**bold**` and `code` and knows nothing at all

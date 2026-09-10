@@ -8,10 +8,6 @@ struct TurnCard: View {
     /// False when the turn before this one was from the same speaker.
     let showsRole: Bool
     @Environment(\.accent) private var accent
-    /// How this screen draws a diagram, where it can. See `Drawn.swift`: a transcript is not
-    /// markdown and is not becoming markdown — a mermaid fence is the one thing lifted out of the
-    /// words, because it is the one whose contents are not the answer.
-    @Environment(\.diagram) private var diagram
     /// Closed until asked. Thinking is the longest thing in a turn and the least often wanted —
     /// a transcript that opened every block by default would be a transcript nobody could skim.
     @State private var thinking = false
@@ -27,9 +23,7 @@ struct TurnCard: View {
             // Above the words, which is where it happened: this is how it got to what it says
             // next, the same argument that puts the tool trace above a message rather than under.
             thought
-            ForEach(Array(Fenced.parts(turn.text).enumerated()), id: \.offset) { _, part in
-                said(part)
-            }
+            said
         }
         .overlay(alignment: .leading) {
             if turn.isUser {
@@ -95,23 +89,21 @@ struct TurnCard: View {
         turn.thoughts.count == 1 ? "THOUGHT" : "\(turn.thoughts.count) THOUGHTS"
     }
 
-    /// One run of a turn: the words as they were written, or the picture a mermaid fence meant.
-    @ViewBuilder private func said(_ part: Fenced.Part) -> some View {
-        switch part {
-        case .words(let text):
-            Text(Links.marked(text, in: accent))
-                .font(.system(size: 13))
-                .foregroundStyle(Palette.textPrimary)
+    /// What was said, drawn as the document it is.
+    ///
+    /// The document renderer rather than ``Prose``, and the reason is what each contract is for.
+    /// `Prose` draws the four things a *summary* may contain and shows anything else as the
+    /// characters the model typed, because a summary is written against a prompt this repo owns
+    /// and a briefing that broke that contract must look broken. A turn has no contract to break:
+    /// it is whatever a person dictated or another session wrote, and what another session writes
+    /// is markdown — headings, `code`, **bold**, bullets, numbered steps, fences, tables. Every
+    /// one of those used to land here as punctuation, which is the same failure `Prose` exists to
+    /// expose, arriving for the opposite reason. ``Markdown`` is also where the fence rule already
+    /// lives, and a third renderer would be a third place that rule could drift out of step.
+    @ViewBuilder private var said: some View {
+        if !turn.text.isEmpty {
+            Markdown(turn.text)
                 .textSelection(.enabled)
-        case .diagram(let source):
-            if let draw = diagram {
-                draw(source)
-            } else {
-                Text(source)
-                    .font(.system(size: 12, design: .monospaced))
-                    .foregroundStyle(Palette.textSecondary)
-                    .textSelection(.enabled)
-            }
         }
     }
 }

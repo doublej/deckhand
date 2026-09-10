@@ -60,6 +60,18 @@ def test_system_reminders_are_stripped(claude_home):
     assert transcripts.read_turns(SID)[0].text == "keep me"
 
 
+def test_a_peer_reaches_the_phone_as_a_labelled_turn(claude_home):
+    """The whole of `machinery` reaches a turn, which is the only place the phone reads one."""
+    write_transcript(claude_home, [
+        user('Another Claude session sent a message:\n'
+             '<teammate-message teammate_id="git-surgery" summary="main fast-forwarded">\n'
+             "It is in: **08b3792**.\n</teammate-message>"),
+    ])
+    assert transcripts.read_turns(SID)[0].text == (
+        "**From git-surgery:** main fast-forwarded\n\nIt is in: **08b3792**."
+    )
+
+
 def test_limit_returns_the_newest_turns(claude_home):
     write_transcript(claude_home, [user(f"m{i}") for i in range(10)])
     assert [t.text for t in transcripts.read_turns(SID, limit=3)] == ["m7", "m8", "m9"]
