@@ -82,6 +82,8 @@ final class AppModel {
     /// Pictures pinned to those words, per session, until they are sent or discarded.
     var attached: [String: [Snap]] = [:]
     var showsHidden = false
+    /// The project picker's own state, in its own object — see `Starting.swift`.
+    var picker = ProjectPicker()
     /// Everything the Mac can do to words on their way in, as the Mac describes it. Global,
     /// because what this Mac *can* do genuinely is: only the chain is per session. The phone
     /// holds no list of its own — `Filtering.swift` is the whole of what it knows about filters.

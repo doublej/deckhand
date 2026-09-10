@@ -25,6 +25,7 @@ from . import (
 )
 from .filters import routes as filter_routes
 from .log import log
+from .projects import routes as project_routes
 from .reading import asked, commands, readable, transcripts
 
 
@@ -48,6 +49,7 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="Deckhand", version=__version__, lifespan=lifespan)
 app.include_router(artifacts.router, dependencies=[Depends(require_token)])
 app.include_router(filter_routes.router, dependencies=[Depends(require_token)])
+app.include_router(project_routes.router, dependencies=[Depends(require_token)])
 app.include_router(saying.router, dependencies=[Depends(require_token)])
 
 

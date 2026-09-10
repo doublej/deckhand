@@ -11,6 +11,9 @@ import SwiftUI
 struct SessionListView: View {
     @Bindable var model: AppModel
     @State private var showSettings = false
+    /// The project picker. Its own sheet rather than a page pushed onto the rail: it is a way
+    /// *into* a session rather than a place, and it hands one back rather than navigating.
+    @State private var showProjects = false
     @State private var recorder = Recorder()
     /// Which session the microphone is open for, if any. One recorder, many rows.
     @State private var talking: String?
@@ -55,6 +58,11 @@ struct SessionListView: View {
             .navigationDestination(item: $chosen) { SessionView(model: model, opened: $0) }
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showSettings) { SettingsView(model: model) }
+            // The rail owns where you end up, so the picker hands the new session back rather
+            // than pushing anything itself — same route a tapped row takes.
+            .sheet(isPresented: $showProjects) {
+                ProjectListView(model: model) { chosen = $0 }
+            }
             // On the page rather than on the row: a row is recycled as the listing refreshes, and
             // a sheet presented from one goes with it.
             .sheet(item: $marking) { SnapView(model: model, session: $0.session, snap: $0.snap) }
@@ -249,6 +257,8 @@ struct SessionListView: View {
             // sentence, so it is the thing that would be squeezed to an ellipsis by these.
             if reason == nil { Statusline(model: model) }
             StateWord(model.connection.state)
+            Button("New session", systemImage: "plus") { showProjects = true }
+                .accessibilityIdentifier("new-session")
             Button("Hidden sessions", systemImage: model.showsHidden ? "eye" : "eye.slash") {
                 model.showsHidden.toggle()
             }
