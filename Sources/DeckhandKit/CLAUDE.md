@@ -64,6 +64,12 @@ Design is its own packet (`Design/CLAUDE.md`).
 
 ## Verification
 
+- **`StubProtocol` is static, and suites run in parallel.** A second `@Suite` stubbing the same
+  transport answers the first one's requests — measured: a `/projects` body arrived at the
+  `/sessions` test and both failed. `.serialized` orders tests *within* a suite, not across them.
+  Anything that stubs the client goes in `ClientTests` — including as an `extension ClientTests`
+  in another file, which stays in that suite and so stays serialized with it.
+
 `just test` runs `Tests/DeckhandKitTests` on the Mac — no simulator needed.
 `.quality.json` caps a Swift file at 400 lines and a directory at 16 files, which is why
 `DeckhandClient+Filters.swift` and `Conversation.swift` exist.

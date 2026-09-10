@@ -18,6 +18,7 @@ app.py          # the endpoints, and nothing else
 config.py       # data dir, token, port
 log.py          # the one log file, in ~/Library/Logs
 sessions.py     # which Claude sessions are alive, and their iTerm pane
+projects/       # what folders there are, and starting a session in one
 reading/        # everything that reads a transcript and nothing that writes one
 deliver.py      # the words go into the session, by keyboard or by socket
 saying.py       # what a spoken line becomes before it is delivered
@@ -61,6 +62,40 @@ and `/sessions` both carry an `iterm` field saying whether pane data is trustwor
   still backs off for a minute so a real outage cannot starve the event loop. This matters for
   more than window titles: without a pane there is no keyboard, and delivery falls back to the
   peer socket.
+
+## Starting a session that does not exist yet
+
+`projects/` is the only place a new session comes from. `sources.py` is the universal consumer —
+a project is a name and a folder, read from the person's own `projects.json`, then atlas over
+HTTP, then atlas's scan cache, first to answer wins. `starting.py` opens the terminal.
+
+- **`it2 tab new` makes a pane whose shell never reads input.** It exits 0, the pane comes back
+  from `it2 session list --json` with a tty and a live zsh on it, and a minute later it holds
+  nothing but blank lines. A tab is created relative to iTerm's *current* window and a daemon has
+  no window to be current in. `it2 window new` has no such ambiguity and prints `Created new
+  window: pty-…` — a handle, so the new session is looked up by `window_id` rather than guessed
+  at by diffing the session list either side of the call.
+- **Never script `it2 session close`.** It asks "Close tab #N?" as a **modal sheet**, which blocks
+  iTerm's entire Python API — every `it2` call on the Mac, this daemon's pane lookups included,
+  fails with "Not running inside iTerm2 or Python API not enabled" until somebody dismisses it.
+  Piping `yes` does not answer it. Recovering without restarting iTerm (which would take every
+  live session with it) is `osascript -e 'tell application "System Events" to tell process
+  "iTerm2" to click button "Cancel" of sheet 1 of window 1'`.
+- **Bare `claude` opens the session dashboard, not a session.** Measured on 2.1.266: it draws the
+  "describe a task for a new session" launcher, writes no `~/.claude/sessions/<pid>.json`, and so
+  never reaches the phone at all. `--name` starts an interactive session outright and is **not in
+  `claude --help`** — the flag was read off the running processes on this Mac.
+- **A folder Claude Code has never been trusted in stops at a prompt nobody can answer**, and
+  writes no session record until it is. Read the answer it already has out of `~/.claude.json`
+  (`projects.<path>.hasTrustDialogAccepted`) and refuse before opening anything — otherwise a
+  window is left stranded at a question. 81 of 659 folders here are trusted, so this is the
+  common refusal rather than an edge case.
+- **A session's name is a key**, not a label: a star, a hidden row and a filter chain are all
+  filed under it, so a second session called `deckhand` would silently share the first one's
+  three. The project's name is taken when free and numbered when not.
+- The rest of the launch line is the person's, not a default to help oneself to — a phone-started
+  session has nobody to approve its first tool use. Asked on a slip; the answer is in
+  `starting.FLAGS`.
 
 ## Delivery: two routes, and the difference is authority
 

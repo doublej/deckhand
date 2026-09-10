@@ -14,6 +14,8 @@ to edit**; change `project.yml` and run `just generate`.
 (`Dictating`, `Controlling`, `Filtering`, `Markups`, `Reading`, `Snaps`, `LiveUpdates`). `Views/`
 is the screens, `Views/Session/` the session page's parts, `Views/Artifacts/` slips,
 `Views/Annotation/` marking up a picture (its own packet — read it before touching that folder).
+`Views/Projects/` is the picker that starts a new session; its state is `ProjectPicker`, in
+`Starting.swift` rather than four more properties on `AppModel`, which sits at its 300-line gate.
 
 ## Invariants
 

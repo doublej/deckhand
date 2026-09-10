@@ -33,7 +33,7 @@ own page inside utt.
 
 | Folder | Its job |
 |---|---|
-| `daemon/` | The Mac half: sessions, transcripts, delivery, briefings, utt, APNs. |
+| `daemon/` | The Mac half: sessions, projects, transcripts, delivery, briefings, utt, APNs. |
 | `Sources/DeckhandKit/` | Models, HTTP client, pure logic, design layer — everything `just test` can reach. |
 | `Sources/IconMaker/` | Draws the app icon from the same grid as the in-app mark (`just icon`). |
 | `deckhand/` | The iOS app target: `Model`, the recorders, and `Views/`. |
@@ -95,6 +95,8 @@ to talk → `POST /sessions/{id}/audio`, which answers with the transcript and w
 the session. `?deliver=false` transcribes without sending, for the review card, and
 `POST /sessions/{id}/say` sends the text once the person has read it.
 
+- `GET /projects` — every folder on this Mac a session could be started in, and which source
+  said so; `POST /projects/session` opens a terminal there and answers with the session itself
 - `GET /briefings` — every live session's last briefing at once, off disk, for a cold start
 - `GET /sessions/{id}/commands` — the slash commands and skills that session could be handed
 - `GET /sessions/{id}/raw` — the transcript as readable lines, for when the app's reading looks wrong
