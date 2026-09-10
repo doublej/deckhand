@@ -115,6 +115,8 @@ hold to talk → `POST /sessions/{id}/audio`, which answers with the transcript 
 reached the session. `?deliver=false` transcribes without sending, for the review card, and
 `POST /sessions/{id}/say` sends the text once the person has read it.
 `GET /briefings` hands back every live session's last briefing at once, off disk, for a cold start.
+`GET /sessions/{id}/commands` lists the slash commands and skills that session could be handed
+by name, read off `~/.claude` and the project at every request.
 `GET /sessions/{id}/raw` hands back the transcript as readable lines — one per event, the syntax
 dropped — for when the question is whether the app read it right.
 `POST /sessions/{id}/queue/clear` draws a line under an inbox holding prompts nothing will read.
@@ -296,6 +298,12 @@ unauthenticated route; everything else needs the `x-deckhand-token` header, and 
   binary). `UIContextMenuSystem`, which would be the supported answer, is iOS 26. So the app's own
   surface is the answer: `ArtifactPage.watcher` reports *that* there is a selection and
   `SayOnPage` appears under the page. Reconsider when the floor reaches iOS 26.
+- **A slash command only works typed into a pane.** The socket delivers a *message*, so one sent
+  that way arrives as words beginning with a slash: the session reads it, runs nothing, and
+  reports no failure, because from where it sits nothing failed. `deliver.deliver` refuses a
+  leading slash on the socket route and where there is no pane, which is the only way anybody
+  finds out. `reading/commands.py` is where the names come from — `~/.claude` and the project's
+  own `.claude`, project shadowing user, nested folders keeping their `dir:name` namespace.
 - **A two-letter name fails the lint, and `at` is the one everybody reaches for.** SwiftLint's
   `identifier_name` wants three characters, and a point on a picture wants to be called `at` —
   it has now been written and renamed three times (`Pin.at` → `Pin.spot`, and twice in
