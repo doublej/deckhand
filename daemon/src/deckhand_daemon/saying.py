@@ -36,9 +36,20 @@ IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".heic", ".gif", ".webp"}
 def session_or_404(session_id: str) -> sessions.Session:
     # ponytail: every lookup re-lists sessions (one `it2` call, ~0.5 s). Cache it if the
     # phone ever polls harder than every few seconds.
-    for s in sessions.live_sessions():
+    live = sessions.live_sessions()
+    for s in live:
         if s.session_id == session_id:
             return s
+    # The one lookup that is allowed to answer with a session other than the one asked for. A
+    # `/clear` retires the conversation and keeps everything the phone can see — the pane, the
+    # name, the socket, the process — so a page opened before it is addressing an id that is
+    # gone while showing a session that is plainly still there. The person means the session on
+    # their screen, and this is the same pid in the same pane: it is theirs.
+    if (now := sessions.succeeded_by(session_id)) and (
+        found := next((s for s in live if s.session_id == now), None)
+    ):
+        log.info("%s was cleared — %s answers for it now", session_id[:8], found.name)
+        return found
     raise HTTPException(status_code=404, detail="no live session with that id")
 
 

@@ -153,6 +153,34 @@ def _fetch_panes() -> dict[str, Pane]:
     return panes
 
 
+#: pid -> the conversation running under it now, and every id that has been retired from one.
+#:
+#: `/clear` keeps the process, the pane, the inbox socket and the name, and changes only the
+#: conversation id — which is the one thing the phone is holding. A page opened before the clear
+#: is left addressing an id nothing on this Mac answers to, and the person looking at it cannot
+#: tell: every word on the screen still says the session is right there. This is how that prompt
+#: still lands.
+#:
+#: Both are dropped the moment their pid stops running, and that is not tidiness: pids are
+#: recycled, and an id left pointing at a dead one would resolve to whatever unrelated session
+#: the OS handed that number to next. A voice clip going to the wrong session is worse than one
+#: that fails.
+# ponytail: in memory, so a daemon restart forgets. A phone's id is stale across a restart
+# anyway; make it a file if that ever stops being true.
+_current: dict[int, str] = {}
+_retired: dict[str, int] = {}
+
+
+def succeeded_by(session_id: str) -> str:
+    """The conversation now running where `session_id` used to, or "".
+
+    Only ever an id this Mac watched being retired from a pid that is still running — never a
+    guess at which session someone probably meant.
+    """
+    pid = _retired.get(session_id)
+    return _current.get(pid, "") if pid is not None else ""
+
+
 def live_sessions(iterm_only: bool = True) -> list[Session]:
     """Live interactive Claude sessions, most recently active first."""
     procs = _processes()
@@ -166,13 +194,18 @@ def live_sessions(iterm_only: bool = True) -> list[Session]:
         pid = rec.get("pid")
         if pid not in procs or rec.get("kind") != "interactive":
             continue
+        session_id = rec.get("sessionId", "")
+        if session_id:
+            if (was := _current.get(pid)) and was != session_id:
+                _retired[was] = pid
+            _current[pid] = session_id
         tty = procs[pid]
         pane = panes.get(tty)
         if pane is None and iterm_only and panes:
             continue
         found.append(
             Session(
-                session_id=rec.get("sessionId", ""),
+                session_id=session_id,
                 pid=pid,
                 name=rec.get("name") or Path(rec.get("cwd", "")).name or f"pid {pid}",
                 cwd=rec.get("cwd", ""),
@@ -183,6 +216,11 @@ def live_sessions(iterm_only: bool = True) -> list[Session]:
                 socket_path=rec.get("messagingSocketPath", ""),
             )
         )
+    for dead in set(_current) - set(procs):
+        del _current[dead]
+    for old, pid in list(_retired.items()):
+        if pid not in procs:
+            del _retired[old]
     found.sort(key=lambda s: s.updated_at, reverse=True)
     return [s for s in found if s.session_id]
 

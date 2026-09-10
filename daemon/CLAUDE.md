@@ -52,6 +52,14 @@ Sessions with no iTerm pane are hidden — unless iTerm answers nothing at all, 
 every live session is listed so the app still works without the iTerm Python API. `/health`
 and `/sessions` both carry an `iterm` field saying whether pane data is trustworthy.
 
+- **A session id is the conversation, not the session.** `/clear` retires it and starts a new
+  one under the *same* pid, pane, inbox socket and name — so nothing the phone can see changes,
+  and a page opened before the clear is left addressing an id this Mac no longer answers to.
+  That was a prompt that silently went nowhere. `sessions.succeeded_by` remembers which pid an
+  id was retired from and `saying.session_or_404` follows it, which makes that the one lookup
+  allowed to answer with a session other than the one asked for. Both maps drop a pid the
+  moment it stops running, and that is not tidiness: pids are recycled, and an id left pointing
+  at a dead one would resolve to whatever unrelated session got that number next.
 - The **first** connection from a new client makes iTerm2 ask for Python API approval. Until
   someone clicks it, `it2` blocks: pane data is missing and `/sessions` costs the timeout.
   It happened once when the launchd agent was first bootstrapped and has been approved since.

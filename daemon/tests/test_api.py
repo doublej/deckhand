@@ -295,3 +295,22 @@ def test_reading_one_summary_moves_that_session_to_the_front_of_the_queue(token)
     briefings._bumped.clear()
     assert client(token).get(f"/sessions/{SID}/summary").status_code == 200
     assert briefings._bumped == [SID]
+
+
+def test_a_prompt_still_lands_on_a_session_that_was_cleared(token, claude_home, monkeypatch):
+    """The symptom this fixes: hold to talk on a page opened before a `/clear` and the words go
+    nowhere, with nothing on the phone changed to explain why — same name, same pane, same row."""
+    sent = []
+    monkeypatch.setattr(deliver_module, "deliver",
+                        lambda session, *a, **k: sent.append(session.session_id) or ("socket", None))
+    c = client(token)
+    assert c.post(f"/sessions/{SID}/say", json={"text": "before"}).status_code == 200
+
+    record = claude_home / "sessions" / "4242.json"
+    rec = json.loads(record.read_text())
+    rec["sessionId"] = "dddd1111-2222-3333-4444-555566667777"
+    record.write_text(json.dumps(rec))
+
+    answer = c.post(f"/sessions/{SID}/say", json={"text": "after"})
+    assert answer.status_code == 200, "the id the phone is holding is the one it opened the page with"
+    assert sent == [SID, "dddd1111-2222-3333-4444-555566667777"]
