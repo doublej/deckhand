@@ -49,6 +49,14 @@ Design is its own packet (`Design/CLAUDE.md`).
   different matter: any script on the page can post to the handler, so `holds` carries no text. A
   page could claim a selection it does not have; at worst that shows a control with nothing to
   work on, because the passage is read out of the page by the host at the moment it is wanted.
+- **A slip can declare its questions instead of only drawing them**, and then it is not a web page
+  at all: `Aloud` parses one `id="deckhand-aloud"` JSON block out of the HTML and the app draws a
+  card per question with the app's own talk mark on it. Parsed here as string work rather than
+  asked of a live web view — the app already holds the page as a string, and this way the aloud
+  path builds no web view and the whole decision is testable on the Mac. Every failure lands on the
+  same side: no block, bad JSON, no usable question → `declared` is nil → the HTML renders. The
+  answer is the *form* shape (`{"answer": {id: words}, "completedCount": n}`) on purpose, so
+  nothing new has to be learned to read one.
 - **A custom item cannot be added to a `WKWebView`'s text-selection menu on iOS 18.** Measured
   against the iPhoneOS 26.5 SDK headers, because every route that sounds right is a dead end:
   `WKUIDelegate.webView(_:willPresentEditMenuWithAnimator:)` hands over a

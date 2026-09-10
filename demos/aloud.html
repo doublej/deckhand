@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Before I start on the migration</title>
+</head>
+<body>
+<main>
+  <p class="eyebrow" id="slug">migration-questions</p>
+  <h1>Before I start on the migration</h1>
+  <p class="lead">Six things I would rather hear you say than guess at.</p>
+
+  <!--
+    THE ONLY THING TO EDIT.
+
+    Copy this file, change the <title>, the <h1>, the lead, and this block. Everything below
+    renders itself from it, so the questions exist once and cannot drift out of step with what
+    is drawn — in the app, in a browser, or in the answer that comes back.
+
+      id    the key this question's answer arrives under. Yours; keep it short.
+      ask   the question, as you would say it out loud.
+      hint  the line under it, or leave it out. What you would have put in brackets.
+
+    On the phone this does not render as a page at all: Deckhand reads this block and draws one
+    card per question with its own talk mark on it, so the whole slip is answered by talking. In
+    a browser, or on a phone that has never heard of that, the script below draws the same
+    questions as fields and sends the same answer.
+  -->
+  <script type="application/json" id="deckhand-aloud">
+  {
+    "questions": [
+      { "id": "scope",
+        "ask": "How far should this migration go?",
+        "hint": "Everything at once, or the read path first and the writes later." },
+      { "id": "downtime",
+        "ask": "What downtime is acceptable, if any?" },
+      { "id": "rollback",
+        "ask": "If it goes wrong at 2am, what should happen?",
+        "hint": "Roll back automatically, or wake you up." },
+      { "id": "data",
+        "ask": "Is there anything in this data I should not be looking at?" },
+      { "id": "deadline",
+        "ask": "Is there a date this has to be done by?" },
+      { "id": "else",
+        "ask": "Anything else I should know before I start?",
+        "hint": "The thing you would have said in the corridor." }
+    ]
+  }
+  </script>
+
+  <div id="cards"></div>
+
+  <div class="actions">
+    <button id="send" class="primary" disabled>Send</button>
+  </div>
+
+  <section id="loose" hidden>
+    <hr>
+    <p class="state">OFF</p>
+    <p class="hint">Opened outside Deckhand, so nothing is connected and an answer goes nowhere.
+      What it would have sent shows up here instead. On the phone these are cards with the app's
+      own talk mark on each one — this is the same slip with its clothes off.</p>
+    <pre id="shape" hidden></pre>
+  </section>
+</main>
+
+<script>
+  const connected = Boolean(window.deckhand);
+  const declared = JSON.parse(document.getElementById("deckhand-aloud").textContent);
+  const questions = declared.questions.filter((q) => q && q.id && q.ask);
+  const cards = document.getElementById("cards");
+  const send = document.getElementById("send");
+  const shape = document.getElementById("shape");
+
+  // What was answered last time, per question. The app puts it in place before this script runs,
+  // so a field is built already holding it rather than filling in a moment later. A question that
+  // was not answered is not in the map, and stays empty.
+  const before = connected && window.deckhand.answer;
+  const was = (before && before.answer) || {};
+
+  questions.forEach((question, at) => {
+    const card = document.createElement("section");
+    card.className = "card";
+
+    const count = document.createElement("p");
+    count.className = "eyebrow";
+    count.textContent = (at + 1) + " of " + questions.length;
+    card.appendChild(count);
+
+    const ask = document.createElement("p");
+    ask.className = "lead";
+    ask.textContent = question.ask;
+    card.appendChild(ask);
+
+    if (question.hint) {
+      const hint = document.createElement("p");
+      hint.className = "hint";
+      hint.textContent = question.hint;
+      card.appendChild(hint);
+    }
+
+    const box = document.createElement("textarea");
+    box.rows = 3;
+    box.dataset.id = question.id;
+    box.value = typeof was[question.id] === "string" ? was[question.id] : "";
+    card.appendChild(box);
+
+    cards.appendChild(card);
+  });
+
+  // Answered is anything with words in it. The same rule the app applies, so the two renderings
+  // count to the same number and `completedCount` means one thing.
+  function answers() {
+    const given = {};
+    for (const box of cards.querySelectorAll("textarea")) {
+      const said = box.value.trim();
+      if (said !== "") given[box.dataset.id] = said;
+    }
+    return given;
+  }
+
+  function show() {
+    const given = answers();
+    const count = Object.keys(given).length;
+    send.disabled = count === 0;
+    send.textContent = count === questions.length
+      ? "Send all " + count
+      : "Send " + count + " of " + questions.length;
+  }
+
+  // The shape `ask` `type: "form"` comes back with, because that is the one an agent already
+  // knows how to read: a question-id → answer map, and how many were got through.
+  function answer() {
+    const given = answers();
+    const value = { answer: given, completedCount: Object.keys(given).length };
+
+    if (!connected) {
+      shape.hidden = false;
+      shape.textContent = JSON.stringify(value, null, 2);
+      return;
+    }
+    window.deckhand.respond(value);
+    window.deckhand.close();
+  }
+
+  cards.addEventListener("input", show);
+  send.addEventListener("click", answer);
+  show();
+
+  // Last, so the page only claims to be connected once everything on it is wired.
+  if (connected) document.getElementById("slug").textContent = window.deckhand.artifact.id;
+  else document.getElementById("loose").hidden = false;
+</script>
+</body>
+</html>

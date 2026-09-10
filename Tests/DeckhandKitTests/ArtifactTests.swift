@@ -164,3 +164,87 @@ struct ArtifactTests {
         #expect(!injected.contains("\"no\"\nagain"))
     }
 }
+
+/// A slip that is answered by talking, and the block a page carries to say so.
+///
+/// Every one of these is about the same decision — draw cards, or draw the page — and the half
+/// that matters is the failing half: a page that gets the block wrong has to end up as HTML,
+/// because HTML is a slip that still works.
+@Suite("Aloud")
+struct AloudTests {
+    private func page(_ block: String) -> String {
+        """
+        <!doctype html><html><body><h1>Ask</h1>
+        <script type="application/json" id="deckhand-aloud">
+        \(block)
+        </script>
+        <p>the fallback rendering</p></body></html>
+        """
+    }
+
+    @Test("the questions come out of the block, in the order they were written")
+    func reads() throws {
+        let found = try #require(Aloud.declared(in: page("""
+        {"questions": [
+          {"id": "scope", "ask": "How far?", "hint": "Reads first, writes later."},
+          {"id": "when", "ask": "By when?"}
+        ]}
+        """)))
+        #expect(found.questions.map(\.id) == ["scope", "when"])
+        #expect(found.questions.first?.ask == "How far?")
+        #expect(found.questions.first?.hint == "Reads first, writes later.")
+        // Absent rather than optional: a card with no hint draws no second line.
+        #expect(found.questions.last?.hint == "")
+    }
+
+    /// A question with no id has nowhere to put its answer, and a repeated id would quietly
+    /// overwrite the first card's — so one of them has to go, and it is the later one.
+    @Test("a question with no id, no words, or a repeated id is dropped")
+    func drops() throws {
+        let found = try #require(Aloud.declared(in: page("""
+        {"questions": [
+          {"id": "scope", "ask": "How far?"},
+          {"id": "  ", "ask": "Nowhere to put this"},
+          {"id": "empty", "ask": "   "},
+          {"id": "scope", "ask": "Asked twice"}
+        ]}
+        """)))
+        #expect(found.questions.map(\.id) == ["scope"])
+        #expect(found.questions.first?.ask == "How far?")
+    }
+
+    /// The failing half. Each of these is a page that still renders — as a page.
+    @Test("a page with no block, a broken block or no usable question is HTML")
+    func fallsBack() {
+        #expect(Aloud.declared(in: "<html><body><p>an ordinary slip</p></body></html>") == nil)
+        #expect(Aloud.declared(in: page("{ this is not json")) == nil)
+        #expect(Aloud.declared(in: page(#"{"questions": []}"#)) == nil)
+        #expect(Aloud.declared(in: page(#"{"nothing": true}"#)) == nil)
+        // The marker without a closing tag: everything after it would otherwise be read as JSON.
+        #expect(Aloud.declared(in: #"<script id="deckhand-aloud">{"questions": []"#) == nil)
+    }
+
+    @Test("what was answered last time comes back per question, strings only")
+    func readsBack() {
+        let said = Aloud.said(in: #"{"answer": {"scope": "all of it", "n": 4}, "completedCount": 2}"#)
+        #expect(said == ["scope": "all of it"])
+        // Nothing answered, and a shape this page has never seen, are the same empty cards.
+        #expect(Aloud.said(in: "null").isEmpty)
+        #expect(Aloud.said(in: #"{"answer": "a string where a map was"}"#).isEmpty)
+        #expect(Aloud.said(in: "not json at all").isEmpty)
+    }
+
+    /// The shape `ask` `type: "form"` comes back with, because an agent already knows how to read
+    /// that one. Blank is unanswered — the same rule the send button counts by.
+    @Test("the answer is the form shape, and a blank question is left out of it")
+    func sends() throws {
+        let json = try #require(Aloud.value(of: ["scope": "all of it", "when": "   ", "why": ""]))
+        let body = try #require(try JSONSerialization.jsonObject(with: Data(json.utf8))
+            as? [String: Any])
+        #expect(body["answer"] as? [String: String] == ["scope": "all of it"])
+        #expect(body["completedCount"] as? Int == 1)
+        // Nothing said is nothing to send: the Mac refuses an answer of null on purpose.
+        #expect(Aloud.value(of: [:]) == nil)
+        #expect(Aloud.value(of: ["scope": "  "]) == nil)
+    }
+}

@@ -150,6 +150,43 @@ Both are driven by a small script the app injects alongside the bridge, which li
 selection or a focused field — never the text. A page that tears those listeners off loses itself
 the controls, the same way a page that paints nothing loses itself a screen.
 
+## A slip answered by talking
+
+A phone dictates better than it types, and an agent with six questions had two bad options: six
+textareas on a page, or six sentences in a row in the session. The third is a page that **declares**
+its questions instead of only drawing them:
+
+```html
+<script type="application/json" id="deckhand-aloud">
+{ "questions": [
+  { "id": "scope", "ask": "How far should this go?", "hint": "Reads first, writes later." },
+  { "id": "deadline", "ask": "Is there a date this has to be done by?" }
+] }
+</script>
+```
+
+The app reads that block out of the HTML and draws **one card per question with its own talk mark**
+— the same `TalkControl` and `TalkMark` the session page uses, so hold-versus-tap is the gesture the
+person already chose. Words land under whatever the card already holds, never over it, and every
+card carries a field as well, because an answer with one wrong word in it should not need saying
+twice.
+
+Three things make this worth doing rather than a second page format:
+
+- **The block is the page's only source of truth.** `demos/aloud.html` renders *itself* from it, so
+  the questions exist once. Edit the JSON and both renderings change; there is nothing to keep in
+  step by hand.
+- **The page is still a page.** It renders in a browser, it passes `demos/check.py`, and an app that
+  has never heard of any of this shows it as a form and sends back the same answer. Everything that
+  can go wrong with the block — missing, malformed, empty, a question with no id — lands on the same
+  side: the app draws the HTML. A page that gets it wrong is a page that works.
+- **The answer is the form answer.** `{"answer": {id: words}, "completedCount": n}` — what `ask`
+  `type: "form"` comes back with and what `demos/form.html` already sends, so nothing new has to be
+  learned to read one. A question nobody answered is left out rather than sent empty, and half the
+  questions can be sent now and the rest added later; the Mac just rewrites the answer file.
+
+Copy `demos/aloud.html`, change the title and the block, and that is the whole of writing one.
+
 ## The demo set
 
 Five pages under `demos/`, one per thing `consult-user-mcp` can ask, because that MCP is the

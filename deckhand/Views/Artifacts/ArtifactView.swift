@@ -23,6 +23,10 @@ struct ArtifactView: View {
     /// The HTML, once the Mac has handed it over. Fetched here rather than with the listing:
     /// a page is kilobytes, and nobody wants every artifact in memory to read one.
     @State private var html: String?
+    /// The questions this page declared, where it declared any. Set from the same HTML, before it
+    /// — a slip that is answered aloud never builds a web view at all, and the branch below is the
+    /// only place in the app that decides between the two.
+    @State private var aloud: Aloud?
     /// What the person answered last time, as JSON text for the bridge. Set before `html` is, so
     /// the one gate below guarantees a page is never built without it — a page drawing itself blank
     /// and then filling in a moment later is worse than the empty form this replaces.
@@ -56,7 +60,13 @@ struct ArtifactView: View {
     }
 
     @ViewBuilder private var page: some View {
-        if let html {
+        if let aloud {
+            AloudCards(aloud: aloud,
+                       say: say,
+                       was: Aloud.said(in: answer),
+                       respond: respond)
+                .accessibilityIdentifier("artifact-aloud")
+        } else if let html {
             ArtifactWeb(artifact: artifact,
                         html: html,
                         answer: answer,
@@ -132,7 +142,7 @@ struct ArtifactView: View {
     /// end. Commenting closes this screen, because what it makes is a card at the foot of the
     /// session's own page and that card is behind this one.
     @ViewBuilder private var saying: some View {
-        if html != nil {
+        if html != nil, aloud == nil {
             SayOnPage(model: model,
                       session: session,
                       artifact: artifact,
@@ -150,7 +160,11 @@ struct ArtifactView: View {
         async let page = model.page(of: artifact, in: session)
         do {
             answer = await said
-            html = try await page
+            let text = try await page
+            // Before `html`, so one SwiftUI pass sees both and a web view is never built for a
+            // frame on its way to being replaced by cards.
+            aloud = Aloud.declared(in: text)
+            html = text
         } catch {
             _ = await said
             failed = reason(error)

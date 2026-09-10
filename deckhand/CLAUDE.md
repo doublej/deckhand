@@ -14,7 +14,9 @@ to edit**; change `project.yml` and run `just generate`.
 (`Dictating`, `Controlling`, `Filtering`, `Markups`, `Reading`, `Snaps`, `LiveUpdates`). `Views/`
 is the screens, `Views/Session/` the session page's parts, `Views/Artifacts/` slips,
 `Views/Annotation/` marking up a picture (its own packet — read it before touching that folder).
-`Views/Projects/` is the picker that starts a new session; its state is `ProjectPicker`, in
+`Views/Artifacts/AloudCards.swift` is the other way a slip can be drawn — cards with the app's own
+talk mark, from a page that declared its questions (`Aloud`); `ArtifactView` is the one place that
+chooses between it and the web view. `Views/Projects/` is the picker that starts a new session; its state is `ProjectPicker`, in
 `Starting.swift` rather than four more properties on `AppModel`, which sits at its 300-line gate.
 
 ## Invariants
@@ -34,6 +36,11 @@ is the screens, `Views/Session/` the session page's parts, `Views/Artifacts/` sl
 - **Hiding the navigation bar takes swipe-back with it.** `SessionView` catches its own: a
   `simultaneousGesture` that only fires for a drag starting within 28pt of the leading edge,
   simultaneous so it never competes with scrolling the transcript.
+- **Ten talk marks on one screen need `isMine`, not ten recorders.** `AloudCards` draws a mark per
+  question against the *one* recorder handed down to it, and `TalkControl(isMine:)` is what keeps
+  the other nine at rest — the same arrangement the deck uses for its columns. The accent is
+  per-card for the same reason: the card being talked into goes utt orange and the rest stay teal,
+  which is the only way a screen full of marks says which one is listening.
 - **The talk control is a mark and nothing else.** It floats over the pane rather than sitting
   under it, and the scrolling panes add `TalkMark.clearance` to the end of their content so
   nothing is stuck behind it. No bar, no ground, no resting label: a band of furniture across the
