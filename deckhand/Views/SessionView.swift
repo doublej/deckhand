@@ -67,15 +67,25 @@ struct SessionView: View {
                         lit: Pane.allCases.firstIndex(of: showing) ?? 0,
                         working: model.summarising.contains(session.sessionId))
             pane
-                // Over the content, not under it. Stacked below, the bar took a band off every
-                // tab to offer one button; floating, it costs the page nothing and the panes
-                // add its height to the end of their own content so anything can be read out
-                // from under it. And it reaches the foot of the screen now that the tab bar
-                // that used to sit under it is gone.
-                .overlay(alignment: .bottom) {
-                    SessionFoot(model: model, session: session, recorder: recorder)
-                }
+                // All the way down, under the home indicator and into the corners. The panes
+                // stopped at the safe area, which left a band of bare ground across the foot of
+                // every one of them — on a phone with a home indicator that is the last thing
+                // you look at and it was the only part of the screen saying nothing. Scrolling
+                // content belongs under that band; the things you press do not, which is why
+                // this is on the pane and the mark below is on the stack outside it.
+                .ignoresSafeArea(.container, edges: .bottom)
                 .overlay(alignment: .top) { landing }
+        }
+        // Over the content, not under it. Stacked below, the bar took a band off every tab to
+        // offer one button; floating, it costs the page nothing and the panes add its height to
+        // the end of their own content so anything can be read out from under it.
+        //
+        // On the stack rather than on the pane: the pane runs under the home indicator now, and
+        // an overlay on it would put the mark down there with it. The stack still ends where the
+        // safe area does, so this is the one place that keeps its inset without naming a number
+        // — a home indicator is 34 points on this phone and none at all on others.
+        .overlay(alignment: .bottom) {
+            SessionFoot(model: model, session: session, recorder: recorder)
         }
         // Named on arrival and then gone. The dots say where you are among four; they cannot say
         // which four, and a pane you land on by accident is a pane you have to read to identify.
