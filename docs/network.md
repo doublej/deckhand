@@ -83,10 +83,12 @@ Two things atlas learned the hard way that this plan inherits rather than redisc
   different features, and `-L` is fine — but it does mean *one long-lived connection per machine* is
   the only cheap shape available. Which is what this plan already does, now for a second reason.
 
-One caveat on reading `/api/hosts`: `shared/hosts.json` is an ESM import, so the running daemon
-holds its **startup copy** and `PUT /api/hosts` answers `restartRequired: true`. A registry edit is
-not visible over HTTP until `bun run daemon:reload`. Reading the file directly sidesteps that —
-which is an argument for ask 4 below.
+**Read the files, not the API.** Atlas's own docs name the shared JSON as the surface for the
+registry — atlas-picker, in Rust, already reads it that way — and the API carries a staleness the
+file does not: `shared/hosts.json` is an ESM import, so the daemon holds its **startup copy** and
+`PUT /api/hosts` answers `restartRequired: true`. A registry edit is invisible over HTTP until
+`bun run daemon:reload`. Reading the file also means the fleet layer does not fall over when the
+atlas daemon is down, which matters because deckhand's is the one that has to keep answering.
 
 What atlas does not have yet, and what has been asked of it, is in *Asks of atlas* at the end.
 
@@ -300,21 +302,35 @@ M2 is asleep. Today the M2 is the only thing the phone can reach, so a hand outl
 
 ## Asks of atlas
 
-Atlas is the right owner for all four. Raised in its own repo rather than worked around here.
+Four were raised in atlas's own repo. **Three were withdrawn within the hour**, because atlas had
+already answered them and the asking was a failure to read its docs first. What that leaves is the
+useful part: a boundary, agreed rather than assumed.
 
-1. **`status` and `scannedAt` on `/api/hosts`.** Today reachability lives only inside
-   `/api/projects`'s `hosts[]`, so the only way to learn whether Ubuntu is up is to pull a payload
-   of 504 projects. Deckhand asks this question on every listing.
-2. **Say how fresh that status is, or make it fresh.** The last scan was twelve minutes old when
-   this was written. The phone draws a machine as online or off, and a twelve-minute-old answer
-   will confidently lie. Either a cheap probe on request, or a documented "this is scan-aged" so
-   deckhand probes for itself and does not render atlas's answer as live.
-3. **A machine-readable CLI.** `atlas hosts list --json` is accepted and silently ignored — it
-   prints the table. Deckhand's daemon is Python and cannot import `shared/hosts.ts`.
-4. **A stable path for the registry**, if the file rather than the API is the sanctioned surface.
-   Atlas already owns `~/.atlas/` on every machine. Reading
-   `$HOME/dev/multi-stack/project-atlas/shared/hosts.json` from another repo is brittle in a way
-   `~/.atlas/hosts.json` would not be.
+**Withdrawn — a machine-readable CLI, and a stable path for the registry.** `shared/CLAUDE.md:14-20`
+already names `hosts.json` a registry with three named consumers, and root `CLAUDE.md:24` says
+plainly that *atlas-picker reads it directly*. atlas-picker is Rust reading atlas's shared JSON —
+the precedent for a non-TypeScript consumer already exists and is documented. A Python daemon doing
+the same is the intended pattern, not a workaround. **Deckhand reads `shared/hosts.json`.**
+
+**Withdrawn — `status` on `/api/hosts`.** Superseded by `~/dev/.atlas-cache-<id>.json`, which
+already carries `HostFragment {hostId, root, scannedAt, status, error, projects}` per machine with
+no 504-project payload attached. One question remains, and it is a yes/no rather than work: *is the
+per-host cache fragment a public surface?* `shared/CLAUDE.md` blesses `shared/*.json`; a cache file
+and its shape may be atlas's to change freely. If it is internal, deckhand reads the registry and
+probes for status itself — which it is doing anyway.
+
+**Stands, as a boundary rather than a request — liveness.** `status` is set only in the `catch` of
+`scanHost` (`remoteScan.ts:118-128`), on a 10-minute TTL, and a failed scan deliberately keeps the
+*previous* `scannedAt` so the catalog can say "ubuntu down, scanned 3h ago". There is no ping, no
+`lastSeen` and no probe anywhere in `atlas-api/src`, `atlas-cli/src` or `shared`. That is right for
+a catalog and wrong for a phone screen drawing a machine as online or off. So **deckhand owns live
+reachability** and will not ask atlas to.
+
+**Settled — who owns persistent remote execution.** Deckhand does. Atlas's only general SSH callers
+are `syncAgent(host)` and `scanHost(host)`, both hard-wired to the scan agent with no command
+parameter, both behind `$lib`/`$shared` aliases that do not resolve outside atlas-api — and a grep
+for `tunnel|forward|ControlMaster|autossh|-L` across the repo returns seven hits, every one a prose
+comment. There is no port-forward code in atlas to reuse or to duplicate.
 
 And one offer back. Atlas's project cards already carry `claudeSessions` — `lastAt`, `count`,
 `summary` — which is *history*, scraped per project. Deckhand is about to hold the live version for
