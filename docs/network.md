@@ -40,6 +40,40 @@ and `projects_dir()` (`reading/transcripts.py:70`) both route through `DECKHAND_
 `live_sessions(iterm_only=True)` already keeps every session when there are no panes **at all**
 (`sessions.py:204`) — so a machine with no iTerm lists correctly today, untouched.
 
+## Atlas already knows the machines
+
+Do not build a machine registry. Atlas has one, it is correct, and it is the reason this plan got
+smaller after the first draft.
+
+`shared/hosts.json` (version 1) holds exactly what the fleet layer needs, and `atlas hosts list`
+prints it:
+
+| Field | m2 | fractal | ubuntu |
+|---|---|---|---|
+| `ssh` | `null` | `fractal` | `ubuntu` |
+| `root` | `~/dev` | `C:/dev` | `/home/jurrejan/development` |
+| `os` | `darwin` | `win32` | `linux` |
+| `role` | `primary` | `satellite` | `deploy` |
+
+The ssh **alias** is stored, not an IP — the same decision `config.base_url()` made for its own
+`.local` name, and the same reason. `os` is there too, which is what picks the liveness and socket
+code path on a hand. The daemon serves `/api/hosts` and `/api/projects` on `127.0.0.1:47891`.
+
+Two consequences, both subtractions:
+
+- **`fleet/machines.py` shrinks to a reader.** No `machines.json`, no second list of the same three
+  machines to keep in step with the first.
+- **A hand serves no `/projects` route at all.** `/api/projects` already returns 504 projects across
+  all three machines — 450 on the M2, 28 on Fractal, 26 on Ubuntu — with `host` on every one, and
+  `hosts[]` carrying `status` (`ok` / `unreachable`), `scannedAt` and `projectCount`. Deckhand's
+  `GET /projects` merges atlas's answer instead of asking three machines itself.
+
+Atlas's remote reach is a **one-shot scan** — `ssh <alias> <node> ~/.atlas/atlas-scan.mjs`, result
+cached — not a live connection, so the SSH forward below stays deckhand's own. That is the right
+line: **atlas owns which machines exist, deckhand owns the live link to them.**
+
+What atlas does not have yet, and what has been asked of it, is in *Asks of atlas* at the end.
+
 ## The shape
 
 One new noun. **A machine** is a computer on the network that runs sessions. **A hand** is this
@@ -92,7 +126,6 @@ Read, plus exactly one primitive.
 | `GET /health`, `GET /sessions` | its own machine's records, `ps`, no panes |
 | `GET …/turns`, `/raw`, `/context`, `/commands`, `/files`, `/file` | files only on that disk |
 | `GET /sessions/links` | edges are within a machine by construction — `AF_UNIX` cannot cross one |
-| `GET /projects` | folders on that disk, plus that machine's `~/.claude.json` trust list |
 | `GET\|POST …/artifacts…` | a slip is a file in `<cwd>/.deckhand/artifacts` |
 | `POST …/queue/clear` | writes that machine's queue file |
 | `POST …/deliver` | **new.** Exact text → that session's socket. No filters, no orders, no record. |
@@ -152,7 +185,7 @@ against a 400 cap. So the new code is a package, and `sessions.py` splits first.
 
 | New | Job |
 |---|---|
-| `fleet/machines.py` | the registry — name, ssh alias, local port; a `machines.json` in `<data>/` |
+| `fleet/machines.py` | reads atlas's registry and adds one field of its own — the local forward port |
 | `fleet/link.py` | the ssh subprocess, readiness poll, restart backoff, token fetch |
 | `fleet/proxy.py` | `call(machine, method, path, …)` over the existing `httpx[http2]` dep |
 | `fleet/merge.py` | merged `/sessions`, `/sessions/links`, `/projects`; `where(session_id) → machine` |
@@ -186,9 +219,8 @@ unchanged.
 way and for the same reason as the routes above them. The manager's own rule does not move: it
 still never types into a pane, and now there are machines where no pane exists to type into.
 
-One free lunch worth checking before writing code: `list_projects` already queries atlas on
-`127.0.0.1:47891`, and atlas already catalogues `/home/jurrejan/development` and `C:\dev` on the
-other two machines (`atlas hosts list`). Remote project listing may need no hand route at all.
+`list_projects` already queries atlas on `127.0.0.1:47891`, and atlas already catalogues all three
+machines. It spans the network the moment the machine registry does, with no change to the tool.
 
 The Live Activity needs **no wire change at all**: its attributes already carry `mac: String`
 (`LiveActivity.swift:60-73`) and the widget already draws it in the Lock Screen footnote
@@ -249,6 +281,29 @@ no such edge exists to draw.
 M2 is asleep. Today the M2 is the only thing the phone can reach, so a hand outliving it is useless.
 
 **Anything on the NAS or the MBP 15.** Neither runs `claude`.
+
+## Asks of atlas
+
+Atlas is the right owner for all four. Raised in its own repo rather than worked around here.
+
+1. **`status` and `scannedAt` on `/api/hosts`.** Today reachability lives only inside
+   `/api/projects`'s `hosts[]`, so the only way to learn whether Ubuntu is up is to pull a payload
+   of 504 projects. Deckhand asks this question on every listing.
+2. **Say how fresh that status is, or make it fresh.** The last scan was twelve minutes old when
+   this was written. The phone draws a machine as online or off, and a twelve-minute-old answer
+   will confidently lie. Either a cheap probe on request, or a documented "this is scan-aged" so
+   deckhand probes for itself and does not render atlas's answer as live.
+3. **A machine-readable CLI.** `atlas hosts list --json` is accepted and silently ignored — it
+   prints the table. Deckhand's daemon is Python and cannot import `shared/hosts.ts`.
+4. **A stable path for the registry**, if the file rather than the API is the sanctioned surface.
+   Atlas already owns `~/.atlas/` on every machine. Reading
+   `$HOME/dev/multi-stack/project-atlas/shared/hosts.json` from another repo is brittle in a way
+   `~/.atlas/hosts.json` would not be.
+
+And one offer back. Atlas's project cards already carry `claudeSessions` — `lastAt`, `count`,
+`summary` — which is *history*, scraped per project. Deckhand is about to hold the live version for
+every machine: which sessions are running right now, where, and busy or idle. That is a loopback
+call away whenever atlas wants it.
 
 ## Glossary additions
 
