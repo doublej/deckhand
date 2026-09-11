@@ -232,10 +232,10 @@ struct SettingsView: View {
     @ViewBuilder private var hidden: some View {
         if !model.preferences.hidden.isEmpty {
             SettingsGroup("Hidden") {
-                ForEach(Array(model.preferences.hidden).sorted(), id: \.self) { name in
-                    SettingRow(name, detail: "Hidden from the rail.") {
+                ForEach(Array(model.preferences.hidden).sorted(), id: \.self) { key in
+                    SettingRow(Preferences.name(of: key), detail: "Hidden from the rail.") {
                         Button("Show") {
-                            model.preferences.setHidden(name, false)
+                            model.preferences.setHidden(key, false)
                             model.preferences.save()
                         }
                         .buttonStyle(.bordered)

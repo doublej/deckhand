@@ -35,7 +35,12 @@ public enum DeliveryRoute: String, CaseIterable, Sendable {
 }
 
 /// Which sessions you care about, which you never want to see, and how the button behaves.
-/// Keyed by session name, not id: a session that restarts keeps its name but gets a new id.
+///
+/// Keyed by `machine/name`, not by id: a session that restarts keeps its name but gets a new id,
+/// so an id-keyed star would be gone by morning. The machine half is what keeps that name
+/// unambiguous — names come from the folder, so two machines produce `deckhand` without trying,
+/// and starring one would silently star both. ``migrated(onto:)`` carries the names stored before
+/// this existed onto the machine they were always about.
 public struct Preferences: Equatable, Sendable {
     public var favorites: Set<String>
     public var hidden: Set<String>
@@ -85,30 +90,79 @@ public struct Preferences: Equatable, Sendable {
         seconds < 60 ? "\(Int(seconds)) s" : "\(Int(seconds / 60)) min"
     }
 
-    public func isFavorite(_ name: String) -> Bool { favorites.contains(name) }
-    public func isHidden(_ name: String) -> Bool { hidden.contains(name) }
+    /// What one session is filed under. A session with no machine on it — an older Mac's
+    /// listing — keys under the bare name, which is exactly what that Mac's own store holds.
+    public static func key(_ session: Session) -> String { key(session.machine, session.name) }
 
-    public mutating func toggleFavorite(_ name: String) {
-        favorites.formSymmetricDifference([name])
+    public static func key(_ machine: String?, _ name: String) -> String {
+        guard let machine, !machine.isEmpty else { return name }
+        return "\(machine)/\(name)"
     }
 
-    /// Carry what you decided about a session onto its new name.
+    /// The store's own four, taking the key itself. A screen that already holds a key — the
+    /// hidden list in Settings is a list of them — asks with it rather than inventing a session
+    /// to ask with.
+    public func isFavorite(_ key: String) -> Bool { favorites.contains(key) }
+    public func isHidden(_ key: String) -> Bool { hidden.contains(key) }
+
+    public mutating func toggleFavorite(_ key: String) {
+        favorites.formSymmetricDifference([key])
+    }
+
+    /// The same four asked about a session, which is how every screen but that one asks.
+    public func isFavorite(_ session: Session) -> Bool { isFavorite(Self.key(session)) }
+    public func isHidden(_ session: Session) -> Bool { isHidden(Self.key(session)) }
+
+    public mutating func toggleFavorite(_ session: Session) {
+        toggleFavorite(Self.key(session))
+    }
+
+    public mutating func setHidden(_ session: Session, _ hide: Bool) {
+        setHidden(Self.key(session), hide)
+    }
+
+    /// Carry what you decided about a session onto its new name, on its own machine.
     ///
     /// These are keyed by name because a session that restarts keeps its name and gets a new
     /// id — which is the right trade until the name itself changes, and then the star has to
     /// be moved by hand or it is silently lost.
-    public mutating func renamed(from old: String, to new: String) {
-        if favorites.remove(old) != nil { favorites.insert(new) }
-        if hidden.remove(old) != nil { hidden.insert(new) }
+    public mutating func renamed(from old: String, to new: String, on machine: String? = nil) {
+        let was = Self.key(machine, old)
+        let now = Self.key(machine, new)
+        if favorites.remove(was) != nil { favorites.insert(now) }
+        if hidden.remove(was) != nil { hidden.insert(now) }
     }
 
-    public mutating func setHidden(_ name: String, _ hide: Bool) {
+    public mutating func setHidden(_ key: String, _ hide: Bool) {
         if hide {
-            hidden.insert(name)
-            favorites.remove(name)
+            hidden.insert(key)
+            favorites.remove(key)
         } else {
-            hidden.remove(name)
+            hidden.remove(key)
         }
+    }
+
+    /// The same preferences with every bare name filed under the machine it was always about.
+    ///
+    /// A star written before the network was written on a phone paired to one Mac, so that Mac
+    /// is where it belongs — which is why this takes the primary machine's id rather than
+    /// guessing from whatever sessions happen to be on screen. Nothing to do once every key has
+    /// a machine on it, so it is safe to run on every listing and it returns `self` unchanged.
+    public func migrated(onto primary: String) -> Preferences {
+        guard !primary.isEmpty else { return self }
+        var moved = self
+        moved.favorites = Self.prefixed(favorites, primary)
+        moved.hidden = Self.prefixed(hidden, primary)
+        return moved
+    }
+
+    /// The session half of a key, for a screen listing them: `m2/deckhand` reads `deckhand`.
+    public static func name(of key: String) -> String {
+        key.split(separator: "/", maxSplits: 1).last.map(String.init) ?? key
+    }
+
+    private static func prefixed(_ names: Set<String>, _ primary: String) -> Set<String> {
+        Set(names.map { $0.contains("/") ? $0 : "\(primary)/\($0)" })
     }
 
     // MARK: - storage

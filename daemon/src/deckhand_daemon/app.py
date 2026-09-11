@@ -149,9 +149,16 @@ async def list_every_session() -> dict:
     A route of its own rather than a flag on `/sessions`, because `/sessions` is what every older
     build of the app already polls and it must go on meaning exactly this Mac. The phone moves
     over when it is ready to draw a machine, and nothing breaks in between.
+
+    Everything `/sessions` says, plus the machines — `iterm` and `week` included, so the phone
+    polls one route for a whole screen rather than two that can disagree about the same moment.
     """
-    local = (await asyncio.to_thread(list_sessions))["sessions"]
-    return {"sessions": await fleet.listings(local), "machines": await fleet.machines()}
+    local = await asyncio.to_thread(list_sessions)
+    return {
+        **local,
+        "sessions": await fleet.listings(local["sessions"]),
+        "machines": await fleet.machines(),
+    }
 
 
 @app.get("/sessions/{session_id}/summary", dependencies=[Depends(require_token)])

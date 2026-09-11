@@ -15,9 +15,20 @@ final class ManagerDesk {
     var entries: [ManagerEntry] = []
     /// The Mac says a run is in flight. What draws the working line and what makes the poll fast.
     var working = false
-    /// Whether the panel is on screen. `ManagerShell` owns the gesture; this is the state it
-    /// moves, so the rail's own foot can open the panel without knowing about the drag.
-    var open = false
+    /// Which of the three screens is showing: 0 the rail, 1 the manager, 2 the machines.
+    /// `ManagerShell` owns the gesture; this is the state it moves, so the rail's own foot can
+    /// reach either page without knowing about the drag.
+    var page = 0
+
+    /// Whether the manager panel is on screen.
+    ///
+    /// Kept as a name of its own rather than replaced by `page == 1` at every call site: the
+    /// panel's poll keys on it, and "the manager is showing" is what those places actually mean
+    /// — on the machines page the manager is not showing and must not be polling.
+    var open: Bool {
+        get { page == 1 }
+        set { page = newValue ? 1 : 0 }
+    }
 
     /// Whether a session's own page is sitting on top of the rail.
     ///

@@ -186,13 +186,21 @@ something that is not the `sessionId`, and every one of them can collide across 
 
 | Store | Keyed by | Where | Fix |
 |---|---|---|---|
-| `filters.json` | session **name** | `filters/config.py:29-30` | `machine/name` |
-| `settings.json` | absolute folder **path** | `settings/wants.py:77-78` | `machine:path` |
+| `filters.json` | session **name** | `filters/config.py:29-30` | `machine/name` — **done**, `edcaadd` |
+| `settings.json` | absolute folder **path** | `settings/wants.py:77-78` | **not done, on purpose** |
 | iOS favourites / hidden | session **name** | `Preferences.swift:40-41` | `machine/name` |
 
 Names are folder-derived (`daemon-9d`, `jurre-28`), so two machines produce the same name easily.
 Each needs a one-shot migration that prefixes every existing key with this Mac's name. `POST /name`
-rekeys `filters.json` and has to rekey the new shape.
+rekeys `filters.json` and does rekey the new shape.
+
+**`settings.json` is left keyed by path**, and this is a decision rather than an oversight. The
+three roots are `/Users/jurrejan/…`, `/home/jurrejan/development/…` and `C:/dev/…`: the key is
+already unique because the namespaces are disjoint, so prefixing it would buy nothing and cost a
+migration plus eight call sites, two of which hold only a folder string and would have to be
+given a machine to pass on. **Add it the day a second host with an overlapping root joins
+atlas's registry** — in practice a second Mac, `mbp15` being the obvious one — because from then
+on `/Users/jurrejan/dev/x` names two folders and one switch would quietly set both.
 
 A fourth, in Swift: **`ProjectGroup.of` buckets on `cwd` and its `id` is the path**
 (`Rail/ProjectGroup.swift:36-41`), abbreviating `/Users/jurrejan` → `~`. `/Users/jurrejan/dev/x`

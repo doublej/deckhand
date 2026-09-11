@@ -35,6 +35,12 @@ public struct Session: Codable, Hashable, Identifiable, Sendable {
     /// transcript entry `context` does, and both are optional for the same reason it is.
     public var model: String?
     public var effort: String?
+    /// Which machine it is running on, as the Mac's registry names it — `m2`, `ubuntu`.
+    ///
+    /// Optional for the reason every optional above it is: the synthesised decoder tolerates a
+    /// missing key only on an optional, so a non-optional here would make an older Mac's whole
+    /// listing fail to decode rather than simply say nothing about machines.
+    public var machine: String?
 
     public var id: String { sessionId }
     public var isBusy: Bool { status == "busy" }

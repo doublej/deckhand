@@ -122,6 +122,14 @@ final class AppModel {
     /// the clips they came from as having arrived.
     var heldClips: [String: [String]] = [:]
 
+    /// Every machine the Mac can see, newest listing wins. Empty until the first one lands,
+    /// and empty forever from a Mac that has only itself — which is the same thing to every
+    /// screen: nothing to name.
+    var machines: [Machine] = []
+    /// The machine the rail is showing, or nil for all of them. Here rather than in the view
+    /// because `SessionListView` is at its length gate and because the deck reads it too.
+    var onlyMachine: String?
+
     /// Not private: `Keeping.swift` is another half of this type, and a clip going out is the one
     /// thing in this app worth a line in the log whether or not it worked.
     let logger = Logger(subsystem: "dev.jurrejan.deckhand", category: "app")
@@ -138,11 +146,13 @@ final class AppModel {
     var isConfigured: Bool { settings.isComplete }
 
     var visibleSessions: [Session] {
-        sessions.filter { showsHidden || !preferences.isHidden($0.name) }
+        sessions.filter {
+            (showsHidden || !preferences.isHidden($0)) && shows($0.machine)
+        }
     }
 
     var favoriteSessions: [Session] {
-        sessions.filter { preferences.isFavorite($0.name) }
+        sessions.filter { preferences.isFavorite($0) && shows($0.machine) }
     }
 
     /// The deck shows favourites; with none marked it shows what you can see, so it is never blank.
@@ -157,12 +167,12 @@ final class AppModel {
     }
 
     func toggleFavorite(_ session: Session) {
-        preferences.toggleFavorite(session.name)
+        preferences.toggleFavorite(session)
         preferences.save()
     }
 
     func setHidden(_ session: Session, _ hide: Bool) {
-        preferences.setHidden(session.name, hide)
+        preferences.setHidden(session, hide)
         preferences.save()
     }
 
@@ -191,9 +201,10 @@ final class AppModel {
         if sessions.isEmpty { connection = .checking }
         do {
             let health = try await client.health()
-            let listing = try await client.sessions()
+            let listing = try await client.everywhere()
             sessions = listing.sessions
             week = listing.week
+            absorb(listing.machines)
             connection = .connected(iterm: health.iterm ?? "ok")
             macAddress = health.lan
             logger.info("listed \(listing.sessions.count) sessions")

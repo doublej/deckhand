@@ -172,7 +172,10 @@ struct SessionListView: View {
                     .plainRow()
             }
         } header: {
-            ProjectHeader(project: project)
+            ProjectHeader(
+                project: project,
+                machine: model.namesMachines ? model.label(of: project.machine) : ""
+            )
         }
     }
 
@@ -180,7 +183,7 @@ struct SessionListView: View {
     /// whole point of a list of six sessions: answering the one that needs a word is a press,
     /// not a page. What it heard appears under the row it was said to.
     private func row(_ session: Session, first: Bool, last: Bool) -> some View {
-        let hidden = model.preferences.isHidden(session.name)
+        let hidden = model.preferences.isHidden(session)
         return VStack(spacing: Spacing.xxs) {
             TalkControl(
                 recorder: recorder,
@@ -224,7 +227,7 @@ struct SessionListView: View {
             headline: model.headlines[session.sessionId],
             asks: model.tasks[session.sessionId] ?? [],
             talk: talk,
-            starred: model.preferences.isFavorite(session.name),
+            starred: model.preferences.isFavorite(session),
             first: first,
             last: last
         )
@@ -257,7 +260,7 @@ struct SessionListView: View {
     }
 
     private func star(_ session: Session) -> some View {
-        let starred = model.preferences.isFavorite(session.name)
+        let starred = model.preferences.isFavorite(session)
         // The glyph says what the swipe will do, like the word beside it. It was `star` either
         // way, so on a starred row the action and its icon disagreed.
         return Button(starred ? "Unstar" : "Star",

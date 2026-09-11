@@ -113,6 +113,7 @@ class Link:
             "os": self.machine.os,
             "reachable": self.ready,
             "error": self.error,
+            "primary": False,
         }
 
 

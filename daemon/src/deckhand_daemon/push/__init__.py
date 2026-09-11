@@ -134,7 +134,11 @@ def spoke_to(session_id: str) -> None:
 def announce(session, kind: str) -> None:
     card = Card(session=session.session_id, name=session.name, kind=kind,
                 line=_line(session.session_id, kind), when=time.time())
-    if error := show(card, config.base_url().removeprefix("http://").split(":")[0]):
+    # The session's own machine rather than the one answering the phone. They are the same
+    # thing on a one-machine network and different the moment they are not, and the card saying
+    # "m2" over a session running on Ubuntu is the card lying about the only thing it adds.
+    where = session.machine or config.base_url().removeprefix("http://").split(":")[0]
+    if error := show(card, where):
         log.info("lock screen: %s", error)
 
 

@@ -127,6 +127,10 @@ async def machines() -> list[dict]:
             "os": here.os,
             "reachable": True,  # this daemon is answering, so this machine is up
             "error": "",
+            # The one machine the phone can name without asking anything else. It is what the
+            # phone's own favourites and hidden rows were always filed under, back when a name
+            # was the whole key, so it is what their migration prefixes them with.
+            "primary": True,
         }
     ]
     rows.extend(link.to_json() for link in links.links().values())

@@ -52,7 +52,7 @@ struct ProjectGroupTests {
                 session("deckhand", cwd: deckhand, updatedAt: 30),
                 session("deckhand-2", cwd: deckhand, updatedAt: 10)
             ],
-            isFavorite: { $0 == "deckhand-2" }
+            isFavorite: { $0.name == "deckhand-2" }
         )
         // the starred session is not the newest, and its project still goes to the top whole
         #expect(groups[0].path == deckhand)

@@ -1,7 +1,7 @@
 import DeckhandKit
 import SwiftUI
 
-/// The rail and the manager, side by side, with the screen sliding between them.
+/// The rail, the manager and the machines, side by side, with the screen sliding between them.
 ///
 /// **Why a shell and not a `TabView(.page)`.** Paging a `TabView` is a UIKit pan inside the view,
 /// and the rail is a `List`: that pan would run against every row's own gestures with no say in
@@ -25,8 +25,12 @@ import SwiftUI
 /// the whole app, so without that it was a *third* meaning for a sideways drag on a screen that
 /// already has two — it took `SessionView`'s pane paging and the leading-edge way out with it.
 ///
-/// The panel opens the other way too, from the glyph in `RailFoot`. A gesture nobody is told
-/// about is not a way in for somebody using VoiceOver.
+/// The panel opens the other way too, from the glyph in `RailFoot`, and so does the machines
+/// page. A gesture nobody is told about is not a way in for somebody using VoiceOver.
+///
+/// **Three screens rather than two**, and the machines page is the far one on purpose: it is
+/// the one a person visits when something is missing, not the one they live on. One drag moves
+/// one screen — never two — so a flick from the rail can never overshoot the manager.
 struct ManagerShell<Content: View>: View {
     @Bindable var model: AppModel
     @ViewBuilder let content: () -> Content
@@ -40,6 +44,11 @@ struct ManagerShell<Content: View>: View {
     /// the sign is the whole of the difference and there is no second code path.
     private var sign: CGFloat { direction == .rightToLeft ? -1 : 1 }
 
+    /// The far edge of the stack, as a page index. One more page is one more entry here and
+    /// one more child below it; nothing else in this file counts screens. A computed property
+    /// rather than a `static let`, which a generic type may not have.
+    private var last: Int { 2 }
+
     var body: some View {
         GeometryReader { geometry in
             let width = geometry.size.width
@@ -49,20 +58,27 @@ struct ManagerShell<Content: View>: View {
                     // Nothing behind the panel is reachable while it is open: it is off the
                     // screen, and a stray touch landing on a row you cannot see is worse than
                     // no touch at all.
-                    .disabled(model.manager.open)
+                    .disabled(model.manager.page != 0)
                 ManagerView(model: model)
                     .frame(width: width)
+                    .disabled(model.manager.page != 1)
+                MachinesView(model: model)
+                    .frame(width: width)
+                    .disabled(model.manager.page != 2)
             }
-            .frame(width: width * 2, alignment: .leading)
+            .frame(width: width * CGFloat(last + 1), alignment: .leading)
             .offset(x: sign * offset(width))
             .simultaneousGesture(slide(width))
         }
     }
 
-    /// Where the pair sits: at rest, one screen either way; mid-drag, wherever the finger is.
+    /// Where the stack sits: at rest, whichever page is up; mid-drag, wherever the finger is.
+    /// Clamped to one page either side, so a long drag cannot skip a screen.
     private func offset(_ width: CGFloat) -> CGFloat {
-        let settled: CGFloat = model.manager.open ? -width : 0
-        return min(0, max(-width, settled + drag))
+        let page = CGFloat(model.manager.page)
+        let settled = -width * page
+        return min(-width * max(0, page - 1), max(-width * min(CGFloat(last), page + 1),
+                                                  settled + drag))
     }
 
     /// The drag that moves the screen, watched for anywhere on it.
@@ -85,27 +101,29 @@ struct ManagerShell<Content: View>: View {
     }
 
     /// Whether this drag is the one that moves the screen: sideways rather than up the page, and
-    /// pointing the only way there is anything to reveal.
+    /// pointing a way there is something to reveal.
     ///
     /// This is the whole of what keeps the rail's own gestures intact, and it is why nothing here
     /// has to win an arbitration fight. A drag up or down the page is the list's. A leading-going
-    /// drag is the row's — every row action lives on that edge. This answers to neither.
+    /// drag **on the rail** is the row's — every row action lives on that edge — which is why
+    /// going back is only ever answered to from a page that has something behind it.
     private func mine(_ value: DragGesture.Value) -> Bool {
         guard !model.manager.covered else { return false }
         let sideways = sign * value.translation.width
         guard abs(sideways) > abs(value.translation.height) else { return false }
-        return model.manager.open ? sideways > 0 : sideways < 0
+        return sideways < 0 ? model.manager.page < last : model.manager.page > 0
     }
 
-    /// Open or closed, decided on where it was let go *and* where it was going. A flick that
-    /// covered a third of the screen means the same thing as a slow drag across most of it.
+    /// One page on or one page back, decided on where it was let go *and* where it was going. A
+    /// flick that covered a third of the screen means the same thing as a slow drag across most
+    /// of it.
     private func settle(_ gesture: DragGesture.Value, _ width: CGFloat) {
         let moved = sign * gesture.translation.width
         let thrown = sign * gesture.predictedEndTranslation.width
         let far = abs(moved) > width / 3 || abs(thrown) > width / 2
-        let opening = moved < 0
+        let step = moved < 0 ? 1 : -1
         withAnimation(Motion.opening) {
-            if far { model.manager.open = opening }
+            if far { model.manager.page = min(last, max(0, model.manager.page + step)) }
             drag = 0
         }
     }

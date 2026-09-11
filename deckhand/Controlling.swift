@@ -34,7 +34,7 @@ extension AppModel {
             // phone never holds one. Both halves move on the same optimism: a busy session runs
             // the command when its turn ends, and the star moves now either way.
             let carried = try await client.rename(session.sessionId, to: wanted)
-            self.preferences.renamed(from: session.name, to: wanted)
+            self.preferences.renamed(from: session.name, to: wanted, on: session.machine)
             self.preferences.save()
             let when = session.isBusy
                 ? "\(session.name) will be \(wanted) when it finishes this turn"

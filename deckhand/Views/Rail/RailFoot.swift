@@ -69,9 +69,17 @@ struct RailFoot: View {
             // about is not a way in for somebody using VoiceOver. Last in the row because it
             // is the one thing here that is a place rather than a switch.
             Button("Manager", systemImage: "bubble.left.and.text.bubble.right") {
-                withAnimation(Motion.opening) { model.manager.open = true }
+                withAnimation(Motion.opening) { model.manager.page = 1 }
             }
             .accessibilityIdentifier("open-manager")
+            // Only once there is more than one machine. On a rail that has always been one Mac
+            // this is a page saying "there is one machine", which is what the rail already says.
+            if model.namesMachines {
+                Button("Machines", systemImage: "rectangle.stack") {
+                    withAnimation(Motion.opening) { model.manager.page = 2 }
+                }
+                .accessibilityIdentifier("open-machines")
+            }
         }
         .labelStyle(.iconOnly)
         .font(.system(size: 12, weight: .semibold))

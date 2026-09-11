@@ -12,15 +12,20 @@ public struct Listing: Decodable, Sendable {
     /// written by something newer than this app costs the listing nothing: a rail of sessions is
     /// worth more than a percentage, and a decoder that throws would lose both.
     public var week: Week?
+    /// Every machine the Mac knows about. Empty from `/sessions`, which answers for this Mac
+    /// alone, and from a Mac that predates the network — both of which mean the same thing to
+    /// every screen: there is one machine and it does not need naming.
+    public var machines: [Machine] = []
 
     enum CodingKeys: String, CodingKey {
-        case sessions, week
+        case sessions, week, machines
     }
 
     public init(from decoder: Decoder) throws {
         let box = try decoder.container(keyedBy: CodingKeys.self)
         sessions = try box.decode([Session].self, forKey: .sessions)
         week = (try? box.decodeIfPresent(Week.self, forKey: .week)) ?? nil
+        machines = (try? box.decodeIfPresent([Machine].self, forKey: .machines)) ?? []
     }
 }
 
