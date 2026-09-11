@@ -72,6 +72,22 @@ Atlas's remote reach is a **one-shot scan** — `ssh <alias> <node> ~/.atlas/atl
 cached — not a live connection, so the SSH forward below stays deckhand's own. That is the right
 line: **atlas owns which machines exist, deckhand owns the live link to them.**
 
+Two things atlas learned the hard way that this plan inherits rather than rediscovers:
+
+- **`-o ConnectTimeout=4 -o BatchMode=yes` on every ssh invocation.** `remoteScan.ts:25` carries the
+  reason: *a powered-off DHCP box otherwise hangs the TCP connect for ~75 s.* Deckhand asks
+  "is this machine up" on every session listing, so without this a sleeping Ubuntu stalls the
+  phone's list for over a minute. This is the single cheapest bug to avoid here.
+- **Windows OpenSSH has no `ControlMaster`** (`remoteScan.ts:20-21`), which is why atlas never built
+  connection reuse. It does not affect the forward below — multiplexing and port forwarding are
+  different features, and `-L` is fine — but it does mean *one long-lived connection per machine* is
+  the only cheap shape available. Which is what this plan already does, now for a second reason.
+
+One caveat on reading `/api/hosts`: `shared/hosts.json` is an ESM import, so the running daemon
+holds its **startup copy** and `PUT /api/hosts` answers `restartRequired: true`. A registry edit is
+not visible over HTTP until `bun run daemon:reload`. Reading the file directly sidesteps that —
+which is an argument for ask 4 below.
+
 What atlas does not have yet, and what has been asked of it, is in *Asks of atlas* at the end.
 
 ## The shape
