@@ -280,10 +280,32 @@ to `m2-2.local` (`ServerSettings.swift:5-9`) — and all ~30 call sites go throu
 
 ## Order
 
-**Spike first, and it is cheap.** Start one session on Ubuntu in tmux, point `DECKHAND_CLAUDE_HOME`
-at it, and check two things: that `live_sessions()` produces a correct listing with no panes, and
-that a raw `deliver._through_socket()` write lands in that session's inbox. Everything here hangs
-off those two, and they are one afternoon to prove or disprove.
+**The spike is done, and both halves passed.** Run 2026-09-11 against a real session started in
+tmux on Ubuntu (`claude --name spike-probe`, 2.1.261, in an already-trusted folder):
+
+- **The join works untouched.** `ps -eo pid=,tty=,command=` parses the same on Linux (tty reads
+  `pts/0`), and the listing came back correct with *no pane data at all* — which is what
+  `live_sessions` already does when there are no panes anywhere.
+- **The inbox lane works untouched.** A raw `user` frame carrying the `peerToken` from the sibling
+  `.key` file produced a `queue-operation`/`enqueue` *and* a consumed `user` entry wrapped in
+  "Another Claude session sent a message" — the peer framing intact, and with no
+  `<cross-session-message>` header, exactly as `links/edges.py` says a sender that is not Claude
+  Code itself behaves.
+
+**A hand on Linux is a port, not a rewrite.** Three things the spike corrected, each of which
+would otherwise have been a quiet bug:
+
+| | macOS | Linux | Windows |
+|---|---|---|---|
+| socket | `/tmp/cc-socks/<pid>.sock` | **`/run/user/1000/cc-socks/<pid>.sock`** | `\\.\pipe\LOCAL\cc-msg-…` |
+| `procStart` | a date string | clock ticks (`"1343642930"`) | FILETIME (`"134330…"`) |
+| `pidDomain` | `darwin` | `linux:<machine-id>:pid:[…]` | `win32:fractal` |
+
+The socket is the sharpest: Linux puts it under `XDG_RUNTIME_DIR`, not `/tmp`. `deliver.py` already
+reads `messagingSocketPath` off the record rather than deriving it, so nothing needs changing — but
+anything that ever *does* derive it is broken on two machines out of three. And `procStart` having
+three formats means a liveness check comparing it has to branch on `os`, which is a field atlas
+already hands over.
 
 1. **The seam, all local.** `machine` field, `fleet/` with only this Mac registered, the three key
    migrations, the `sessions.py` split. One machine, everything still works, one new field on the wire.
