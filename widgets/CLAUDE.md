@@ -66,6 +66,13 @@ number on the Lock Screen is drawn by iOS for free, and the card's own space goe
 - **`StateWord` is the only place a state is drawn**, at whatever distance. It takes a `size:`
   because this surface is read at arm's length; it does not take anything else, and a second view
   that draws a state is the thing to delete rather than the thing to extend.
+- **Never `.fixedSize()` a date-style `Text` (`.relative`, `.timer`) in the Live Activity.** It
+  blanks the *whole card*: the tinted rectangle draws, nothing inside it does, for `asking` and
+  `finished` alike, and the extension logs a successful render — so it looks like a colour or a
+  launch problem and is neither. A date-style `Text` takes every point of width it is offered;
+  that is what the `fixedSize` was for. Put it last in its row instead, where it is the spacer.
+  Found by bisecting the card one view at a time in the simulator, which is the way to find the
+  next one: `Activity<Deck>.request` from the app under a launch flag, lock, screenshot.
 - **A `Text` in a Dynamic Island region clips rather than grows.** The expanded island's second
   line of the session's own words was sliced through the middle: a `Text` draws into whatever
   height it is offered and clips the rest, and the island offers a stack one line's worth unless

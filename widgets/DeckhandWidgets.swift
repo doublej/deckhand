@@ -70,6 +70,7 @@ struct DeckWidget: Widget {
                 StateWord(state.kind.run, size: 12)
                 Age(state.moment)
             }
+            .multilineTextAlignment(.trailing)
         }
         // The sentence wins the height when the panel has to choose: it is the reason somebody
         // held a thumb on the island rather than glanced at it.
@@ -143,17 +144,20 @@ private struct LockScreen: View {
         }
     }
 
-    /// How stale, and which Mac. `Palette.textSecondary`, never `textTertiary`: 5.86:1 against
+    /// Which Mac, and how stale. `Palette.textSecondary`, never `textTertiary`: 5.86:1 against
     /// 3.69:1 on this ground, and the HIG asks specifically that a custom Lock Screen background
     /// be checked on an Always-On display, which takes luminance back out of whatever passes here.
+    ///
+    /// The age is last and there is no `Spacer`: a date-style `Text` takes every point it is
+    /// offered (see `Age`), so it is the spacer, and the Mac's name has to sit before it or the
+    /// dot ends up on the far side of the card.
     private var footnote: some View {
         HStack(spacing: Spacing.xxs) {
-            Age(state.moment)
-            Text("·")
             Text(deck.mac)
                 .lineLimit(1)
                 .truncationMode(.tail)
-            Spacer(minLength: Spacing.small)
+            Text("·")
+            Age(state.moment)
             if showsStop { stop }
         }
         .font(Typography.hint)
@@ -257,10 +261,15 @@ private struct Face: View {
 }
 
 /// How stale this is. It ticks on its own, so the card proves it is alive without costing the
-/// daemon a push — and it never gives way, the same call `Statusline` makes: a clipped age is a
-/// wrong number, where a clipped name is only an ugly one. Not in the compact trailing region,
-/// where it would be the best free fact on the surface: `.relative` renders the two largest
-/// units, so "2 hr, 15 min" is eleven characters into 52.33 points.
+/// daemon a push. Not in the compact trailing region, where it would be the best free fact on
+/// the surface: `.relative` renders the two largest units, so "2 hr, 15 min" is eleven
+/// characters into 52.33 points.
+///
+/// **No `fixedSize()` here, ever.** A date-style `Text` claims every point of width it is
+/// offered, and the obvious answer — `.fixedSize()`, the call `Statusline` makes — blanks the
+/// **entire card**: iOS draws the tinted rectangle and nothing inside it, for every presentation,
+/// with the extension logging a successful render. Bisected on the simulator, one view at a time.
+/// The width is handled by where the view sits instead: last in its row, so it is the spacer.
 private struct Age: View {
     private let moment: Date
 
@@ -271,7 +280,6 @@ private struct Age: View {
             .font(Typography.hint)
             .foregroundStyle(Palette.textSecondary)
             .lineLimit(1)
-            .fixedSize()
     }
 }
 
