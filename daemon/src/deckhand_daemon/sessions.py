@@ -16,6 +16,7 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from . import fleet
 from .log import log
 from .reading.transcripts import (
     TAIL_WINDOWS,
@@ -75,6 +76,9 @@ class Session:
     tty: str
     pane: Pane | None
     socket_path: str = ""  # its own peer inbox; how text gets in. Local to the Mac.
+    # Which machine this session runs on, named as atlas names it. A daemon only ever builds
+    # sessions for its own machine; a hand's listing arrives already stamped with its own.
+    machine: str = ""
 
     def to_json(self) -> dict:
         d = asdict(self)
@@ -222,6 +226,7 @@ def live_sessions(iterm_only: bool = True) -> list[Session]:
     """Live interactive Claude sessions, most recently active first."""
     procs = _processes()
     panes = _panes()
+    machine = fleet.here()  # every record under this root belongs to the machine we are on
     found: list[Session] = []
     for path in sessions_dir().glob("*.json"):
         try:
@@ -252,6 +257,7 @@ def live_sessions(iterm_only: bool = True) -> list[Session]:
                 tty=tty,
                 pane=pane,
                 socket_path=rec.get("messagingSocketPath", ""),
+                machine=machine,
             )
         )
     for dead in set(_current) - set(procs):
