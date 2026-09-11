@@ -283,15 +283,20 @@ async def rename_session(session_id: str, name: str = Body(embed=True)) -> dict:
     return {"renamed": deliver.clean_name(name), "was": session.name, "carried_filters": carried}
 
 @app.post("/live/token", dependencies=[Depends(require_token)])
-def live_token(token: str = Body(embed=True), kind: str = Body(embed=True)) -> dict:
+def live_token(token: str = Body(embed=True), kind: str = Body(embed=True),
+               session: str = Body(embed=True, default="")) -> dict:
     """The phone hands over what the Mac needs to reach its Lock Screen.
 
     Sent on every launch, because these change without warning and a stale one is a card that
     silently stops updating.
+
+    One card is one session, so an *activity* token says which one it addresses. A phone that
+    sends none is a build from before that — taken rather than refused, and dropped, because a
+    token that cannot say which card it is could only ever end the wrong one.
     """
     if kind not in ("activity", "start"):
         raise HTTPException(status_code=400, detail=f"no such token kind {kind!r}")
-    push.remember(token, kind)
+    push.remember(token, kind, session)
     return {"registered": kind}
 
 

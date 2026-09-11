@@ -154,7 +154,9 @@ async def _handled(
                 taken, delivery_error = await asyncio.to_thread(
                     deliver.deliver, session, _with_orders(session, checked.text), chosen)
             log.info("delivery to %s: %s", session.name, delivery_error or f"{taken} took it")
-            push.spoke_to(session.session_id)
+            # Ending a card is an APNs round trip with a ten-second timeout on it, so it goes
+            # off the event loop the same way the delivery above it does.
+            await asyncio.to_thread(push.spoke_to, session.session_id)
         else:
             delivery_error = checked.reason
             log.info("%s refused a clip for %s: %s",
@@ -333,7 +335,7 @@ async def say(
         said = deliver.with_images(_with_orders(session, checked.text), kept)
         taken, error = await asyncio.to_thread(deliver.deliver, session, said, chosen)
         log.info("delivery to %s: %s", session.name, error or f"{taken} took it")
-        push.spoke_to(session_id)
+        await asyncio.to_thread(push.spoke_to, session_id)
     else:
         log.info("%s refused a prompt for %s: %s", checked.stopped_by, session.name, checked.reason)
     return {"delivered": taken is not None, "delivered_by": taken, "delivery_error": error,

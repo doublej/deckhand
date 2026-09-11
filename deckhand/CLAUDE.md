@@ -309,6 +309,43 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
 - **Nothing said to the manager is held for reading first.** The review card exists because a
   prompt into a busy session cannot be undone; a sentence to the manager can simply be followed
   by another, so `TalkMark(confirms: false)` and the clip goes straight up.
+- **A tap on a Lock Screen card was dead for as long as the card has existed.** The widget set
+  `.widgetURL(URL(string: "deckhand://waiting"))` and *nothing answered it*: no `CFBundleURLTypes`
+  anywhere, no `onOpenURL` anywhere, so every tap on every card opened the app on the sessions
+  list. Both halves are needed and neither is visible from the other — the scheme is registered in
+  `project.yml` (there is no checked-in Info.plist to put it in), and `App.swift` reads the URL.
+  The shape is written once, in `DeckhandKit/LiveActivity.swift`: `Deck.cardLink` for the widget,
+  `CardLink.session(openedBy:)` for the app. `CardLink` sits **outside** that file's `#if os(iOS)`
+  on purpose — `Deck` needs ActivityKit and cannot exist on the Mac, but a URL is only characters,
+  so `just test` holds both ends of it down. Two things it caught: `lastPathComponent` answers
+  `"/"` rather than empty for `deckhand://sessions/`, which would send the rail hunting for a
+  session called `/`; and the route has to be set **after** a refresh, because a cold launch from
+  the Lock Screen arrives before the first listing does and the rail can only push a session it is
+  already holding. It goes into `manager.route`, not a second slot beside it — the rail already
+  acts on exactly this ask from the manager, and a second way to say "open this session" is a
+  second place the answer can drift. Landscape is the deck and has no route handler: a tap there
+  lands on the deck, which is every session at once, so there is nothing to push.
+- **One card is one session, so a push token has to say which session.** `LiveUpdates` walked
+  `Activity<Deck>.activities` and posted a token per card with only its *kind*, and the Mac keeps
+  one slot per kind — so the last card to register was the only one the daemon could still reach
+  and every other card sat on the Lock Screen never updating again. That is the four stacked cards
+  in the screenshot. Each `activity` token now carries `activity.attributes.session`, read once
+  outside the token loop because a card never changes which session it speaks for. The
+  push-to-start token carries **no session key at all**, not an empty one: it belongs to the app
+  rather than to a card, and the daemon's parameter defaults to empty, so absence *is* the start
+  slot.
+- **The card's one button lives in `widgets/CardAction.swift` and is compiled into both targets.**
+  A `LiveActivityIntent` is named by the widget's `Button` and *performed in the app's process*,
+  which is the whole reason it is that protocol and not a plain `AppIntent`: the app's process has
+  the pairing the person typed in, where a widget extension has a `UserDefaults` of its own and
+  would find no Mac. Membership in two targets (`project.yml`) rather than a third module, because
+  an App Intent in a Swift package needs `AppIntentsPackage` ceremony for one small file.
+  **A card may only ever make a session do less, never more.** Stop is on it because Escape can
+  only take work away. There is no Approve and there is not going to be one — answering a
+  permission prompt is the keyboard route, which arrives *as the person at the machine*, and a
+  card carries one line of what the session said rather than the prompt it is blocked on. No
+  `compact`, `clear` or `exit` either: two of them cannot be undone and a Lock Screen has nowhere
+  to ask first.
 - **ATS:** the app talks plain HTTP to a `.local` name, which needs `NSAllowsLocalNetworking` plus
   `NSLocalNetworkUsageDescription` — both in `project.yml`, not a checked-in plist.
 

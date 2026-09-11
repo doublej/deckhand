@@ -325,3 +325,20 @@ def test_a_prompt_still_lands_on_a_session_that_was_cleared(token, claude_home, 
     answer = c.post(f"/sessions/{SID}/say", json={"text": "after"})
     assert answer.status_code == 200, "the id the phone is holding is the one it opened the page with"
     assert sent == [SID, "dddd1111-2222-3333-4444-555566667777"]
+
+
+def test_a_live_activity_token_says_which_card_it_addresses(token):
+    """One card is one session, so an activity token has to name the session it addresses."""
+    from deckhand_daemon import push
+
+    c = client(token)
+    given = c.post("/live/token", json={"token": "t1", "kind": "activity", "session": SID})
+    assert given.json() == {"registered": "activity"}
+    assert push.sending._cards(push.sending.tokens()) == {SID: "t1"}
+    # A phone from before that. Taken rather than refused, and then dropped: a token that cannot
+    # say which card it is could only ever end the wrong one.
+    assert c.post("/live/token", json={"token": "t2", "kind": "activity"}).status_code == 200
+    assert push.sending._cards(push.sending.tokens()) == {SID: "t1"}
+    assert c.post("/live/token", json={"token": "s1", "kind": "start"}).status_code == 200
+    assert push.sending.tokens()["start"] == "s1"
+    assert c.post("/live/token", json={"token": "x", "kind": "banner"}).status_code == 400

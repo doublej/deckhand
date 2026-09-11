@@ -1,22 +1,50 @@
+import re
+from pathlib import Path
+
 import pytest
 
-from deckhand_daemon import push, sessions
+from deckhand_daemon import briefings, push, sessions
 
-# Held before the fixture below replaces it, so one test can still reach the real thing.
+# Held before the fixture below replaces them, so one test can still reach the real things.
 REAL_SHOW = push.show
+REAL_END = push.end
 
 
 @pytest.fixture(autouse=True)
 def blank(monkeypatch, tmp_path):
-    monkeypatch.setattr(push, "_seen", {})
-    monkeypatch.setattr(push, "_waiting", {})
+    monkeypatch.setattr(push, "_slips", {})
+    monkeypatch.setattr(push, "_open", {})
+    monkeypatch.setattr(push, "_said", {})
+    monkeypatch.setattr(push.sending, "_raised", {})
     monkeypatch.setenv("DECKHAND_DATA_DIR", str(tmp_path))
     monkeypatch.setattr(push, "_last_line", lambda sid: "shall I run the tests?")
+    monkeypatch.setattr(briefings, "load", lambda sid: {})
+    monkeypatch.setattr(push, "artifacts", Slips({}))
+    monkeypatch.setattr(push, "tasks", Asks({}))
     said = []
-    # Cards paired with whether they were sent loudly, because that is the difference between
-    # a card that changes on the Lock Screen and one that actually reaches the person.
-    monkeypatch.setattr(push, "show", lambda card, mac, loud=False: said.append((card, loud)))
+    monkeypatch.setattr(push, "show", lambda card, mac: said.append(card))
+    monkeypatch.setattr(push, "end", lambda sid: said.append(("end", sid)))
     return said
+
+
+class Slips:
+    """Stands in for `artifacts`: how many slips each session has waiting, by session id."""
+
+    def __init__(self, waiting):
+        self.waiting = waiting
+
+    def counted(self, session):
+        return {"artifacts_waiting": self.waiting.get(session.session_id, 0)}
+
+
+class Asks:
+    """Stands in for `tasks`: how many asks are still open on each session's list."""
+
+    def __init__(self, open_now):
+        self.open_now = open_now
+
+    def outstanding(self, session_id):
+        return [{"id": f"t{n}"} for n in range(self.open_now.get(session_id, 0))]
 
 
 def live(*pairs):
@@ -27,80 +55,230 @@ def live(*pairs):
     ]
 
 
-def test_a_session_that_stops_is_what_puts_a_card_up(monkeypatch, blank):
+def card(kind=push.ASKING, line="shall I run the tests?"):
+    return push.Card(session="one", name="one", kind=kind, line=line, when=0.0)
+
+
+def posts(monkeypatch):
+    """Every APNs post this Mac makes, as (token, event, payload). The real `show` and `end`."""
+    sent = []
+
+    def caught(token, payload, auth, kind):
+        sent.append((token, kind, payload))
+
+    monkeypatch.setattr(push.sending, "bearer", lambda: "auth")
+    monkeypatch.setattr(push, "show", REAL_SHOW)
+    monkeypatch.setattr(push, "end", REAL_END)
+    monkeypatch.setattr(push.sending, "_post", caught)
+    return sent
+
+
+# --- what raises a card, and what no longer does -------------------------------------------
+
+def test_a_turn_ending_never_raises_a_card(monkeypatch, blank):
+    """The trigger this file was rewritten to delete: it fired 294 times in 28 hours."""
     monkeypatch.setattr(sessions, "live_sessions", lambda: live(("one", "busy")))
     push.sweep()
-    assert blank == [], "a session that is still working is not news"
-    monkeypatch.setattr(sessions, "live_sessions", lambda: live(("one", "idle")))
-    push.sweep()
-    assert [card.waiting for card, _ in blank] == [1]
-    assert blank[0][0].name == "one"
-    assert blank[0][0].line == "shall I run the tests?"
-
-
-def test_a_session_already_idle_at_start_up_is_not_an_event(monkeypatch, blank):
-    """Otherwise every restart of the daemon lights up the Lock Screen with old news."""
     monkeypatch.setattr(sessions, "live_sessions", lambda: live(("one", "idle")))
     push.sweep()
     push.sweep()
     assert blank == []
 
 
-def test_two_stopping_are_counted_and_the_newest_is_named(monkeypatch, blank):
-    monkeypatch.setattr(sessions, "live_sessions", lambda: live(("one", "busy"), ("two", "busy")))
-    push.sweep()
-    monkeypatch.setattr(sessions, "live_sessions", lambda: live(("one", "idle"), ("two", "busy")))
-    push.sweep()
-    monkeypatch.setattr(sessions, "live_sessions", lambda: live(("one", "idle"), ("two", "idle")))
-    push.sweep()
-    assert [card.waiting for card, _ in blank] == [1, 2]
-    assert blank[-1][0].name == "two", "the card names the one that just stopped"
-
-
-def test_answering_a_session_takes_it_off_the_card(monkeypatch, blank):
-    monkeypatch.setattr(sessions, "live_sessions", lambda: live(("one", "busy")))
-    push.sweep()
+def test_a_new_slip_asks(monkeypatch, blank):
+    slips = Slips({})
+    monkeypatch.setattr(push, "artifacts", slips)
     monkeypatch.setattr(sessions, "live_sessions", lambda: live(("one", "idle")))
     push.sweep()
-    push.spoke_to("one")
-    assert blank[-1][0].waiting == 0
-
-
-def test_a_session_that_goes_away_stops_waiting(monkeypatch, blank):
-    monkeypatch.setattr(sessions, "live_sessions", lambda: live(("one", "busy")))
+    assert blank == [], "a slip already sitting there when the daemon started is not news"
+    slips.waiting["one"] = 1
     push.sweep()
+    assert [c.kind for c in blank] == [push.ASKING]
+    assert blank[0].session == "one" and blank[0].name == "one"
+    assert blank[0].line == "shall I run the tests?"
+
+
+def test_answering_the_last_slip_ends_the_card(monkeypatch, blank):
+    slips = Slips({"one": 1})
+    monkeypatch.setattr(push, "artifacts", slips)
+    monkeypatch.setattr(sessions, "live_sessions", lambda: live(("one", "idle")))
+    push.sweep()
+    slips.waiting["one"] = 0
+    push.sweep()
+    assert blank == [("end", "one")]
+
+
+def test_a_session_that_goes_away_has_its_card_ended(monkeypatch, blank):
     monkeypatch.setattr(sessions, "live_sessions", lambda: live(("one", "idle")))
     push.sweep()
     monkeypatch.setattr(sessions, "live_sessions", lambda: live())
     push.sweep()
-    assert blank[-1][0].waiting == 0
+    assert blank == [("end", "one")]
+
+
+def test_clearing_the_whole_list_is_the_finished_event(monkeypatch, blank):
+    """One ask going done is 12 an hour and is not news. The list going empty is 4, and is."""
+    asks = Asks({"one": 3})
+    monkeypatch.setattr(push, "tasks", asks)
+    monkeypatch.setattr(sessions, "live_sessions", lambda: live(("one", "idle")))
+    push.sweep()
+    asks.open_now["one"] = 1
+    push.sweep()
+    assert blank == [], "a single ask being ticked off raises nothing"
+    asks.open_now["one"] = 0
+    push.sweep()
+    assert [c.kind for c in blank] == [push.FINISHED]
+
+
+def test_a_list_that_was_empty_all_along_is_not_an_event(monkeypatch, blank):
+    monkeypatch.setattr(sessions, "live_sessions", lambda: live(("one", "idle")))
+    push.sweep()
+    push.sweep()
+    assert blank == []
+
+
+def test_calling_for_you_says_so_in_the_log(monkeypatch, blank, caplog):
+    monkeypatch.setattr(sessions, "live_sessions", lambda: live(("one", "idle")))
+    with caplog.at_level("INFO"):
+        assert push.called(live(("one", "idle"))[0], "the migration needs a decision") is None
+    assert [c.kind for c in blank] == [push.ASKING]
+    assert blank[0].line == "the migration needs a decision"
+    assert "called for you" in caplog.text, "every other trigger logs; this one never did"
+
+
+# --- what may make a noise, and what may raise a card --------------------------------------
+
+def test_only_asking_carries_an_alert():
+    asking = push.sending._update(card())["aps"]
+    assert asking["alert"] == {"title": "one", "body": "shall I run the tests?",
+                               "sound": "default"}
+    finished = push.sending._update(card(push.FINISHED))["aps"]
+    assert "alert" not in finished, "a cleared list is worth reading, not worth a buzz"
+    assert set(finished["content-state"]) == {"kind", "line", "when"}
+
+
+def test_finished_may_never_raise_a_card(monkeypatch):
+    sent = posts(monkeypatch)
+    push.remember("start-token", "start")
+    assert push.show(card(push.FINISHED), "m2-2") is None
+    assert sent == [], "there is no card to update and none may be started"
+    assert push.show(card(), "m2-2") is None
+    assert [kind for _, kind, _ in sent] == ["start"]
+
+
+def test_a_second_start_waits_for_the_first_card_to_say_which_it_is(monkeypatch):
+    """A card raised by push is unaddressable until the phone hands its token back — measured at
+    nine minutes, during which every announce raised one more card."""
+    sent = posts(monkeypatch)
+    push.remember("start-token", "start")
+    assert push.show(card(), "m2-2") is None
+    assert push.show(card(), "m2-2") == "still waiting for the card this Mac raised for one"
+    assert len(sent) == 1
+    push.remember("card-token", "activity", "one")
+    assert push.show(card(), "m2-2") is None
+    assert [kind for _, kind, _ in sent] == ["start", "update"]
+
+
+def test_a_start_that_never_went_out_does_not_hold_off_the_next(monkeypatch):
+    """Only a start APNs actually took blocks a retry. A refused one parking the session for ten
+    minutes would mean no card at all for as long as the network was down."""
+    tried = []
+
+    def refused(token, payload, auth, kind):
+        tried.append(kind)
+        return "APNs unreachable: boom"
+
+    monkeypatch.setattr(push.sending, "bearer", lambda: "auth")
+    monkeypatch.setattr(push.sending, "_post", refused)
+    push.remember("start-token", "start")
+    assert REAL_SHOW(card(), "m2-2") == "APNs unreachable: boom"
+    assert REAL_SHOW(card(), "m2-2") == "APNs unreachable: boom"
+    assert tried == ["start", "start"]
 
 
 def test_without_a_key_it_says_so_rather_than_pretending(monkeypatch):
-    monkeypatch.setattr(push, "signing_key", lambda: None)
-    assert REAL_SHOW(push.Card(1, "one", "", 0.0), "m2-2") == (
-        "no push key on this Mac — run `just sync-apns`"
-    )
+    monkeypatch.setattr(push.sending, "signing_key", lambda: None)
+    monkeypatch.setattr(push.sending, "_bearer", None)
+    assert REAL_SHOW(card(), "m2-2") == "no push key on this Mac — run `just sync-apns`"
 
 
-def test_a_session_that_stops_is_worth_being_interrupted_for(monkeypatch, blank):
-    """An update carrying no alert is a silent redraw, so a card that only ever redraws never
-    reaches anyone. Stopping is loud; the bookkeeping around it is not."""
-    monkeypatch.setattr(sessions, "live_sessions", lambda: live(("one", "busy")))
-    push.sweep()
-    monkeypatch.setattr(sessions, "live_sessions", lambda: live(("one", "idle")))
-    push.sweep()
-    assert blank[-1][1] is True
+# --- one token per card, and a card that can be ended --------------------------------------
+
+def test_a_token_is_kept_per_session():
+    """The phone posts one per live card. One slot kept the last and orphaned the rest."""
+    push.remember("token-one", "activity", "one")
+    push.remember("token-two", "activity", "two")
+    assert push.sending._cards(push.sending.tokens()) == {"one": "token-one", "two": "token-two"}
+
+
+def test_an_activity_token_with_no_session_is_taken_and_dropped():
+    push.remember("stray", "activity")
+    assert push.sending._cards(push.sending.tokens()) == {}, "a pre-update app is accepted, never guessed at"
+
+
+def test_ending_a_card_takes_it_off_the_screen_and_forgets_it(monkeypatch):
+    sent = posts(monkeypatch)
+    push.remember("card-token", "activity", "one")
     push.spoke_to("one")
-    assert blank[-1][1] is False, "answering it is not news"
-    monkeypatch.setattr(sessions, "live_sessions", lambda: live())
-    push.sweep()
-    assert blank[-1][1] is False, "a session going away is not news either"
+    assert [(token, kind) for token, kind, _ in sent] == [("card-token", "end")]
+    assert sent[0][2]["aps"]["dismissal-date"] <= sent[0][2]["aps"]["timestamp"]
+    assert push.sending._cards(push.sending.tokens()) == {}
+    push.spoke_to("one")
+    assert len(sent) == 1, "a card that is gone is not ended twice"
 
 
-def test_only_a_loud_card_carries_an_alert():
-    card = push.Card(1, "one", "shall I run the tests?", 0.0)
-    assert "alert" not in push._update(card, False)["aps"]
-    alert = push._update(card, True)["aps"]["alert"]
-    assert alert == {"title": "one", "body": "shall I run the tests?", "sound": "default"}
-    assert "loud" not in card.state(), "the content state is the Swift struct and nothing else"
+# --- the line ------------------------------------------------------------------------------
+
+def test_the_line_falls_back_to_the_briefing_and_is_never_empty(monkeypatch):
+    monkeypatch.setattr(push, "_last_line", lambda sid: "")
+    monkeypatch.setattr(briefings, "load", lambda sid: {"headline": "Waiting: which migration"})
+    assert push._line("one", push.ASKING) == "Waiting: which migration"
+    monkeypatch.setattr(briefings, "load", lambda sid: {})
+    assert push._line("one", push.ASKING) == push.sending.NOTHING[push.ASKING]
+    assert push._line("one", push.FINISHED) == push.sending.NOTHING[push.FINISHED]
+
+
+def test_an_asking_card_gets_less_room_than_a_finished_one(monkeypatch):
+    """The Stop button costs an `asking` card one line of its hero, so it holds ~80 characters
+    where a `finished` card holds ~120. Sending 120 to both cuts the sentence on the cards that
+    needed a person."""
+    monkeypatch.setattr(briefings, "load", lambda sid: {})
+    monkeypatch.setattr(push, "_last_line", lambda sid: "word " * 60)
+    asking, finished = push._line("one", push.ASKING), push._line("one", push.FINISHED)
+    assert len(asking) <= 80 and asking.endswith("…")
+    assert 80 < len(finished) <= 120 and finished.endswith("…")
+
+
+def test_a_line_is_cut_at_a_word_and_not_through_one():
+    """`…prepara` reads worse than one sentence short."""
+    said = push.shortened("the migration needs a decision before it can go any further " * 3,
+                          push.ASKING)
+    assert len(said) <= 80
+    assert said.endswith("…") and not said.endswith(" …")
+    assert said.removesuffix("…").split()[-1] in said.split(), "no half word on the end"
+    assert push.shortened("  short   enough  ", push.ASKING) == "short enough"
+
+
+def test_an_agents_own_words_are_cut_to_the_asking_card(monkeypatch, blank):
+    """`called()` is the one line an agent chose itself, so it is worth checking it survives the
+    smaller cap rather than arriving as a fragment."""
+    long = "The database migration is ready but it will drop the old index, confirm before I run it"
+    assert push.called(live(("one", "idle"))[0], long) is None
+    assert len(blank[0].line) <= 80
+    assert blank[0].line.startswith("The database migration is ready")
+
+
+# --- the wire, which has no Swift on this side ---------------------------------------------
+
+def test_the_card_is_the_shape_the_swift_type_decodes():
+    """`attributes-type`, the field names and the kinds are the whole contract, and there is no
+    Swift on the sending side to keep them in step — so read the Swift."""
+    swift = (Path(__file__).parents[2] / "Sources/DeckhandKit/LiveActivity.swift").read_text()
+    payload = push.sending._start(card(), "m2-2")["aps"]
+    assert f"public struct {payload['attributes-type']}: ActivityAttributes" in swift
+    state = swift.split("struct ContentState")[1].split("public init")[0]
+    assert set(re.findall(r"public var (\w+):", state)) == set(payload["content-state"])
+    rest = swift.split("public var moment")[1]
+    assert set(re.findall(r"public var (\w+):", rest)) == set(payload["attributes"])
+    kinds = set(re.findall(r"^\s+case (\w+)$", rest, re.MULTILINE))
+    assert {push.ASKING, push.FINISHED} == kinds

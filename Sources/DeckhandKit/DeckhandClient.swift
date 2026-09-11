@@ -153,11 +153,18 @@ public struct DeckhandClient: Sendable {
     /// already on screen; a `start` token lets the daemon put a fresh one there when none is
     /// running, which is the only way this survives the system ending one after a few hours,
     /// or a reboot, or the app being force-quit.
-    public func register(pushToken: String, kind: String) async throws {
+    ///
+    /// One card is one session, so an `activity` token says which session's card it addresses —
+    /// the Mac keeps a slot per session and without this every card but the last one registered
+    /// was unreachable, which is four cards stacked on a Lock Screen and only one of them alive.
+    /// A `start` token belongs to the app rather than to any session and carries **no key at
+    /// all**: the daemon's parameter defaults to empty, so an absent session is its start slot.
+    public func register(pushToken: String, kind: String, session: String?) async throws {
         var req = request(.post, "live/token")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let body = try JSONEncoder().encode(["token": pushToken, "kind": kind])
-        _ = try await send(req, body: body)
+        var fields = ["token": pushToken, "kind": kind]
+        if let session { fields["session"] = session }
+        _ = try await send(req, body: try JSONEncoder().encode(fields))
     }
 
     /// Interrupt a run, compact the conversation, or clear it. Keystrokes into the session's

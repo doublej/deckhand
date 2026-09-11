@@ -38,13 +38,27 @@ public enum RunState: String, Sendable {
 /// row of buttons.
 public struct StateWord: View {
     private let state: RunState
+    private let size: CGFloat?
 
-    public init(_ state: RunState) { self.state = state }
+    /// `size` is for a surface read at a different distance, and it is the only thing that may
+    /// vary. A Lock Screen card is read at arm's length where 9pt is a smudge, and the widget
+    /// had grown a near-copy of this view to say so — which is how a design language stops being
+    /// one. The voice travels with the word: still mono, still semibold, still tracked.
+    public init(_ state: RunState, size: CGFloat? = nil) {
+        self.state = state
+        self.size = size
+    }
+
+    private var font: Font {
+        guard let size else { return Typography.state }
+        return .system(size: size, weight: .semibold, design: .monospaced)
+    }
 
     public var body: some View {
         Text(state.rawValue)
-            .font(Typography.state)
+            .font(font)
             .tracking(2)
+            .lineLimit(1)
             .foregroundStyle(state.tint)
             .accessibilityElement()
             .accessibilityLabel(state.rawValue)

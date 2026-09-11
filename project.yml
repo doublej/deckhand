@@ -26,6 +26,11 @@ targets:
         excludes:
           - "README.md"
       - deckhand/Assets.xcassets
+      # The Lock Screen card's button, compiled into both binaries on purpose. The widget names
+      # the App Intent in its `Button`; a `LiveActivityIntent` is *performed* in the app's
+      # process, so each side needs the type. Membership in two targets rather than a third
+      # module: it is one small file and a package would need `AppIntentsPackage` ceremony.
+      - widgets/CardAction.swift
     dependencies:
       - package: DeckhandKit
         product: DeckhandKit
@@ -52,6 +57,14 @@ targets:
           - _http._tcp
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
+        # What makes a tap on a Lock Screen card reach this app. The widget has pointed at
+        # `deckhand://` since the card existed and nothing was registered to answer it, so every
+        # tap opened the app on the sessions list. `Deck.link` is the other half.
+        CFBundleURLTypes:
+          - CFBundleURLName: dev.jurrejan.deckhand
+            CFBundleTypeRole: Editor
+            CFBundleURLSchemes:
+              - deckhand
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.jurrejan.deckhand
@@ -62,28 +75,6 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_USER_SCRIPT_SANDBOXING: NO
         CODE_SIGN_ENTITLEMENTS: deckhand/Deckhand.entitlements
-  DeckhandWidgets:
-    type: app-extension
-    platform: iOS
-    sources:
-      - widgets
-    dependencies:
-      - package: DeckhandKit
-        product: DeckhandKit
-    info:
-      path: widgets/Info.plist
-      properties:
-        CFBundleDisplayName: Deckhand
-        NSExtension:
-          NSExtensionPointIdentifier: com.apple.widgetkit-extension
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: dev.jurrejan.deckhand.widgets
-        DEVELOPMENT_TEAM: KA6433FU8U
-        CODE_SIGN_STYLE: Automatic
-        SWIFT_VERSION: "6.2"
-        TARGETED_DEVICE_FAMILY: "1"
-        SKIP_INSTALL: YES
   DeckhandWidgets:
     type: app-extension
     platform: iOS

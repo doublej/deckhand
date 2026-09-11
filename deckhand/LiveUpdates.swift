@@ -16,11 +16,11 @@ final class LiveUpdates {
     private(set) var running = false
     private(set) var trouble: String?
     private var sent: Set<String> = []
-    private var send: ((String, String) async throws -> Void)?
+    private var send: ((String, String, String?) async throws -> Void)?
 
     /// `register` is passed in rather than reached for so this stays testable and so a token
     /// arriving before the app is paired is simply dropped rather than lost.
-    func begin(register: @escaping (String, String) async throws -> Void) {
+    func begin(register: @escaping (String, String, String?) async throws -> Void) {
         send = register
         guard ActivityAuthorizationInfo().areActivitiesEnabled else {
             trouble = "Live Activities are switched off for Deckhand in Settings"
@@ -36,7 +36,9 @@ final class LiveUpdates {
     private func watchStartTokens() {
         Task {
             for await data in Activity<Deck>.pushToStartTokenUpdates {
-                await hand(data, kind: "start")
+                // No session on this one, and that is the point of it: a push-to-start token
+                // belongs to the app, not to a card, and the Mac files it in a slot of its own.
+                await hand(data, kind: "start", session: nil)
             }
         }
     }
@@ -61,20 +63,28 @@ final class LiveUpdates {
         }
     }
 
+    /// A token goes up **with the session its card is about**. The Mac keeps one slot per
+    /// session; before this it kept one slot per kind, so the last card to register was the only
+    /// one the daemon could still reach and the rest sat on the Lock Screen never updating
+    /// again — four stacked cards, which is what this whole change came out of. The session is
+    /// read off the attributes once, outside the loop: a card never changes which session it
+    /// speaks for, which is exactly why it is an attribute and not state.
     private func watch(_ activity: Activity<Deck>) {
+        let session = activity.attributes.session
         Task {
             for await data in activity.pushTokenUpdates {
-                await hand(data, kind: "activity")
+                await hand(data, kind: "activity", session: session)
             }
         }
     }
 
-    /// APNs wants the token as hex. Sent once per distinct value: these streams re-emit.
-    private func hand(_ data: Data, kind: String) async {
+    /// APNs wants the token as hex. Sent once per distinct value: these streams re-emit, and a
+    /// token is one-to-one with a card, so the hex alone is enough to tell two cards apart.
+    private func hand(_ data: Data, kind: String, session: String?) async {
         let hex = data.map { String(format: "%02x", $0) }.joined()
         guard !sent.contains(hex), let send else { return }
         do {
-            try await send(hex, kind)
+            try await send(hex, kind, session)
             sent.insert(hex)
             trouble = nil
         } catch {

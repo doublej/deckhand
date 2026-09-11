@@ -22,8 +22,25 @@ struct DeckhandApp: App {
                     // enough that reading it costs nothing. It only ever drops clips that were
                     // actually said — see `ClipArchive.sweep`.
                     model.archive.sweep()
-                    live.begin { hex, kind in
-                        try await model.settings.client()?.register(pushToken: hex, kind: kind)
+                    live.begin { hex, kind, session in
+                        try await model.settings.client()?
+                            .register(pushToken: hex, kind: kind, session: session)
+                    }
+                }
+                // A tap on a Lock Screen card opens the session that card is about. The card
+                // carries the id (`CardLink`); the phone has to find that session in a listing
+                // it may not have fetched yet, which is every cold launch from the Lock Screen —
+                // so the refresh comes first and the route second, or the rail would be asked to
+                // push a session it is not yet holding and would quietly do nothing.
+                //
+                // `manager.route` rather than a second slot beside it: the rail already acts on
+                // exactly this ask, from the manager, and a second way to say "open this session"
+                // is a second place the answer can drift.
+                .onOpenURL { url in
+                    guard let opened = CardLink.session(openedBy: url) else { return }
+                    Task {
+                        await model.refreshSessions()
+                        model.manager.route = .session(opened)
                     }
                 }
         }

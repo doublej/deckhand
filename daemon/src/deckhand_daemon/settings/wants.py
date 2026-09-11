@@ -2,7 +2,8 @@
 
 Four things on this Mac act without being asked, and each is one switch:
 
-- **finished** — a session stopped and is waiting on you.
+- **finished** — a session cleared everything on your list for it. Not a turn ending: that
+  fired 294 times in 28 hours and raised a card nobody could act on.
 - **slips** — a session put a slip on your phone and nothing has answered it.
 - **called** — an agent asked for your attention outright, in its own words.
 - **chase** — the idle check messages a session that went quiet owing work. Not a notification
@@ -18,9 +19,9 @@ every restart, so a preference filed under one would have to be set again every 
 folder is stable and it is what a person actually has an opinion about. A session's own page
 edits the folder it is running in, so from the phone it still reads as "this session".
 
-What is deliberately *not* here: a switch per push. `push.py` raises a card, drops one when the
-session goes, and re-announces when you answer — the last two are that card's bookkeeping, and
-turning one off would strand a card on the Lock Screen with nothing able to clear it.
+What is deliberately *not* here: a switch per push. `push/` raises a card, ends it when the
+session goes, and ends it when you answer — the last two are that card's bookkeeping, and turning
+one off would strand a card on the Lock Screen with nothing able to clear it.
 """
 
 from __future__ import annotations
@@ -45,7 +46,7 @@ SUMMARY_MODELS = ("claude-haiku-4-5-20251001", "claude-sonnet-5", "claude-opus-5
 class Wants:
     """The answers that apply somewhere — globally, or in one folder."""
 
-    #: A session here stopped and is waiting on you.
+    #: A session here cleared everything on your list for it.
     finished: bool = True
     #: A slip written here is waiting for an answer.
     slips: bool = True

@@ -36,7 +36,7 @@ files.py        # what the session touched that a person could open, and the per
 artifacts.py    # slips: what a session left for the phone to answer
 transcribe.py   # utt turns a clip into text, through its jobs folder
 plugin.py       # Deckhand's page inside utt: the manifest, its settings, its buttons
-push.py         # what the Lock Screen says, when it changes, and how it gets there
+push/           # the Lock Screen: `sending.py` is APNs, `__init__.py` is what is worth a card
 ```
 
 Before editing under `reading/`, `filters/` or `prompts/`, read that folder's own CLAUDE.md.
@@ -195,10 +195,10 @@ the words carry, so it fails and says why instead. The receipt names the route t
 ## What the person has set this Mac to do
 
 `settings/` is the switches, keyed by **path**. Four things act without being asked and each is
-one switch: `finished` (a session stopped), `slips` (a slip is unanswered), `called` (an agent
-asked for you outright, `POST /sessions/{id}/notify`), and `chase` (the idle check, which speaks
-to a session rather than to a person). Plus `subagents`, off by default, which lets the
-summariser read what a folder's subagents did. `GET|PUT /settings` is the whole document;
+one switch: `finished` (a session cleared its whole task list), `slips` (a slip is unanswered),
+`called` (an agent asked for you outright, `POST /sessions/{id}/notify`), and `chase` (the idle
+check, which speaks to a session rather than to a person). Plus `subagents`, off by default,
+which lets the summariser read what a folder's subagents did. `GET|PUT /settings` is the whole document;
 `GET /settings/project?path=` is the resolved answer for one folder.
 
 - **Path, not session id.** "Per session" is what was asked for, and a session id is the wrong
@@ -214,9 +214,9 @@ summariser read what a folder's subagents did. `GET|PUT /settings` is the whole 
 - **`called` is the only trigger a session raises for itself**, so it is the only one a folder may
   refuse outright, and the refusal is returned rather than swallowed. An agent that thinks it has
   your attention and has not is worse than one that knows it has not.
-- **Not one switch per push.** `push.py` raises a card, drops it when the session goes, and
-  re-announces when you answer; the last two are that card's bookkeeping, and switching one off
-  would strand a card nothing could clear.
+- **Not one switch per push.** `push/` raises a card, ends it when the session goes, and ends
+  it when you answer; the last two are that card's bookkeeping, and switching one off would
+  strand a card nothing could clear.
 
 ## Briefings, tasks, and the idle check
 
@@ -368,6 +368,13 @@ whole of it is `docs/manager.md`; three things are worth having here.
 - **A string setting arrives per keystroke.** `revision` is correct per write, but typing one
   sentence into a field produced 40-odd revisions in four seconds. Anything done on a values
   change has to be cheap, or debounced.
+- **One card is one session, and three things can put one there.** A new unanswered slip and
+  `POST /sessions/{id}/notify` are both `asking` — they may raise a card and they carry the sound.
+  A session's task list going from something to nothing is `finished` — silent, and it may only
+  ever *update* a card that is already up. A turn merely ending raises nothing: it did, 294 times
+  in 28 hours. `push.end` takes a card off the Lock Screen when its session is answered or goes
+  away, because iOS's own retirement is hours and a parked card teaches you to ignore the feature.
+  Activity tokens are filed by session id, since the phone hands one over per live card.
 - **APNs needs a key the daemon cannot mint.** `just sync-apns` materialises `deckhand/APNS_KEY`
   and `APNS_KEY_ID` out of 1Password, for the launchd reason as ever. The key itself is created
   by hand once in the developer portal. Without it everything works up to the send and the log
