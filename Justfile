@@ -240,6 +240,18 @@ install-agent:
     launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.jurrejan.deckhand.plist
     @curl -sf --retry 20 --retry-delay 1 --retry-connrefused http://127.0.0.1:4180/health && echo ' ← daemon is up'
 
+# Put a hand on a remote machine: uv, the daemon's source, and its locked environment.
+# Nothing is registered as a service — a hand's whole life is the ssh link the daemon opens,
+
+# so this only has to leave the code somewhere `uv run` can find it.
+[group('ops')]
+install-hand alias:
+    ssh -o BatchMode=yes -o ConnectTimeout=4 {{ alias }} 'command -v uv >/dev/null || (curl -LsSf https://astral.sh/uv/install.sh | sh)'
+    rsync -a --delete --exclude .venv --exclude __pycache__ --exclude '*.pyc' --exclude tests \
+        {{ justfile_directory() }}/daemon/ {{ alias }}:.deckhand/
+    ssh -o BatchMode=yes {{ alias }} 'PATH="$HOME/.local/bin:$PATH" uv sync --no-dev --directory ~/.deckhand'
+    @echo '{{ alias }} has a hand — the daemon starts it over ssh when it needs one'
+
 [group('ops')]
 uninstall-agent:
     launchctl bootout gui/$(id -u)/com.jurrejan.deckhand || true

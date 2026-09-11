@@ -17,6 +17,7 @@ from . import (
     deliver,
     files,
     filters,
+    fleet,
     nudge,
     plugin,
     presence,
@@ -52,10 +53,15 @@ async def lifespan(_: FastAPI):
     plugin.install()
     watchers = [asyncio.create_task(plugin.watch()), asyncio.create_task(push.watch()),
                 asyncio.create_task(nudge.watch()), asyncio.create_task(briefings.watch()),
-                asyncio.create_task(manager_agent.watch())]
+                asyncio.create_task(manager_agent.watch()),
+                # Open every machine's link now rather than on the first listing that wants one:
+                # otherwise the whole ssh handshake lands on the one request a person is watching.
+                asyncio.create_task(fleet.warm())]
     yield
     for watcher in watchers:
         watcher.cancel()
+    # Every hand dies with its link, which is why nothing had to be installed as a service.
+    fleet.stop_all()
 
 
 app = FastAPI(title="Deckhand", version=__version__, lifespan=lifespan)
@@ -118,6 +124,29 @@ def list_sessions() -> dict:
     # What the week has cost so far, which belongs to the Mac rather than to any session. One
     # small file read per listing, not per session — the statusline's agent does the counting.
     return {"sessions": listed, "iterm": status, "week": sessions.week_usage()}
+
+
+@app.get("/machines", dependencies=[Depends(require_token)])
+async def list_machines() -> dict:
+    """Every machine on the network and whether it is reachable right now.
+
+    Separate from `/sessions` on purpose: the listing answers "what can I talk to", and a machine
+    that is asleep simply contributes nothing to it rather than failing it. This is where a
+    person finds out that a machine is missing, and why.
+    """
+    return {"machines": await fleet.machines()}
+
+
+@app.get("/sessions/all", dependencies=[Depends(require_token)])
+async def list_every_session() -> dict:
+    """The whole network's sessions in one answer, newest first.
+
+    A route of its own rather than a flag on `/sessions`, because `/sessions` is what every older
+    build of the app already polls and it must go on meaning exactly this Mac. The phone moves
+    over when it is ready to draw a machine, and nothing breaks in between.
+    """
+    local = (await asyncio.to_thread(list_sessions))["sessions"]
+    return {"sessions": await fleet.listings(local), "machines": await fleet.machines()}
 
 
 @app.get("/sessions/{session_id}/summary", dependencies=[Depends(require_token)])

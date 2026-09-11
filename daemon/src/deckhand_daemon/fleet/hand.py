@@ -153,9 +153,38 @@ def deliver_text(session_id: str, text: str = Body(embed=True)) -> dict:
     return {"delivered": delivered_by is not None, "delivered_by": delivered_by, "error": error}
 
 
+def _die_with_the_link() -> None:
+    """Exit when the ssh connection that started this one goes away.
+
+    **Measured, not assumed: a hand does not die on its own when its link is terminated.** One
+    outlived its ssh by over a minute, kept port 4181, and then answered the *next* link's calls
+    with the code it had been started with — so a machine went on reporting its own hostname as
+    its id long after that was fixed and shipped. A stale hand is invisible from the Mac: the
+    link comes up, `/health` answers, and everything it says is a version behind.
+
+    stdin closing is the one signal that survives everything. No tty is involved, so `-tt` and
+    SIGHUP are not reliable, and this works the same on Windows, where neither is.
+    """
+    import os
+    import sys
+    import threading
+
+    def watch() -> None:
+        try:
+            while sys.stdin.readline():
+                pass
+        except (OSError, ValueError):
+            pass
+        log.info("link closed; hand exiting")
+        os._exit(0)  # not sys.exit: this is a daemon thread under a running event loop
+
+    threading.Thread(target=watch, daemon=True).start()
+
+
 def main() -> None:
     """`deckhand-daemon --hand`. Loopback only: the daemon gets here through an ssh forward."""
     import uvicorn
 
+    _die_with_the_link()
     log.info("hand on %s, port %d, loopback only", registry.here(), config.PORT + 1)
     uvicorn.run(app, host="127.0.0.1", port=config.PORT + 1, log_level="warning")

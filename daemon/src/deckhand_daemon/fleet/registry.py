@@ -100,5 +100,12 @@ def primary() -> Machine:
 
 
 def here() -> str:
-    """This machine's id — what every session listed by this daemon is stamped with."""
-    return primary().id
+    """This machine's id — what every session listed by this daemon is stamped with.
+
+    `DECKHAND_MACHINE` wins, and that is how a hand learns its own name. A hand has no atlas
+    installed and should not need one: which machines exist is the daemon's business, so the
+    daemon passes the id it already knows when it starts the hand over ssh. Without this a hand
+    falls back to its hostname — `mbp-ubuntu` where atlas says `ubuntu` — and every session it
+    lists is stamped with a machine the daemon cannot route back to.
+    """
+    return os.environ.get("DECKHAND_MACHINE") or primary().id

@@ -54,7 +54,15 @@ def image_dir(session_id: str) -> Path:
 
 
 def token() -> str:
-    """Read the pairing token, creating one on first run. 12 chars: typable on a phone."""
+    """Read the pairing token, creating one on first run. 12 chars: typable on a phone.
+
+    `DECKHAND_TOKEN` overrides it, and that is how a hand gets one: the daemon starts it over
+    ssh with its own token in the environment, so there is no second secret to mint, fetch or
+    keep in step. One token for the fleet is safe here because the only way to a hand is an
+    authenticated ssh session to a port bound on loopback.
+    """
+    if given := os.environ.get("DECKHAND_TOKEN"):
+        return given
     path = data_dir() / "token"
     if path.exists():
         existing = path.read_text().strip()
