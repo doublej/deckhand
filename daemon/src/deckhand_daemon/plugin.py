@@ -108,7 +108,11 @@ def manifest() -> dict[str, Any]:
         "skipsTextStages": ["formatting"],
         "tint": "#3EAFB4",
         "showsInMenuBar": True,
-        "daemon": {"label": DAEMON_LABEL},
+        # utt reveals this in the Finder itself, so it works when this daemon is the thing
+        # that is down — which is the only time anybody wants it. Our own log is what is
+        # named, and launchd's stdout and stderr are its siblings in that folder: a crash
+        # before logging starts lands in those, and revealing puts all three on screen.
+        "daemon": {"label": DAEMON_LABEL, "log": str(LOG_FILE)},
         # Every action is reachable from the menu bar or none is, so each one here has to be
         # safe to press by accident. There was a "Stop listening" button; it ran `launchctl
         # bootout`, which unloads the job — and utt's Restart is `kickstart`, which cannot
@@ -118,8 +122,6 @@ def manifest() -> dict[str, Any]:
         "actions": [
             {"key": "copyToken", "label": "Copy pairing code",
              "detail": "Puts the code your phone asks for on the clipboard."},
-            {"key": "openLog", "label": "Open the log",
-             "detail": "Every clip, what it was heard as, and where it went."},
         ],
         "settings": [
             {"key": "route", "kind": "choice", "label": "How your words arrive",
@@ -210,8 +212,6 @@ def _act(key: str) -> None:
     if key == "copyToken":
         subprocess.run(["/usr/bin/pbcopy"], input=config.token(), text=True, check=False)
         status(lastAction="pairing code copied")
-    elif key == "openLog":
-        subprocess.run(["/usr/bin/open", "-a", "Console", str(LOG_FILE)], check=False)
 
 
 def _write(path: Path, payload: dict) -> None:
