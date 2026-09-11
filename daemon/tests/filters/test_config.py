@@ -10,7 +10,10 @@ import pytest
 
 from deckhand_daemon.filters import config
 
-TERMINAL = "warm-okapi"
+# A key is `machine/name`. Built through `key` rather than spelled out, so these follow
+# whatever machine this Mac calls itself instead of hard-coding one.
+TERMINAL = config.key("", "warm-okapi")
+OTHER = config.key("", "cold-otter")
 
 
 @pytest.fixture
@@ -45,33 +48,33 @@ def test_saving_an_empty_chain_is_the_absence_of_one(store):
 
 def test_two_terminals_keep_their_own_chains_in_the_one_file(store):
     config.save(TERMINAL, [{"filter": "words", "settings": {"pairs": [["a", "b"]]}}])
-    config.save("cold-otter", [{"filter": "words", "on": False}])
+    config.save(OTHER, [{"filter": "words", "on": False}])
 
     assert config.load(TERMINAL)[0]["settings"] == {"pairs": [["a", "b"]]}
-    assert config.load("cold-otter") == [{"filter": "words", "on": False, "settings": {}}]
+    assert config.load(OTHER) == [{"filter": "words", "on": False, "settings": {}}]
 
 
 def test_a_rename_carries_the_chain_the_way_a_star_is_carried(store):
     """Keyed by name, so a rename is the one thing that can lose a chain. It must not."""
     config.save(TERMINAL, [{"filter": "words"}])
 
-    assert config.renamed(TERMINAL, "warm-okapi-2") is True
-    assert config.load("warm-okapi-2") == [{"filter": "words", "on": True, "settings": {}}]
+    assert config.renamed(TERMINAL, config.key("", "warm-okapi-2")) is True
+    assert config.load(config.key("", "warm-okapi-2")) == [{"filter": "words", "on": True, "settings": {}}]
     assert config.load(TERMINAL) == []
 
 
 def test_a_rename_onto_a_name_that_already_has_a_chain_keeps_the_live_ones(store):
     """`Preferences.renamed` overwrites for the same reason: the live session's is the real one."""
     config.save(TERMINAL, [{"filter": "words", "settings": {"pairs": [["live", "one"]]}}])
-    config.save("taken", [{"filter": "words", "settings": {"pairs": [["old", "one"]]}}])
+    config.save(config.key("", "taken"), [{"filter": "words", "settings": {"pairs": [["old", "one"]]}}])
 
-    config.renamed(TERMINAL, "taken")
+    config.renamed(TERMINAL, config.key("", "taken"))
 
-    assert config.load("taken")[0]["settings"] == {"pairs": [["live", "one"]]}
+    assert config.load(config.key("", "taken"))[0]["settings"] == {"pairs": [["live", "one"]]}
 
 
 def test_a_rename_with_no_chain_to_carry_changes_nothing(store):
-    assert config.renamed(TERMINAL, "something-else") is False
+    assert config.renamed(TERMINAL, config.key("", "something-else")) is False
     assert config.renamed(TERMINAL, TERMINAL) is False
     assert not config.path().exists()
 
@@ -96,3 +99,25 @@ def test_the_old_chain_is_only_retired_once(store):
     assert config.load(TERMINAL) == []
     assert config.save(TERMINAL, [{"filter": "words"}])
     assert json.loads(config.path().read_text())["chains"][TERMINAL]
+
+
+def test_a_chain_saved_before_the_network_is_filed_under_this_machine(store):
+    """Every bare name was written when this Mac was the only one, so that is where it belongs.
+
+    Written back rather than translated on each read: an unprefixed key left in the file is one
+    the next save or rename would file a second time under the new shape.
+    """
+    config.path().write_text(json.dumps({"chains": {"warm-okapi": [{"filter": "words"}]}}))
+
+    assert config.load(TERMINAL) == [{"filter": "words", "on": True, "settings": {}}]
+    assert list(json.loads(config.path().read_text())["chains"]) == [TERMINAL]
+
+
+def test_the_same_name_on_two_machines_is_two_chains(store):
+    """The collision this key exists to stop: names come from the folder, so two machines make
+    `deckhand` without trying, and one shared chain would filter words on a machine nobody set."""
+    config.save(config.key("m2", "deckhand"), [{"filter": "here"}])
+    config.save(config.key("ubuntu", "deckhand"), [{"filter": "there"}])
+
+    assert config.load(config.key("m2", "deckhand"))[0]["filter"] == "here"
+    assert config.load(config.key("ubuntu", "deckhand"))[0]["filter"] == "there"

@@ -70,7 +70,8 @@ async def _filtered(
 ) -> filters.Outcome:
     """What the chain makes of the words, before the session is ever told about them."""
     return await filters.run(filters.Prompt(
-        text=text, session_id=session.session_id, session_name=session.name, cwd=session.cwd,
+        text=text, session_id=session.session_id, session_name=session.name,
+        machine=session.machine, cwd=session.cwd,
         route=route, source=source, images=images or []))
 
 

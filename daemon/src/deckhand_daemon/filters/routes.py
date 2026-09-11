@@ -37,7 +37,8 @@ def list_filters() -> dict:
 def session_filters(session_id: str) -> dict:
     """What this terminal runs, and what it could run, in the one call a settings screen needs."""
     session = session_or_404(session_id)
-    return {"session": session.name, "known": registry.known(), "steps": config.load(session.name)}
+    chain = config.load(config.key(session.machine, session.name))
+    return {"session": session.name, "known": registry.known(), "steps": chain}
 
 
 @router.put("/sessions/{session_id}/filters")
@@ -52,4 +53,5 @@ def set_session_filters(session_id: str, steps: Annotated[list[dict], Body(embed
     missing = sorted(name for name in named if registry.get(name) is None)
     if missing:
         raise HTTPException(status_code=400, detail=f"no such filter: {', '.join(missing)}")
-    return {"session": session.name, "steps": config.save(session.name, steps)}
+    saved = config.save(config.key(session.machine, session.name), steps)
+    return {"session": session.name, "steps": saved}

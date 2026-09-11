@@ -4,13 +4,19 @@ One file, `filters.json`, holding a chain per session **name**. The array order 
 they run in, and a filter may appear in one chain more than once with different settings, so
 nothing inside a chain is keyed by name — a step is a position in a list, not an entry in a table.
 
-**The name is the key, not the id and not the cwd.** A session id is new every time Claude Code
+**The key is `machine/name`, and the name half is the load-bearing part.** A session id is new every time Claude Code
 restarts in that pane, so an id-keyed chain would be gone by morning; a cwd is shared by every
 session working in one project, and what was asked for is per terminal. A name is what survives a
 restart, which is what makes it the identity of the terminal rather than of the process. The phone
 keys its favourites and its hidden set the same way and for the same reason. The price is that a
 rename is the one thing that can lose a chain, which is why `renamed` below exists and why the
 rename endpoint calls it — a chain that vanishes on `/rename` is the same bug as a lost star.
+
+The machine half is what stops that name being ambiguous across the network. Names are derived
+from the folder, so two machines produce `deckhand` or `dotfiles` without trying, and unprefixed
+they would silently share one chain — a filter someone set on the Mac quietly rewriting words on
+Ubuntu. `_migrate` prefixes every key written before this existed with the primary machine, which
+is where all of them were written.
 
 A missing or unreadable file loads as an empty chain. Every store in this daemon does that, and
 here it matters more than most: a half-written settings file must not be able to stop someone
@@ -23,11 +29,18 @@ import json
 from pathlib import Path
 
 from ..config import data_dir
+from ..fleet import here
 from ..log import log
 
 
 def path() -> Path:
     return data_dir() / "filters.json"
+
+
+def key(machine: str, name: str) -> str:
+    """The key one terminal's chain is filed under. A session with no machine on it is this one —
+    which is what a `Session` built before the field existed, or by a test, actually is."""
+    return f"{machine or here()}/{name}"
 
 
 def load(session_name: str) -> list[dict]:
@@ -81,9 +94,9 @@ def _read() -> dict[str, list[dict]]:
         return {}
     chains = saved.get("chains")
     if isinstance(chains, dict):
-        return {
+        return _migrate({
             str(name): _steps(steps) for name, steps in chains.items() if isinstance(steps, list)
-        }
+        })
     if isinstance(saved.get("steps"), list):
         _retire(saved["steps"])
         return {}
@@ -110,6 +123,22 @@ def _retire(steps: list) -> None:
         path().rename(kept)
     except OSError as trouble:
         log.warning("could not move the old chain aside: %s", trouble)
+
+
+def _migrate(chains: dict[str, list[dict]]) -> dict[str, list[dict]]:
+    """Carry chains filed under a bare name onto `machine/name`, once.
+
+    Every key without a `/` predates the network, so it was written on this Mac and belongs to it.
+    Written back rather than translated on each read: a chain that is still unprefixed tomorrow is
+    a chain the next rename or save would file twice.
+    """
+    bare = [name for name in chains if "/" not in name]
+    if not bare:
+        return chains
+    moved = {(key("", name) if name in bare else name): steps for name, steps in chains.items()}
+    _write(moved)
+    log.info("filed %d filter chain(s) under %s", len(bare), here())
+    return moved
 
 
 def _write(chains: dict[str, list[dict]]) -> None:

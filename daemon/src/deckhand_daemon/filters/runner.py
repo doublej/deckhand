@@ -21,11 +21,11 @@ async def run(prompt: Prompt) -> Outcome:
     """Every step that is on, in order, each one handed what the last one left.
 
     The chain belongs to the terminal, so which steps these are comes from the prompt's own
-    `session_name`: a prompt with no name behind it filters through nothing, which is what an
-    unknown terminal should do rather than inheriting somebody else's chain.
+    machine and `session_name`: a prompt with no name behind it filters through nothing, which is
+    what an unknown terminal should do rather than inheriting somebody else's chain.
     """
     outcome = Outcome(text=prompt.text)
-    for step in config.load(prompt.session_name):
+    for step in config.load(config.key(prompt.machine, prompt.session_name)):
         name = step["filter"]
         if not step["on"]:
             continue

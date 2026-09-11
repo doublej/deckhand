@@ -23,6 +23,9 @@ class Prompt:
     text: str
     session_id: str
     session_name: str = ""
+    #: Which machine that terminal is on. Empty is this one, so a filter written before the
+    #: network — and every test that builds a `Prompt` by hand — keeps working.
+    machine: str = ""
     cwd: str = ""
     route: str = "auto"
     images: list[str] = field(default_factory=list)

@@ -31,6 +31,9 @@ def marker(name, *, adds="", note="", stop=False, boom=False, seen=None):
 # Which terminal the words were spoken at. A chain belongs to one, so every test that saves a
 # chain and then runs one has to agree on whose chain it is.
 TERMINAL = "warm-okapi"
+# What that terminal's chain is filed under: the name with its machine in front, which is
+# what the runner composes out of the prompt.
+CHAIN = config.key("", TERMINAL)
 
 
 def said(text="hello", terminal=TERMINAL, **rest):
@@ -41,17 +44,17 @@ def test_the_chain_runs_in_the_order_it_is_written(chain):
     marker("a", adds="+a")
     marker("b", adds="+b")
 
-    config.save(TERMINAL, [{"filter": "a"}, {"filter": "b"}])
+    config.save(CHAIN, [{"filter": "a"}, {"filter": "b"}])
     assert run(filters.run(said("x"))).text == "x+a+b"
 
-    config.save(TERMINAL, [{"filter": "b"}, {"filter": "a"}])
+    config.save(CHAIN, [{"filter": "b"}, {"filter": "a"}])
     assert run(filters.run(said("x"))).text == "x+b+a"
 
 
 def test_a_step_that_is_off_is_stepped_over(chain):
     marker("a", adds="+a")
     marker("b", adds="+b")
-    config.save(TERMINAL, [{"filter": "a", "on": False}, {"filter": "b"}])
+    config.save(CHAIN, [{"filter": "a", "on": False}, {"filter": "b"}])
 
     assert run(filters.run(said("x"))).text == "x+b"
 
@@ -61,7 +64,7 @@ def test_a_stop_ends_the_chain_and_says_why(chain):
     marker("first", adds="+first", seen=ran)
     marker("gate", note="already logged as #12", stop=True, seen=ran)
     marker("never", adds="+never", seen=ran)
-    config.save(TERMINAL, [{"filter": "first"}, {"filter": "gate"}, {"filter": "never"}])
+    config.save(CHAIN, [{"filter": "first"}, {"filter": "gate"}, {"filter": "never"}])
 
     outcome = run(filters.run(said("x")))
 
@@ -75,7 +78,7 @@ def test_a_stop_ends_the_chain_and_says_why(chain):
 def test_a_stop_with_nothing_to_say_still_gets_a_reason(chain):
     """A message that vanishes without a reason is the bug the whole chain exists to avoid."""
     marker("mute", stop=True)
-    config.save(TERMINAL, [{"filter": "mute"}])
+    config.save(CHAIN, [{"filter": "mute"}])
 
     assert run(filters.run(said("x"))).reason == "mute stopped it"
 
@@ -83,7 +86,7 @@ def test_a_stop_with_nothing_to_say_still_gets_a_reason(chain):
 def test_a_filter_that_raises_is_survived_and_the_words_go_through(chain):
     marker("boom", boom=True)
     marker("after", adds="+after")
-    config.save(TERMINAL, [{"filter": "boom"}, {"filter": "after"}])
+    config.save(CHAIN, [{"filter": "boom"}, {"filter": "after"}])
 
     outcome = run(filters.run(said("what I actually said")))
 
@@ -94,7 +97,7 @@ def test_a_filter_that_raises_is_survived_and_the_words_go_through(chain):
 
 def test_a_filter_that_answers_with_nonsense_is_treated_as_broken(chain):
     registry.register(filters.Filter(name="odd", title="odd", summary="odd", apply=lambda p, s: None))
-    config.save(TERMINAL, [{"filter": "odd"}])
+    config.save(CHAIN, [{"filter": "odd"}])
 
     outcome = run(filters.run(said("x")))
 
@@ -108,7 +111,7 @@ def test_an_async_filter_is_awaited(chain):
         return filters.Verdict(text=prompt.text.upper(), note="shouted it")
 
     registry.register(filters.Filter(name="slow", title="slow", summary="slow", apply=slowly))
-    config.save(TERMINAL, [{"filter": "slow"}])
+    config.save(CHAIN, [{"filter": "slow"}])
 
     outcome = run(filters.run(said("quiet")))
 
@@ -118,7 +121,7 @@ def test_an_async_filter_is_awaited(chain):
 
 def test_a_chain_naming_a_filter_this_mac_no_longer_has_is_noted_not_fatal(chain):
     marker("real", adds="+real")
-    config.save(TERMINAL, [{"filter": "ghost"}, {"filter": "real"}])
+    config.save(CHAIN, [{"filter": "ghost"}, {"filter": "real"}])
 
     outcome = run(filters.run(said("x")))
 
@@ -128,7 +131,7 @@ def test_a_chain_naming_a_filter_this_mac_no_longer_has_is_noted_not_fatal(chain
 
 def test_one_filter_can_appear_twice_with_different_settings(chain):
     registry.register(words.WORDS)
-    config.save(TERMINAL, [
+    config.save(CHAIN, [
         {"filter": "words", "settings": {"pairs": [["deck hand", "deckhand"]]}},
         {"filter": "words", "settings": {"pairs": [["tu y", "TUI"]]}},
     ])
@@ -145,23 +148,23 @@ def test_one_filter_can_appear_twice_with_different_settings(chain):
 def test_a_corrupt_chain_loads_as_empty_rather_than_stopping_anyone_speaking(chain):
     config.path().write_text("{this was half written when the Mac went to sleep")
 
-    assert config.load(TERMINAL) == []
+    assert config.load(CHAIN) == []
     assert run(filters.run(said("x"))).text == "x"
 
 
 def test_a_chain_is_one_terminals_and_not_anothers(chain):
     """The whole point of the change: the same words go through different steps per terminal."""
     marker("a", adds="+a")
-    config.save(TERMINAL, [{"filter": "a"}])
+    config.save(CHAIN, [{"filter": "a"}])
 
     assert run(filters.run(said("x"))).text == "x+a"
     assert run(filters.run(said("x", terminal="cold-otter"))).text == "x"
-    assert config.load("cold-otter") == []
+    assert config.load(config.key("", "cold-otter")) == []
 
 
 def test_a_prompt_with_no_terminal_behind_it_filters_through_nothing(chain):
     marker("a", adds="+a")
-    config.save(TERMINAL, [{"filter": "a"}])
+    config.save(CHAIN, [{"filter": "a"}])
 
     assert run(filters.run(said("x", terminal=""))).text == "x"
 

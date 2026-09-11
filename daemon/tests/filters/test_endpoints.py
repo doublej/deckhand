@@ -80,8 +80,8 @@ def test_a_rename_carries_the_chain_onto_the_new_name(token, monkeypatch):
     answer = c.post(f"/sessions/{SID}/name", json={"name": "bright-heron"}).json()
 
     assert answer == {"renamed": "bright-heron", "was": "warm-okapi", "carried_filters": True}
-    assert filters.load("bright-heron") == [{"filter": "words", "on": True, "settings": {}}]
-    assert filters.load("warm-okapi") == []
+    assert filters.load(filters.key("", "bright-heron")) == [{"filter": "words", "on": True, "settings": {}}]
+    assert filters.load(filters.key("", "warm-okapi")) == []
 
 
 def test_the_words_that_reach_a_session_are_the_filtered_ones(token, monkeypatch):

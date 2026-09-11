@@ -321,7 +321,10 @@ async def rename_session(session_id: str, name: str = Body(embed=True)) -> dict:
     # A filter chain is filed under the session's name, so it has to be carried across exactly as
     # the phone carries a star. Done now rather than when the rename lands: a busy session runs
     # the command when its turn ends, and the phone moves its own favourites on the same optimism.
-    carried = filters.renamed(session.name, deliver.clean_name(name))
+    carried = filters.renamed(
+        filters.key(session.machine, session.name),
+        filters.key(session.machine, deliver.clean_name(name)),
+    )
     return {"renamed": deliver.clean_name(name), "was": session.name, "carried_filters": carried}
 
 @app.post("/live/token", dependencies=[Depends(require_token)])

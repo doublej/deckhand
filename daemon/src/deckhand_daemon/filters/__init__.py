@@ -10,7 +10,7 @@ module, so the import list below is the only thing that has to change to add one
 """
 
 from . import crafting, words  # noqa: F401  -- imported for the register they fill on the way past
-from .config import load, path, renamed, save
+from .config import key, load, path, renamed, save
 from .kinds import Field, Filter, Outcome, Prompt, Verdict
 from .registry import known, register
 from .runner import run
@@ -21,6 +21,7 @@ __all__ = [
     "Outcome",
     "Prompt",
     "Verdict",
+    "key",
     "known",
     "load",
     "path",

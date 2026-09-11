@@ -75,7 +75,7 @@ def listing() -> dict:
 def one(session: sessions.Session, turns: int) -> dict:
     """Everything about one session worth knowing before acting on it."""
     brief = briefings.of(session.session_id)
-    chain = filter_config.load(session.name)
+    chain = filter_config.load(filter_config.key(session.machine, session.name))
     parts = [
         f"{session.name} [{session.status}] in {_tilde(session.cwd)}",
         f"id: {session.session_id}",
