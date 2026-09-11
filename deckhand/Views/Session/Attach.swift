@@ -146,3 +146,42 @@ extension View {
     /// Draw this as one of the card's foot controls. See ``Chip``.
     func chip(_ fill: Color) -> some View { modifier(Chip(fill: fill)) }
 }
+
+/// A way into the words, at the foot of the staging box on the right: Alias, then Edit.
+///
+/// A glyph and a word with nothing behind them — the quietest controls on the card. Neither
+/// sends nor throws away: Edit opens the words, Alias marks one of them for good. 44pt of
+/// finger under 11pt of ink, the trade `SayRest` makes.
+///
+/// One type rather than two views, for ``Chip``'s own reason, written directly above: two
+/// controls built separately stop matching, and these two sit four points apart where that is
+/// unmissable.
+struct WayIn: View {
+    let word: String
+    let symbol: String
+    /// Only the last control in the row loses its trailing inset, so the row ends on the column
+    /// the words above it end on — the mirror of what `SayRest` does on the leading side.
+    var last = false
+    let open: () -> Void
+    @Environment(\.accent) private var accent
+
+    /// The minimum a finger can be asked to hit. The same raw number `ReviewActions`, `SayRest`
+    /// and `FilesView` write: no spacing token means "a finger".
+    private static let touch: CGFloat = 44
+
+    var body: some View {
+        Button(action: open) {
+            Label(word, systemImage: symbol)
+                .font(Typography.hint)
+                .foregroundStyle(accent)
+                .lineLimit(1)
+                .chip(.clear)
+                .padding(.trailing, last ? -Chip.insets.trailing : 0)
+                // Bottom of the box, for the reason `SayRest.face` gives: these sit on the card's
+                // foot row and centred ink floats above the edge it belongs on.
+                .frame(minHeight: Self.touch, alignment: .bottomTrailing)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+    }
+}

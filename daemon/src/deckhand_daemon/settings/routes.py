@@ -11,7 +11,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Body
 
-from . import wants
+from . import aliases, wants
 
 router = APIRouter(tags=["settings"])
 
@@ -25,6 +25,23 @@ def read() -> dict:
 def write(sent: Annotated[dict, Body()]) -> dict:
     """What was stored, which is not always what was sent — see `wants.save`."""
     return wants.save(sent)
+
+
+@router.get("/aliases")
+def read_aliases() -> dict:
+    """Every word this Mac swaps on the way out of utt, as rows of two: heard, then meant."""
+    return {"aliases": aliases.load()}
+
+
+@router.put("/aliases")
+def write_aliases(aliases_sent: Annotated[list, Body(embed=True, alias="aliases")]) -> dict:
+    """Replace the list whole, the way `/settings` and `/filters` are written.
+
+    Answers with what was stored rather than what was sent: a row with nothing on its left is
+    dropped, and a word aliased twice keeps only the later answer. A screen that followed its own
+    copy would then be showing a list this Mac is not running.
+    """
+    return {"aliases": aliases.save(aliases_sent)}
 
 
 @router.get("/settings/project")

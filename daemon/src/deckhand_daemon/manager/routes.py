@@ -21,6 +21,7 @@ from fastapi import APIRouter, Body, HTTPException, Query, UploadFile
 
 from .. import config, plugin, sessions, transcribe
 from ..log import log
+from ..settings import aliases
 from . import agent, talk
 
 router = APIRouter(tags=["manager"])
@@ -77,8 +78,13 @@ async def speak_to_manager(
     plugin.status(lastClip=f"the manager, {heard.error or 'heard'}")
     if heard.error or not (heard.text or "").strip():
         return {"text": heard.text, "error": heard.error, "said": False}
-    entry = agent.ask(heard.text) if say else {}
-    return {"text": heard.text, "error": None, "said": bool(entry), "entry": entry or None}
+    # The same Mac-wide aliases a session's clip gets, and this is the half of them a per-terminal
+    # word list could never reach: the manager runs no filter chain. `notes` is what the card
+    # draws under the words, so a swap is never silent here either.
+    spoken, swaps = aliases.applied(heard.text)
+    entry = agent.ask(spoken) if say else {}
+    return {"text": spoken, "error": None, "said": bool(entry), "entry": entry or None,
+            "notes": swaps}
 
 
 @router.post("/manager/clear")
@@ -89,7 +95,7 @@ def clear_manager() -> dict:
 
 
 def _hints() -> list[str]:
-    words = {"deckhand", "manager", "session", "slip", "pane", "orders"}
+    words = {"deckhand", "manager", "session", "slip", "pane", "orders", *aliases.spoken()}
     for session in sessions.live_sessions():
         words.update(session.name.replace("-", " ").split())
         words.update(part for part in Path(session.cwd).parts[-2:] if part not in ("/", "Users"))

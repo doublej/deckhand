@@ -34,6 +34,7 @@ the wire.** Everywhere else the word is the same on both sides.
 |---|---|---|
 | **clip** | The recorded audio the phone sends. | recording, voice note |
 | **hint** | A word handed to utt to bias transcription (`transcribe.hints_for`). | prompt, vocabulary |
+| **alias** | One pair kept for the whole Mac: what utt hands back, and what was actually said. Swapped on every clip, before the chain and before the manager (`settings/aliases.py`). The per-terminal version is a step in the `words` filter and is never called an alias. | replacement, correction, substitution |
 | **route** | Keyboard or socket — whose authority the words carry. `auto`, `keyboard`, `socket`. | channel, transport |
 | **keyboard route** | `it2 session send` typing into the pane, as the person at the machine. | type route, direct |
 | **socket route** | The session's own peer socket, labelled as another agent. | fallback (in code), IPC |

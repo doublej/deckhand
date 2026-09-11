@@ -130,6 +130,9 @@ the session. `?deliver=false` transcribes without sending, for the review card, 
   said so; `POST /projects/session` opens a terminal there and answers with the session itself
 - `GET|PUT /settings` — what this Mac has been set to do, globally and per folder; `GET
   /settings/project?path=` is the resolved answer for one of them
+- `GET|PUT /aliases` — the words this Mac always mishears and what they were meant to be, as rows
+  of two. Swapped into every clip the moment utt answers, so the card, the session and the
+  manager all read the one sentence; the right-hand side also goes into the next clip's hints
 - `GET|PUT /sessions/{id}/orders` — what this session is to keep in mind, carried in front of
   every prompt it is sent. Empty adds nothing at all
 - `POST /sessions/{id}/notify` — an agent asking for the person outright, in its own words

@@ -201,6 +201,15 @@ check, which speaks to a session rather than to a person). Plus `subagents`, off
 which lets the summariser read what a folder's subagents did. `GET|PUT /settings` is the whole document;
 `GET /settings/project?path=` is the resolved answer for one folder.
 
+`settings/aliases.py` is the one thing in that folder with no path on it, and deliberately: an
+**alias** is a word this Mac always mishears and what it was meant to be, and a voice is not a
+property of a folder. `GET|PUT /aliases` is the list, rows of two. The swap runs in
+`saying.upload_audio` and `manager/routes.speak_to_manager` the moment utt answers — in front of
+the filter chain, which a per-terminal `words` step could never be, and in front of the manager,
+which runs no chain at all. `aliases.swap` is the one copy of the whole-word rule; `words.py`
+calls it. Read the top of `aliases.py` before moving any of this: it records why utt's own
+replacement list cannot be written from here and have it apply to Deckhand's clips.
+
 - **Path, not session id.** "Per session" is what was asked for, and a session id is the wrong
   key for it — it changes every restart, so the preference would be gone by morning. The folder
   is stable, and a session's page edits the folder it is running in. (Stars and hidden rows key

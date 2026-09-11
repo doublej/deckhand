@@ -21,6 +21,12 @@ final class Switchboard {
     var saving: String?
     /// Why the last write did not land. Kept until the next attempt: it is the only receipt.
     var failed: String?
+    /// Every word this Mac swaps on the way out of utt, as rows of two: heard, then meant.
+    ///
+    /// Here rather than beside the filter chain, because that is what it is: a chain belongs to
+    /// one terminal and this list belongs to the Mac. Empty until the Mac has answered, which on
+    /// this one is honest — an empty list and an unasked question both swap nothing.
+    var aliases: [Alias] = []
 
     /// What applies in a folder right now, with nothing from the Mac yet standing in as the
     /// defaults — which are the daemon's own defaults, so the screen is not wrong, only early.
@@ -43,6 +49,30 @@ extension AppModel {
             wants.failed = nil
         } catch {
             wants.failed = reason(error)
+        }
+    }
+
+    /// The Mac's word list. Read where a card that might alias one is about to be drawn, and on
+    /// the settings page — cheap, and the alternative is a sheet offering to correct a word it
+    /// has already been told about.
+    func loadAliases() async {
+        guard let client = settings.client() else { return }
+        guard let list = try? await client.aliases() else { return }
+        wants.aliases = list
+    }
+
+    /// Replace the list, and keep the Mac's own reading of it: a row with nothing on its left is
+    /// dropped and a word aliased twice keeps only the later answer, so what was sent is not
+    /// always what is running. A failure leaves the screen showing what the Mac still has.
+    func storeAliases(_ list: [Alias]) {
+        guard let client = settings.client() else { return }
+        Task {
+            do {
+                wants.aliases = try await client.saveAliases(list)
+                wants.failed = nil
+            } catch {
+                wants.failed = reason(error)
+            }
         }
     }
 

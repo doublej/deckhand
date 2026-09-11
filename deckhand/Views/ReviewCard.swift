@@ -51,8 +51,13 @@ struct ReviewCard: View {
     /// The names this session answers to, fetched when the picker opens. Nil where there is
     /// nobody to ask — a deck column, or a card built from words with no session behind them.
     var commands: (() async -> [SlashCommand])?
+    /// What this Mac already swaps on the way out of utt, and the way to change it. Nil where
+    /// there is no Mac to write to — the same places `commands` is nil.
+    var aliases: [Alias] = []
+    var alias: (([Alias]) -> Void)?
     @State private var editing = false
     @State private var choosing = false
+    @State private var naming = false
     /// Set by `SayRest` while a clip it took is with the Mac. See `waiting`.
     @State private var adding = false
     @Environment(\.accent) private var accent
@@ -102,6 +107,17 @@ struct ReviewCard: View {
                 editing = false
             }
         }
+        .sheet(isPresented: $naming) {
+            if let alias {
+                // Into the draft as well as onto the Mac: the person is looking at the word that
+                // came out wrong, and a rule saved without fixing what is on screen asks them to
+                // correct it twice. See `Aliasing`.
+                Aliasing(words: words, existing: aliases) { rows, corrected in
+                    alias(rows)
+                    draft = corrected
+                }
+            }
+        }
         .sheet(isPresented: $choosing) {
             if let commands {
                 // Into the draft, not out of the card: the whole point is that the words are
@@ -110,36 +126,6 @@ struct ReviewCard: View {
             }
         }
     }
-
-    /// Edit, at the foot of the box on the right, drawn the way `SayRest` is drawn.
-    ///
-    /// A glyph and a word with nothing behind them: this is the quietest of the three things you
-    /// can do — it neither sends nor throws away, it just opens the words. 44pt of finger under
-    /// 11pt of ink, the trade `SayRest` makes. No trailing padding, so it ends on the column the
-    /// words above it end on.
-    private var openWords: some View {
-        Button { editing = true } label: {
-            Label("Edit", systemImage: "square.and.pencil")
-                .font(Typography.hint)
-                .foregroundStyle(accent)
-                .lineLimit(1)
-                .chip(.clear)
-                // Pulled back by its own trailing inset, the mirror of what `SayRest` does on
-                // the leading side: the chip is what makes the two boxes match, and neither may
-                // pay for it by moving off the column it sits on.
-                .padding(.trailing, -Chip.insets.trailing)
-                // Bottom of the box, for the reason `SayRest.face` gives: these two sit on the
-                // card's foot row and centred ink floats above the edge it belongs on.
-                .frame(minHeight: Self.touch, alignment: .bottomTrailing)
-                .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("edit-prompt")
-    }
-
-    /// The minimum a finger can be asked to hit. The same raw number `ReviewActions`, `SayRest`
-    /// and `FilesView` write, and for the same reason: no spacing token means "a finger".
-    private static let touch: CGFloat = 44
 
     /// The one left edge everything on this card is set against.
     ///
@@ -215,7 +201,21 @@ struct ReviewCard: View {
                 HStack(spacing: 0) {
                     if let more { SayRest(more: more, words: words, adding: $adding) { draft = nil } }
                     Spacer(minLength: Spacing.small)
-                    if !compact { openWords }
+                    if !compact {
+                        // Beside Edit rather than below the box, because it is the same kind of
+                        // move: a way into the words. Edit changes them once; this changes the
+                        // word everywhere, for good — see `Aliasing`.
+                        if alias != nil {
+                            WayIn(word: "Alias", symbol: "textformat.abc.dottedunderline") {
+                                naming = true
+                            }
+                            .accessibilityIdentifier("alias-prompt")
+                        }
+                        WayIn(word: "Edit", symbol: "square.and.pencil", last: true) {
+                            editing = true
+                        }
+                        .accessibilityIdentifier("edit-prompt")
+                    }
                 }
                 // Down into the box's own bottom padding. Bottom-aligned in a 44pt frame the
                 // ink still stood 20 points off the edge — the padding is the card's and the

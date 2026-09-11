@@ -26,6 +26,7 @@ from fastapi import APIRouter, Body, HTTPException, Query, UploadFile
 
 from . import config, deliver, filters, orders, plugin, push, sessions, transcribe
 from .log import log, took
+from .settings import aliases
 
 router = APIRouter(tags=["saying"])
 
@@ -128,7 +129,17 @@ async def upload_audio(
     ms.update(heard.stages)
     log.info("transcript for %s: %s", session.name, heard.error or repr(heard.text))
     plugin.status(lastClip=f"{session.name}, {heard.error or 'heard'}")
-    taken, delivery_error, checked = await _handled(session, heard.text, route, deliver_now, ms)
+    # Before the chain and before `heard.text` is handed anywhere, so the card, the session and
+    # the manager all read the one sentence. `heard.text` itself is left as utt said it — it is
+    # what `transcript` answers with, and `Rewrites` on the phone diffs utt's `raw` against it to
+    # name which of utt's stages changed something. Swapping it here would put this Mac's own
+    # word list on that line under utt's name, which is the one lie that view exists to avoid.
+    spoken, swaps = aliases.applied(heard.text) if heard.text else (heard.text, [])
+    taken, delivery_error, checked = await _handled(session, spoken, route, deliver_now, ms)
+    # In front of whatever the chain said, because it happened in front of it. The card draws
+    # these as the quiet line under the words: there is no size of card on which it is acceptable
+    # to show somebody a word they did not say without saying so.
+    checked.notes[:0] = swaps
     ms["total"] = round((time.perf_counter() - whole) * 1000, 1)
     _record(session, path, len(body), seconds, heard, taken is not None, ms)
     return _receipt(path, body, heard, taken, delivery_error, checked, ms)

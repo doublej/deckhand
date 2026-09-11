@@ -64,7 +64,11 @@ struct Rewrites: View {
             found.append(Change(id: who, before: raw, after: filtered.heard ?? prepared))
         }
         if let heard = filtered.heard {
-            found.append(Change(id: "the filters on this Mac", before: heard, after: prepared))
+            // Both in one name, because both are Deckhand and one diff covers them: the Mac-wide
+            // alias list runs before the chain does, so a swap on this line may have come from
+            // either. Which one it was is in the note above — this says which app to go and open.
+            found.append(Change(id: "this Mac's word list and filters",
+                                before: heard, after: prepared))
         }
         return found
     }

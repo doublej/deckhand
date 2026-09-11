@@ -21,6 +21,7 @@ from pathlib import Path
 
 from . import plugin
 from .log import log, took
+from .settings import aliases
 
 # utt loads its model on the first clip after launch, and that one is slow.
 TIMEOUT = 180
@@ -162,8 +163,16 @@ VOCABULARY = (
 def hints_for(name: str, cwd: str) -> list[str]:
     """Every clip was dictated at a named session working in a known folder. Those are the
     words most likely to be in it and most likely to come back wrong, and we have them before
-    the clip is even recorded."""
-    words = {*VOCABULARY, *name.replace("-", " ").split()}
+    the clip is even recorded.
+
+    The aliases go in too, and only their right-hand side. An alias is a word this Mac has been
+    told it gets wrong, and what it should have been — so the second half is exactly the word to
+    bias the recogniser towards. The two halves of the fix are not the same fix: a hint makes the
+    word less likely to come back wrong at all, and the swap in `settings/aliases.py` catches it
+    when it does anyway. Only the swap can be relied on; a hint only displaces text already
+    nearly it.
+    """
+    words = {*VOCABULARY, *aliases.spoken(), *name.replace("-", " ").split()}
     words.update(part for part in Path(cwd).parts[-2:] if part not in ("/", "Users"))
     return sorted(word for word in words if len(word) > 2)
 

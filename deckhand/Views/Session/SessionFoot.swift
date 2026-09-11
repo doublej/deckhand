@@ -205,9 +205,17 @@ struct SessionFoot: View {
                 // The names this session answers to, for the front of the words. Fetched when
                 // the picker opens rather than held here: two hundred of them, and most cards
                 // never ask.
-                commands: { await model.commands(for: session) }
+                commands: { await model.commands(for: session) },
+                // The Mac's word list, so the sheet can say what is already on it and correct a
+                // row rather than doubling it.
+                aliases: model.wants.aliases,
+                alias: { model.storeAliases($0) }
             )
             .frame(maxWidth: .infinity)
+            // Read when a card appears rather than polled: nothing but this phone changes it,
+            // and a sheet offering to alias a word it has already been told about is the one
+            // thing this list gets wrong.
+            .task { await model.loadAliases() }
             // Down into the safe area, the same move the mark makes and inside the same ceiling.
             //
             // The arithmetic is `talk`'s, because the geometry is: the stack this slot overlays

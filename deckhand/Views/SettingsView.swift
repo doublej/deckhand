@@ -11,6 +11,10 @@ struct SettingsView: View {
     /// on `Preferences`, which is a persisted document with an initialiser, defaults and tests
     /// behind it: this is a design question with an answer coming, and two lines either way.
     @AppStorage("talk.letters") private var letters = false
+    /// The word list as this page is editing it, seeded from the Mac and written back on the way
+    /// out. Held here rather than bound straight through to `wants.aliases`, so that a row half
+    /// typed is not a row the card behind this page is already swapping on.
+    @State private var aliases: [Alias] = []
 
     var body: some View {
         NavigationStack {
@@ -20,6 +24,7 @@ struct SettingsView: View {
                     buzz
                     models
                     talking
+                    words
                     route
                     linking
                     hidden
@@ -27,7 +32,16 @@ struct SettingsView: View {
                 }
                 .padding(Spacing.medium)
             }
-            .task { await model.loadSettings() }
+            .task {
+                await model.loadSettings()
+                await model.loadAliases()
+                aliases = model.wants.aliases
+            }
+            // Both ways off this page come through here — Done and a swipe down — the same place
+            // `SessionFilters` writes its chain, and for the same reason.
+            .onDisappear {
+                if aliases != model.wants.aliases { model.storeAliases(aliases) }
+            }
             .background(Palette.surfaceGround)
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
@@ -156,6 +170,23 @@ struct SettingsView: View {
                 .pickerStyle(.segmented)
                 .frame(width: 180)
             }
+        }
+    }
+
+    /// The Mac's word list, in full, with the way off it.
+    ///
+    /// The card is where an alias is *made*, one word at a time, standing over the mistake. This
+    /// is where the list is read and pruned — an alias that fires on the wrong word is found by
+    /// reading the list, not by waiting for it to happen again.
+    ///
+    /// Edited here and written on the way off the page, for `SessionFilters`' reason: a text
+    /// field changes on every letter, and one sentence typed into the Mac's own plugin page was
+    /// forty-odd writes in four seconds.
+    private var words: some View {
+        SettingsGroup("Aliases") {
+            Pairs(label: "Heard, and meant",
+                  hint: "Swapped on every clip, in every session and the manager alike.",
+                  rows: $aliases)
         }
     }
 
