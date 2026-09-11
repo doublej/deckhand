@@ -87,6 +87,17 @@ context.py      # the CLAUDE.md tree a session in a folder is loaded with, befor
 - **`updated_at` is the moment a session's status last changed, not a heartbeat.** Measured here:
   a session reporting `busy` with a 1553 s old stamp while it was mid-turn. So it is only the age
   of an *idle* session.
+- **And Claude Code sometimes stops writing that record at all**, which is a `busy` that outlives
+  its turn by however long the session then sits there. Measured: a record froze at the prompt
+  that started background agents, and four whole turns began and ended after it without one
+  rewrite — the phone read WORKING for half an hour at a session waiting to be spoken to. The
+  **age of the claim cannot be the test**, because the record is written twice a turn and never
+  in between: over six minutes one session turning over rewrote it five times and one mid-turn
+  rewrote it not at all in 26. Two sessions proved it in the same minute — stale by 1546 s and
+  working, stale by 2036 s and finished. `transcripts.turn_ended` answers off the transcript
+  instead, which is a log and not a claim: `stop_reason` is `tool_use` while the model is still
+  going. `sessions._reading` uses it to lower a `busy` nothing is maintaining, never to raise
+  one, and moves `updated_at` to the turn's own end when it does — the rail fades a row by that.
 - **Thinking rides with the turn it produced.** The transcript carries `thinking` blocks in the
   same content list as `text` and `tool_use`, and they were dropped outright — 326 of them in one
   session here. They are collected exactly as tool calls are and handed to the next message with

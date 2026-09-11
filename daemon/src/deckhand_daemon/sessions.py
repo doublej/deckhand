@@ -17,7 +17,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from .log import log
-from .reading.transcripts import TAIL_WINDOWS, parse_line, tail_lines, transcript_path
+from .reading.transcripts import (
+    TAIL_WINDOWS,
+    parse_line,
+    tail_lines,
+    transcript_path,
+    turn_ended,
+)
 
 PANE_TTL = 3.0  # seconds; one `it2` call costs ~0.5 s and the phone polls every few
 # When iTerm will not answer, every call costs the full timeout. Back off instead of paying
@@ -169,6 +175,37 @@ def _fetch_panes() -> dict[str, Pane]:
 # anyway; make it a file if that ever stops being true.
 _current: dict[int, str] = {}
 _retired: dict[str, int] = {}
+#: Sessions caught claiming `busy` after their own transcript said the turn was over, so the log
+#: says it once rather than on every poll. Dropped with the session, like the two maps above.
+_frozen: set[str] = set()
+
+
+def _reading(rec: dict, session_id: str) -> tuple[str, float]:
+    """What this session is doing and since when, preferring the transcript over the registry.
+
+    The registry says `busy` until Claude Code writes `idle`, and it does not always write it —
+    see `reading.transcripts.turn_ended` for how that was measured and why the age of the claim
+    cannot be the test. Nothing here ever raises a session to `busy`: a record that has stopped
+    being maintained can only ever be over-claiming, and the transcript is only read to catch
+    that. When it has nothing to say the record stands exactly as it did.
+
+    The stamp moves with the status on purpose. `updated_at` is what the rail fades a row by, so
+    leaving a corrected session on the moment it went busy would draw the one that just stopped
+    talking as the faintest row on the screen.
+    """
+    status = rec.get("status", "unknown")
+    updated_at = rec.get("updatedAt", rec.get("startedAt", 0)) / 1000
+    if status != "busy" or not (ended := turn_ended(session_id)):
+        _frozen.discard(session_id)
+        return status, updated_at
+    if session_id not in _frozen:
+        _frozen.add(session_id)
+        log.info(
+            "%s still reads busy %.0f s on, but its last turn ended: listing it idle",
+            rec.get("name", session_id),
+            ended - updated_at,
+        )
+    return "idle", ended
 
 
 def succeeded_by(session_id: str) -> str:
@@ -203,14 +240,15 @@ def live_sessions(iterm_only: bool = True) -> list[Session]:
         pane = panes.get(tty)
         if pane is None and iterm_only and panes:
             continue
+        status, updated_at = _reading(rec, session_id)
         found.append(
             Session(
                 session_id=session_id,
                 pid=pid,
                 name=rec.get("name") or Path(rec.get("cwd", "")).name or f"pid {pid}",
                 cwd=rec.get("cwd", ""),
-                status=rec.get("status", "unknown"),
-                updated_at=rec.get("updatedAt", rec.get("startedAt", 0)) / 1000,
+                status=status,
+                updated_at=updated_at,
                 tty=tty,
                 pane=pane,
                 socket_path=rec.get("messagingSocketPath", ""),
@@ -221,6 +259,7 @@ def live_sessions(iterm_only: bool = True) -> list[Session]:
     for old, pid in list(_retired.items()):
         if pid not in procs:
             del _retired[old]
+    _frozen.intersection_update(s.session_id for s in found)
     found.sort(key=lambda s: s.updated_at, reverse=True)
     return [s for s in found if s.session_id]
 

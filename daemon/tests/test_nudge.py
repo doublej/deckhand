@@ -107,4 +107,11 @@ def test_the_question_is_addressed_to_the_session_by_name(deckhand_data, monkeyp
     asked = nudge._question([{"id": "t1", "state": "todo", "text": "ship it"}], "quiet-gannet")
     assert "quiet-gannet" in asked
     assert "misrouted" in asked
+    # A session that checks the wrong name declares a false misroute and answers nothing, so
+    # the message says where the name comes from and which way to fall when unsure.
+    assert "~/.claude/sessions/" in asked
+    assert "unsure" in asked
+    # Answered by messaging a peer instead, the reply never reaches the summariser, which
+    # reads the transcript. Observed live: framelink answered t35 to a peer, not in its turn.
+    assert "your own reply in this session" in asked
     assert "{" not in asked, "a placeholder left unfilled goes to a live session as the word"

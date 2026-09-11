@@ -12,12 +12,16 @@ import json
 import os
 import re
 from dataclasses import asdict, dataclass, field
+from datetime import datetime
 from pathlib import Path
 
 from .entries import absorbed, text_of, wrote_of
 
 # A session deep in a tool run can push its last words far back, so widen until turns appear.
 TAIL_WINDOWS = (512 * 1024, 4 * 1024 * 1024, 32 * 1024 * 1024)
+# Only the last entry decides whether a turn is over, so this never widens: a window holding no
+# whole entry answers "still in one", which leaves the session record's own claim standing.
+TURN_TAIL = 256 * 1024
 
 
 # The input field worth showing for each tool, in the order the phone would want to read it.
@@ -77,6 +81,55 @@ def transcript_path(session_id: str) -> Path | None:
         projects_dir().glob(f"*/{session_id}.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True
     )
     return matches[0] if matches else None
+
+
+def turn_ended(session_id: str) -> float:
+    """When this session's last turn ended, or 0 while it is still in one.
+
+    The registry's `status` is a claim Claude Code sometimes stops maintaining. Measured on this
+    Mac: a session's record froze at `busy` the moment its owner started background agents, and
+    four whole turns then began and ended without a single rewrite — the phone read WORKING for
+    half an hour at a session sitting at its prompt waiting to be spoken to.
+
+    **The age of the claim is not the test**, however tempting it looks. The record is written
+    exactly twice a turn and never in between: measured over six minutes, a session turning over
+    rewrote it five times while one mid-turn rewrote it not at all in 26 minutes. A `busy` stamp
+    is therefore as old as the turn is long, and no threshold separates a frozen record from a
+    long turn. Two sessions here proved it in the same minute — one stale by 1546 s and genuinely
+    working, one stale by 2036 s and finished.
+
+    The transcript answers instead, and it is a log rather than a claim: `stop_reason` is
+    `tool_use` while the model is still going and `end_turn` once it has handed control back.
+    On every session whose record *is* being maintained, that entry's timestamp and the
+    registry's own stamp agree to within a second — which is what makes it the same fact.
+    """
+    path = transcript_path(session_id)
+    if path is None:
+        return 0.0
+    for raw in reversed(tail_lines(path, TURN_TAIL)):
+        entry = parse_line(raw)
+        # A subagent's own rounds run in the parent's file and are not the parent's turn.
+        if entry is None or entry.get("isSidechain"):
+            continue
+        kind = entry.get("type")
+        # A prompt or a tool's answer, with nothing said after it: the model owes a reply either
+        # way. Without this a turn is briefly "over" between arriving and being started on.
+        if kind == "user":
+            return 0.0
+        if kind != "assistant":
+            continue  # hook summaries, attachments and the metadata lines say nothing about it
+        if entry.get("message", {}).get("stop_reason") == "tool_use":
+            return 0.0
+        return _at(entry.get("timestamp"))
+    return 0.0
+
+
+def _at(stamp: object) -> float:
+    """The epoch seconds in a transcript timestamp, or 0 for one that cannot be read."""
+    try:
+        return datetime.fromisoformat(str(stamp)).timestamp()
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def activity_since_last_user(session_id: str, cap: int = 12_000) -> str:
