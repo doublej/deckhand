@@ -19,7 +19,8 @@ the model's half of it together, the way `Views/Rail/Linking.swift` already does
 `LiveUpdates`). `Views/` is the screens, `Views/Session/` the session page's parts,
 `Views/Artifacts/` slips,
 `Views/Annotation/` marking up a picture (its own packet — read it before touching that folder),
-`Views/Archive/` every clip this phone has recorded, `Views/Talk/` the mark itself.
+`Views/Archive/` every clip this phone has recorded, `Views/Talk/` the mark itself,
+`Views/Reading/` the one turn a hold opens and the text view that makes it selectable.
 `Views/Artifacts/AloudCards.swift` is the other way a slip can be drawn — cards with the app's own
 talk mark, from a page that declared its questions (`Aloud`); `ArtifactView` is the one place that
 chooses between it and the web view. `Views/Projects/` is the picker that starts a new session; its state is `ProjectPicker`, in
@@ -126,6 +127,18 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   the other nine at rest — the same arrangement the deck uses for its columns. The accent is
   per-card for the same reason: the card being talked into goes utt orange and the rest stay teal,
   which is the only way a screen full of marks says which one is listening.
+- **`.textSelection(.enabled)` is not selection on iOS, and putting it back is the regression.**
+  On this floor it gives a `Text` one gesture with one meaning — select the whole view and offer
+  Copy — with no handles and no way to take a line out of a page. It was already on the turn and
+  on the file source, which is exactly what "I can only copy the entire thing" was: the modifier
+  working. Range selection is a `UITextView` and nothing else (`Views/Reading/SelectableText`),
+  so a hold on a turn opens `TurnReader` and the file viewer's source side is that text view.
+  The hold goes on the **words**, never on the card, for the reason every other gesture here is
+  written the way it is: a long press applied outside a control takes the touch from it, and the
+  card holds the thinking toggle. Where a screen has no reader — the manager panel — the turn
+  keeps the modifier rather than growing a second meaning for the same press.
+  `TurnReader` shows the **source**, not the rendering: a fenced command only exists there, and a
+  selection lifted out of a rendered view pastes back with its markdown stripped.
 - **A turn is drawn as the document it is, through `Markdown` rather than `Prose`.** The two
   renderers differ by what their contract is for: `Prose` shows anything outside its four blocks
   as the characters the model typed, because a summary is written against a prompt this repo owns

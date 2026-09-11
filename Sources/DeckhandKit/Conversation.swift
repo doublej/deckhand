@@ -56,6 +56,40 @@ public struct Turn: Codable, Hashable, Sendable {
     public func speaker(theirs: String = "CLAUDE") -> String {
         writtenBy.isEmpty ? (isUser ? "YOU" : theirs) : writtenBy.uppercased()
     }
+
+    /// When it was said, or nil where nothing said when.
+    ///
+    /// Nil is a real answer and not an error: the manager panel builds its turns by hand with no
+    /// stamp at all, and a turn still in flight is sent with an empty one because it has not
+    /// finished happening. Both draw no time rather than a wrong one.
+    ///
+    /// Two parses because the Mac hands over whatever Claude Code wrote in the transcript, and
+    /// that is ISO 8601 with fractional seconds — a spelling the plain reader rejects outright
+    /// rather than rounding. The second is the fallback for a stamp without them, so neither
+    /// spelling is the one that silently loses the time.
+    ///
+    /// `Date.ISO8601FormatStyle` and not `ISO8601DateFormatter`: the formatter is a class that
+    /// does not conform to `Sendable`, so holding one in a `static let` is a compile error under
+    /// this package's strict concurrency. The style is a value and costs nothing to make.
+    public var moment: Date? {
+        guard !timestamp.isEmpty else { return nil }
+        let precise = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
+        if let exact = try? precise.parse(timestamp) { return exact }
+        return try? Date.ISO8601FormatStyle().parse(timestamp)
+    }
+
+    /// The time to put on the card. Empty where ``moment`` is nil, so the view asks one question.
+    ///
+    /// The clock rather than "2m ago": a transcript is a record of when things happened, and a
+    /// relative age on a row that never moves is a number that goes stale while you read it.
+    /// The date comes too once the turn is not from today — a bare `13:03` on a turn from
+    /// Tuesday is the one reading that is actively wrong.
+    public var clock: String {
+        guard let moment else { return "" }
+        return Calendar.current.isDateInToday(moment)
+            ? moment.formatted(date: .omitted, time: .shortened)
+            : moment.formatted(date: .abbreviated, time: .shortened)
+    }
 }
 
 /// The conversation as the phone reads it: what has been said, and what you have said that

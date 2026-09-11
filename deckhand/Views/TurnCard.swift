@@ -11,6 +11,14 @@ struct TurnCard: View {
     /// the manager, and calling it Claude there would be the one screen where the word said
     /// nothing — every session on that panel is Claude too.
     var theirWord = "CLAUDE"
+    /// What a hold on the words opens, where this screen has somewhere for it to go.
+    ///
+    /// It goes on the words and never on the card, which is the trap this repo has already paid
+    /// for three times: a long press applied *outside* a control takes the touch from it, and
+    /// the card holds the thinking toggle. Nil leaves the turn exactly as it was — whole-card
+    /// selection, which is the only thing `.textSelection` does on iOS — and that is the manager
+    /// panel, which has no reader of its own.
+    var onHold: (() -> Void)?
     @Environment(\.accent) private var accent
     /// Closed until asked. Thinking is the longest thing in a turn and the least often wanted —
     /// a transcript that opened every block by default would be a transcript nobody could skim.
@@ -18,12 +26,7 @@ struct TurnCard: View {
 
     var body: some View {
         Card(spacing: Spacing.xxs) {
-            if showsRole {
-                Text(turn.speaker(theirs: theirWord))
-                    .font(Typography.eyebrow)
-                    .tracking(1)
-                    .foregroundStyle(turn.isUser ? accent : Palette.textTertiary)
-            }
+            header
             // Above the words, which is where it happened: this is how it got to what it says
             // next, the same argument that puts the tool trace above a message rather than under.
             thought
@@ -37,6 +40,32 @@ struct TurnCard: View {
                     .fill(accent)
                     .frame(width: 3)
                     .padding(.vertical, Spacing.extraSmall)
+            }
+        }
+    }
+
+    /// Who said it, and when.
+    ///
+    /// One row rather than two, because the speaker is only drawn at the top of a run and the
+    /// time is drawn on every turn: on the second turn of a run this row is the time alone,
+    /// hanging off the right edge where the eye already knows to find it. Skipped entirely when
+    /// there is neither — the manager panel builds its turns with no stamp, and an empty row
+    /// there would be a gap that means nothing.
+    @ViewBuilder private var header: some View {
+        if showsRole || !turn.clock.isEmpty {
+            HStack(spacing: Spacing.extraSmall) {
+                if showsRole {
+                    Text(turn.speaker(theirs: theirWord))
+                        .font(Typography.eyebrow)
+                        .tracking(1)
+                        .foregroundStyle(turn.isUser ? accent : Palette.textTertiary)
+                }
+                Spacer(minLength: 0)
+                Text(turn.clock)
+                    .font(Typography.hint)
+                    .foregroundStyle(Palette.textTertiary)
+                    .monospacedDigit()
+                    .accessibilityIdentifier("turn-time")
             }
         }
     }
@@ -104,10 +133,27 @@ struct TurnCard: View {
     /// one of those used to land here as punctuation, which is the same failure `Prose` exists to
     /// expose, arriving for the opposite reason. ``Markdown`` is also where the fence rule already
     /// lives, and a third renderer would be a third place that rule could drift out of step.
+    ///
+    /// A hold on it opens ``TurnReader`` where the screen has one, and then the turn carries no
+    /// `.textSelection` at all — two meanings for one press is how a gesture goes silently dead,
+    /// and the reader gives back everything the modifier did (Select All, then Copy) plus the
+    /// range selection it never could.
     @ViewBuilder private var said: some View {
         if !turn.text.isEmpty {
-            Markdown(turn.text)
-                .textSelection(.enabled)
+            if let onHold {
+                Markdown(turn.text)
+                    // The air between blocks is part of the turn, so a hold that lands in it has
+                    // to count; without a shape only the ink itself is pressable.
+                    .contentShape(.rect)
+                    .onLongPressGesture(perform: onHold)
+                    // On a container, and knowingly: this renames every `Text` under it, which
+                    // is the trap the manager panel fell into — but a rendered block has no
+                    // identifier of its own to lose, and the press has to land on one of them.
+                    .accessibilityIdentifier("turn-words")
+            } else {
+                Markdown(turn.text)
+                    .textSelection(.enabled)
+            }
         }
     }
 }

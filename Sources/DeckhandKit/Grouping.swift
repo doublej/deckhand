@@ -33,6 +33,23 @@ public extension Asset {
         return tail.isEmpty ? Self.noSuffix : tail.uppercased()
     }
 
+    /// What this file is called once it is on the phone — the name a share sheet puts on the
+    /// attachment, and the name it arrives under at the other end.
+    ///
+    /// The name is the Mac's answer, and here it becomes a path component on this phone, so it
+    /// is read as one rather than trusted as one: anything with a separator in it is cut to its
+    /// last piece, and the three components that name a directory rather than a file — `/`, `.`
+    /// and `..`, which would land the download on top of its own folder — fall through to the
+    /// path and then to a plain word. A leading dot is left alone: `.gitignore` is a file called
+    /// gitignore, the same decision ``suffix`` makes one property up.
+    var filename: String {
+        for candidate in [name, path] {
+            let last = (candidate as NSString).lastPathComponent
+            if !last.isEmpty, !["/", ".", ".."].contains(last) { return last }
+        }
+        return "file"
+    }
+
     /// One section of the Files tab: a suffix, and every file carrying it.
     struct Group: Identifiable, Sendable {
         public let suffix: String

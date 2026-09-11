@@ -50,6 +50,7 @@ struct AssetView: View {
                         formatting
                     }
                     ToolbarItemGroup(placement: .topBarTrailing) {
+                        sharing
                         if !markup.isEmpty {
                             // Not Send: it sends nothing. See `SnapView.hand`.
                             Button("Add to card") { hand() }
@@ -86,11 +87,7 @@ struct AssetView: View {
                     pencilling: pencilling,
                     say: say)
         case .words(let text):
-            ScrollView {
-                words(text)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(Spacing.medium)
-            }
+            words(text)
         case .film(let player):
             VideoPlayer(player: player)
         case nil:
@@ -104,14 +101,26 @@ struct AssetView: View {
     /// want the moment the rendering is the thing in question, or you need to copy a fenced
     /// command out of it, and selection lives on the source view for exactly that reason. A long
     /// press inside a sideways-scrolling code block would be fighting the scroll.
+    ///
+    /// That reason only became true here: the source was a `Text` carrying `.textSelection`,
+    /// which on iOS offers the whole file and nothing smaller. It is a ``SelectableText`` now, so
+    /// "select the line you want" is a thing the source view can actually do — and the `textformat`
+    /// button in the toolbar is how you get to it from the rendering.
+    ///
+    /// Each branch brings its own scrolling. The formatted side is a stack of blocks that needs a
+    /// `ScrollView` around it; the source side is a `UITextView`, which scrolls itself, and one
+    /// inside the other is a scroller that never reaches its own end.
     @ViewBuilder private func words(_ text: String) -> some View {
         if asset.isMarkdown, model.preferences.formatsMarkdown {
-            Markdown(text)
+            ScrollView {
+                Markdown(text)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(Spacing.medium)
+            }
         } else {
-            Text(text)
-                .font(Typography.mono)
-                .foregroundStyle(Palette.textPrimary)
-                .textSelection(.enabled)
+            SelectableText(text: text,
+                           font: .monospacedSystemFont(ofSize: 12, weight: .regular))
+                .padding(Spacing.medium)
         }
     }
 
@@ -140,6 +149,26 @@ struct AssetView: View {
     private func setFormatted(_ formats: Bool) {
         model.preferences.formatsMarkdown = formats
         model.preferences.save()
+    }
+
+    /// Hand the file itself to everything else on this phone — Mail, Messages, Files, a note.
+    ///
+    /// Off the copy already fetched for the view, so there is nothing to wait for and nothing
+    /// extra to clean up. That is also why it is absent rather than disabled until the file has
+    /// arrived: a Mac that is asleep, that refused the token, or that answered 413 because the
+    /// file is half a gigabyte has no file to hand over, and `waiting` is already saying which.
+    /// A picture this phone cannot draw still shares — `local` is set before it is read.
+    ///
+    /// `ShareLink` rather than a `UIActivityViewController` wrapped in a representable: the
+    /// floor is iOS 18, and the sheet names the attachment from the URL's last component, which
+    /// `DeckhandClient.download` has already made the file's real name.
+    @ViewBuilder private var sharing: some View {
+        if let local {
+            ShareLink(item: local) { Image(systemName: "square.and.arrow.up") }
+                .tint(Palette.tint)
+                .accessibilityLabel("Share \(asset.name)")
+                .accessibilityIdentifier("file-share")
+        }
     }
 
     /// Only a picture can be marked, so only a picture gets a pencil — and a Discard, which is the
@@ -238,7 +267,9 @@ struct AssetView: View {
 
     private func discard() {
         keep()
-        if let local { try? FileManager.default.removeItem(at: local) }
+        // The folder, not the file: `download` gives every file one of its own so it can keep
+        // its real name, and removing only the file would leave an empty folder behind per open.
+        if let local { try? FileManager.default.removeItem(at: local.deletingLastPathComponent()) }
         ready = nil
     }
 

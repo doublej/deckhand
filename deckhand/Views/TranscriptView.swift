@@ -15,6 +15,16 @@ struct TranscriptView: View {
     @Binding var earlier: Bool
     /// Set while a step back is in flight, so a second tap does not ask for the same page twice.
     @State private var stepping = false
+    /// The turn a hold has opened, and nil the rest of the time.
+    @State private var held: Held?
+
+    /// A turn on its way to the reader. Its own id rather than the turn's position, because the
+    /// poll renumbers every row on a prepend and a sheet identified by a number that moves under
+    /// it would re-present itself while somebody is reading.
+    private struct Held: Identifiable {
+        let id = UUID()
+        let turn: Turn
+    }
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -30,7 +40,9 @@ struct TranscriptView: View {
                             // What it ran sits above what it said, in the order it happened.
                             if !turn.tools.isEmpty { ToolTrace(tools: turn.tools) }
                             if !turn.text.isEmpty {
-                                TurnCard(turn: turn, showsRole: startsRun(index))
+                                TurnCard(turn: turn,
+                                         showsRole: startsRun(index),
+                                         onHold: { held = Held(turn: turn) })
                             }
                         }
                         .id(index)
@@ -71,6 +83,9 @@ struct TranscriptView: View {
             .onChange(of: queued.count) { scroll(proxy) }
             .onChange(of: session.isBusy) { scroll(proxy) }
             .onAppear { scroll(proxy) }
+            // Held here rather than on the card: a sheet per row in a lazy stack is a sheet
+            // that is torn down the moment the row it hangs off scrolls out of the list.
+            .sheet(item: $held) { TurnReader(turn: $0.turn) }
         }
     }
 

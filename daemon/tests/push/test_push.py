@@ -273,7 +273,7 @@ def test_an_agents_own_words_are_cut_to_the_asking_card(monkeypatch, blank):
 def test_the_card_is_the_shape_the_swift_type_decodes():
     """`attributes-type`, the field names and the kinds are the whole contract, and there is no
     Swift on the sending side to keep them in step — so read the Swift."""
-    swift = (Path(__file__).parents[2] / "Sources/DeckhandKit/LiveActivity.swift").read_text()
+    swift = (Path(__file__).parents[3] / "Sources/DeckhandKit/LiveActivity.swift").read_text()
     payload = push.sending._start(card(), "m2-2")["aps"]
     assert f"public struct {payload['attributes-type']}: ActivityAttributes" in swift
     state = swift.split("struct ContentState")[1].split("public init")[0]

@@ -98,6 +98,31 @@ struct TurnDecodingTests {
         #expect(turn.tools.first?.succeeded == false)
         #expect(turn.tools.first?.kind == .running)
     }
+
+    @Test("a stamp with fractional seconds reads, which is the one the Mac actually sends")
+    func fractional() {
+        // Claude Code writes the transcript with milliseconds, and the default
+        // `ISO8601DateFormatter` rejects that spelling outright rather than rounding it — so
+        // this is the case that decides whether any time is drawn at all.
+        let turn = Turn(role: "assistant", text: "done", timestamp: "2026-09-11T13:03:38.974Z")
+        #expect(turn.moment?.timeIntervalSince1970 == 1789131818.974)
+        #expect(!turn.clock.isEmpty)
+    }
+
+    @Test("and one without them reads too")
+    func whole() {
+        let turn = Turn(role: "assistant", text: "done", timestamp: "2026-09-11T13:03:38Z")
+        #expect(turn.moment?.timeIntervalSince1970 == 1789131818)
+    }
+
+    @Test("nothing to read draws nothing, rather than a wrong time")
+    func unreadable() {
+        // Both real: the manager panel builds its turns with no stamp, and a turn still in
+        // flight is sent with an empty one because it has not finished happening.
+        #expect(Turn(role: "user", text: "hi", timestamp: "").moment == nil)
+        #expect(Turn(role: "user", text: "hi", timestamp: "t").moment == nil)
+        #expect(Turn(role: "user", text: "hi", timestamp: "t").clock == "")
+    }
 }
 
 @Suite("What a session asked for and what it made")

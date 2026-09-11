@@ -85,3 +85,38 @@ struct GroupingTests {
         #expect(Asset.grouped([]).isEmpty)
     }
 }
+
+@Suite("What a downloaded file is called on the phone")
+struct FilenameTests {
+    /// The name is off the wire and becomes a path component here, so these are the cases that
+    /// decide where a download lands, not only what it is titled.
+    private func named(_ name: String, path: String = "/tmp/session/report.md") -> Asset {
+        Asset(path: path, name: name, kind: "text", size: 1, modified: 0)
+    }
+
+    @Test("a real name survives whole, which is the whole point of the share sheet")
+    func real() {
+        #expect(named("report.md").filename == "report.md")
+        // A dotfile is a file called gitignore, the same reading `suffix` gives it.
+        #expect(named(".gitignore").filename == ".gitignore")
+    }
+
+    @Test("a name carrying separators is cut to its last piece")
+    func separators() {
+        #expect(named("../../escape.md").filename == "escape.md")
+        #expect(named("/etc/passwd").filename == "passwd")
+    }
+
+    @Test("a component naming a folder rather than a file falls through to the path")
+    func folders() {
+        #expect(named("..").filename == "report.md")
+        #expect(named(".").filename == "report.md")
+        #expect(named("/").filename == "report.md")
+        #expect(named("").filename == "report.md")
+    }
+
+    @Test("nothing usable on either side still leaves a name to write")
+    func nothing() {
+        #expect(named("", path: "").filename == "file")
+    }
+}

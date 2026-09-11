@@ -59,7 +59,7 @@ public struct DeckhandClient: Sendable {
     ///
     /// To disk rather than into memory, because one of the three kinds is video: a rendered
     /// clip is routinely tens of megabytes, and AVPlayer wants a URL anyway. The caller owns
-    /// the file and deletes it.
+    /// the folder it lands in and deletes that, not the file.
     ///
     /// ponytail: the whole file lands before anything is shown. Fine over a LAN; if a
     /// half-gigabyte clip ever needs to start playing at once, that is a ranged asset loader.
@@ -69,11 +69,15 @@ public struct DeckhandClient: Sendable {
         req.timeoutInterval = 300
         let (temporary, response) = try await urlSession.download(for: req)
         try check(response, at: temporary)
-        // The session's own temporary file is gone the moment this returns, and the extension
-        // has to survive: AVFoundation picks its reader from it, exactly as utt does.
-        let kept = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString)
-            .appendingPathExtension((asset.name as NSString).pathExtension)
+        // The session's own temporary file is gone the moment this returns, and the whole name
+        // has to survive, not only the extension: AVFoundation picks its reader off the suffix,
+        // and a share sheet titles the attachment from the last path component — so a file kept
+        // under a UUID is a file somebody receives called a UUID. The folder is what keeps two
+        // `report.md`s off each other; the caller deletes the folder.
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let kept = folder.appendingPathComponent(asset.filename)
         try FileManager.default.moveItem(at: temporary, to: kept)
         return kept
     }
