@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import secrets
 import socket
+import sys
 from pathlib import Path
 
 PORT = 4180
@@ -17,9 +18,20 @@ TOKEN_HEADER = "x-deckhand-token"
 
 
 def data_dir() -> Path:
-    """Runtime state root. DECKHAND_DATA_DIR overrides it (tests, temp instances)."""
-    override = os.environ.get("DECKHAND_DATA_DIR")
-    root = Path(override) if override else Path.home() / "Library" / "Application Support" / "Deckhand"
+    """Runtime state root. DECKHAND_DATA_DIR overrides it (tests, temp instances).
+
+    A hand runs this same package on Linux or Windows, where `~/Library/Application Support` is
+    not a path anybody would find twice. Everything a hand keeps here is its token, so the
+    platform default only has to be somewhere ordinary and writable.
+    """
+    if override := os.environ.get("DECKHAND_DATA_DIR"):
+        root = Path(override)
+    elif sys.platform == "darwin":
+        root = Path.home() / "Library" / "Application Support" / "Deckhand"
+    elif sys.platform == "win32":
+        root = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "Deckhand"
+    else:
+        root = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")) / "deckhand"
     root.mkdir(parents=True, exist_ok=True)
     return root
 

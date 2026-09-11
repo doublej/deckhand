@@ -309,8 +309,18 @@ def live_token(token: str = Body(embed=True), kind: str = Body(embed=True),
 
 
 def main() -> None:
+    import sys
+
     import uvicorn
 
+    # `--hand` is a different app, not this one with routes switched off: see `fleet/hand.py`.
+    # Imported here rather than at module scope so the daemon does not pay for it, and so a
+    # hand never constructs this app — with its utt page, its APNs watcher and its manager.
+    if "--hand" in sys.argv[1:]:
+        from .fleet import hand
+
+        hand.main()
+        return
     log.info("deckhand %s  token: %s", config.base_url(), config.token())
     uvicorn.run(app, host="0.0.0.0", port=config.PORT, log_level="info")
 
