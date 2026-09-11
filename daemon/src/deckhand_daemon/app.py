@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import secrets
 from contextlib import asynccontextmanager
 from typing import Annotated
 
@@ -39,7 +40,10 @@ from .settings import routes as settings_routes
 
 
 def require_token(x_deckhand_token: str = Header(default="")) -> None:
-    if x_deckhand_token != config.token():
+    # `compare_digest` rather than `!=`: this Mac's token is now also every hand's token, so it
+    # is compared far more often and by more processes than it was, and a comparison that
+    # returns early leaks where it stopped. The cost is nothing and the property is free.
+    if not secrets.compare_digest(x_deckhand_token, config.token()):
         raise HTTPException(status_code=401, detail="bad token")
     # The one place every authenticated request passes, so the phone's last-heard-from stamp
     # costs an assignment and needs no route of its own. Only a request that got *past* the

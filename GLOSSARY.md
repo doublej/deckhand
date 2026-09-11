@@ -10,12 +10,25 @@ the wire.** Everywhere else the word is the same on both sides.
 
 | Word | Means | Not |
 |---|---|---|
-| **session** | One live Claude Code process on the Mac, keyed by its `sessionId`. | conversation, agent, instance |
+| **session** | One live Claude Code process on one machine, keyed by its `sessionId`. | conversation, agent, instance |
 | **pane** | The iTerm split a session is running in. Absent when iTerm cannot be reached. | window, tab, terminal |
 | **record** | `~/.claude/sessions/<pid>.json` — what Claude Code writes about a live session. | session file |
 | **transcript** | The session's own JSONL under `~/.claude/projects/`. Never written by Deckhand. | log, history |
 | **listing** | What `/sessions` answers: every live session plus what is true of the Mac as a whole. | index, list of sessions |
 | **pairing token** | The `x-deckhand-token` secret. `/health` is the only route without it. | api key, password |
+
+## The network
+
+| Word | Means | Not |
+|---|---|---|
+| **machine** | A computer on the home network that runs sessions, named as atlas names it (`m2`, `ubuntu`, `fractal`). | host, node, box |
+| **hand** | This same daemon in `--hand` mode on a machine that is not this Mac: it reads its own disk, writes one inbox, and decides nothing. | agent, worker, remote daemon |
+| **link** | The one ssh process per machine that both forwards a port and runs the hand behind it. Its state *is* that machine's reachability. | tunnel, connection, probe |
+| **primary** | The machine this daemon runs on — the one that holds every setting and makes every decision. | master, server |
+
+`host` is deliberately absent: it already means the daemon's own address in the app's
+`ServerSettings`, and one word cannot mean both. The phone never learns a hand exists — a machine
+is a field on a row and a way to slice the list, never an address it dials.
 
 ## The conversation
 

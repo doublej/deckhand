@@ -26,6 +26,8 @@ Two more absences worth naming, because both look like oversights and are not:
 
 from __future__ import annotations
 
+import secrets
+
 from fastapi import Body, Depends, FastAPI, Header, HTTPException, Query
 
 from .. import __version__, artifacts, config, deliver, sessions
@@ -38,7 +40,7 @@ from . import registry
 def require_token(x_deckhand_token: str = Header(default="")) -> None:
     """The same shared secret the daemon uses, fetched over ssh rather than typed. Belt and
     braces behind a loopback bind: the only way to this port is an authenticated ssh session."""
-    if x_deckhand_token != config.token():
+    if not secrets.compare_digest(x_deckhand_token, config.token()):
         raise HTTPException(status_code=401, detail="bad token")
 
 

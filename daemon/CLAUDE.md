@@ -17,7 +17,8 @@ State lives in `~/Library/Application Support/Deckhand/` — `token`, `audio/<se
 app.py          # the endpoints, and nothing else
 config.py       # data dir, token, port
 log.py          # the one log file, in ~/Library/Logs
-sessions.py     # which Claude sessions are alive, and their iTerm pane
+sessions/       # which Claude sessions are alive, their iTerm pane, and what they have spent
+fleet/          # every other machine: the registry, the ssh link, the hand, the merge
 projects/       # what folders there are, and starting a session in one
 reading/        # everything that reads a transcript and nothing that writes one
 deliver.py      # the words go into the session, by keyboard or by socket
@@ -152,6 +153,13 @@ the words carry, so it fails and says why instead. The receipt names the route t
   as long as its turn lasts. The receipt says they were typed, which is all that is known.
   One hazard: if that pane happens to be showing a permission prompt, dictated words go to the
   prompt, not to a new message.
+- **A session on another machine takes the same last step, one machine over.** `deliver.deliver`
+  is the one branch, because every caller in this daemon already routes through it — the filter
+  chain, the standing orders and the delivery record have all run here by then, and running any
+  of them again on the far side would be the shape of bug that looks like it works. Nothing above
+  that branch changes: the keyboard route has already refused, because a remote session has no
+  pane, and so has a slash command, for the same reason. On Fractal the inbox is a named pipe
+  rather than an `AF_UNIX` socket; the frames are identical and only the door differs.
 - **The fallback goes through the session's own peer socket.** Every session listens on the
   `messagingSocketPath` in its record, and the wire format is newline-delimited JSON — an
   optional `{"type":"auth","token":…}` line carrying the `peerToken` out of the sibling

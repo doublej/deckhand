@@ -1,6 +1,6 @@
 # deckhand
 
-> iOS remote for the Claude Code sessions running in iTerm on the Mac
+> iOS remote for the Claude Code sessions running on every machine on the home network
 
 ## What this is
 
@@ -42,6 +42,7 @@ load-bearing: it never types into a pane. See [docs/manager.md](docs/manager.md)
 | Folder | Its job |
 |---|---|
 | `daemon/` | The Mac half: sessions, projects, transcripts, delivery, briefings, utt, APNs. |
+| `daemon/…/fleet/` | The rest of the network: atlas's registry, the ssh links, the hands, the merge. |
 | `daemon/…/manager/` | The manager: its conversation, its facade of tools, its run, its routes. |
 | `daemon/…/mcp/` | The six tools an agent *inside* a session gets, over stdio. `just install-mcp`. |
 | `skills/deckhand/` | The same surface as prose and two scripts, for a session with no tools. |
