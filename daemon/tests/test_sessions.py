@@ -20,15 +20,15 @@ def test_session_carries_its_iterm_pane(claude_home):
 
 def test_sessions_without_a_pane_are_dropped_while_iterm_answers(claude_home, monkeypatch):
     monkeypatch.setattr(
-        sessions,
-        "_panes",
+        sessions.panes,
+        "lookup",
         lambda: {"ttys014": sessions.Pane("ITERM-A", "win-1", "180", "◐ warm-okapi")},
     )
     assert [s.name for s in sessions.live_sessions()] == ["warm-okapi"]
 
 
 def test_every_session_survives_when_iterm_is_unavailable(claude_home, monkeypatch):
-    monkeypatch.setattr(sessions, "_panes", dict)
+    monkeypatch.setattr(sessions.panes, "lookup", dict)
     listed = sessions.live_sessions()
     assert [s.name for s in listed] == ["warm-okapi", "cold-otter"]
     assert listed[0].pane is None
@@ -58,7 +58,7 @@ def test_an_id_from_a_pid_that_has_gone_resolves_to_nothing(claude_home, monkeyp
     was = sessions.live_sessions()[0].session_id
     _clear(claude_home, 4242, "dddd1111-2222-3333-4444-555566667777")
     sessions.live_sessions()
-    monkeypatch.setattr(sessions, "_processes", lambda: {4243: "ttys015"})
+    monkeypatch.setattr(sessions.live, "_processes", lambda: {4243: "ttys015"})
     sessions.live_sessions()
     assert sessions.succeeded_by(was) == ""
 

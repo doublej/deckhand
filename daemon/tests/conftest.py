@@ -47,17 +47,17 @@ def claude_home(tmp_path, monkeypatch):
                 }
             )
         )
-    monkeypatch.setattr(sessions, "_pane_cache", (0.0, {}))
+    monkeypatch.setattr(sessions.panes, "_pane_cache", (0.0, {}))
     # Which conversation is running under which pid outlives a single listing, so it outlives a
     # single test too unless it is blanked here.
-    monkeypatch.setattr(sessions, "_current", {})
-    monkeypatch.setattr(sessions, "_retired", {})
+    monkeypatch.setattr(sessions.live, "_current", {})
+    monkeypatch.setattr(sessions.live, "_retired", {})
     monkeypatch.setenv("DECKHAND_CLAUDE_HOME", str(home))
     monkeypatch.setenv("DECKHAND_DATA_DIR", str(tmp_path / "data"))
-    monkeypatch.setattr(sessions, "_processes", lambda: {4242: "ttys014", 4243: "ttys015"})
+    monkeypatch.setattr(sessions.live, "_processes", lambda: {4242: "ttys014", 4243: "ttys015"})
     monkeypatch.setattr(
-        sessions,
-        "_panes",
+        sessions.panes,
+        "lookup",
         lambda: {
             "ttys014": sessions.Pane("ITERM-A", "win-1", "180", "◐ warm-okapi"),
             "ttys015": sessions.Pane("ITERM-B", "win-1", "181", "✳ cold-otter"),
