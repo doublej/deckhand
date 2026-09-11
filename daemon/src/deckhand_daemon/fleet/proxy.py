@@ -28,6 +28,12 @@ TIMEOUT = 8.0
 # binds before the hand behind it has started listening, so the first call after `start` is
 # expected to be refused.
 READY_TIMEOUT = 20.0
+# The same wait at start-up, where nobody is watching. Measured: a cold `uv run` on Ubuntu — 155
+# days of uptime, a load average around 2 — takes longer than 20 s often enough that the machine
+# read "not reachable" after every restart of this daemon and only came back minutes later, on
+# whichever call happened to find the hand finally listening. There is no phone waiting on
+# `warm`, so it can afford to wait for the answer rather than be told the wrong one.
+WARM_TIMEOUT = 90.0
 
 
 async def call(machine_id: str, method: str, path: str, **kwargs) -> dict | None:

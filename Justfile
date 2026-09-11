@@ -252,6 +252,47 @@ install-hand alias:
     ssh -o BatchMode=yes {{ alias }} 'PATH="$HOME/.local/bin:$PATH" uv sync --no-dev --directory ~/.deckhand'
     @echo '{{ alias }} has a hand — the daemon starts it over ssh when it needs one'
 
+# The same, for a machine that answers ssh with PowerShell. A separate recipe rather than a
+# branch: nothing in the POSIX one survives the crossing — there is no rsync on Windows, `VAR=x
+# cmd` is not a thing, and `~` is not a path. What the two share is the shape, not a line.
+#
+# tar rather than rsync, and a tarball rather than a pipe: Windows has bsdtar in System32, and
+# PowerShell is not a safe pipe for binary stdin. What is copied is the same set of files the
+
+# POSIX recipe copies, so a hand is the same thing on every machine.
+[group('ops')]
+install-hand-win alias:
+    #!/usr/bin/env zsh
+    set -e
+    tar czf /tmp/deckhand-hand.tgz \
+        -C {{ justfile_directory() }}/daemon \
+        --exclude .venv --exclude __pycache__ --exclude '*.pyc' --exclude tests .
+    scp -q /tmp/deckhand-hand.tgz {{ alias }}:deckhand-hand.tgz
+    rm -f /tmp/deckhand-hand.tgz
+    # Piped as a script rather than passed as a command line: the login shell on that machine is
+    # PowerShell and it eats an inline `$variable` before the inner one ever sees it. The
+    # delimiter carries no indentation of its own: `just` strips a recipe's leading whitespace
+    # before the shell sees it, so a quoted `<<'    PS'` would never match the line that ends it
+    # — the heredoc then runs to the end of the recipe, and PowerShell reads `PS` as `Get-Process`.
+    ssh -o BatchMode=yes {{ alias }} 'powershell -NoProfile -Command -' <<'PS'
+    $ErrorActionPreference = "Stop"
+    $root = Join-Path $HOME ".deckhand"
+    # A hand running out of this folder holds its own .exe open, and uv cannot replace a locked
+    # file — the install fails with "Access is denied" halfway through and leaves half a venv.
+    # Stopping it is safe and is not a special case: a hand's whole life is the ssh link the
+    # daemon opened, and the daemon opens a new one within the minute.
+    Get-Process -ErrorAction SilentlyContinue |
+        Where-Object { $_.Path -and $_.Path.StartsWith($root, "OrdinalIgnoreCase") } |
+        Stop-Process -Force
+    Start-Sleep -Seconds 1
+    if (Test-Path $root) { Remove-Item -Recurse -Force $root }
+    New-Item -ItemType Directory -Force -Path $root | Out-Null
+    tar xzf (Join-Path $HOME "deckhand-hand.tgz") -C $root
+    Remove-Item (Join-Path $HOME "deckhand-hand.tgz")
+    uv sync --no-dev --directory $root
+    PS
+    echo '{{ alias }} has a hand — the daemon starts it over ssh when it needs one'
+
 [group('ops')]
 uninstall-agent:
     launchctl bootout gui/$(id -u)/com.jurrejan.deckhand || true

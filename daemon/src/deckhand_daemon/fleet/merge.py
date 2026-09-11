@@ -142,11 +142,16 @@ async def warm() -> None:
 
     Without this the first `/sessions` after a restart pays the whole ssh handshake for every
     machine at once, which is the one request a person is watching.
+
+    `WARM_TIMEOUT` rather than the ordinary one, and that is the whole point of doing it here: a
+    machine slow to start its hand is worth waiting for when nobody is waiting for the answer.
     """
     from . import link as links
 
     for one in links.links().values():
         links.start(one)
-    await asyncio.gather(*(proxy.ready(one) for one in links.links().values()))
+    await asyncio.gather(
+        *(proxy.ready(one, proxy.WARM_TIMEOUT) for one in links.links().values())
+    )
     up = [one.machine.id for one in links.links().values() if one.ready]
     log.info("fleet: %d link(s) up%s", len(up), f" ({', '.join(up)})" if up else "")

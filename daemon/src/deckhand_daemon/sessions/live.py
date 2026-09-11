@@ -1,9 +1,17 @@
 """Which Claude Code sessions are alive right now, and which iTerm pane each one sits in.
 
 Claude Code writes ~/.claude/sessions/<pid>.json for every running session (sessionId, cwd,
-name, busy/idle). Those files outlive the process, so a record only counts once `ps` still
-shows that pid running claude. `it2 session list --json` then maps the pid's tty to an iTerm
+name, busy/idle). Those files outlive the process, so a record only counts once that pid is
+still the process that wrote it. `it2 session list --json` then maps the pid's tty to an iTerm
 pane, which is what makes a session addressable from the phone.
+
+**Two ways of asking whether a pid is still that session**, and the Windows one is the better
+of them. macOS and Linux ask `ps` and take any pid whose command line has `claude` in it, which
+a recycled pid can fool. Windows has no `ps`, so the record's own `procStart` is compared
+against the pid's real creation time — a pid handed to something else since has a different
+one, and no heuristic is involved. The POSIX side is not changed to match: `procStart` is a
+date string on macOS and clock ticks on Linux, two more formats to parse for a case that has
+not bitten in a year of running.
 
 The pane half of this lives in `panes.py` and the token counting in `usage.py`; `__init__.py`
 re-exports all three, so `sessions.live_sessions()` and `sessions.iterm_status()` read the same
@@ -15,6 +23,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -52,7 +61,14 @@ class Session:
 
 
 def _processes() -> dict[int, str]:
-    """pid -> tty short name (`ttys014`), for every running claude process."""
+    """pid -> tty short name (`ttys014`), for every running claude process.
+
+    Empty on Windows, which has neither `ps` nor a tty: there, `_still_running` answers per
+    record instead, and a tty of "" is right rather than missing — nothing on that machine has
+    a pane for it to name.
+    """
+    if sys.platform == "win32":
+        return {}
     out = subprocess.run(
         ["ps", "-eo", "pid=,tty=,command="], capture_output=True, text=True, check=True
     ).stdout
@@ -67,6 +83,44 @@ def _processes() -> dict[int, str]:
         if "claude" in command:
             procs[int(pid)] = tty
     return procs
+
+
+def _still_running(pid: int, procs: dict[int, str], proc_start: str) -> bool:
+    """Whether the process that wrote this record is the one holding that pid now."""
+    if sys.platform != "win32":
+        return pid in procs
+    return bool(proc_start) and _created_at(pid) == str(proc_start)
+
+
+def _created_at(pid: int) -> str:
+    """A Windows pid's creation time as the same FILETIME string `procStart` holds, or "".
+
+    `ctypes` against kernel32 rather than a `Get-Process` subprocess: this runs once per record
+    on every listing, and starting PowerShell costs more than the whole rest of the listing put
+    together. `PROCESS_QUERY_LIMITED_INFORMATION` is the narrowest right that answers — it works
+    across integrity levels, which `PROCESS_QUERY_INFORMATION` does not.
+    """
+    import ctypes
+    from ctypes import wintypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    handle = kernel32.OpenProcess(0x1000, False, pid)
+    if not handle:
+        return ""
+    try:
+        created, exited, kernel, user = (wintypes.FILETIME() for _ in range(4))
+        ok = kernel32.GetProcessTimes(
+            handle,
+            ctypes.byref(created),
+            ctypes.byref(exited),
+            ctypes.byref(kernel),
+            ctypes.byref(user),
+        )
+        if not ok:
+            return ""
+        return str((created.dwHighDateTime << 32) | created.dwLowDateTime)
+    finally:
+        kernel32.CloseHandle(handle)
 
 
 #: pid -> the conversation running under it now, and every id that has been retired from one.
@@ -140,14 +194,16 @@ def live_sessions(iterm_only: bool = True) -> list[Session]:
         except (json.JSONDecodeError, OSError):
             continue
         pid = rec.get("pid")
-        if pid not in procs or rec.get("kind") != "interactive":
+        if not isinstance(pid, int) or rec.get("kind") != "interactive":
+            continue
+        if not _still_running(pid, procs, rec.get("procStart", "")):
             continue
         session_id = rec.get("sessionId", "")
         if session_id:
             if (was := _current.get(pid)) and was != session_id:
                 _retired[was] = pid
             _current[pid] = session_id
-        tty = procs[pid]
+        tty = procs.get(pid, "")
         pane = found_panes.get(tty)
         if pane is None and iterm_only and found_panes:
             continue
@@ -166,10 +222,11 @@ def live_sessions(iterm_only: bool = True) -> list[Session]:
                 machine=machine,
             )
         )
-    for dead in set(_current) - set(procs):
+    alive = {s.pid for s in found}
+    for dead in set(_current) - alive:
         del _current[dead]
     for old, pid in list(_retired.items()):
-        if pid not in procs:
+        if pid not in alive:
             del _retired[old]
     _frozen.intersection_update(s.session_id for s in found)
     found.sort(key=lambda s: s.updated_at, reverse=True)

@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import socket
 import subprocess
+import sys
 import uuid
 
 from .fleet import here, remote
@@ -210,11 +211,27 @@ def _keystrokes(pane_id: str, burst: str) -> bool:
 
 
 def _through_socket(session: Session, message: str) -> tuple[bool, str | None]:
-    """The fallback: always available, but the receiver knows it is not the user speaking."""
+    """The fallback: always available, but the receiver knows it is not the user speaking.
+
+    **The frames are the same on every machine; only the door differs.** Claude Code listens on
+    an `AF_UNIX` socket on macOS and Linux and on a named pipe on Windows, and writes the path
+    of whichever it made into the session record — so the payload is built once here and the two
+    writers below differ in nothing but how they open it.
+    """
     path = session.socket_path
     if not path:
         return False, f"{session.name} has no inbox socket"
     payload = _frames(_peer_token(session.pid), f"{PREAMBLE} {message}")
+    sent, error = (
+        _write_pipe(path, payload) if sys.platform == "win32" else _write_unix(path, payload)
+    )
+    if error is not None:
+        return False, error.format(name=session.name)
+    log.info("delivered %d chars to %s over its peer inbox", len(message), session.name)
+    return sent, None
+
+
+def _write_unix(path: str, payload: bytes) -> tuple[bool, str | None]:
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
             client.settimeout(TIMEOUT)
@@ -222,12 +239,32 @@ def _through_socket(session: Session, message: str) -> tuple[bool, str | None]:
             client.sendall(payload)
             client.shutdown(socket.SHUT_WR)
     except FileNotFoundError:
-        return False, f"{session.name} is not listening — its inbox socket is gone"
+        return False, "{name} is not listening — its inbox socket is gone"
     except ConnectionRefusedError:
-        return False, f"{session.name} has exited — its inbox socket is stale"
+        return False, "{name} has exited — its inbox socket is stale"
     except (OSError, TimeoutError) as error:
-        return False, f"could not reach {session.name}: {error}"
-    log.info("delivered %d chars to %s over its peer socket", len(message), session.name)
+        return False, f"could not reach {{name}}: {error}"
+    return True, None
+
+
+def _write_pipe(path: str, payload: bytes) -> tuple[bool, str | None]:
+    r"""The same frames down a Windows named pipe (`\\.\pipe\LOCAL\cc-msg-…`).
+
+    Opened as a file, because that is what a named pipe is to everything but the process that
+    made it: Claude Code's listener there is node's own `net` server, which makes a byte-stream
+    pipe, so `write` puts exactly the same newline-delimited JSON on the wire that `sendall`
+    does on the other two machines.
+
+    Unbuffered, and closed by the `with`: the receiver reads until the write end goes, which is
+    what `shutdown(SHUT_WR)` is doing on the POSIX side.
+    """
+    try:
+        with open(path, "wb", buffering=0) as pipe:
+            pipe.write(payload)
+    except FileNotFoundError:
+        return False, "{name} is not listening — its inbox pipe is gone"
+    except OSError as error:
+        return False, f"could not reach {{name}}: {error}"
     return True, None
 
 

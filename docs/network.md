@@ -315,16 +315,29 @@ anything that ever *does* derive it is broken on two machines out of three. And 
 three formats means a liveness check comparing it has to branch on `os`, which is a field atlas
 already hands over.
 
-1. **The seam, all local.** `machine` field, `fleet/` with only this Mac registered, the three key
-   migrations, the `sessions.py` split. One machine, everything still works, one new field on the wire.
-2. **The hand, on Ubuntu.** `--hand` mode, route filtering, `POST /deliver`, the ssh link, proxy and
-   merge. POSIX, so the existing code nearly runs as-is. A `just install-hand <alias>` recipe that
-   rsyncs `daemon/` and runs `uv sync` — Ubuntu has no `uv` yet.
-3. **Fractal.** Two real unknowns, both inside two functions: liveness without `ps`
-   (`sessions._processes()` — use the record's `procStart` FILETIME against `Get-Process`, which is
-   *better* than the current `ps | grep claude` heuristic), and writing to `\\.\pipe\LOCAL\cc-msg-…`
-   instead of `AF_UNIX` (`deliver._through_socket()`).
-4. **The phone.** The machines page, the filter, the preference migration, the `mac` repoint.
+1. ~~**The seam, all local.**~~ **Done.** `machine` field, `fleet/`, the `sessions.py` split, and
+   the filter-chain rekey. `settings.json` was left keyed by path, deliberately — see above.
+2. ~~**The hand, on Ubuntu.**~~ **Done.** `--hand` mode, route filtering, `POST /deliver`, the ssh
+   link, proxy and merge, and `just install-hand <alias>`.
+3. ~~**Fractal.**~~ **Done, and both unknowns were as described.** Verified 2026-09-11 end to end
+   against a live session there: it appears on the listing, its transcript reads, and a `/say`
+   lands in it exactly once while `?route=keyboard` refuses. Four things the machine taught that
+   the plan had no way to know:
+   - **The process is called `claude`, not `node`.** So a name filter would have worked after all
+     — but the start-time comparison is still the better test and is what is in.
+   - **`.StartTime` is access-denied over ssh.** `Get-Process -Id <pid>` answers, and reading
+     `StartTime` off it throws for a process in another session — which takes the rest of a
+     PowerShell script with it. `sessions.live._created_at` therefore goes at kernel32 through
+     `ctypes` with `PROCESS_QUERY_LIMITED_INFORMATION`, the one right that answers across
+     integrity levels. It is also the faster way: no PowerShell start-up per listing.
+   - **scoop's `uv` was broken**: `apps/uv/current` was a dangling junction, so every `uv` on that
+     machine failed with `Shim: Could not create process`. `scoop reset uv` fixed it. That error
+     is scoop's, not ours, and it is what the link reported for an afternoon.
+   - **An install cannot replace a running hand's own `.exe`.** Windows holds it open and uv fails
+     half-way with "Access is denied". `install-hand-win` stops anything running out of that
+     folder first — safe, because a hand's whole life is the link the daemon reopens.
+4. ~~**The phone.**~~ **Done.** The machines page, the filter, the preference migration, and the
+   `mac` repoint. The rail names the machine on the project header and nowhere else.
 
 ## Left out, and when to add it
 
