@@ -166,6 +166,23 @@ def start(link: Link) -> None:
     log.info("link to %s opening on 127.0.0.1:%d", link.machine.id, link.port)
 
 
+# ssh writes advisory banners to stderr, which is merged into stdout here so a failing machine
+# can say why. The post-quantum notice fires on every connection to an older sshd and is not a
+# failure at all — left in, it becomes the reason the phone shows for a machine being down, and
+# the real reason two lines below it is never seen.
+NOISE = ("** ", "WARNING:", "post-quantum", "store now", "may need to be upgraded")
+
+
+def useful_error(text: str) -> str:
+    """What actually went wrong, out of everything ssh had to say about it."""
+    lines = [
+        line.strip()
+        for line in text.splitlines()
+        if line.strip() and not any(n in line for n in NOISE)
+    ]
+    return lines[-1][:200] if lines else "ssh exited without saying why"
+
+
 def _back_off(link: Link) -> None:
     link.ready = False
     link.next_try = time.monotonic() + BACKOFF[min(link.attempts, len(BACKOFF) - 1)]

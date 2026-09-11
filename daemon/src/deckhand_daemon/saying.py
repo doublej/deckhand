@@ -24,7 +24,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Body, HTTPException, Query, UploadFile
 
-from . import config, deliver, filters, orders, plugin, push, sessions, transcribe
+from . import config, deliver, filters, fleet, orders, plugin, push, sessions, transcribe
 from .log import log, took
 from .settings import aliases
 
@@ -51,6 +51,12 @@ def session_or_404(session_id: str) -> sessions.Session:
     ):
         log.info("%s was cleared — %s answers for it now", session_id[:8], found.name)
         return found
+    # Not on this Mac, so try the rest of the network. The routes that need a pane still refuse
+    # a session found this way — it comes back with `pane=None`, which is the same refusal a
+    # local pane-less session already gets — but `say`, a clip and a slip's answer all work,
+    # because the pipeline runs here and only the last step happens over there.
+    if elsewhere := fleet.session(session_id):
+        return elsewhere
     raise HTTPException(status_code=404, detail="no live session with that id")
 
 

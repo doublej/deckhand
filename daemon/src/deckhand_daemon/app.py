@@ -27,6 +27,7 @@ from . import (
     summarize,
 )
 from .filters import routes as filter_routes
+from .fleet import routing as fleet_routing
 from .links import routes as link_routes
 from .log import log
 from .manager import agent as manager_agent
@@ -65,6 +66,10 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Deckhand", version=__version__, lifespan=lifespan)
+# A read for a session on another machine goes to the machine that has the files. One place
+# rather than a branch in nine handlers, and an allow-list rather than a skip-list, so a route
+# added later is local until somebody says otherwise: see `fleet/routing.py`.
+app.middleware("http")(fleet_routing.forward_remote_reads)
 app.include_router(artifacts.router, dependencies=[Depends(require_token)])
 app.include_router(filter_routes.router, dependencies=[Depends(require_token)])
 app.include_router(link_routes.router, dependencies=[Depends(require_token)])

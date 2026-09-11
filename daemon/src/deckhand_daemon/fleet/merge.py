@@ -31,15 +31,50 @@ def owner(session_id: str) -> str:
     return _owner.get(session_id, "")
 
 
+# The last listing's rows for sessions that are not on this Mac, so the daemon can find one
+# without asking its machine again. `session()` rebuilds a `Session` from a row.
+_rows: dict[str, dict] = {}
+
+
 def remembered(machine_id: str, rows: list[dict]) -> None:
     for row in rows:
         if sid := row.get("session_id"):
             _owner[sid] = machine_id
+            if machine_id != registry.here():
+                _rows[sid] = row
+
+
+def session(session_id: str):
+    """A remote session as a `Session`, or None. Rebuilt from the last listing rather than
+    fetched, because every caller is already on a code path that just listed.
+
+    **No `socket_path`, and that is right.** The socket is a path on the machine that owns it and
+    means nothing here; `deliver.deliver` hands a remote session to its hand by id instead. A
+    `pane` of None is right for the same reason — there is no iTerm over there, so the keyboard
+    route refuses exactly as it does for a local session that has no pane.
+    """
+    from ..sessions import Session
+
+    row = _rows.get(session_id)
+    if row is None:
+        return None
+    return Session(
+        session_id=row.get("session_id", ""),
+        pid=row.get("pid", 0),
+        name=row.get("name", ""),
+        cwd=row.get("cwd", ""),
+        status=row.get("status", "unknown"),
+        updated_at=row.get("updated_at", 0.0),
+        tty=row.get("tty", ""),
+        pane=None,
+        machine=row.get("machine", ""),
+    )
 
 
 def forget(machine_id: str) -> None:
     for sid in [s for s, m in _owner.items() if m == machine_id]:
         del _owner[sid]
+        _rows.pop(sid, None)
 
 
 async def listings(local: list[dict]) -> list[dict]:

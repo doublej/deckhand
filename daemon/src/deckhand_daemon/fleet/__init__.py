@@ -9,11 +9,11 @@ forward. `docs/network.md` is the whole design and the reasoning behind each ref
 """
 
 from .link import stop_all
-from .merge import links_of, listings, machines, owner, warm
+from .merge import links_of, listings, machines, owner, session, warm
 from .registry import Machine, here, primary
 from .registry import machines as known
 
 __all__ = [
     "Machine", "here", "known", "links_of", "listings", "machines", "owner", "primary",
-    "stop_all", "warm",
+    "session", "stop_all", "warm",
 ]

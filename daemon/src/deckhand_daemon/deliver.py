@@ -23,6 +23,7 @@ import socket
 import subprocess
 import uuid
 
+from .fleet import here, remote
 from .log import log
 from .sessions import Session, sessions_dir
 
@@ -156,7 +157,15 @@ def deliver(session: Session, text: str, route: str = "auto") -> tuple[str | Non
             return None, f"iTerm would not type into {session.name}"
     if route == "keyboard":
         return None, f"{session.name} has no iTerm pane to type into"
-    delivered, error = _through_socket(session, message)
+    # A session on another machine takes the same last step, one machine over. The guard is here
+    # rather than in each caller because every one of them — `say`, a clip, a slip's answer, the
+    # idle check, the manager — routes through this function, and a guard per caller would be
+    # five places to forget. Above this line nothing changes: the keyboard route has already
+    # refused (a remote session has no pane) and so has a slash command, for the same reason.
+    if session.machine and session.machine != here():
+        delivered, error = remote.deliver_to(session.machine, session.session_id, message)
+    else:
+        delivered, error = _through_socket(session, message)
     return ("socket" if delivered else None), error
 
 

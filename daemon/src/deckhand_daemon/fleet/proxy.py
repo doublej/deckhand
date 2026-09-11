@@ -72,8 +72,8 @@ async def ready(link: links.Link, timeout: float = READY_TIMEOUT) -> bool:
             if not link.alive:
                 out = ""
                 if link.process is not None and link.process.stdout is not None:
-                    out = link.process.stdout.read()[:200]
-                links.went_down(link, out.strip() or "ssh exited")
+                    out = link.process.stdout.read()
+                links.went_down(link, links.useful_error(out))
                 return False
             try:
                 r = await client.get(f"{link.base_url}/health")
