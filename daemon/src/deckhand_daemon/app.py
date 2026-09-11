@@ -19,6 +19,7 @@ from . import (
     filters,
     nudge,
     plugin,
+    presence,
     push,
     saying,
     sessions,
@@ -38,6 +39,10 @@ from .settings import routes as settings_routes
 def require_token(x_deckhand_token: str = Header(default="")) -> None:
     if x_deckhand_token != config.token():
         raise HTTPException(status_code=401, detail="bad token")
+    # The one place every authenticated request passes, so the phone's last-heard-from stamp
+    # costs an assignment and needs no route of its own. Only a request that got *past* the
+    # token counts: a wrong token is not this phone.
+    presence.seen()
 
 
 @asynccontextmanager
@@ -74,6 +79,9 @@ def health() -> dict:
         # So the phone can turn a session's `localhost:5173` into something it can actually open.
         "lan": config.lan_address(),
         "iterm": sessions.iterm_status(),
+        # Who has this Mac. Unauthenticated like the rest of /health, and deliberately so: it
+        # says whether a person is at the keyboard, never what they are doing.
+        "presence": presence.state(),
     }
 
 
