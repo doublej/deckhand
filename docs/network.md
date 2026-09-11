@@ -92,7 +92,7 @@ Read, plus exactly one primitive.
 | `GET /health`, `GET /sessions` | its own machine's records, `ps`, no panes |
 | `GET …/turns`, `/raw`, `/context`, `/commands`, `/files`, `/file` | files only on that disk |
 | `GET /sessions/links` | edges are within a machine by construction — `AF_UNIX` cannot cross one |
-| `GET /projects`, `POST /projects/session` | folders on that disk |
+| `GET /projects` | folders on that disk, plus that machine's `~/.claude.json` trust list |
 | `GET\|POST …/artifacts…` | a slip is a file in `<cwd>/.deckhand/artifacts` |
 | `POST …/queue/clear` | writes that machine's queue file |
 | `POST …/deliver` | **new.** Exact text → that session's socket. No filters, no orders, no record. |
@@ -102,12 +102,19 @@ Read, plus exactly one primitive.
 By absence. The router is never mounted, so the route 404s:
 
 `/settings` · `/orders` · `/filters` · `/briefings` · `/summary` · `/audio` · `/say` · `/notify` ·
-`/image` · `/live/token` · `/manager` · `/focus` · `/control` · `/name`
+`/image` · `/live/token` · `/manager` · `/focus` · `/control` · `/name` · `POST /projects/session`
 
-The last three are the pane routes. **For v1 a remote session is socket-only**: you can read it and
-speak to it, and focus, stop/compact/clear, `/rename` and image paste are simply not there. Both
-machines run tmux and Claude Code even records a tmux target (Fractal's says `main-2:@2.%3`), so
-this is a decision rather than a limit — see *Left out*.
+The last four are pane work. **For v1 a remote session is socket-only**: you can read it and speak
+to it, and focus, stop/compact/clear, `/rename` and image paste are simply not there. Both machines
+run tmux and Claude Code even records a tmux target (Fractal's says `main-2:@2.%3`), so this is a
+decision rather than a limit — see *Left out*.
+
+`POST /projects/session` is on that list for a harder reason than the others: `starting.start()` is
+`it2` from end to end — `it2 window new` for the handle, `it2 session run` to launch, `it2 session
+list --json` to find the pane (`starting.py:109`, `:127`, `:150`). There is no fallback path in it
+to disable. **Starting a session on a remote machine is not a flag, it is a second backend**, and it
+arrives with the rest of the pane work or not at all. The phone lists remote folders; it opens them
+only on this Mac.
 
 And the standing invariant gets a second reason to fire: **the keyboard route on a remote session
 returns 409, never a fallback.** It already does this when a session has no pane
@@ -159,7 +166,29 @@ against a 400 cap. So the new code is a package, and `sessions.py` splits first.
 | `summarize.py` | pulls turns through the fleet layer instead of local files; the SDK still runs here |
 | `push/__init__.py:137` | passes the **session's** machine as `mac` instead of `config.base_url()`'s hostname |
 | `manager/tools.py` | `listing()` gains the machine; `find(wanted)` disambiguates by name across machines |
+| `app.require_token` | `secrets.compare_digest` instead of `!=` (`app.py:39`) — the daemon is about to hold one token per machine and compare far more of them |
 | `/health` | gains a `machines` array — name, reachable, session count, last error |
+
+### The manager
+
+Its eleven tools divide cleanly, which is the sign the seam is in the right place. Seven are reads
+that go through the fleet layer and then span every machine for free: `list_sessions`,
+`read_session`, `list_projects`, `read_settings`, `read_context`, `history`, `show_on_phone` (the
+last touches no machine at all — it writes a `command` entry into the conversation file,
+`doing.py:133-152`).
+
+`say_to_session` already hard-codes `route="socket"` (`doing.py:60`) — the manager's central
+refusal, written before any of this, and exactly the call the fleet layer needs. It works remotely
+unchanged.
+
+`set_orders` and `set_switch` write hub state and stay put. `focus_session` and `start_session` are
+`it2` (`doing.py:85-107`, `:155-163`) and are therefore **absent on a remote session**, the same
+way and for the same reason as the routes above them. The manager's own rule does not move: it
+still never types into a pane, and now there are machines where no pane exists to type into.
+
+One free lunch worth checking before writing code: `list_projects` already queries atlas on
+`127.0.0.1:47891`, and atlas already catalogues `/home/jurrejan/development` and `C:\dev` on the
+other two machines (`atlas hosts list`). Remote project listing may need no hand route at all.
 
 The Live Activity needs **no wire change at all**: its attributes already carry `mac: String`
 (`LiveActivity.swift:60-73`) and the widget already draws it in the Lock Screen footnote
@@ -206,11 +235,12 @@ off those two, and they are one afternoon to prove or disprove.
 
 ## Left out, and when to add it
 
-**Pane control on a remote machine.** Both hands have tmux and Claude Code records the target, so
-focus, stop/compact/clear and `/rename` are reachable via `tmux send-keys`. Add it when reading a
-remote session stops being enough — but note that `deliver.py:32-41` spells keys as CSI-u escape
-sequences for a measured reason, and that reason has to be re-proven against tmux rather than
-assumed.
+**Pane control on a remote machine**, and with it `POST /projects/session`, `focus_session` and
+`start_session`. Both hands have tmux and Claude Code records the target, so focus,
+stop/compact/clear and `/rename` are reachable via `tmux send-keys`. Add it when reading a remote
+session stops being enough — but note that `deliver.py:32-41` spells keys as CSI-u escape sequences
+for a measured reason, and that reason has to be re-proven against tmux rather than assumed. This
+is one piece of work, not four: every one of them is the same missing backend.
 
 **Cross-machine session links.** Not left out — impossible. `AF_UNIX` does not cross a machine, so
 no such edge exists to draw.
