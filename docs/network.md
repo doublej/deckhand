@@ -50,6 +50,7 @@ prints it:
 
 | Field | m2 | fractal | ubuntu |
 |---|---|---|---|
+| `label` | `M2 Pro` | `Fractal` | `Ubuntu` |
 | `ssh` | `null` | `fractal` | `ubuntu` |
 | `root` | `~/dev` | `C:/dev` | `/home/jurrejan/development` |
 | `os` | `darwin` | `win32` | `linux` |
@@ -57,7 +58,14 @@ prints it:
 
 The ssh **alias** is stored, not an IP — the same decision `config.base_url()` made for its own
 `.local` name, and the same reason. `os` is there too, which is what picks the liveness and socket
-code path on a hand. The daemon serves `/api/hosts` and `/api/projects` on `127.0.0.1:47891`.
+code path on a hand. `label` is the word the phone's machines page draws; `id` is what the wire
+carries.
+
+**Those six fields are now a named contract.** `shared/CLAUDE.md` records that `hosts.json` has a
+consumer outside the atlas repo and that `id`, `label`, `ssh`, `root`, `os` and `role` are names to
+keep — because a rename here breaks a repo that will not fail to compile over there. Deckhand
+depends on those six and no others; `node`, `agent` and `skipGit` belong to atlas's scan agent and
+are never read here. If that ever changes, say so in atlas rather than reaching for the field.
 
 Two consequences, both subtractions:
 
@@ -258,6 +266,11 @@ to `m2-2.local` (`ServerSettings.swift:5-9`) — and all ~30 call sites go throu
   `.off` and `.err` already exist (`Model.swift:26-33`). Tap to filter the rail.
 - **No colour per machine.** In this app busy/idle is a *word*, not a colour (`StateWord`), and
   `Palette.tint` is the only accent. A machine reads as a word plus `DotGlyph.forName`.
+- **Clamp `label` on the way in.** It is display copy the phone renders verbatim, and atlas
+  validates neither its length nor its emptiness — it is hand-editable in `hosts.json` and through
+  the `/system` console's registry editor. Atlas has no use for that validation and will not add
+  it, which is the right call on their side and an obligation on this one: fall back to `id` when
+  it is blank, and truncate rather than let a long one push the row's state word off the screen.
 - `Session.machine` must be **Optional** — the synthesised decoder only tolerates a missing key on
   an optional (`Models.swift:26-31`), so a non-optional field makes an older daemon's whole listing
   fail to decode.
@@ -312,19 +325,32 @@ plainly that *atlas-picker reads it directly*. atlas-picker is Rust reading atla
 the precedent for a non-TypeScript consumer already exists and is documented. A Python daemon doing
 the same is the intended pattern, not a workaround. **Deckhand reads `shared/hosts.json`.**
 
-**Withdrawn — `status` on `/api/hosts`.** Superseded by `~/dev/.atlas-cache-<id>.json`, which
-already carries `HostFragment {hostId, root, scannedAt, status, error, projects}` per machine with
-no 504-project payload attached. One question remains, and it is a yes/no rather than work: *is the
-per-host cache fragment a public surface?* `shared/CLAUDE.md` blesses `shared/*.json`; a cache file
-and its shape may be atlas's to change freely. If it is internal, deckhand reads the registry and
-probes for status itself — which it is doing anyway.
+**Withdrawn — `status` on `/api/hosts`.** And the replacement was refused too, correctly:
+`~/dev/.atlas-cache-<id>.json` looked like a cheap source of per-host status, and atlas has ruled it
+**internal**. The reason is the good one — the main cache carries `shapeVersion` precisely so
+atlas-picker can detect a shape change and bail, and `HostFragment` has no such field, so a change
+in it would be silent here. **Deckhand reads `shared/hosts.json` and `/api/projects`, and nothing
+else of atlas's.**
 
-**Stands, as a boundary rather than a request — liveness.** `status` is set only in the `catch` of
-`scanHost` (`remoteScan.ts:118-128`), on a 10-minute TTL, and a failed scan deliberately keeps the
-*previous* `scannedAt` so the catalog can say "ubuntu down, scanned 3h ago". There is no ping, no
-`lastSeen` and no probe anywhere in `atlas-api/src`, `atlas-cli/src` or `shared`. That is right for
-a catalog and wrong for a phone screen drawing a machine as online or off. So **deckhand owns live
-reachability** and will not ask atlas to.
+Ask 4 was also simply wrong on its facts: `~/.atlas/` does not exist on the M2 at all. It exists
+only on the remote machines, because that is where the scan agent is `scp`'d.
+
+> One thing came back the other way. On the evidence in these asks, atlas found that `scanHost`
+> wrote its fragment with a plain `writeFile` while `readHostFragments` swallows a parse error as
+> "that host is simply missing" — so a torn read dropped a whole machine's projects from the merged
+> catalog. It now writes temp+rename like the main cache. **That fix is live in the running daemon
+> but not yet in git history**, riding with an uncommitted multi-host change in atlas-api. Do not
+> pull atlas, fail to find it, and conclude the fragments are still torn.
+
+**Settled — liveness is deckhand's, and it costs nothing.** Atlas sets `status` only in the `catch`
+of `scanHost` (`remoteScan.ts:118-128`), on a 10-minute TTL, and a failed scan deliberately keeps
+the *previous* `scannedAt` so the catalog can say "ubuntu down, scanned 3h ago". That is a catalog
+telling the truth about when it last looked, and the wrong primitive for a dot that says online.
+
+Atlas's answer was better than the probe this plan originally carried: **the link being up is the
+machine being up.** The supervised `ssh -L` subprocess already has to exist, and its state is the
+reachability signal — no ping, no `lastSeen`, no second SSH round trip, and nothing to keep fresh.
+The probe is deleted from this plan rather than moved.
 
 **Settled — who owns persistent remote execution.** Deckhand does. Atlas's only general SSH callers
 are `syncAgent(host)` and `scanHost(host)`, both hard-wired to the scan agent with no command
