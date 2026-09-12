@@ -421,10 +421,11 @@ takes the one `x-deckhand-token`. The edge is in front of it, not instead of it:
   unpublished hostname on that Caddy tells it; a person who mistyped the pairing code reads
   "unauthorized" in the app, which is what `DeckhandError` makes of 401 where it makes "not live"
   of 404. The bit that gives away is only reachable by already having sent a token.
-- **The rotting part is the IP.** The M2 is a roaming laptop on DHCP with no reservation, and it
-  drifted `.145` → `.180` once already. The Caddy container cannot resolve `m2-2.local` (no mDNS
-  in there — measured), so the literal is the only shape available, and it is the same literal
-  every other M2-hosted vhost on that Caddy carries.
+- **The IP is a literal, and a DHCP reservation is what holds it still.** It drifted `.145` →
+  `.180` once, before the router was given `6c:7e:67:d2:08:34 → 192.168.178.180`. The Caddy
+  container cannot resolve `m2-2.local` (no mDNS in there — measured), so a literal is the only
+  shape available; lose that reservation and this is the line that breaks, along with every other
+  M2-hosted vhost on that Caddy, which all carry the same one.
 
 In the app it is just the Address field: `https://deckhand.jurrejan.com`, token unchanged.
 `ServerSettings.baseURL` deliberately does not pin `:4180` onto an `https` host — that host is
