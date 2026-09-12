@@ -14,6 +14,11 @@ public struct ServerSettings: Equatable, Sendable {
     }
 
     /// Accepts `m2-2.local`, `192.168.178.180:4180`, or a full URL. Nil when unusable.
+    ///
+    /// `https://deckhand.jurrejan.com` is the one off-LAN form and it is why the port is not
+    /// filled in blindly: that host is the NAS Caddy on 443, and 4180 pinned onto it reaches
+    /// nothing. Anything spoken over http still means this Mac's daemon, whether or not the
+    /// scheme was typed, so that case keeps the default it always had.
     public var baseURL: URL? {
         var text = host.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return nil }
@@ -22,7 +27,9 @@ public struct ServerSettings: Equatable, Sendable {
             return nil
         }
         parts.scheme = parts.scheme ?? "http"
-        parts.port = parts.port ?? Self.defaultPort
+        if parts.scheme != "https" {
+            parts.port = parts.port ?? Self.defaultPort
+        }
         parts.path = parts.path.hasSuffix("/") ? parts.path : parts.path + "/"
         return parts.url
     }

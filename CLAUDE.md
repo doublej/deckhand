@@ -161,6 +161,9 @@ the session. `?deliver=false` transcribes without sending, for the review card, 
   the SDK thread behind it, both together
 
 `/health` is the only unauthenticated route; everything else needs the `x-deckhand-token` header.
+Off the home network that surface is `https://deckhand.jurrejan.com` — the NAS Caddy, checking
+the same header in front of the Mac so `/health` is not open to the internet either. See
+[daemon/CLAUDE.md](daemon/CLAUDE.md) under *Off the home network*.
 Both `/health` and `/sessions` carry an `iterm` field saying whether pane data is trustworthy.
 
 ## Commands

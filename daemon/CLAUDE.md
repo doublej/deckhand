@@ -399,6 +399,39 @@ whole of it is `docs/manager.md`; three things are worth having here.
   `aps-environment: development`, so the daemon talks to `api.sandbox.push.apple.com`; a token
   minted for one host is refused by the other. See `widgets/CLAUDE.md` for the payload contract.
 
+## Off the home network
+
+`https://deckhand.jurrejan.com` — the NAS Caddy, reverse-proxying the M2's `192.168.178.180:4180`.
+Added with `cdy` (`~/dev/node/caddyctl`); the site file is
+`/share/CACHEDEV1_DATA/Container/caddy/etc/sites/deckhand.caddy` and `cdy edit deckhand` is how it
+changes, because every mutation there is snapshot → validate-in-container → reload → rollback.
+
+**Nothing about the daemon changed.** It still binds `0.0.0.0:4180`, still answers the LAN, still
+takes the one `x-deckhand-token`. The edge is in front of it, not instead of it:
+
+- **Caddy checks the same header the daemon does.** One secret, and the app needed no change for
+  it — `request()` already sets the token on every call, `/health` included. The literal lives in
+  that site file the way `fin.caddy`'s bearer does, so rotating the daemon's token means editing
+  it there in the same breath or the phone stops connecting from outside.
+- **Gated in front, because of what this is.** Deckhand can put words into a running Claude
+  session on three machines, start new ones and move the phone's screen. `/health` alone is open
+  on the LAN and says whether the person is at the keyboard. None of that should be answering an
+  internet scanner, so nothing unpaired reaches the Mac at all.
+- **No token at all answers 404, a wrong one answers 401.** A scanner learns only what every
+  unpublished hostname on that Caddy tells it; a person who mistyped the pairing code reads
+  "unauthorized" in the app, which is what `DeckhandError` makes of 401 where it makes "not live"
+  of 404. The bit that gives away is only reachable by already having sent a token.
+- **The rotting part is the IP.** The M2 is a roaming laptop on DHCP with no reservation, and it
+  drifted `.145` → `.180` once already. The Caddy container cannot resolve `m2-2.local` (no mDNS
+  in there — measured), so the literal is the only shape available, and it is the same literal
+  every other M2-hosted vhost on that Caddy carries.
+
+In the app it is just the Address field: `https://deckhand.jurrejan.com`, token unchanged.
+`ServerSettings.baseURL` deliberately does not pin `:4180` onto an `https` host — that host is
+Caddy on 443 — while anything spoken over http still means this Mac's daemon. Hairpin NAT means
+the public URL resolves and works on the LAN too, so one setting covers both places; the LAN name
+is still worth keeping for the hop it saves.
+
 ## Verification
 
 `just daemon-lint` (ruff) and `just daemon-test` (pytest), both inside `just check`.

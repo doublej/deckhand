@@ -59,7 +59,9 @@ struct SettingsView: View {
 
     private var mac: some View {
         SettingsGroup("Mac") {
-            SettingRow("Address", detail: "Where the daemon answers. `just daemon` prints it.") {
+            SettingRow("Address",
+                       detail: "Where the daemon answers. `just daemon` prints it. "
+                       + "Off the home network: https://deckhand.jurrejan.com") {
                 TextField("m2-2.local", text: $model.settings.host)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()

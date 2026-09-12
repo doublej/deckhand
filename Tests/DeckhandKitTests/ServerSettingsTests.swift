@@ -18,6 +18,14 @@ struct ServerSettingsTests {
             == "http://m2-2.local:9000/")
     }
 
+    @Test("an https host keeps its own port, because that one is not the daemon")
+    func offLan() {
+        #expect(ServerSettings(host: "https://deckhand.jurrejan.com").baseURL?.absoluteString
+            == "https://deckhand.jurrejan.com/")
+        #expect(ServerSettings(host: "https://deckhand.jurrejan.com:8443").baseURL?.absoluteString
+            == "https://deckhand.jurrejan.com:8443/")
+    }
+
     @Test("an empty host is not a server")
     func empty() {
         #expect(ServerSettings(host: "  ", token: "t").baseURL == nil)
