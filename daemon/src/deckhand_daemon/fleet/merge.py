@@ -137,21 +137,47 @@ async def machines() -> list[dict]:
     return rows
 
 
+#: How often to ask every machine how it is. Two jobs, and it is the same ask for both: a link
+#: that died is remade here rather than in front of the phone, and a hand that would otherwise
+#: sit unspoken-to hears from its daemon well inside its own `FORGOTTEN_AFTER`.
+KEEP_WARM = 60.0
+
+
 async def warm() -> None:
-    """Open every link at start-up rather than on the first listing that needs one.
+    """Open every link that is down, and wait generously for the hands behind them.
 
     Without this the first `/sessions` after a restart pays the whole ssh handshake for every
     machine at once, which is the one request a person is watching.
 
     `WARM_TIMEOUT` rather than the ordinary one, and that is the whole point of doing it here: a
     machine slow to start its hand is worth waiting for when nobody is waiting for the answer.
+    Ubuntu's cold `uv run` was measured at 61 s, against the 20 s a call in front of the phone
+    can afford.
     """
     from . import link as links
 
-    for one in links.links().values():
-        links.start(one)
-    await asyncio.gather(
-        *(proxy.ready(one, proxy.WARM_TIMEOUT) for one in links.links().values())
-    )
-    up = [one.machine.id for one in links.links().values() if one.ready]
-    log.info("fleet: %d link(s) up%s", len(up), f" ({', '.join(up)})" if up else "")
+    opened = [one for one in links.links().values() if links.start(one)]
+    await asyncio.gather(*(proxy.ready(one, proxy.WARM_TIMEOUT) for one in opened))
+
+
+async def keep_warm() -> None:
+    """Warm every link, then go on doing it for as long as this daemon runs.
+
+    **Not a health probe with a second opinion.** `proxy.ready` marks a link up or down exactly
+    as a real call does, through the same two functions, so this cannot disagree with what the
+    phone is told — it only means nobody had to wait to find out.
+
+    It is also what keeps a hand from timing itself out: a hand exits after five minutes of
+    silence, which is the one thing that frees the port when an ssh session is left half-open
+    at the far end, and this is the heartbeat that says the daemon is still here.
+    """
+    said: list[str] = []
+    while True:
+        await warm()
+        from . import link as links
+
+        up = sorted(one.machine.id for one in links.links().values() if one.ready)
+        if up != said:
+            log.info("fleet: %d link(s) up%s", len(up), f" ({', '.join(up)})" if up else "")
+            said = up
+        await asyncio.sleep(KEEP_WARM)

@@ -45,10 +45,13 @@ async def call(machine_id: str, method: str, path: str, **kwargs) -> dict | None
     link = links.links().get(machine_id)
     if link is None:
         return None
-    if not link.alive:
-        links.start(link)
-        if not await ready(link):
-            return None
+    # `start` answering False means the link is still serving a backoff, and then nothing else
+    # may happen: `ready` would fail it a second time for an attempt that was never made, and
+    # every one of those pushes the next attempt further away. With a phone polling every few
+    # seconds the retry then never fires at all, and a machine that dropped overnight stays
+    # unreachable for exactly as long as somebody is watching it.
+    if not link.alive and not (links.start(link) and await ready(link)):
+        return None
     try:
         async with httpx.AsyncClient(timeout=TIMEOUT) as client:
             r = await client.request(

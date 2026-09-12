@@ -27,6 +27,7 @@ Two more absences worth naming, because both look like oversights and are not:
 from __future__ import annotations
 
 import secrets
+import time
 
 from fastapi import Body, Depends, FastAPI, Header, HTTPException, Query
 
@@ -155,6 +156,21 @@ def deliver_text(session_id: str, text: str = Body(embed=True)) -> dict:
     return {"delivered": delivered_by is not None, "delivered_by": delivered_by, "error": error}
 
 
+#: When the daemon was last heard from, however it asked. Stamped by the middleware below.
+_heard = time.monotonic()
+#: How long a hand goes unspoken-to before deciding it has been orphaned. Comfortably longer
+#: than `merge.KEEP_WARM`, so a hand only ever reaches this when the daemon has actually gone.
+FORGOTTEN_AFTER = 300.0
+
+
+@app.middleware("http")
+async def _remember_the_daemon(request, call_next):
+    """Anything at all from the daemon counts as the link being alive, `/health` included."""
+    global _heard
+    _heard = time.monotonic()
+    return await call_next(request)
+
+
 def _die_with_the_link() -> None:
     """Exit when the ssh connection that started this one goes away.
 
@@ -183,10 +199,43 @@ def _die_with_the_link() -> None:
     threading.Thread(target=watch, daemon=True).start()
 
 
+def _die_when_forgotten() -> None:
+    """Exit when the daemon has not asked this hand anything for `FORGOTTEN_AFTER`.
+
+    **The backstop `_die_with_the_link` cannot be**, and it is not belt-and-braces: it answers a
+    failure that one structurally cannot. Measured on 2026-09-12 — a hand started at 18:44 the
+    day before was still holding port 4181 seventeen hours later, its stdin a pipe from an
+    `sshd: jurrejan@notty` with no client left at the other end. The Mac's ssh had gone without
+    closing the connection (a sleeping laptop sends no FIN), and sshd, which has no
+    `ClientAliveInterval` here, held that session open forever. stdin never saw EOF because the
+    write end was never closed.
+
+    What that costs is worth spelling out, because it is invisible from the Mac: the squatting
+    hand keeps the port, so every new hand fails to bind and exits at once — while `/health`
+    through the new forward still answers, *from the old hand*. The link reads up, the listing
+    is a day stale, and nothing anywhere says so.
+
+    A hand exists to serve one daemon. Silence for five minutes means that daemon is gone,
+    whatever the reason, and the right thing is to let go of the port.
+    """
+    import os
+    import threading
+
+    def watch() -> None:
+        while True:
+            time.sleep(FORGOTTEN_AFTER / 5)
+            if time.monotonic() - _heard > FORGOTTEN_AFTER:
+                log.info("nothing from the daemon in %.0fs; hand exiting", FORGOTTEN_AFTER)
+                os._exit(0)
+
+    threading.Thread(target=watch, daemon=True).start()
+
+
 def main() -> None:
     """`deckhand-daemon --hand`. Loopback only: the daemon gets here through an ssh forward."""
     import uvicorn
 
     _die_with_the_link()
+    _die_when_forgotten()
     log.info("hand on %s, port %d, loopback only", registry.here(), config.PORT + 1)
     uvicorn.run(app, host="127.0.0.1", port=config.PORT + 1, log_level="warning")

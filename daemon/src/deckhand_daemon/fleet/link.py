@@ -130,13 +130,22 @@ def links() -> dict[str, Link]:
     return _links
 
 
-def start(link: Link) -> None:
-    """Spawn the ssh process. Does not wait for the hand behind it to bind — `ready` is set by
-    whoever polls `/health`, because the forward is up well before the process is listening."""
+def start(link: Link) -> bool:
+    """Spawn the ssh process, and say whether there is now one to wait for.
+
+    Does not wait for the hand behind it to bind — `ready` is set by whoever polls `/health`,
+    because the forward is up well before the process is listening.
+
+    **False means "still serving a backoff", and the caller must do nothing else.** Every
+    `went_down` pushes the next attempt further out, so a caller that went on to fail a machine
+    it never actually tried would push it out again — and with a phone polling every few seconds
+    that arithmetic never lets the retry fire at all. A machine that dropped overnight then
+    stayed unreachable for as long as anyone was watching, which is the worst possible time.
+    """
     if link.alive:
-        return
+        return True
     if time.monotonic() < link.next_try:
-        return
+        return False
     command = [
         "ssh", *SSH_OPTIONS,
         "-L", f"{link.port}:127.0.0.1:{HAND_PORT}",
@@ -162,9 +171,10 @@ def start(link: Link) -> None:
     except OSError as error:
         link.error = f"cannot run ssh: {error}"
         _back_off(link)
-        return
+        return False
     link.error = ""
     log.info("link to %s opening on 127.0.0.1:%d", link.machine.id, link.port)
+    return True
 
 
 # ssh writes advisory banners to stderr, which is merged into stdout here so a failing machine

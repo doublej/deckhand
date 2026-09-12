@@ -77,3 +77,69 @@ def test_each_remote_machine_gets_its_own_port_and_the_primary_gets_none(monkeyp
     made = link.links()
     assert set(made) == {"ubuntu", "fractal"}, "the primary is this Mac; it needs no link"
     assert len({one.port for one in made.values()}) == 2, "two machines cannot share one port"
+
+
+class TestABackoffThatCanActuallyExpire:
+    """The failure this class exists for was measured on 2026-09-12, not imagined.
+
+    Ubuntu's ssh link died overnight. The next morning, with the phone open and polling every
+    few seconds, `/machines` said it was unreachable and went on saying it — because every poll
+    called `went_down` for an attempt that had never been made, and every one of those pushed
+    the next attempt 300 seconds further away. The retry could only fire while nobody was
+    looking, which is the one time it is no use.
+    """
+
+    @pytest.fixture
+    def down(self, monkeypatch):
+        one = link.Link(machine=UBUNTU, port=4191)
+        link.went_down(one, "the machine went to sleep")
+        monkeypatch.setattr(link.subprocess, "Popen", lambda *a, **k: pytest.fail("spawned ssh"))
+        return one
+
+    def test_a_link_serving_its_backoff_says_it_did_not_start(self, down):
+        assert link.start(down) is False
+
+    def test_asking_again_does_not_move_the_next_attempt(self, down):
+        """The whole bug in one assertion: the wait may not grow when nothing was tried."""
+        was = down.next_try
+        for _ in range(20):
+            link.start(down)
+        assert down.next_try == was
+
+    def test_the_wait_expires_and_the_link_tries_again(self, down, monkeypatch):
+        spawned: list[list[str]] = []
+        monkeypatch.setattr(link.subprocess, "Popen", lambda cmd, **k: spawned.append(cmd))
+        monkeypatch.setattr(link.time, "monotonic", lambda: down.next_try + 1)
+
+        assert link.start(down) is True
+        assert spawned and "-L" in spawned[0]
+
+    def test_a_link_already_up_is_started_without_spawning_a_second_one(self, monkeypatch):
+        one = link.Link(machine=UBUNTU, port=4191)
+        monkeypatch.setattr(link.subprocess, "Popen", lambda *a, **k: pytest.fail("spawned ssh"))
+        monkeypatch.setattr(type(one), "alive", property(lambda self: True))
+
+        assert link.start(one) is True
+
+
+class TestACallThatFindsAMachineBackedOff:
+    """Where the 2026-09-12 failure actually lived: `call` went on to `ready` a link `start` had
+    refused to spawn, and `ready` failed it — which is the push that made the wait immortal."""
+
+    @pytest.fixture
+    def down(self, monkeypatch):
+        one = link.Link(machine=UBUNTU, port=4191)
+        link.went_down(one, "the machine went to sleep")
+        monkeypatch.setattr(link, "_links", {"ubuntu": one})
+        monkeypatch.setattr(link.subprocess, "Popen", lambda *a, **k: pytest.fail("spawned ssh"))
+        return one
+
+    def test_it_answers_absent_without_touching_the_wait(self, down):
+        import asyncio
+
+        from deckhand_daemon.fleet import proxy
+
+        was = down.next_try
+        for _ in range(20):
+            assert asyncio.run(proxy.call("ubuntu", "GET", "/sessions")) is None
+        assert down.next_try == was, "a call that tried nothing must not push the next attempt"

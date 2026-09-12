@@ -133,3 +133,40 @@ def test_deliver_passes_the_words_through_untouched(client, monkeypatch):
         headers={config.TOKEN_HEADER: config.token()},
     )
     assert seen["text"] == words
+
+
+class TestAHandThatHasBeenForgotten:
+    """The failure measured on 2026-09-12, and the only thing that can answer it.
+
+    A hand started at 18:44 was still holding port 4181 seventeen hours later. Its stdin was a
+    pipe from an `sshd: jurrejan@notty` with no client left — the Mac's ssh had gone without
+    closing the connection, and sshd held the session open, so `_die_with_the_link` never saw
+    the EOF it waits for. Every hand started after that failed to bind and exited, while
+    `/health` went on answering from the stale one: the link read up and the listing was a day
+    old, with nothing anywhere saying so.
+    """
+
+    def test_anything_at_all_counts_as_hearing_from_the_daemon(self, monkeypatch):
+        """`/health` included, which is the one the keepalive actually sends."""
+        monkeypatch.setattr(hand, "_heard", 0.0)
+        client = TestClient(hand.app)
+
+        client.get("/health")
+
+        assert hand._heard > 0.0
+
+    def test_a_refused_call_counts_too(self, monkeypatch):
+        """A wrong token is still the daemon talking — and a hand that exited over one would
+        take the port with it every time the two disagreed."""
+        monkeypatch.setattr(hand, "_heard", 0.0)
+        client = TestClient(hand.app)
+
+        assert client.get("/sessions", headers={"x-deckhand-token": "wrong"}).status_code == 401
+        assert hand._heard > 0.0
+
+    def test_the_silence_it_waits_for_is_longer_than_the_daemons_heartbeat(self):
+        """The two numbers are a pair: a hand must only ever reach this when the daemon has
+        really gone, never because one keepalive was late."""
+        from deckhand_daemon.fleet import merge
+
+        assert hand.FORGOTTEN_AFTER > merge.KEEP_WARM * 2

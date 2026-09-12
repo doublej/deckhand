@@ -59,9 +59,11 @@ async def lifespan(_: FastAPI):
     watchers = [asyncio.create_task(plugin.watch()), asyncio.create_task(push.watch()),
                 asyncio.create_task(nudge.watch()), asyncio.create_task(briefings.watch()),
                 asyncio.create_task(manager_agent.watch()),
-                # Open every machine's link now rather than on the first listing that wants one:
-                # otherwise the whole ssh handshake lands on the one request a person is watching.
-                asyncio.create_task(fleet.warm())]
+                # Open every machine's link now rather than on the first listing that wants one
+                # — otherwise the whole ssh handshake lands on the one request a person is
+                # watching — and go on asking, so a link that drops is remade in the background
+                # and the hand behind it never falls silent long enough to time itself out.
+                asyncio.create_task(fleet.keep_warm())]
     yield
     for watcher in watchers:
         watcher.cancel()
