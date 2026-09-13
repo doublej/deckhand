@@ -162,6 +162,13 @@ struct SessionView: View {
         .onChange(of: model.manager.pane) { _, name in show(name) }
         .task {
             model.turns = []
+            // The subagents go with them. Both are one session's at a time, and the dashboard
+            // now says how many are running the instant it appears — so the previous session's
+            // count would be on screen for the second it takes the first poll to land, on the
+            // one square whose whole claim is that the number is true. The transcript had the
+            // same exposure through `LooseAgents` and nobody could see it there, because that
+            // list is filtered against `turns`, which this line already cleared.
+            model.agents = [:]
             model.current = session.sessionId
             show(model.manager.pane)
             // Beside the transcript, not in front of it. The summariser thinks for ten

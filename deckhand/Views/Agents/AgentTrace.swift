@@ -75,6 +75,10 @@ struct LooseAgents: View {
 
 /// One agent as a row, openable or not.
 ///
+/// Not private, and the one caller outside this file is why: the dashboard's own listing draws
+/// the same row under two headings of its own (`AgentList`), and a second row that looked nearly
+/// like this one would be the drift a settled style exists to stop.
+///
 /// **It looks pressable on purpose**, the way `WaitingSlip` does and for the same reason: the
 /// tell used to be a 10pt tertiary chevron on a fill the un-openable row wore too, so a row you
 /// could open and a row you could not were the same row. The two things that say otherwise are
@@ -82,7 +86,7 @@ struct LooseAgents: View {
 /// it, and the app's own tint on the chevron, which is the colour of every other thing here that
 /// answers a tap. The fill stays `tileIdle`: how a subagent reads inside the transcript was the
 /// half that was already right.
-private struct AgentFace: View {
+struct AgentFace: View {
     let title: String
     let line: String
     let running: Bool

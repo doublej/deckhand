@@ -243,6 +243,18 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   not a number on the tile. What a tile *says* is `DeckhandKit/Dashboard/`, where `just test` can
   prove every sentence; the order they are read in is the order they are written, because a grid's
   reading order is a layout fact rather than a rule anything can check.
+- **The subagents square is the one tile that costs nothing and answers the most.** `model.agents`
+  is refreshed at the tail of every `loadTurns`, which the session page polls every five seconds
+  whichever pane is showing, so the count of what is running is free and always current. Finding a
+  subagent used to mean knowing roughly which turn started it and scrolling the transcript to that
+  row — `AgentTrace` draws the ones a turn started and `LooseAgents` gathers the running strays,
+  and both are readings of the conversation rather than a listing. `AgentList` is the listing, and
+  it is the one place that shows **finished** agents too: `LooseAgents` is running-only because a
+  permanent roll-call pinned under a transcript is a second transcript, and a square is the exact
+  opposite case — it is where a full listing was asked for. The row is `AgentFace` either way,
+  which is why that type is no longer private, and the destination is `AgentView` either way.
+  `SessionView` clears `model.agents` beside `model.turns`: one session's at a time, and a square
+  claiming the last session's count for a second is the one thing this grid must not do.
 - **Two of the four controls are on the grid and two are not, and it is the same line the Lock
   Screen card draws.** `cancel` and `compact` only ever make a session do less, so they are
   squares — and compact carries the window figure that decides whether to press it, which is the
