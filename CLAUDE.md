@@ -144,6 +144,10 @@ the session. `?deliver=false` transcribes without sending, for the review card, 
 - `GET /sessions/{id}/commands` — the slash commands and skills that session could be handed
 - `GET /sessions/{id}/context` — every CLAUDE.md a session in that folder is loaded with, as a
   tree with the connectors already drawn, and what it costs
+- `GET /sessions/{id}/agents` — the subagents it has started, each with its own step count and
+  whether it is still going; `GET /sessions/{id}/agents/{aid}/turns` is one of their conversations.
+  A subagent is not a tool call: Claude Code writes its transcript beside the session's, under
+  `<sessionId>/subagents/`, and the phone draws it as a row you can open rather than a dot
 - `GET /sessions/{id}/raw` — the transcript as readable lines, for when the app's reading looks wrong
 - `POST /sessions/{id}/queue/clear` — draw a line under an inbox holding prompts nothing will read
 - `GET /filters` — every filter this Mac has; `GET|PUT /sessions/{id}/filters` — the chain one

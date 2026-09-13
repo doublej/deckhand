@@ -22,7 +22,7 @@ MAX_TEXT = 4000
 MACHINE = re.compile(r"^\s*<\s*(?:task-notification|system-reminder|local-command-\w+)\b", re.IGNORECASE)
 
 
-def blocks_of(entry: dict) -> str | None:
+def blocks_of(entry: dict, sidechain: bool = False) -> str | None:
     """Every text block of one entry, joined, still inside whatever envelope carried it.
 
     Split out from `text_of` because who wrote a message is only legible before the envelope
@@ -30,8 +30,15 @@ def blocks_of(entry: dict) -> str | None:
 
     Tool calls, tool results, thinking blocks and subagent traffic are not part of the
     conversation the phone shows.
+
+    **`sidechain` is which file is being read, not which entry.** Every row of a subagent's own
+    transcript carries `isSidechain: true`, so dropping them is exactly right while reading the
+    session's transcript — its agents' chatter is not its conversation — and exactly wrong while
+    reading the agent's, where it is the only thing there is. Without the distinction a subagent
+    reads as forty rows of nothing, which is what it did: three real agents, every one of them
+    with `turns=0`.
     """
-    if entry.get("isSidechain") or entry.get("isMeta"):
+    if (entry.get("isSidechain") and not sidechain) or entry.get("isMeta"):
         return None
     message = entry.get("message")
     if not isinstance(message, dict):
@@ -48,9 +55,9 @@ def blocks_of(entry: dict) -> str | None:
     return "\n".join(p for p in parts if p) or None
 
 
-def text_of(entry: dict) -> str | None:
+def text_of(entry: dict, sidechain: bool = False) -> str | None:
     """The human-readable text of one transcript entry, or None if it carries none."""
-    raw = blocks_of(entry)
+    raw = blocks_of(entry, sidechain)
     if raw is None:
         return None
     text = machinery.unwrapped(raw)

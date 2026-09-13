@@ -45,6 +45,10 @@ final class AppModel {
     /// rail's own logic is in `Views/Rail/Linking.swift`.
     var trails: [LinkTrail] = []
     var turns: [Turn] = []
+    /// The subagents of the session on screen, keyed by the tool call that started each — which
+    /// is how a turn finds its own without holding a copy. Refreshed with the turns, because an
+    /// agent that appeared between two polls belongs to a turn already drawn.
+    var agents: [String: Agent] = [:]
     var deckTurns: [String: [Turn]] = [:]
     var summaries: [String: String] = [:]
     /// The one line each session needs to say in the rail: what to know, or what to do.

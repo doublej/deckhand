@@ -149,17 +149,22 @@ public struct Tool: Codable, Hashable, Sendable, Identifiable {
     public let name: String
     public let detail: String
     public let succeeded: Bool
+    /// Claude Code's own id for this call, and the join to a subagent: an `Agent` row carries the
+    /// same string as its `toolUseId`. Empty from a daemon that predates it, which is why nothing
+    /// is keyed on it being there.
+    public var toolId: String = ""
     /// The whole call and the whole answer, for when a dot and a line are not enough.
     public var call: String = ""
     public var result: String = ""
 
     public init(name: String, detail: String, succeeded: Bool = true,
-                call: String = "", result: String = "") {
+                call: String = "", result: String = "", toolId: String = "") {
         self.name = name
         self.detail = detail
         self.succeeded = succeeded
         self.call = call
         self.result = result
+        self.toolId = toolId
     }
 
     /// Same tolerance as `Turn`: a daemon a version behind sends neither of the last two.
@@ -169,15 +174,21 @@ public struct Tool: Codable, Hashable, Sendable, Identifiable {
         detail = try box.decode(String.self, forKey: .detail)
         succeeded = try box.decodeIfPresent(Bool.self, forKey: .succeeded) ?? true
         call = try box.decodeIfPresent(String.self, forKey: .call) ?? ""
+        toolId = try box.decodeIfPresent(String.self, forKey: .toolId) ?? ""
         result = try box.decodeIfPresent(String.self, forKey: .result) ?? ""
     }
 
-    /// Stable enough for a list that is rebuilt every few seconds from the same transcript.
-    public var id: String { "\(name)\(detail)\(succeeded)" }
+    /// Claude Code's own id where the Mac sent one, and otherwise what it always was: stable
+    /// enough for a list rebuilt every few seconds from the same transcript.
+    public var id: String { toolId.isEmpty ? "\(name)\(detail)\(succeeded)" : toolId }
+
+    /// A subagent, rather than something this session ran itself. `Task` is the older spelling
+    /// and still appears in transcripts written before it changed.
+    public var isAgent: Bool { name == "Agent" || name == "Task" }
 
     /// What a tool does, which is the only thing a single dot has room to say. Reading,
     /// changing and running are worth telling apart at a glance; the exact tool is a tap away.
-    public enum Kind: Sendable {
+    public enum Kind: Sendable, Equatable {
         case reading, changing, running, asking, other
     }
 

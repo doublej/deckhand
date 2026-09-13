@@ -31,7 +31,9 @@ struct ToolTrace: View {
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("tool-trace")
             if depth != .dots {
-                VStack(alignment: .leading, spacing: Spacing.extraSmall) {
+                // Lazy: the whole point of the strip is that this trace can hold hundreds, and
+                // a VStack builds every one of them the moment the list opens.
+                LazyVStack(alignment: .leading, spacing: Spacing.extraSmall) {
                     ForEach(tools) { row($0) }
                 }
                 .padding(.leading, Spacing.xxs)
@@ -44,17 +46,28 @@ struct ToolTrace: View {
 
     /// The dots are the closed state's whole content. Once the list is open they are stacked
     /// down the left of it, one per row, so repeating them across the top says nothing twice.
+    ///
+    /// **Two drawings of one fact, and the changeover is the whole layout system.** Under
+    /// `countable` every step is its own dot, because then the row answers "which ones" as well
+    /// as "how many". Over it the same row becomes one strip of the same colours, proportioned by
+    /// how many steps each run holds — which costs a fixed width whether there are thirty steps
+    /// or three thousand. Nothing scrolls, nothing wraps, nothing is hidden behind a "+417 more".
     private var head: some View {
         HStack(spacing: 5) {
             if depth == .dots {
-                ForEach(Array(tools.enumerated()), id: \.offset) { _, tool in
-                    Circle().fill(colour(tool)).frame(width: 6, height: 6)
+                if tools.count <= Steps.countable {
+                    ForEach(Array(tools.enumerated()), id: \.offset) { _, tool in
+                        Circle().fill(colour(tool)).frame(width: 6, height: 6)
+                    }
+                } else {
+                    StepStrip(runs: Steps.runs(tools), colour: colour)
                 }
             }
             Text(label)
                 .font(Typography.hint)
                 .foregroundStyle(Palette.textTertiary)
                 .padding(.leading, depth == .dots ? Spacing.xxs : 0)
+                .layoutPriority(1)
             Spacer(minLength: 0)
         }
         .contentShape(.rect)
@@ -123,15 +136,49 @@ struct ToolTrace: View {
         )
     }
 
+    private func colour(_ tool: Tool) -> Color { colour(tool.kind, !tool.succeeded) }
+
     /// A failure is red whatever it was doing: the one thing worth breaking the scheme for.
-    private func colour(_ tool: Tool) -> Color {
-        guard tool.succeeded else { return Palette.lcdRed }
-        switch tool.kind {
+    private func colour(_ kind: Tool.Kind, _ failed: Bool) -> Color {
+        guard !failed else { return Palette.lcdRed }
+        switch kind {
         case .reading: return Palette.textTertiary
         case .changing: return accent
         case .running: return Palette.lcdGreen
         case .asking: return Palette.lcdYellow
         case .other: return Palette.textTertiary
         }
+    }
+}
+
+/// Every step in one strip of constant width, however many there are.
+///
+/// The answer to "what does a row of dots do at four hundred tool calls". It keeps exactly what
+/// the dots said — how much, of what kind, and where it went wrong — and spends a fixed width
+/// saying it, so the row is the same size at thirty steps and at three thousand. The arithmetic
+/// is `Steps.widths`, in DeckhandKit, where it can be tested.
+struct StepStrip: View {
+    let runs: [StepRun]
+    /// How a kind is coloured, which is the caller's business: the trace already decides that for
+    /// its dots, and a strip that picked its own would be a second palette to keep in step.
+    let colour: (Tool.Kind, Bool) -> Color
+
+    private static let height: CGFloat = 6
+
+    var body: some View {
+        GeometryReader { proxy in
+            HStack(spacing: 0) {
+                ForEach(Array(zip(runs, Steps.widths(runs, in: proxy.size.width))),
+                        id: \.0.id) { run, width in
+                    Rectangle()
+                        .fill(colour(run.kind, run.failed))
+                        .frame(width: width)
+                }
+            }
+            .clipShape(Capsule())
+        }
+        .frame(height: Self.height)
+        .frame(maxWidth: .infinity)
+        .accessibilityIdentifier("step-strip")
     }
 }

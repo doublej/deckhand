@@ -17,6 +17,8 @@ struct TranscriptView: View {
     @State private var stepping = false
     /// The turn a hold has opened, and nil the rest of the time.
     @State private var held: Held?
+    /// The subagent whose own transcript is open, and nil the rest of the time.
+    @State private var reading: Agent?
 
     /// A turn on its way to the reader. Its own id rather than the turn's position, because the
     /// poll renumbers every row on a prepend and a sheet identified by a number that moves under
@@ -38,7 +40,15 @@ struct TranscriptView: View {
                         // it anyway — silently it would not scroll at all.
                         VStack(alignment: .leading, spacing: Spacing.xxs) {
                             // What it ran sits above what it said, in the order it happened.
-                            if !turn.tools.isEmpty { ToolTrace(tools: turn.tools) }
+                            // Subagents come out of that row and get their own: one is a
+                            // conversation that outlives the call which started it, and a dot
+                            // cannot say "still going" or be opened.
+                            let started = turn.tools.filter(\.isAgent)
+                            let steps = turn.tools.filter { !$0.isAgent }
+                            if !started.isEmpty {
+                                AgentTrace(tools: started, agents: model.agents) { reading = $0 }
+                            }
+                            if !steps.isEmpty { ToolTrace(tools: steps) }
                             if !turn.text.isEmpty {
                                 TurnCard(turn: turn,
                                          showsRole: startsRun(index),
@@ -86,6 +96,7 @@ struct TranscriptView: View {
             // Held here rather than on the card: a sheet per row in a lazy stack is a sheet
             // that is torn down the moment the row it hangs off scrolls out of the list.
             .sheet(item: $held) { TurnReader(turn: $0.turn) }
+            .sheet(item: $reading) { AgentView(model: model, session: session, agent: $0) }
         }
     }
 

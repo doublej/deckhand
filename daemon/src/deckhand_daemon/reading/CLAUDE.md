@@ -125,3 +125,28 @@ context.py      # the CLAUDE.md tree a session in a folder is loaded with, befor
 ## Verification
 
 `daemon/tests/reading/` — pytest, inside `just daemon-test`.
+
+## Subagents are a second transcript, not a lane in this one
+
+`agents.py`. Claude Code keeps a subagent's conversation in its own file beside the session's —
+`<sessionId>/subagents/agent-<id>.jsonl`, with an `agent-<id>.meta.json` next to it — and the
+`toolUseId` in that meta file is the `id` of the `tool_use` block in the parent. That is the join,
+and it means nothing here guesses: a dot in the conversation and a folder on disk are two views of
+one thing. The tool is called `Agent`; `Task` is the older spelling and both are read.
+
+Three things that cost something to learn:
+
+- **Every row of a subagent's transcript carries `isSidechain: true`.** `entries.blocks_of` drops
+  those, which is right while reading the session — its agents' chatter is not its conversation —
+  and wrong while reading the agent, where it is the only thing there is. Hence the `sidechain`
+  argument threaded through `blocks_of`, `text_of` and `_scan`: it says which *file* is being read,
+  never which entry. Without it three real agents read as `turns=0`.
+- **"Running" needs the session to be mid-turn, not just a missing result.** Results are read off
+  the tail like everything else here, so an agent that finished last week has none in the window.
+  On the first live run that made 16 of one session's 45 agents read as still going while the
+  session sat idle. A subagent runs inside its parent's turn, so `turn_ended` is the other half.
+- **The agent id names a file, so it is checked** (`_safe`), not trusted. Claude Code's own are
+  `agent-` and hex; anything with a separator in it is refused before a path is built.
+
+`reading/routes.py` is mounted on the daemon *and* on a hand, like `artifacts` and `links`: a
+subagent's transcript is a file on the disk of the machine that ran it.

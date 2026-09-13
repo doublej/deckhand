@@ -44,6 +44,11 @@ class Tool:
     # The whole call and the whole answer, for when a dot is not enough.
     call: str = ""
     result: str = ""
+    #: Claude Code's own id for this call. Carried because it is the join to a subagent: a
+    #: `tool_use` named `Agent` and a folder under `<sessionId>/subagents/` are two views of one
+    #: thing, and `agents.Agent.tool_use_id` is the other half of it. The phone does the joining,
+    #: so nothing here has to index the subagent folder on every turn it reads.
+    tool_id: str = ""
 
 
 @dataclass(slots=True)
@@ -243,7 +248,7 @@ def _thoughts_of(entry: dict) -> list[str]:
     ]
 
 
-def _scan(path: Path, window: int) -> list[Turn]:
+def _scan(path: Path, window: int, sidechain: bool = False) -> list[Turn]:
     """Parse the conversation turns in the last `window` bytes, with what was run between them.
 
     Tool calls are collected as they appear and handed to the next message that has something
@@ -272,7 +277,7 @@ def _scan(path: Path, window: int) -> list[Turn]:
         answers.update(_answers(entry))
         ran.extend(_tools_of(entry))
         thought.extend(_thoughts_of(entry))
-        text = text_of(entry)
+        text = text_of(entry, sidechain)
         if text is None:
             continue
         turns.append(Turn(role=entry["type"], text=text, written_by=wrote_of(entry),
@@ -335,7 +340,8 @@ def _tools_of(entry: dict) -> list[tuple[str, Tool]]:
     return [
         (
             block.get("id", ""),
-            Tool(name=block.get("name", "tool"), detail=_detail(block), call=_call(block)),
+            Tool(name=block.get("name", "tool"), detail=_detail(block), call=_call(block),
+                 tool_id=block.get("id", "")),
         )
         for block in content
         if isinstance(block, dict) and block.get("type") == "tool_use"

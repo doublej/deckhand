@@ -29,6 +29,9 @@ from . import merge, registry, remote
 # Suffixes of `/sessions/{id}/…` that belong to the machine holding the files.
 FORWARDED = (
     "turns",
+    # Both the listing and one agent's own turns: the prefix match below carries
+    # `agents/<id>/turns` along with `agents` itself.
+    "agents",
     "raw",
     "context",
     "commands",

@@ -38,7 +38,23 @@ extension AppModel {
             self.queued[session.sessionId] = rounds.queued
             more = rounds.more
         }
+        await loadAgents(for: session)
         return more
+    }
+
+    /// The session's subagents, filed under the tool call that started each.
+    ///
+    /// Deliberately not inside `run`: a daemon that has never heard of the route answers 404,
+    /// which this app reads as "that session is gone" and shows as an error over the whole
+    /// screen. A session with no subagents and a Mac that is a version behind are the same
+    /// answer here — none — and neither is worth a banner.
+    func loadAgents(for session: Session) async {
+        guard let client = settings.client() else { return }
+        guard let found = try? await client.agents(of: session.sessionId) else {
+            agents = [:]
+            return
+        }
+        agents = Dictionary(found.map { ($0.toolUseId, $0) }) { first, _ in first }
     }
 
     /// The page before the one on screen, put in front of it. Hands back how many arrived — the

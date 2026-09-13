@@ -36,6 +36,7 @@ from .manager import routes as manager_routes
 from .orders import routes as order_routes
 from .projects import routes as project_routes
 from .reading import asked, commands, context, readable, transcripts
+from .reading import routes as reading_routes
 from .settings import routes as settings_routes
 
 
@@ -81,6 +82,7 @@ app.include_router(filter_routes.router, dependencies=[Depends(require_token)])
 app.include_router(link_routes.router, dependencies=[Depends(require_token)])
 app.include_router(manager_routes.router, dependencies=[Depends(require_token)])
 app.include_router(order_routes.router, dependencies=[Depends(require_token)])
+app.include_router(reading_routes.router, dependencies=[Depends(require_token)])
 app.include_router(project_routes.router, dependencies=[Depends(require_token)])
 app.include_router(settings_routes.router, dependencies=[Depends(require_token)])
 app.include_router(saying.router, dependencies=[Depends(require_token)])
