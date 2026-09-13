@@ -213,10 +213,44 @@ Three things make this worth doing rather than a second page format:
 
 Copy `demos/aloud.html`, change the title and the block, and that is the whole of writing one.
 
+## A slip that is not a question
+
+Everything above asks something. A **logbook** does not: it is the running account of a job too
+long to say in a sentence, locked on the phone so the person can see where it has got to without
+having to ask. `skills/deckhand/scripts/logbook.py` writes one, `demos/logbook.html` is the page,
+and four decisions in it are each the fix for something a hand-rolled one got wrong.
+
+- **Its state lives beside the page**, as `<slug>.log.json` in the same folder, and the page is
+  rewritten whole from it on every command. A page that must be *edited* to be appended to costs
+  a rewrite per entry, and a logbook costing that stops getting entries by the third one.
+- **It is written flat, so it belongs to the folder.** The one slip whose default scope is not
+  the session's own, for the same reason that scope exists elsewhere: a question has to come back
+  to whoever asked it, while a job outlives the session working it — compacted, cleared,
+  restarted, handed over. Flat is what lets the next session append to the same book by running
+  the same command in the same directory, with nothing to discover and nothing to be told.
+- **Rewriting it does not clear the answer.** `slip.py` deletes `<slug>.answer.json` when it
+  rewrites a page, because rewriting a question is asking it again. Rewriting a logbook is the
+  same page saying more, so a note the person left on it survives every entry appended after.
+- **Both files land with `os.replace`.** A question page is written once; this one is written
+  while the phone may be fetching it, and half a page is a broken slip rather than an error.
+
+The page renders itself from one `id="deckhand-logbook"` block, the arrangement `aloud.html`
+already uses — so the markup exists once, in the demo `demos/check.py` gates, rather than being
+concatenated in Python where nothing would check it. Twelve entries are drawn and the rest
+counted, because a phone is a phone; the state file keeps all of them, and the counts at the top
+are over all of them.
+
+That it answers at all is not a contradiction. The field at the bottom is a note back, in the
+shape a `text` ask returns, so someone reading "blocked on the export" on a train can say what to
+do instead without opening a laptop — and a page nobody can reply to is a page they end up
+replying to by ringing the person who wrote it.
+
 ## The demo set
 
-Five pages under `demos/`, one per thing `consult-user-mcp` can ask, because that MCP is the
-existing proof of which questions are worth asking from a phone: a confirm, a pick (single and
-multiple), a text field, a form of several questions in sequence, and a set of sliders. They are
-working artifacts, not mockups — copy one into a session's `.deckhand/artifacts/<session id>/`
-and it runs.
+Seven pages under `demos/`. Five are one per thing `consult-user-mcp` can ask, because that MCP
+is the existing proof of which questions are worth asking from a phone: a confirm, a pick (single
+and multiple), a text field, a form of several questions in sequence, and a set of sliders. The
+other two have no `consult-user` equivalent because they only make sense on a phone — `aloud.html`
+and `logbook.html`. They are working artifacts, not mockups — copy one into a session's
+`.deckhand/artifacts/<session id>/` and it runs, though those last two are better written by the
+scripts that own them.

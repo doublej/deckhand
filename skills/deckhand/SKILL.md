@@ -75,7 +75,8 @@ than about the work in hand — pass `--session ""` to either script. The phone 
 ## Writing one by hand
 
 For a wizard, sliders, or anything those four miss, copy a template out of
-`~/.claude/skills/deckhand/templates/` — all four plus `form` and `tweak`, as working pages:
+`~/.claude/skills/deckhand/templates/` — all four plus `form` and `tweak`, as working pages
+(`logbook` is in there as well, but a script writes that one):
 
 ```bash
 mkdir -p .deckhand/artifacts/$CLAUDE_CODE_SESSION_ID
@@ -118,6 +119,45 @@ draw them — the app then renders one card per question with its own talk mark:
 That block is the whole of what you edit — `aloud.html` renders itself from it, so the questions
 exist once. The answer arrives as `{"answer": {id: words}, "completedCount": n}`, an unanswered
 question left out rather than sent empty; every way the block can be wrong renders as plain HTML.
+
+## Saying where a long job has got to
+
+Some work is too long to report in a sentence and too slow to be worth interrupting for: a
+migration, a port, a release, anything that crosses a compaction. A **logbook** is a slip that
+asks nothing — one page the person can look at whenever they wonder how it is going, so they
+never have to ask.
+
+```bash
+LOG=~/.claude/skills/deckhand/scripts/logbook.py
+python3 $LOG start "Moving the reader onto the new store" --standing "Porting first, cutover last."
+python3 $LOG add done "Read every caller" "Nine, and two of them are in the manager."
+python3 $LOG add blocked "Export needs an Apple account" "There is no token on this Mac."
+python3 $LOG standing "Everything but the cutover is done."
+python3 $LOG finish "Cut over at 16:40, no session lost its place."
+```
+
+`add` takes a state — `done`, `doing`, `blocked` or `note` — a heading of at most 80 characters,
+and one line of at most 300 saying what happened. Flags go **after** the verb. Each command
+rewrites the whole page, so an entry costs one command and no thought; that cheapness is the
+design, because a logbook that costs a page rewrite per entry stops getting entries by the third
+one. A longer line is refused rather than cut, so nothing you thought you recorded is missing.
+
+**Reach for one** when the job has more than a handful of steps, when it will outlive this
+session, or when it has a part the person will want to see coming — a cutover, a deletion, the
+thing that will need them. Start it as you start the job: a logbook written at the end is a
+report, and they already get those. **Do not** write one for work you will finish in a few
+minutes, or to narrate what you are about to say in the session anyway.
+
+**A logbook belongs to the folder, not to this session**, which is the one place it differs from
+every other slip. It is written flat, so another session working here appends to the same book
+with the same command and a compaction, a `/clear` or a handover loses none of it. Its state is
+`.deckhand/artifacts/<slug>.log.json`, beside the page; `--slug` gives a second job its own book
+and `--session "$CLAUDE_CODE_SESSION_ID"` pins one to this session if you really want that.
+
+Say once that it is there; after that it is theirs to open. The page carries a single field as
+well — a note back, so someone reading "blocked on X" on a train can say what to do instead. It
+arrives like any other answer, so `answer.py logbook` reads it, and rewriting the page does not
+take it away.
 
 ## Asking for the person outright
 

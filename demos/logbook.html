@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Moving the transcript reader onto the new store</title>
+</head>
+<body>
+<main>
+  <p class="eyebrow" id="slug">logbook</p>
+  <h1>Moving the transcript reader onto the new store</h1>
+  <p class="lead">The reader is ported and its tests are green. What is left is the cutover,
+    which wants the daemon stopped for about a minute and is the part I would rather you saw
+    coming.</p>
+
+  <p class="state busy" id="how">WORKING</p>
+  <p class="hint" id="tally"></p>
+
+  <!--
+    WRITTEN BY logbook.py, NOT EDITED BY HAND.
+
+    Everything below renders itself from this block, the way aloud.html renders itself from its
+    questions — so the entries exist once and what the phone shows cannot drift from what the
+    Mac has. `skills/deckhand/scripts/logbook.py` rewrites the block on every `add`, keeping
+    the <title>, the slug and the standing line above in step with it, and strips this comment
+    on the way out. The block that ships here is an example, and the page is live with it.
+
+      finished  the job is over, whatever the last entry says
+      updated   when the Mac last rewrote this, so a time of day on an entry means something
+      earlier   entries the Mac still holds and this page is not showing
+      counts    over every entry, not only the shown ones
+      entries   oldest first: state (done, doing, blocked, note), step, said, at
+  -->
+  <script type="application/json" id="deckhand-logbook">
+  {
+    "finished": false,
+    "updated": "2026-09-12T16:41:00+02:00",
+    "earlier": 2,
+    "counts": { "done": 5, "doing": 1, "blocked": 0, "note": 2 },
+    "entries": [
+      { "state": "done",
+        "step": "Read every caller of the old reader",
+        "said": "Nine, and two of them are in the manager rather than the routes — those were the ones that would have been missed.",
+        "at": "2026-09-11T14:02:00+02:00" },
+      { "state": "done",
+        "step": "Ported the reader onto the new store",
+        "said": "Same public shape, so nothing above it changed. 240 lines, under the cap.",
+        "at": "2026-09-12T10:18:00+02:00" },
+      { "state": "note",
+        "step": "The old store keeps one thing the new one does not",
+        "said": "Compaction markers. Nothing reads them today, so they are dropped rather than carried.",
+        "at": "2026-09-12T11:05:00+02:00" },
+      { "state": "done",
+        "step": "Tests green on both stores",
+        "said": "The suite runs twice, once against each, which is how the cutover gets proved before it happens.",
+        "at": "2026-09-12T15:30:00+02:00" },
+      { "state": "doing",
+        "step": "Writing the cutover",
+        "said": "The daemon has to be stopped for it. About a minute, and no session loses its place.",
+        "at": "2026-09-12T16:41:00+02:00" }
+    ]
+  }
+  </script>
+
+  <h2>Steps</h2>
+  <p class="hint" id="earlier" hidden></p>
+  <div class="rows" id="steps"></div>
+
+  <label class="eyebrow" for="note">Say something back</label>
+  <input id="note" type="text" placeholder="Goes to the session as your own words">
+  <div class="actions">
+    <button id="send" class="primary" disabled>Send</button>
+  </div>
+
+  <section id="loose" hidden>
+    <hr>
+    <p class="state">OFF</p>
+    <p class="hint">Opened outside Deckhand, so nothing is connected and a note goes nowhere.
+      What it would have sent shows up here instead.</p>
+    <pre id="shape" hidden></pre>
+  </section>
+</main>
+
+<script>
+  const connected = Boolean(window.deckhand);
+  const log = JSON.parse(document.getElementById("deckhand-logbook").textContent);
+  const entries = (log.entries || []).filter((entry) => entry && entry.step);
+  const shape = document.getElementById("shape");
+  const note = document.getElementById("note");
+  const send = document.getElementById("send");
+
+  // StateWord's own vocabulary: the word alone, no dot and no capsule. A badge reads as
+  // something you press, and there is nothing to press on a row of a logbook.
+  const WORDS = {
+    done: ["DONE", "state on"],
+    doing: ["DOING", "state busy"],
+    blocked: ["BLOCKED", "state err"],
+    note: ["NOTE", "state"]
+  };
+
+  // A time of day is enough while a job runs inside one day, and a lie the moment it does not —
+  // and a logbook is for the jobs that do not. So an entry from another day says which day.
+  function when(iso) {
+    const at = new Date(iso);
+    if (isNaN(at)) return "";
+    const clock = at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const now = new Date(log.updated || Date.now());
+    if (at.toDateString() === now.toDateString()) return clock;
+    return at.toLocaleDateString([], { day: "numeric", month: "short" }) + " " + clock;
+  }
+
+  // One row per entry: what happened takes the width, the state word sits at the end. The time
+  // and the sentence share the line under it, because two lines per entry is what fits a phone.
+  const steps = document.getElementById("steps");
+  for (const entry of entries) {
+    const row = document.createElement("div");
+    const words = document.createElement("span");
+    words.appendChild(document.createTextNode(entry.step));
+
+    const under = document.createElement("small");
+    under.textContent = [when(entry.at), entry.said].filter(Boolean).join(" · ");
+    words.appendChild(under);
+    row.appendChild(words);
+
+    const said = WORDS[entry.state] || WORDS.note;
+    const mark = document.createElement("p");
+    mark.className = said[1];
+    mark.textContent = said[0];
+    row.appendChild(mark);
+    steps.appendChild(row);
+  }
+
+  // The one word at the top has to survive being read at arm's length without the list under it.
+  // Finished wins over everything; otherwise the newest entry is where the job actually is.
+  const newest = entries.length ? entries[entries.length - 1] : null;
+  const how = document.getElementById("how");
+  const stuck = Boolean(newest && newest.state === "blocked");
+  const state = log.finished ? WORDS.done : stuck ? WORDS.blocked : WORDS.doing;
+  how.className = state[1];
+  // Its own three words on the same three colours. A row's word is about that one step and this
+  // one is about the whole job, and the two are read a second apart — DONE over a list of DONEs
+  // says nothing, FINISHED says the thing you opened the page for.
+  how.textContent = log.finished ? "FINISHED" : stuck ? "BLOCKED" : "WORKING";
+
+  // Counts over every entry the Mac holds, not only the ones drawn here, and a zero left out
+  // rather than written — "0 blocked" is a sentence about nothing.
+  const counts = log.counts || {};
+  const tally = [];
+  if (counts.done) tally.push(counts.done + " done");
+  if (counts.doing) tally.push(counts.doing + " in flight");
+  if (counts.blocked) tally.push(counts.blocked + " blocked");
+  if (counts.note) tally.push(counts.note + (counts.note === 1 ? " note" : " notes"));
+  if (log.updated) tally.push("updated " + when(log.updated));
+  document.getElementById("tally").textContent = tally.join(" · ");
+
+  if (log.earlier > 0) {
+    const line = document.getElementById("earlier");
+    line.textContent = log.earlier + (log.earlier === 1 ? " earlier step is" : " earlier steps are")
+      + " in the log on the Mac and not on this page.";
+    line.hidden = false;
+  }
+
+  // A logbook is read rather than answered — but the person reading one on a phone is exactly
+  // the person who can say "leave that, do the other thing first", and a field is the lane a
+  // phone dictates into. It answers in the shape a text ask does, so `answer.py <slug>` reads
+  // it with nothing new to learn.
+  function answer() {
+    const value = { answer: note.value.trim() };
+    if (!connected) {
+      shape.hidden = false;
+      shape.textContent = JSON.stringify(value, null, 2);
+      return;
+    }
+    window.deckhand.respond(value);
+    window.deckhand.close();
+  }
+
+  // What was said last time. The page is rewritten under the person every time the job moves and
+  // the Mac keeps the answer through it — unlike a question, where rewriting is asking again —
+  // so a note left an hour ago is still here.
+  const before = connected && window.deckhand.answer;
+  if (before && typeof before.answer === "string") note.value = before.answer;
+  send.disabled = note.value.trim() === "";
+
+  note.addEventListener("input", () => { send.disabled = note.value.trim() === ""; });
+  send.addEventListener("click", answer);
+
+  // Last, so the page only claims to be connected once everything on it is wired.
+  if (connected) document.getElementById("slug").textContent = window.deckhand.artifact.id;
+  else document.getElementById("loose").hidden = false;
+</script>
+</body>
+</html>
