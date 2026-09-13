@@ -143,3 +143,38 @@ class TestACallThatFindsAMachineBackedOff:
         for _ in range(20):
             assert asyncio.run(proxy.call("ubuntu", "GET", "/sessions")) is None
         assert down.next_try == was, "a call that tried nothing must not push the next attempt"
+
+
+class TestTheLinkIsDrained:
+    """A pipe nobody reads is a fuse: ssh's stdout holds 64 KB here, the hand writes into it on
+    every log line, and a full buffer blocks ssh's own write — which from the daemon's side is a
+    machine that stopped answering."""
+
+    def _drained(self, lines):
+        import io
+        import time
+
+        one = link.Link(machine=UBUNTU, port=4191)
+        one.process = type("P", (), {"stdout": io.StringIO("".join(f"{x}\n" for x in lines))})()
+        link._drain(one)
+        for _ in range(200):
+            if len(one._log) >= min(len(lines), link.KEPT_LINES):
+                break
+            time.sleep(0.005)
+        return one
+
+    def test_the_output_is_read_rather_than_left_in_the_pipe(self):
+        one = self._drained(["opening", "hand on ubuntu"])
+        assert link.said(one) == "opening\nhand on ubuntu"
+
+    def test_only_the_last_lines_are_kept(self):
+        """Bounded, or draining the pipe would only move the unbounded growth into this process."""
+        one = self._drained([f"line {n}" for n in range(link.KEPT_LINES * 3)])
+        assert len(one._log) == link.KEPT_LINES
+        assert one._log[-1] == f"line {link.KEPT_LINES * 3 - 1}"
+
+    def test_what_went_wrong_is_still_the_last_useful_line(self):
+        """`useful_error` reads the drained lines now instead of the pipe, and its own rule about
+        ssh's post-quantum banner has to go on holding."""
+        one = self._drained(["** WARNING: post-quantum", "ubuntu: Connection refused"])
+        assert link.useful_error(link.said(one)) == "ubuntu: Connection refused"

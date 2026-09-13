@@ -352,3 +352,46 @@ def test_redacted_thinking_is_not_an_empty_disclosure(tmp_path, monkeypatch):
     monkeypatch.setattr(transcripts, "transcript_path", lambda _: path)
     turns, _ = transcripts.page_turns("s", 4)
     assert turns[0].thoughts == []
+
+
+def test_a_remembered_transcript_is_not_answered_with_once_it_is_gone(claude_home):
+    """The path is kept so a listing does not walk 335 project folders per session per route.
+
+    It is checked before it is handed back, though, or a `/clear` and a tidied-up transcript
+    would leave every read route pointing at a file that is not there.
+    """
+    path = write_transcript(claude_home, [user("first")])
+    assert transcripts.transcript_path(SID) == path
+    assert transcripts.transcript_path(SID) == path  # the remembered one
+    path.unlink()
+    assert transcripts.transcript_path(SID) is None
+
+
+def test_two_roots_with_the_same_id_are_two_different_files(claude_home, monkeypatch, tmp_path):
+    """`projects_dir` reads an environment variable, so the id alone is not the key."""
+    mine = write_transcript(claude_home, [user("mine")])
+    assert transcripts.transcript_path(SID) == mine
+    other = tmp_path / "elsewhere"
+    (other / "projects" / "-Users-jj-dev").mkdir(parents=True)
+    theirs = write_transcript(other, [user("theirs")])
+    monkeypatch.setenv("DECKHAND_CLAUDE_HOME", str(other))
+    assert transcripts.transcript_path(SID) == theirs
+
+
+def test_the_folder_walk_happens_once_per_session(claude_home, monkeypatch):
+    """The whole point of remembering: 8 walks for one `/sessions` and 20 for one `/briefings`,
+    each asking 335 project folders whether they hold that name."""
+    write_transcript(claude_home, [user("first")])
+    transcripts.transcript_path(SID)
+    walks = 0
+    real = type(claude_home).glob
+
+    def counted(self, pattern):
+        nonlocal walks
+        walks += 1
+        return real(self, pattern)
+
+    monkeypatch.setattr(type(claude_home), "glob", counted)
+    for _ in range(5):
+        transcripts.transcript_path(SID)
+    assert walks == 0

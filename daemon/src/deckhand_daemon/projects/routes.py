@@ -13,6 +13,7 @@ carries, and for the same reason `projects/__init__.py` must not import this mod
 from __future__ import annotations
 
 import asyncio
+from functools import lru_cache
 from pathlib import Path
 
 from fastapi import APIRouter, Body, HTTPException
@@ -40,9 +41,12 @@ async def list_projects() -> dict:
     trust dialog answered at its own keyboard. A machine that is asleep contributes no trusted
     rows, so its folders read as "cannot start here yet" — the right answer, arrived at honestly.
     """
-    found, source = sources.catalog()
+    # In a thread, because both read: the catalogue asks atlas over HTTP with a three-second
+    # timeout that this Mac's atlas has been measured hitting, and the counts walk the sessions.
+    # On the event loop that is the whole daemon stopped for as long as the picker takes.
+    found, source = await asyncio.to_thread(sources.catalog)
     here = registry.here()
-    counts = _live_counts(here)
+    counts = await asyncio.to_thread(_live_counts, here)
     allowed = await _trusted(here)
     for project in found:
         machine = project.machine or here
@@ -125,9 +129,18 @@ async def _start_over_there(machine: str, path: str) -> dict:
     return {"session": answer.get("session")}
 
 
+# ponytail: cached for the life of the daemon, so a folder that gains or loses a symlink after
+# this answered for it keeps the old spelling until a restart. Give it a TTL if that ever matters.
+@lru_cache(maxsize=2048)
 def _resolved(path: str) -> str:
     """The same folder spelled the same way from both sides. The dev tree carries a symlink, and
-    a session's own `cwd` is whatever the shell was given rather than what the catalogue holds."""
+    a session's own `cwd` is whatever the shell was given rather than what the catalogue holds.
+
+    Remembered, because `/projects` resolves every row: `resolve` walks each path component
+    looking for a link, and over the 504 folders atlas catalogues here that measured 1.7 s —
+    paid on the event loop, so it was every other request in the daemon waiting on the picker.
+    A folder does not move while the daemon runs.
+    """
     try:
         return str(Path(path).resolve())
     except OSError:

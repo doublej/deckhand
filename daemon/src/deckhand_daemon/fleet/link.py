@@ -32,6 +32,7 @@ from __future__ import annotations
 import os
 import shlex
 import subprocess
+import threading
 import time
 from dataclasses import dataclass, field
 
@@ -173,8 +174,48 @@ def start(link: Link) -> bool:
         _back_off(link)
         return False
     link.error = ""
+    _drain(link)
     log.info("link to %s opening on 127.0.0.1:%d", link.machine.id, link.port)
     return True
+
+
+#: How many of the ssh process's last lines to keep. `useful_error` reads the last useful one,
+#: so everything above that is only ever context for a person reading this file.
+KEPT_LINES = 40
+
+
+def _drain(link: Link) -> None:
+    """Read the link's output for as long as it runs, keeping the last few lines.
+
+    **A pipe nobody reads is a fuse.** ssh's stdout is a 64 KB pipe here (measured), and the hand
+    on the far side writes into it every time it logs — on Ubuntu, where there is no `it2`, that
+    is a `panes unavailable` warning per lookup: 53 lines in its busiest hour, about 4.5 KB, so a
+    link that lives past roughly fourteen hours fills the buffer. Then ssh blocks on its own write
+    and the forward stops carrying anything, which from this side is indistinguishable from a
+    machine that went to sleep — every call to it costs `proxy.TIMEOUT` and the phone's listing
+    waits for all of them. Hands live minutes today only because the daemon is restarted that
+    often.
+
+    A thread rather than a poll, because a pipe has no other way to be read without blocking, and
+    a daemon one so nothing has to be joined: it ends at EOF, which is the ssh process exiting.
+    """
+    if link.process is None or link.process.stdout is None:
+        return
+    stream = link.process.stdout
+    kept = link._log
+    kept.clear()
+
+    def read() -> None:
+        for line in stream:
+            kept.append(line.rstrip())
+            del kept[:-KEPT_LINES]
+
+    threading.Thread(target=read, daemon=True).start()
+
+
+def said(link: Link) -> str:
+    """Everything the link's ssh process has said lately, newest last."""
+    return "\n".join(link._log)
 
 
 # ssh writes advisory banners to stderr, which is merged into stdout here so a failing machine

@@ -79,13 +79,42 @@ def projects_dir() -> Path:
     return Path(os.environ.get("DECKHAND_CLAUDE_HOME", Path.home() / ".claude")) / "projects"
 
 
+#: session id -> the file it was last found in. Finding one means asking every project folder
+#: on this Mac whether it holds that name — 335 folders here, 8102 transcripts, 3.5 ms a call —
+#: and nearly every read route makes one per session, twice over on a listing. Measured at 8
+#: globs for one `/sessions` and 20 for one `/briefings`, which the phone polls every 4 and 12
+#: seconds.
+#:
+#: **Remembered rather than trusted**: the kept path is checked before it is answered with, so a
+#: transcript that has gone falls back to the walk and this can never name a file that is not
+#: there. What it cannot notice is a *second*, newer file appearing under the same id in another
+#: folder — which is what the mtime sort below is for, and which has never happened here: of the
+#: 8102 transcripts on this Mac, no id is in two folders.
+# ponytail: cleared wholesale at the cap rather than evicted one at a time; a session id is
+# ~90 bytes and the daemon restarts often. Make it an LRU if that ever stops being true.
+#:
+#: Keyed by the folder as well as the id, because `projects_dir` reads an environment variable:
+#: two roots with the same id in them are two different files and must not answer for each other.
+_found: dict[tuple[Path, str], Path] = {}
+REMEMBERED = 512
+
+
 def transcript_path(session_id: str) -> Path | None:
     if not re.fullmatch(r"[A-Za-z0-9_-]{6,64}", session_id):
         return None
+    key = (projects_dir(), session_id)
+    if (kept := _found.get(key)) is not None and kept.exists():
+        return kept
     matches = sorted(
-        projects_dir().glob(f"*/{session_id}.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True
+        key[0].glob(f"*/{session_id}.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True
     )
-    return matches[0] if matches else None
+    _found.pop(key, None)
+    if not matches:
+        return None
+    if len(_found) >= REMEMBERED:
+        _found.clear()
+    _found[key] = matches[0]
+    return matches[0]
 
 
 def turn_ended(session_id: str) -> float:

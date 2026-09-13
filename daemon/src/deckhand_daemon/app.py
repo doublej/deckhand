@@ -179,7 +179,7 @@ async def session_summary(session_id: str) -> dict:
     """
     await saying.live_session(session_id)
     briefings.bump(session_id)
-    return briefings.of(session_id)
+    return await asyncio.to_thread(briefings.of, session_id)
 
 
 @app.get("/briefings", dependencies=[Depends(require_token)])
@@ -301,7 +301,7 @@ async def list_commands(session_id: str) -> dict:
     that project's — which is why this is a session route and not a `/commands`.
     """
     session = await saying.live_session(session_id)
-    found = commands.commands(session.cwd)
+    found = await asyncio.to_thread(commands.commands, session.cwd)
     return {"commands": [command.to_json() for command in found]}
 
 

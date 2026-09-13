@@ -79,10 +79,9 @@ async def ready(link: links.Link, timeout: float = READY_TIMEOUT) -> bool:
     async with httpx.AsyncClient(timeout=2.0) as client:
         while asyncio.get_running_loop().time() < deadline:
             if not link.alive:
-                out = ""
-                if link.process is not None and link.process.stdout is not None:
-                    out = link.process.stdout.read()
-                links.went_down(link, links.useful_error(out))
+                # What the link already said, rather than a read of its pipe: that read blocks
+                # until EOF, on the event loop, and the pipe is drained by `link._drain` anyway.
+                links.went_down(link, links.useful_error(links.said(link)))
                 return False
             try:
                 r = await client.get(f"{link.base_url}/health")

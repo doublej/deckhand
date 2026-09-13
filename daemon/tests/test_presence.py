@@ -50,3 +50,16 @@ def test_a_locked_screen_is_never_the_person(monkeypatch):
     monkeypatch.setattr(presence, "locked", lambda: True)
     presence.seen()
     assert presence.owner() == "deckhand"
+
+
+def test_each_reading_is_taken_once_for_one_answer(monkeypatch):
+    """`/health` is polled every four seconds and every `ioreg` is a subprocess walking the whole
+    IO registry. `state` used to call `owner` beside its own two readings, so one request spawned
+    three or four of them for two facts."""
+    runs: list[str] = []
+    monkeypatch.setattr(presence, "idle_seconds", lambda: runs.append("idle") or 1.0)
+    monkeypatch.setattr(presence, "locked", lambda: bool(runs.append("locked")) and False)
+    presence.seen()
+    answer = presence.state()
+    assert runs == ["idle", "locked"]
+    assert answer["owner"] == "person" and answer["locked"] is False

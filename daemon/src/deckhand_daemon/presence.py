@@ -83,10 +83,15 @@ def owner() -> str:
     hands off the keyboard, and a Mac that will not say whether anyone is at it is not one to
     start typing into.
     """
-    idle = idle_seconds()
+    return _owner_of(idle_seconds(), locked())
+
+
+def _owner_of(idle: float | None, screen_locked: bool) -> str:
+    """The same answer, out of two facts already in hand. Separate so `state` can read each of
+    them exactly once — see there for what that was costing."""
     if idle is None:
         return "person"
-    if idle < IDLE_AFTER and not locked():
+    if idle < IDLE_AFTER and not screen_locked:
         return "person"
     if _phone_seen is not None and time.time() - _phone_seen < PHONE_RECENT:
         return "deckhand"
@@ -94,9 +99,18 @@ def owner() -> str:
 
 
 def state() -> dict:
-    """What `/health` carries, so the phone can say who has the Mac without guessing."""
+    """What `/health` carries, so the phone can say who has the Mac without guessing.
+
+    **Each fact is read once.** This used to call `owner()` beside `idle_seconds()` and
+    `locked()`, so one `/health` spawned `ioreg` three or four times over for two answers.
+    Neither is cheap: `ioreg` walks the whole IO registry, and the two invocations print 351 KB
+    and 206 KB here. Measured against each other in one process, one `state()` went from
+    141 ms to 67 ms; on a cold registry it was 406 ms. The phone asks every four seconds, on
+    a threadpool thread, for a fact that changes on a human timescale.
+    """
     idle = idle_seconds()
-    return {"owner": owner(),
+    screen_locked = locked()
+    return {"owner": _owner_of(idle, screen_locked),
             "idle": round(idle, 1) if idle is not None else None,
-            "locked": locked(),
+            "locked": screen_locked,
             "phone": round(time.time() - _phone_seen, 1) if _phone_seen else None}
