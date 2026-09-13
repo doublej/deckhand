@@ -41,6 +41,68 @@ sync-apns:
     @chmod 600 ~/Library/Application\ Support/Deckhand/apns.p8 ~/Library/Application\ Support/Deckhand/apns-key-id
     @echo 'push key written; restart the daemon to pick it up'
 
+# Materialise the App Store Connect signing key, the way sync-apns does the push key.
+#
+# An API key rather than an Apple ID, and that is the whole reason this recipe exists: signing a
+# build needs the developer portal, the portal needs authentication, and the only authentication
+# that works on a Mac nobody is sitting at is one with no password and no 2FA round trip. Xcode's
+# own account sign-in needs a dialog on an unlocked screen, which is exactly what is missing when
+# this is wanted. Revocable on its own, too — it is not the account.
+
+# Materialise the App Store Connect signing key out of 1Password.
+[group('setup')]
+sync-signing:
+    @mkdir -p ~/.appstoreconnect/private_keys
+    @onenv get deckhand ASC_KEY > ~/.appstoreconnect/private_keys/AuthKey_$(onenv get deckhand ASC_KEY_ID).p8
+    @chmod 600 ~/.appstoreconnect/private_keys/*.p8
+    @echo 'signing key written; `just release` can now export'
+
+# Build an Ad Hoc ipa and publish it where a phone anywhere can install it.
+#
+# The way onto a phone that is not on this network. `just device` needs the phone discoverable
+# over Bonjour, which no VPN can arrange — iOS advertises the pairing service on its physical
+# link only — so the alternative is not a better tunnel, it is a different kind of build: one
+# signed for distribution and fetched over HTTPS by the phone itself.
+#
+# Two things travel with that choice and are not incidental. An Ad Hoc build signs
+# `aps-environment: production`, so the daemon must push to the production APNs host or the Lock
+# Screen card goes quiet. And it drops `get-task-allow`, so no debugger attaches to it.
+
+# Build an Ad Hoc ipa and publish it where a phone anywhere can install it.
+[group('build')]
+release: generate
+    #!/usr/bin/env zsh
+    set -e
+    root={{ justfile_directory() }}/.build/adhoc
+    key=$(ls ~/.appstoreconnect/private_keys/AuthKey_*.p8 2>/dev/null | head -1)
+    if [[ -z "$key" ]]; then echo 'no signing key — run: just sync-signing'; exit 1; fi
+    rm -rf $root && mkdir -p $root
+    xcodebuild {{ project }} -configuration Release -destination 'generic/platform=iOS' \
+        -archivePath $root/Deckhand.xcarchive -allowProvisioningUpdates archive
+    xcodebuild -exportArchive -archivePath $root/Deckhand.xcarchive -exportPath $root/export \
+        -exportOptionsPlist {{ justfile_directory() }}/ExportOptions.plist -allowProvisioningUpdates \
+        -authenticationKeyPath $key \
+        -authenticationKeyID $(basename $key .p8 | sed 's/AuthKey_//') \
+        -authenticationKeyIssuerID $(onenv get deckhand ASC_ISSUER_ID)
+    just publish-release
+
+# Put the exported build behind install.jurrejan.com. Split from `release` so a failed publish
+# can be retried without paying for the archive again.
+
+# Put the exported build behind install.jurrejan.com.
+[group('build')]
+publish-release:
+    #!/usr/bin/env zsh
+    set -e
+    root={{ justfile_directory() }}/.build/adhoc
+    site=$root/site && rm -rf $site && mkdir -p $site
+    cp $root/export/Deckhand.ipa $root/export/manifest.plist $site/
+    sips -Z 57 {{ justfile_directory() }}/deckhand/Assets.xcassets/AppIcon.appiconset/icon.png --out $site/icon-57.png
+    sips -Z 512 {{ justfile_directory() }}/deckhand/Assets.xcassets/AppIcon.appiconset/icon.png --out $site/icon-512.png
+    cp {{ justfile_directory() }}/tools/install-page.html $site/index.html
+    cdy site install $site
+    @echo 'open https://install.jurrejan.com in Safari on the phone'
+
 # Follow the daemon log (the same file Console.app shows under ~/Library/Logs).
 [group('develop')]
 logs:

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Install Deckhand</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin: 0; font: 17px/1.5 -apple-system, system-ui, sans-serif;
+         display: grid; place-items: center; min-height: 100dvh; padding: 24px; }
+  main { max-width: 30rem; text-align: center; }
+  img { width: 96px; height: 96px; border-radius: 22px; }
+  h1 { font-size: 1.5rem; margin: 1rem 0 .25rem; }
+  p { color: #6b7280; margin: .5rem 0; }
+  a.button { display: inline-block; margin-top: 1.25rem; padding: .8rem 1.6rem;
+             background: #2563eb; color: #fff; border-radius: 999px;
+             text-decoration: none; font-weight: 600; }
+  code { font-size: .85em; }
+</style>
+</head>
+<body>
+<main>
+  <img src="icon-512.png" alt="">
+  <h1>Deckhand</h1>
+  <p id="build"></p>
+  <p>Open this page in <strong>Safari</strong>, then tap install. Anywhere else the link does
+     nothing — only Safari hands <code>itms-services</code> to the installer.</p>
+  <a class="button" href="itms-services://?action=download-manifest&amp;url=https://install.jurrejan.com/manifest.plist">Install</a>
+  <p style="margin-top:1.5rem">It replaces the copy already on the phone and keeps its settings.</p>
+</main>
+<script>
+  fetch("manifest.plist").then(r => r.text()).then(t => {
+    const found = t.match(/<key>bundle-version<\/key>\s*<string>([^<]+)/);
+    document.getElementById("build").textContent = found ? "Version " + found[1] : "";
+  }).catch(() => {});
+</script>
+</body>
+</html>
