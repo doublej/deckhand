@@ -82,7 +82,7 @@ struct ArchiveSheet: View {
         if player.playing == kept.id {
             player.stop()
         } else {
-            player.play(kept, at: model.archive.url(of: kept))
+            player.play(kept.id, at: model.archive.url(of: kept))
         }
     }
 

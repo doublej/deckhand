@@ -19,7 +19,9 @@ the model's half of it together, the way `Views/Rail/Linking.swift` already does
 `LiveUpdates`). `Views/` is the screens, `Views/Session/` the session page's parts,
 `Views/Artifacts/` slips,
 `Views/Annotation/` marking up a picture (its own packet — read it before touching that folder),
-`Views/Archive/` every clip this phone has recorded, `Views/Talk/` the mark itself,
+`Views/Archive/` every clip this phone has recorded and the one player that sounds any of them —
+`Listening` is that player's transport, drawn for a sound file the Files tab opens,
+`Views/Talk/` the mark itself,
 `Views/Reading/` the one turn a hold opens and the text view that makes it selectable.
 `Views/Artifacts/AloudCards.swift` is the other way a slip can be drawn — cards with the app's own
 talk mark, from a page that declared its questions (`Aloud`); `ArtifactView` is the one place that

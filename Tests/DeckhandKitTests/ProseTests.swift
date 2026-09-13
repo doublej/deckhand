@@ -145,16 +145,18 @@ struct AskAndAssetTests {
         #expect(summary.tasks.map(\.progress) == [.doing, .todo, .done])
     }
 
-    @Test("a file knows which of the three ways to show it")
+    @Test("a file knows which of the four ways to show it")
     func assetKinds() throws {
         let json = """
             {"files":[{"path":"/tmp/a/shot.png","name":"shot.png","kind":"image",
-             "size":120,"modified":1.0}]}
+             "size":120,"modified":1.0},
+             {"path":"/tmp/a/take.m4a","name":"take.m4a","kind":"audio",
+              "size":900,"modified":2.0}]}
             """
         let body = try JSONDecoder().decode([String: [Asset]].self, from: Data(json.utf8))
-        let asset = try #require(body["files"]?.first)
-        #expect(asset.sort == .image)
-        #expect(asset.folder == "/tmp/a")
+        let files = try #require(body["files"])
+        #expect(files.map(\.sort) == [.image, .audio])
+        #expect(files.first?.folder == "/tmp/a")
     }
 }
 

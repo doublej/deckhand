@@ -2,8 +2,8 @@ import AVKit
 import DeckhandKit
 import SwiftUI
 
-/// One file, open. Three kinds and three ways of showing them: an image fits the sheet, text
-/// scrolls and can be selected, a video gets a player.
+/// One file, open. Four kinds and four ways of showing them: an image fits the sheet, text
+/// scrolls and can be selected, a video gets a player and a sound gets a transport.
 ///
 /// The file is fetched to disk when the sheet appears and deleted when it closes. It arrives
 /// as one thing, ready, rather than as bytes that become a picture a frame later — a video
@@ -35,6 +35,7 @@ struct AssetView: View {
         case picture(UIImage)
         case words(String)
         case film(AVPlayer)
+        case sound(URL)
     }
 
     var body: some View {
@@ -90,6 +91,8 @@ struct AssetView: View {
             words(text)
         case .film(let player):
             VideoPlayer(player: player)
+        case .sound(let file):
+            Listening(file: file)
         case nil:
             waiting
         }
@@ -225,6 +228,8 @@ struct AssetView: View {
         switch asset.sort {
         case .video:
             return .film(AVPlayer(url: file))
+        case .audio:
+            return .sound(file)
         case .image:
             guard let image = UIImage(contentsOfFile: file.path) else {
                 throw Trouble.unreadable("Not an image this phone can draw")

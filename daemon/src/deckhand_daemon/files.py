@@ -20,6 +20,7 @@ from .reading.transcripts import TAIL_WINDOWS, tail_lines, transcript_path
 KINDS = {
     "image": (".png", ".jpg", ".jpeg", ".gif", ".heic", ".webp", ".bmp", ".tiff"),
     "video": (".mp4", ".mov", ".m4v"),
+    "audio": (".mp3", ".wav", ".m4a", ".aac", ".flac", ".opus", ".ogg", ".aiff", ".caf"),
     "text": (".md", ".txt", ".log", ".csv", ".json", ".yaml", ".yml", ".toml"),
 }
 SUFFIXES = {suffix: kind for kind, suffixes in KINDS.items() for suffix in suffixes}

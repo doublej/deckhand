@@ -71,3 +71,15 @@ def test_one_file_named_two_ways_is_one_row(claude_home, tmp_path):
     )
 
     assert len(files.readable_files(SID, str(tmp_path))) == 1
+
+
+def test_a_clip_the_session_talked_about_is_listed_as_audio(claude_home, tmp_path):
+    # Named in a command rather than handed to a tool as a path, which is how most audio a
+    # session makes gets mentioned: it renders one and then plays or converts it.
+    clip = tmp_path / "take.m4a"
+    clip.write_bytes(b"\x00\x00\x00\x20ftypM4A ")
+    write_transcript(claude_home, [ran("Bash", command=f"afplay {clip}")])
+
+    assert [(a.name, a.kind) for a in files.readable_files(SID, str(tmp_path))] == [
+        ("take.m4a", "audio")
+    ]

@@ -202,6 +202,7 @@ private struct AssetRow: View {
         switch asset.sort {
         case .image: "photo"
         case .video: "film"
+        case .audio: "waveform"
         case .text: "doc.text"
         }
     }

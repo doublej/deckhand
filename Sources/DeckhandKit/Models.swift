@@ -249,12 +249,13 @@ public struct Asset: Codable, Hashable, Sendable, Identifiable {
     public var id: String { path }
     public var changed: Date { Date(timeIntervalSince1970: modified) }
 
-    public enum Kind: Sendable { case image, video, text }
+    public enum Kind: Sendable { case image, video, audio, text }
 
     public var sort: Kind {
         switch kind {
         case "image": .image
         case "video": .video
+        case "audio": .audio
         default: .text
         }
     }
