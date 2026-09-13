@@ -26,6 +26,11 @@ is deliberately allowed where `docs/agent-surface.md` refuses it: that refusal i
 starting a process nobody asked for, and this one only ever runs because somebody spoke into the
 panel. Both gates it inherits are unchanged — the folder must be on this Mac's own project list,
 and Claude Code must already be trusted there.
+
+`start_scratch_session` is the one thing here that **makes** something on the Mac, and the bound
+is why it is not a general "create a folder" verb: it is the sandbox or it is nothing. A task
+with no project on this Mac had nowhere to go at all before it, so the only answer left was a
+refusal. `projects.starting.scratch_folder` holds the whole of where; read it before widening.
 """
 
 from __future__ import annotations
@@ -105,6 +110,23 @@ def begin(wanted: str) -> dict:
     sources.forget()
     talk.say("act", f"started {session.name} in {match.relative or match.path}")
     return said(f"{session.name} is running in {match.path}.")
+
+
+def scratch(task: str) -> dict:
+    """Make a folder under the sandbox for a task with no home, and start a session in it."""
+    folder, why = starting.scratch_folder(task)
+    if folder is None:
+        return said(why)
+    session, error = starting.start(str(folder))
+    if session is None:
+        talk.say("act", f"made {folder.name} but nothing started in it: {error}")
+        return said(f"the folder is there and nothing started in it: {error}")
+    sources.forget()
+    talk.say("act", f"started {session.name} in a new scratch folder, {folder.name}")
+    return said(
+        f"{session.name} is running in {folder}, a folder made for this and holding nothing "
+        f"else. Say what the work is with say_to_session — it has been told nothing yet."
+    )
 
 
 def switch(folder: str, key: str, value: str) -> dict:
@@ -242,6 +264,10 @@ def server(described: dict[str, str]):
     async def start_session(args: dict) -> dict:
         return begin(str(args.get("project", "")))
 
+    @tool("start_scratch_session", described["start_scratch_session"], {"task": str})
+    async def start_scratch_session(args: dict) -> dict:
+        return scratch(str(args.get("task", "")))
+
     @tool("set_switch", described["set_switch"], {"folder": str, "key": str, "value": str})
     async def set_switch(args: dict) -> dict:
         return switch(str(args.get("folder", "")), str(args.get("key", "")),
@@ -256,7 +282,8 @@ def server(described: dict[str, str]):
         return on_phone(str(args.get("action", "")), str(args.get("target", "")))
 
     made = [list_sessions, read_session, list_projects, read_settings, read_context,
-            say_to_session, set_orders, start_session, set_switch, focus_session, show_on_phone]
+            say_to_session, set_orders, start_session, start_scratch_session, set_switch,
+            focus_session, show_on_phone]
     if len(made) != len(TOOLS):
         log.warning("the manager's tool list and TOOLS have drifted apart")
     return create_sdk_mcp_server(name="deckhand", tools=made)
@@ -268,6 +295,6 @@ def server(described: dict[str, str]):
 TOOLS = tuple(
     f"mcp__deckhand__{name}"
     for name in ("list_sessions", "read_session", "list_projects", "read_settings",
-                 "read_context", "say_to_session", "set_orders", "start_session", "set_switch",
-                 "focus_session", "show_on_phone")
+                 "read_context", "say_to_session", "set_orders", "start_session",
+                 "start_scratch_session", "set_switch", "focus_session", "show_on_phone")
 )

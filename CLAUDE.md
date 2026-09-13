@@ -27,7 +27,7 @@ load-bearing: it never types into a pane. See [docs/manager.md](docs/manager.md)
   the network.
 - **Summaries** — the Claude Agent SDK, Haiku 4.5, thinking off, three task tools and nothing else.
   The daemon owns the schedule; the phone only ever reads.
-- **The manager** — the Claude Agent SDK again, Sonnet 5, thinking off, eleven in-process tools
+- **The manager** — the Claude Agent SDK again, Sonnet 5, thinking off, twelve in-process tools
   over this daemon's own modules. One `query()` per thing said, carrying `resume=`; the
   conversation is a file with a cursor, never a stream.
 - **App** — Swift 6.2, SwiftUI, iOS 18. `DeckhandKit` (SwiftPM) holds the models, the HTTP client

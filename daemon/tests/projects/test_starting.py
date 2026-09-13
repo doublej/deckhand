@@ -124,3 +124,79 @@ def test_a_machine_that_is_asleep_says_so_rather_than_failing_silently(trusted_h
     with pytest.raises(Exception) as raised:
         anyio.run(routes.start_project_session, "C:\\dev\\thing")
     assert "not reachable" in str(raised.value)
+
+
+@pytest.fixture
+def sandbox(trusted_home, tmp_path, monkeypatch):
+    """A scratch root of this Mac's own, so a test never makes a folder in the real one."""
+    root = (tmp_path / "_sandbox").resolve()
+    root.mkdir()
+    monkeypatch.setattr(starting, "sandbox_root", lambda: root)
+    return root
+
+
+def test_a_scratch_folder_is_named_after_the_task_and_recorded_as_trusted(sandbox):
+    folder, why = starting.scratch_folder("Collect Phono Lake Festival recordings by artist")
+    assert why is None
+    assert folder == sandbox / "collect-phono-lake-festival-recordings"
+    assert folder.is_dir()
+    # Without this the folder could not be started in: `start` refuses one Claude Code has no
+    # answer on file for, and one made a second ago never has.
+    assert str(folder) in starting.trusted()
+
+
+def test_a_name_that_climbs_out_of_the_sandbox_is_refused_rather_than_sanitised(sandbox):
+    """`../../etc` slugified is `etc`, which is inside the sandbox and is not what was asked."""
+    for name in ("../../etc", "/etc/passwd", "..", "research/../../../tmp"):
+        folder, why = starting.scratch_folder(name)
+        assert folder is None, name
+        assert "not a folder name" in why, name
+    assert list(sandbox.iterdir()) == []
+
+
+def test_a_name_with_nothing_in_it_makes_nothing(sandbox):
+    folder, why = starting.scratch_folder("   !!!   ")
+    assert folder is None and "no folder name" in why
+    assert list(sandbox.iterdir()) == []
+
+
+def test_somebody_elses_scratch_project_is_not_written_into(sandbox):
+    (sandbox / "clouds").mkdir()
+    (sandbox / "clouds" / "notes.md").write_text("work")
+    folder, why = starting.scratch_folder("clouds")
+    assert folder is None
+    assert "already a scratch folder" in why
+    # An empty one is the folder this made a moment ago on a start that failed, so it is reused.
+    (sandbox / "empty-one").mkdir()
+    again, why = starting.scratch_folder("empty one")
+    assert why is None and again == sandbox / "empty-one"
+
+
+def test_the_trust_write_keeps_the_rest_of_that_file(sandbox, claude_home):
+    """`~/.claude.json` is a megabyte of somebody's whole configuration, not ours to rewrite."""
+    record = claude_home.parent / "claude.json"
+    document = json.loads(record.read_text())
+    document["numStartups"] = 8714
+    document["lastShownEmergencyTip"] = "Fable 5 — currently unavailable"
+    document["projects"]["/Users/jj/dev/web/shop"]["allowedTools"] = ["Read"]
+    record.write_text(json.dumps(document, indent=2, ensure_ascii=False))
+    before = record.read_text()
+    starting.scratch_folder("a look at this")
+    after = json.loads(record.read_text())
+    assert after["numStartups"] == 8714
+    # `json.dumps` escapes non-ASCII by default, which would re-encode all 1.4 MB of somebody's
+    # configuration to change one key — and again on every folder made after it.
+    assert "Fable 5 — currently unavailable" in record.read_text()
+    assert len(record.read_text()) - len(before) < 400  # one entry's worth, not a rewrite
+    assert after["projects"]["/Users/jj/dev/web/shop"] == {
+        "hasTrustDialogAccepted": True, "allowedTools": ["Read"]
+    }
+    assert after["projects"][str(sandbox / "a-look-at-this")]["hasTrustDialogAccepted"] is True
+
+
+def test_nothing_outside_the_sandbox_is_ever_recorded_as_trusted(sandbox, tmp_path, claude_home):
+    """The containment check lives in the write as well, so it holds whoever calls it."""
+    elsewhere = tmp_path / "somebody-elses"
+    elsewhere.mkdir()
+    starting._trust(elsewhere)
+    assert str(elsewhere) not in starting.trusted()

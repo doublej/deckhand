@@ -58,6 +58,7 @@ need its own Automation grant under launchd, with nobody there to click it.
 from __future__ import annotations
 
 import json
+import os
 import re
 import shlex
 import subprocess
@@ -79,6 +80,13 @@ OPENING = 6.0
 # session has nobody to approve its first tool use; `--chrome` because that is how this Mac runs.
 FLAGS = ("--dangerously-skip-permissions", "--chrome")
 WINDOW_ID = re.compile(r"(pty-[0-9A-Fa-f-]+)")
+# The monorepo's own scratch root, `~/dev/CLAUDE.md`'s "Scratch → _sandbox". Derived from the
+# home directory rather than written out: no absolute path into the dev tree belongs in a file.
+SANDBOX = ("dev", "_sandbox")
+# What a folder name is allowed to be made of. Everything else becomes a hyphen, and the name
+# is cut to five words — the sandbox is full of `phone-finder` and `disk-space`, not sentences.
+SLUG = re.compile(r"[^a-z0-9]+")
+SLUG_WORDS = 5
 
 
 def trusted() -> set[str]:
@@ -96,6 +104,81 @@ def trusted() -> set[str]:
         return set()
     return {path for path, entry in projects.items()
             if isinstance(entry, dict) and entry.get("hasTrustDialogAccepted")}
+
+
+def sandbox_root() -> Path:
+    """Where work with no home of its own goes on this Mac."""
+    return Path.home().joinpath(*SANDBOX)
+
+
+def scratch_folder(name: str) -> tuple[Path | None, str | None]:
+    """A folder under the sandbox for a task with no project, ready to be started in.
+
+    The one thing in this daemon that *makes* a place rather than finding one, and the bound is
+    the whole of why it is allowed: it is the sandbox or it is nothing. A name carrying a
+    separator or a `..` is refused outright rather than sanitised — `../../etc` slugified is
+    `etc`, which is inside the sandbox and is not what anybody asked for — and the resolved
+    folder's parent is checked against the root, which holds whatever the name was.
+
+    A folder with anything in it is somebody's scratch project and is refused by name. An empty
+    one is reused: the folder is made before the terminal is opened, so a start that failed on
+    iTerm would otherwise have burnt the name.
+    """
+    wanted = (name or "").strip()
+    if "/" in wanted or "\\" in wanted or ".." in wanted:
+        return None, (f"{wanted!r} is not a folder name. A scratch folder is one plain name — "
+                      f"no slashes, no dots leading anywhere.")
+    slug = "-".join(SLUG.sub("-", wanted.lower()).strip("-").split("-")[:SLUG_WORDS])
+    if not slug:
+        return None, f"there is no folder name to make out of {wanted!r}"
+    root = sandbox_root()
+    if not root.is_dir():
+        return None, f"there is no sandbox at {root} on this Mac"
+    folder = (root / slug).resolve()
+    if folder.parent != root.resolve():
+        return None, f"{slug!r} would land outside the sandbox, so nothing was made"
+    if folder.is_dir() and any(folder.iterdir()):
+        return None, (f"{slug} is already a scratch folder with work in it. Pick another name, "
+                      f"or start a session in it with start_session.")
+    folder.mkdir(exist_ok=True)
+    _trust(folder)
+    return folder, None
+
+
+def _trust(folder: Path) -> None:
+    """Write the entry the trust dialog writes, for a folder made a moment ago.
+
+    `start` refuses a folder Claude Code has not been trusted in, and one that did not exist a
+    second ago never has been — so without this the whole of `scratch_folder` could only end in
+    that refusal. What makes it honest rather than a permission answered from another room is
+    that the folder is **empty**: there is nothing in it to trust, and this daemon made it.
+    Measured on 2.1.270: Claude Code does not ask the trust question in a new folder at all, so
+    the gate this satisfies is this daemon's own.
+
+    Read, change one key, write back through `os.replace` — that file is a megabyte of somebody's
+    whole Claude Code configuration. Read-modify-write, so a `claude` writing it in the same
+    instant loses that write, as it does to itself. **`ensure_ascii=False` is not optional** and
+    the default is the trap: the file is raw UTF-8, so escaping every non-ASCII character turns
+    one changed key into a rewrite of all 1.4 MB. With it, exactly the bytes that were read.
+    """
+    if folder.parent != sandbox_root().resolve():
+        return
+    record = sessions_dir().parent.with_suffix(".json")  # ~/.claude -> ~/.claude.json
+    try:
+        document = json.loads(record.read_text())
+    except (OSError, json.JSONDecodeError):
+        log.warning("no ~/.claude.json to record trust for %s in", folder.name)
+        return
+    projects = document.setdefault("projects", {})
+    if not isinstance(projects, dict):
+        return
+    entry = projects.get(str(folder))
+    projects[str(folder)] = {**(entry if isinstance(entry, dict) else {}),
+                             "hasTrustDialogAccepted": True}
+    half = record.parent / f"{record.name}.deckhand"
+    half.write_text(json.dumps(document, indent=2, ensure_ascii=False))
+    os.replace(half, record)
+    log.info("made %s and recorded it as trusted", folder)
 
 
 def start(cwd: str) -> tuple[Session | None, str | None]:

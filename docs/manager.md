@@ -17,7 +17,7 @@ phone                     daemon
                                                           │
                               manager/agent.watch()  ◀────┘
                                      │
-                                     ├─ query(resume=…) with eleven tools
+                                     ├─ query(resume=…) with twelve tools
                                      ├─ each text block  ──▶ talk.say("manager", …)
                                      └─ each acting tool ──▶ talk.say("act", …)
 ```
@@ -42,7 +42,7 @@ written down. The panel draws them at once and polls at one second while `workin
 
 ## The facade
 
-Eleven in-process tools over this daemon's own modules — a tool call is a function call, with no
+Twelve in-process tools over this daemon's own modules — a tool call is a function call, with no
 HTTP round trip through the Mac's own front door and no second copy of the auth. They answer in
 plain lines rather than JSON: the manager is reading, not parsing a wire, and a page of quoted
 braces costs more and reads worse than the same facts laid out.
@@ -57,6 +57,7 @@ braces costs more and reads worse than the same facts laid out.
 | `say_to_session` | words into a session's own inbox | `deliver`, socket route only |
 | `set_orders` | what a session keeps in mind | `orders.kept` |
 | `start_session` | opens a terminal and starts Claude Code | `projects.starting` |
+| `start_scratch_session` | makes a folder under the sandbox and starts one there | `projects.starting` |
 | `set_switch` | one switch, globally or for one folder | `settings.wants` |
 | `focus_session` | brings a pane to the front; types nothing | `sessions.focus` |
 | `show_on_phone` | moves the phone's own screen | `manager/talk`, then the app |
@@ -96,6 +97,46 @@ And one that is not about the keyboard:
 agent starting a process nobody asked for. This one only ever runs because somebody spoke into
 the panel, and both gates are unchanged: the folder must be on this Mac's own project list, and
 Claude Code must already be trusted there.
+
+## Making a folder, and why the sandbox is the whole of where
+
+`start_session` needs a folder from this Mac's own project list, so a task with no project had
+nowhere to go at all: "go and collect these recordings" could only ever be answered with a
+refusal and a request to name a folder, from a phone, by somebody who is not at the Mac.
+`start_scratch_session` makes one — named after the task, under `~/dev/_sandbox`, the monorepo's
+own scratch root (`~/dev/CLAUDE.md`: *Scratch → _sandbox*) — and starts a session in it. It is
+the only thing on this surface that creates anything on the Mac, and four bounds are what keep
+it from being a general "create a folder anywhere" verb:
+
+- **The sandbox root or nothing.** The root is derived from the home directory rather than
+  written out. A name carrying a `/`, a `\` or a `..` is **refused outright rather than
+  sanitised** — `../../etc` slugified is `etc`, which lands inside the sandbox and is not what
+  anybody asked for — and the folder is then resolved and its parent compared against the root,
+  which is the check that holds whatever the name was.
+- **A new folder, or an empty one.** Anything with a file in it is somebody else's scratch
+  project and is refused by name. The empty case is reused on purpose: the folder is made
+  before the terminal is opened, so a start that failed on iTerm would otherwise burn the name.
+- **One trust entry, for a folder made a moment ago.** `starting.start` refuses a folder Claude
+  Code has not been trusted in, and one created a second ago never has been, so `_trust` writes
+  the same `hasTrustDialogAccepted` into `~/.claude.json` that the dialog writes — for that one
+  path, read-modify-write through `os.replace`, never for anything outside the sandbox. What
+  makes that honest rather than a safety question answered from another room is that the folder
+  is **empty**: this daemon made it a moment ago and there is nothing in it to trust.
+- **It still types nothing.** The session comes up with an empty conversation and the manager
+  reaches it down its own inbox socket like any other, carrying none of the person's authority.
+
+**What the trust dialog actually does, measured 2026-09-13.** Claude Code 2.1.270 on this Mac
+shows no trust dialog in a folder it has never been trusted in: not under a trusted parent, not
+under an untrusted one, with `--dangerously-skip-permissions` and without it, `--name` and
+without it, empty folder and folder with files. It starts, writes its
+`~/.claude/sessions/<pid>.json`, and files a `hasTrustDialogAccepted: **false**` entry for the
+folder — which is why 125 folders under `_sandbox` are recorded and only the root reads as
+trusted. Probed with a pty and a scrubbed `CLAUDE*` environment; that scrub is the part worth
+keeping, because inside a Claude Code session the inherited `CLAUDE_CODE_CHILD_SESSION` marker
+suppresses the session record and makes the probe say nothing at all. So the gate
+`starting.start` enforces is this daemon's own rather than Claude Code's, and it is still the
+right gate for a folder somebody else made: it is the daemon refusing to open a terminal in
+somebody's project without the answer on file.
 
 **None of this is a fence and the daemon should not pretend otherwise.** The manager holds no
 token and makes no HTTP calls, so there is no `curl` around any of it — but everything above is

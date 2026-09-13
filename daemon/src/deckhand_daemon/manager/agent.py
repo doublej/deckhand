@@ -122,7 +122,7 @@ async def _run(text: str, resume: str) -> tuple[bool, str | None]:
         model=MODEL,
         system_prompt=SYSTEM_PROMPT,
         # `allowed_tools` only auto-approves; `tools=[]` is what actually removes the built-ins.
-        # Together they are the whole surface: eleven in-process functions and no shell, no
+        # Together they are the whole surface: twelve in-process functions and no shell, no
         # file access and no network. `bypassPermissions` is safe for exactly that reason —
         # there is nobody at the daemon to answer a permission prompt.
         tools=[],
