@@ -50,9 +50,6 @@ struct DashboardView: View {
     /// sheet's content, not here: a view presents one sheet at a time, and a second one attached
     /// to this view would have nowhere to go while the first is up.
     @State var doc: Asset?
-    /// Asked for once, when the page is built. Nobody watches any of these change, and three of
-    /// the four are a walk on the Mac rather than a field on the session.
-    @State private var asked = false
     /// The page's colour, which goes utt orange while the mark at the foot of it is open.
     @Environment(\.accent) var accent
 
@@ -80,7 +77,15 @@ struct DashboardView: View {
             .contentMargins(.bottom, TalkMark.clearance, for: .scrollContent)
         }
         .task { await load() }
-        .sheet(item: $opened) { page(for: $0) }
+        // Read again on the way back, and it is one argument rather than twelve. **A sheet does
+        // not remove the view that presented it**, so nothing here disappeared and `.task` never
+        // fires a second time — which meant every square went stale the moment its own sheet
+        // changed the thing it counts. Answer a slip and SLIPS kept the old count; add the alias
+        // that fixes "web" and ON THE WAY IN still said "Nothing changed", which is the demo path
+        // for that square ending on the sentence it was rewritten to stop telling.
+        .sheet(item: $opened,
+               onDismiss: { Task { await load() } },
+               content: { page(for: $0) })
     }
 
     /// How many squares fit across, and the gutter between them. The count is `Dashboard`'s,
@@ -144,6 +149,10 @@ struct DashboardView: View {
     /// The CLAUDE.md tree, with the file viewer attached to it rather than to this page — see
     /// `doc`. Until now the tree was reachable only through a chip at the top of the files pane,
     /// which is a long way from "what is this session loaded with".
+    /// No `onDismiss` of its own, and it does not need one: this sheet is declared *inside* the
+    /// context sheet, so closing a document returns to the tree rather than to the grid, and the
+    /// reload fires when the tree itself is closed. One reload, at the one place the grid comes
+    /// back — adding a second here would only re-read the same five things twice over.
     private var tree: some View {
         ContextTree(context: docs ?? ContextDocs()) { doc = $0 }
             .sheet(item: $doc) { AssetView(model: model, session: session, asset: $0) }
@@ -155,7 +164,14 @@ struct DashboardView: View {
         }
     }
 
-    /// Everything the squares need that the listing does not already carry, once.
+    /// Everything the squares need that the listing does not already carry.
+    ///
+    /// **Re-runnable, and it had better stay that way.** It used to latch on an `asked` flag so
+    /// it could only ever run once, which is why simply adding `onDismiss` to the sheet would
+    /// have changed nothing at all: the reload would have been called and returned immediately.
+    /// Every assignment below therefore *replaces* a value and never clears one — a failed
+    /// re-read leaves the square saying the last thing that was true, rather than falling to a
+    /// zero that reads as a fact.
     ///
     /// They go **together**. Awaited one after another they arrived over about ten seconds and
     /// the grid sat on four "…" for most of it — which is the one thing a dashboard must not do,
@@ -169,8 +185,7 @@ struct DashboardView: View {
     /// it, which no listing carries — and it is the same directory read `ArtifactsView` makes
     /// when the square is opened, so nothing new was put on the wire for it.
     private func load() async {
-        guard !asked, let client = model.settings.client() else { return }
-        asked = true
+        guard let client = model.settings.client() else { return }
         async let heard = try? client.aliases()
         async let touched: Void = model.loadFiles(for: session)
         async let written: Void = model.loadArtifacts(for: session)
@@ -189,7 +204,15 @@ struct DashboardView: View {
         if let offer, let aliases = await heard { chain = incoming(offer, aliases) }
         await touched
         await written
-        docs = await tree
+        // `model.context` answers a refused request with an *empty* tree rather than nil, so on
+        // a re-read this line would quietly replace fifteen CLAUDE.md files with "No CLAUDE.md"
+        // — the same confident wrong answer the tally guard above exists to stop, arriving
+        // through the other door. An empty tree is only believed the first time, when there is
+        // nothing on the square to lose. The cost is that a folder whose last CLAUDE.md is
+        // deleted while this page is open keeps the old count until it is opened again, which is
+        // the right way round: stale is recoverable by looking, wrong is not noticed at all.
+        let read = await tree
+        if docs == nil || !read.documents.isEmpty { docs = read }
     }
 
     /// What the square about words on their way in knows, once the chain and this Mac's alias
