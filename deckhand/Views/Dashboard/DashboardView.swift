@@ -171,7 +171,7 @@ struct DashboardView: View {
     private func load() async {
         guard !asked, let client = model.settings.client() else { return }
         asked = true
-        async let heard: Void = model.loadAliases()
+        async let heard = try? client.aliases()
         async let touched: Void = model.loadFiles(for: session)
         async let written: Void = model.loadArtifacts(for: session)
         async let tree = model.context(for: session)
@@ -182,12 +182,11 @@ struct DashboardView: View {
             orders = try await standing
             offer = try await offered
         }
-        // Both halves before the square shows a number, and the aliases are the half easy to
-        // forget: `loadAliases` is the only thing that fills `wants.aliases`, and until something
-        // calls it the list is empty rather than unknown — so a tally taken early is confidently
-        // smaller than the truth.
-        await heard
-        if let offer { chain = incoming(offer) }
+        // Both halves, or neither. A tally over a list that was never fetched — or fetched and
+        // refused — is confidently smaller than the truth, and "2 swaps" at a Mac with fourteen
+        // is worse than the "Nothing running" this replaced: a person can tell that "nothing"
+        // might mean "not asked" and cannot tell that about a number.
+        if let offer, let aliases = await heard { chain = incoming(offer, aliases) }
         await touched
         await written
         docs = await tree
@@ -198,8 +197,15 @@ struct DashboardView: View {
     ///
     /// The tally is `Replacements`' own, which is the point: the number on the square and the
     /// listing `Swapping` draws behind it are the one function, so they cannot drift apart.
-    private func incoming(_ offer: (known: [Filter], steps: [FilterStep])) -> Incoming {
-        let stages = Replacements.inForce(aliases: model.wants.aliases,
+    ///
+    /// The aliases are handed in rather than read off `model.wants`, and that is the guard
+    /// rather than a style choice. `AppModel.loadAliases` answers a refused request by leaving
+    /// the list exactly as it found it, so a Mac that would not answer and a Mac with no aliases
+    /// are the same empty array on the model — and this square would report the second when the
+    /// first is true. Asked for here, a failure is `nil` and the square goes on saying "…".
+    private func incoming(_ offer: (known: [Filter], steps: [FilterStep]),
+                          _ aliases: [Alias]) -> Incoming {
+        let stages = Replacements.inForce(aliases: aliases,
                                           chain: offer.steps,
                                           known: offer.known)
         return Incoming(counted: Replacements.tally(stages),
