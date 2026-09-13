@@ -9,13 +9,14 @@ struct SessionView: View {
     /// which is still refreshing behind this page.
     let opened: Session
     @State private var recorder = Recorder()
-    @State private var showing: Pane = .summary
+    @State private var showing: Pane = .dashboard
     /// Set while the one control that cannot be undone waits to be confirmed.
     @State private var confirming: Control?
-    @State private var renaming = false
     @State private var reading = false
-    @State private var filtering = false
-    @State private var configuring = false
+    /// Which square of the dashboard is open, held here rather than on the pane: the manager can
+    /// ask for "slips" before anybody has looked at this session, and `show` has to be able to
+    /// answer that without the pane having been built yet.
+    @State private var square: DashboardDestination?
     /// Whether the Mac holds turns older than the ones on screen. Answered by every load, so
     /// the transcript can offer the way back without a request of its own to find out.
     @State private var earlier = false
@@ -29,16 +30,18 @@ struct SessionView: View {
     /// What the confirmation is about to do, in that control's own words.
     private var asking: Caution? { confirming?.caution(about: session.name) }
 
-    /// What you want on arriving, and they want different layouts: the briefing wants a page to
-    /// itself, the transcript wants to be pinned to its newest line, and the files and the slips
-    /// this session put on the phone are lists you scroll from the top.
+    /// Three panes, and what they have in common is that all three are things you *read*.
     ///
-    /// Orders is last on purpose. The order here is the swipe order, so the pane you land on is
-    /// still the briefing and the pane you leave from is still the first — and standing orders are
-    /// the one thing here you set once and then stop looking at.
+    /// It was five. Slips, files and orders were three swipes of them, and each was a screen you
+    /// had to arrive at before you could find out whether it had anything on it — so they are
+    /// squares on the dashboard now, carrying their own counts, and the pane itself opens on a
+    /// sheet from the square. What is left is a carousel of reading: where you are, what it did,
+    /// and what it said, in that order and in one direction.
+    ///
+    /// The dashboard is first because it is where a session opens. The order here is the swipe
+    /// order, so the leading edge you leave the page from is still the first pane's.
     enum Pane: String, CaseIterable {
-        case summary = "Summary", slips = "Slips", transcript = "Transcript", files = "Files",
-             orders = "Orders"
+        case dashboard = "Dashboard", summary = "Summary", transcript = "Transcript"
     }
 
     /// The session as the Mac last described it, not as it was when the page opened. A compact,
@@ -66,10 +69,7 @@ struct SessionView: View {
             SessionHead(model: model,
                         session: session,
                         confirming: $confirming,
-                        renaming: $renaming,
                         reading: $reading,
-                        filtering: $filtering,
-                        configuring: $configuring,
                         pages: Pane.allCases.count,
                         lit: Pane.allCases.firstIndex(of: showing) ?? 0,
                         working: model.summarising.contains(session.sessionId))
@@ -130,24 +130,11 @@ struct SessionView: View {
         // chevron moved into the header and the band went with it.
         .toolbar(.hidden, for: .navigationBar)
         .modifier(LocalLinks(mac: model.macAddress, paired: model.settings.host))
+        // The one sheet still opened from the menu. Renaming, the filter chain and the project's
+        // settings moved onto the dashboard with everything else the menu used to carry, and they
+        // are presented from there — a sheet belongs to whatever triggers it, and what triggers
+        // those three is now a square rather than a strip.
         .sheet(isPresented: $reading) { RawView(model: model, session: session) }
-        .sheet(isPresented: $filtering) {
-            SessionFilters(model: model, session: session, say: say)
-        }
-        // Built here rather than looked up in the picker's catalog: that page wants a path and a
-        // name, this session has both, and a folder with no atlas record is still a folder whose
-        // settings someone may want to change.
-        .sheet(isPresented: $configuring) {
-            ProjectSettingsView(model: model,
-                                project: Project(name: session.folder, path: session.cwd))
-        }
-        // A sheet rather than the alert this was, because an alert holds a field and buttons and
-        // nothing in between — and what a name needs beside it is the mark. See `Renaming`.
-        .sheet(isPresented: $renaming) {
-            Renaming(session: session, say: say) { wanted in
-                Task { await model.rename(session, to: wanted) }
-            }
-        }
         // One dialog for every control that cannot be undone, and it says whatever that control
         // says. It used to be written for `clear` alone, so adding `exit` to the menu would have
         // asked "Clear this?" before quitting Claude Code.
@@ -193,10 +180,21 @@ struct SessionView: View {
     }
 
     /// Move to the pane the manager named, and take the ask off the desk so it happens once.
+    ///
+    /// It knows five names and there are three panes. The other two — and files, and orders — are
+    /// squares on the dashboard now, so the ask lands as "the dashboard, with that square open".
+    /// The manager's own list (`manager/doing.py`'s `PANES`) is unchanged and is not this app's to
+    /// change: a phone that quietly stopped answering to "slips" would be a tool that reports
+    /// success and does nothing.
     private func show(_ name: String?) {
-        guard let name, let pane = Pane(rawValue: name.capitalized) else { return }
+        guard let name else { return }
         model.manager.pane = nil
-        withAnimation(Motion.opening) { showing = pane }
+        if let pane = Pane(rawValue: name.capitalized) {
+            withAnimation(Motion.opening) { showing = pane }
+        } else if let asked = DashboardDestination(rawValue: name.lowercased()) {
+            withAnimation(Motion.opening) { showing = .dashboard }
+            square = asked
+        }
     }
 
     /// The strip down the leading edge that leaves this page, from whichever pane you are on.
@@ -257,19 +255,19 @@ struct SessionView: View {
     /// The panes side by side, swiped between rather than chosen from a bar.
     ///
     /// The bar is gone and nothing replaced it at the foot: it was a band of chrome across every
-    /// screen to hold four words, and the four words are now four dots on a row the header was
-    /// already drawing. That is the whole saving — the panes are a tab bar's height taller and
-    /// the mark you hold to talk sits where the bar was.
+    /// screen to hold the panes' names, and those names are dots on a row the header was already
+    /// drawing. That is the whole saving — the panes are a tab bar's height taller and the mark
+    /// you hold to talk sits where the bar was. There are three of them now rather than five:
+    /// slips, files and orders are squares on the dashboard, opened onto a sheet.
     ///
     /// Its own index display is off. The native dots would land exactly where the mark floats,
     /// which is the one place on this page something must not be drawn.
     private var pane: some View {
         TabView(selection: $showing) {
+            DashboardView(model: model, session: session, say: say, opened: $square)
+                .tag(Pane.dashboard)
             BriefingView(model: model, session: session).tag(Pane.summary)
-            ArtifactsView(model: model, session: session).tag(Pane.slips)
             TranscriptView(model: model, session: session, earlier: $earlier).tag(Pane.transcript)
-            FilesView(model: model, session: session).tag(Pane.files)
-            OrdersView(model: model, session: session, say: say).tag(Pane.orders)
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
         .animation(Motion.opening, value: showing)

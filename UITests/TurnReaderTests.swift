@@ -35,9 +35,11 @@ final class TurnReaderTests: XCTestCase {
     func testThePanesStillPageWithAHoldOnTheTurns() throws {
         let (app, _) = try openTheTranscript()
 
-        // One more pane along is Files, and it has to be reachable by the same swipe as before.
-        app.swipeLeft()
-        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "file-filter")
+        // Backwards, because the transcript is the last pane now: past the summary is the
+        // dashboard, and it has to be reachable by the same swipe as before.
+        app.swipeRight()
+        app.swipeRight()
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "tile-slips")
             .firstMatch.waitForExistence(timeout: 10),
                       "a swipe off the transcript no longer pages")
         XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "turn-reader")
@@ -54,7 +56,8 @@ final class TurnReaderTests: XCTestCase {
         XCTAssertTrue(firstSession.waitForExistence(timeout: 30), "the deck stayed empty")
         firstSession.tap()
         XCTAssertTrue(talkMark(app).waitForExistence(timeout: 20), "the session page never opened")
-        // Summary, slips, transcript — swiped to, because there is no bar at the foot.
+        // The dashboard, the summary, the transcript — swiped to, because there is no bar at
+        // the foot. The loop stops the moment turns arrive, so it is a ceiling rather than a count.
         let turns = app.descendants(matching: .staticText).matching(identifier: "turn-words")
         for _ in 0..<3 where !turns.firstMatch.exists {
             app.swipeLeft()

@@ -16,7 +16,8 @@ the model's half of it together, the way `Views/Rail/Linking.swift` already does
 
 `Model` holds the listing and the selection; the files beside it are one feature each
 (`Dictating`, `Controlling`, `Filtering`, `Keeping`, `Markups`, `Reading`, `Snaps`,
-`LiveUpdates`). `Views/` is the screens, `Views/Session/` the session page's parts,
+`LiveUpdates`). `Views/` is the screens, `Views/Dashboard/` the grid a session opens on,
+`Views/Session/` the session page's parts,
 `Views/Artifacts/` slips,
 `Views/Annotation/` marking up a picture (its own packet — read it before touching that folder),
 `Views/Archive/` every clip this phone has recorded and the one player that sounds any of them —
@@ -159,7 +160,9 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   did before any of this existed. Slips do **not** get this yet: an artifact page is sandboxed by
   its own CSP and nothing injects mermaid into one.
 - **The orders pane writes on a sheet, and it has to.** `OrdersView` shows what a session has been
-  told to keep in mind and opens `Editor` to change it. A field on the pane itself would put a
+  told to keep in mind and opens `Editor` to change it. It is itself on a sheet now, opened from
+  the dashboard's square — which only strengthens the argument below rather than retiring it: the
+  field still cannot sit on the pane, and `Editor` is still what a dictated paragraph needs. A field on the pane itself would put a
   second `TalkControl` on a screen that already floats one over it: two controls reading the one
   recorder, both live, one filling a box and the other sending to the session — the `isMine`
   arrangement `AloudCards` uses cannot help, because these two do different things with the same
@@ -210,8 +213,8 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   the row ids are positions, so a prepend renumbers everything: `TranscriptView.step` scrolls to
   index `added` afterwards, one runloop hop later, or the reader lands wherever the new page
   begins.
-- **The panes are swiped between, and there is no bar at the foot.** Four words across every
-  screen to choose between four screens was a band of chrome doing what a swipe does for free, so
+- **The panes are swiped between, and there is no bar at the foot.** A word per pane across every
+  screen to choose between those screens was a band of chrome doing what a swipe does for free, so
   `pane` is a `TabView(.page)` and the bar is gone — the panes are that much taller and the talk
   mark sits where the bar was. Its native index display is **off**: those dots land exactly where
   the mark floats. The indicator is a dot per pane on the header's meter row instead, which was
@@ -220,6 +223,40 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   try to hit — and the page's own edge-swipe-to-leave has to be arbitrated against the paging
   rather than restricted to the first pane. It fires from **every** pane, and the strip that
   catches it wins by being drawn over them.
+- **There are three panes and all three are things you read: the dashboard, the briefing, the
+  transcript.** It was five. Slips, files and orders were three swipes each of which had to be
+  *arrived* at before you could learn whether it had anything on it, and a carousel you page past
+  on the way to the transcript is the wrong home for something you do once. They are squares now.
+  The dashboard opens first because it is where a session starts, and the order here is the swipe
+  order, so the leading edge that leaves the page is still the first pane's.
+- **A square that cannot carry a number is not a square.** `Views/Dashboard/` is a grid, and every
+  tile carries the count it is about — slips waiting, files touched, the first written line of the
+  standing orders, how many filters run out of how many this Mac offers, what the CLAUDE.md tree
+  costs, how full the window is and what is answering. That is the whole reason it beats the menu
+  it replaced, which was nine words with no figures beside any of them. **Nothing on the dashboard
+  draws a slip, a file or a paragraph of orders**: `ArtifactsView`, `FilesView` and `OrdersView`
+  are untouched and arrive on a sheet, framed with a title because all three were written to sit
+  under a header that named the session and would otherwise land with none. The rule is enforced
+  by what is *not* on the grid — a tile whose only content is a word in a box is a menu row drawn
+  four times too large, which is why the raw transcript stayed in the `…` menu: its line count is
+  not known until it has been fetched, and a number that arrives only after you press the tile is
+  not a number on the tile. What a tile *says* is `DeckhandKit/Dashboard/`, where `just test` can
+  prove every sentence; the order they are read in is the order they are written, because a grid's
+  reading order is a layout fact rather than a rule anything can check.
+- **Two of the four controls are on the grid and two are not, and it is the same line the Lock
+  Screen card draws.** `cancel` and `compact` only ever make a session do less, so they are
+  squares — and compact carries the window figure that decides whether to press it, which is the
+  argument for a dashboard in one tile. `clear` and `exit` cannot be undone, which is the set
+  `Control.asksFirst` names, and they stayed in the menu in their own section, red and asking
+  first: a grid of identical squares is where a thumb moves fastest, and that is the worst place
+  in the app for a mis-tap that costs something.
+- **The manager still knows five pane names and the phone still answers to all five.**
+  `manager/doing.py`'s `PANES` is unchanged and is not the app's to change. `SessionView.show`
+  maps "summary" and "transcript" onto panes and "slips", "files" and "orders" onto the dashboard
+  with that square already open — so the square is held by the *page* (`SessionView.square`) and
+  not by the pane, because the ask can land before anybody has looked at the dashboard. A phone
+  that quietly stopped answering to one of those names would be a tool reporting success and
+  doing nothing.
 - **The session header is a name and a menu, and everything else is the row under it.** The
   chevron and the glyph tile both went: the panes are swiped between and a swipe from the leading
   edge of any of them leaves the session, so the arrow was a second way to do what the page
@@ -230,7 +267,7 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   13pt ring (a bar ran the width of the page to say one number, and read as the page's progress
   rather than the session's), the count, BUSY or IDLE, and the pane dots. The relative time is
   drawn **only when idle** — `updated_at` is the age of an idle session and nothing else.
-- **A swipe names where it landed, then stops.** Four dots say how many panes there are; they
+- **A swipe names where it landed, then stops.** The dots say how many panes there are; they
   cannot say which one this is, and a swipe can be accidental. So the pane's name slides in at
   the top and leaves after a second. It takes no touch and it must never become permanent — a
   label that stayed would be the tab bar again under another name.

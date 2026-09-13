@@ -1,16 +1,16 @@
 import XCTest
 
-/// The last pane of a session: what it has been told to keep in mind.
+/// What a session has been told to keep in mind, reached from the square that says so.
 ///
 /// Its own file rather than another case in `DeckLoopTests`, which is one loop through the app and
-/// stops where it started. This goes past the end of that loop — the orders pane is the one you
-/// swipe to and it is the one nothing else here reaches.
+/// stops where it started. This goes off that loop — the orders pane is a sheet now, opened from
+/// the dashboard, and it is the one nothing else here reaches.
 ///
-/// Nothing is typed into a session by this test. It swipes to the pane, reads what is standing and
+/// Nothing is typed into a session by this test. It opens the square, reads what is standing and
 /// opens the field; the saving half needs a daemon carrying the route, and a UI test that wrote a
 /// paragraph into a live session's orders would leave it there.
 final class OrdersPaneTests: XCTestCase {
-    func testTheLastPaneIsTheSessionsOrders() throws {
+    func testTheOrdersSquareOpensTheSessionsOrders() throws {
         let app = try launch()
         let firstSession = app.descendants(matching: .any).matching(identifier: "session-row").firstMatch
         XCTAssertTrue(firstSession.waitForExistence(timeout: 30), "the deck stayed empty")
@@ -18,16 +18,19 @@ final class OrdersPaneTests: XCTestCase {
         let talk = app.descendants(matching: .any).matching(identifier: "talk-mark").firstMatch
         XCTAssertTrue(talk.waitForExistence(timeout: 20), "the session page never opened")
 
-        // Past summary, slips, transcript and files. One more than the loop test walks, because
-        // orders is deliberately last: the pane you land on stays the briefing.
+        // A square on the dashboard rather than four swipes to the end of a carousel. The tile
+        // says what is standing before anything is opened, which is the whole reason it is one.
+        let tile = app.descendants(matching: .any).matching(identifier: "tile-orders").firstMatch
+        XCTAssertTrue(tile.waitForExistence(timeout: 15), "no orders square on the dashboard")
+        add(screenshot(app, named: "dashboard"))
+        tile.tap()
+
         let card = app.descendants(matching: .any).matching(identifier: "orders-card").firstMatch
-        for _ in 0..<4 where !card.exists {
-            app.swipeLeft()
-        }
-        XCTAssertTrue(card.waitForExistence(timeout: 5), "no orders pane at the end of the panes")
+        XCTAssertTrue(card.waitForExistence(timeout: 10), "the orders square opened nothing")
         add(screenshot(app, named: "orders"))
-        // The mark still floats over it: this pane is inside the session page like the other four.
-        XCTAssertTrue(talk.exists, "the mark went away on the orders pane")
+        // It arrives on a sheet, which means it arrives with a way off it — the pane was written
+        // to sit under a header that named the session and would otherwise have no title at all.
+        XCTAssertTrue(app.buttons["Done"].exists, "the orders sheet has no way off it")
 
         // The whole card is the way in, and what it opens is `Editor` — a field with the app's own
         // talk control under it, which is why there is no second one on the pane itself.

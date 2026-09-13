@@ -5,23 +5,21 @@ import SwiftUI
 /// everything you can do *to* it as opposed to say to it.
 ///
 /// Split out of `SessionView` when that file passed 280 lines. The seam is a real one rather
-/// than a line count: below this strip the page is four interchangeable panes and a tab bar,
-/// and none of them know anything about renaming a session or compacting it.
+/// than a line count: below this strip the page is three interchangeable panes swiped between,
+/// and none of them know anything about ending a session or clearing it.
 ///
-/// What it does not own is the presenting. Every sheet and alert this menu opens is declared on
-/// the page, because one belongs to the whole page and not to the strip that triggered it — so
-/// they arrive here as bindings and this view only ever sets them.
+/// What it does not own is the presenting. Both sheets this menu opens are declared on the page,
+/// because one belongs to the whole page and not to the strip that triggered it — so they arrive
+/// here as bindings and this view only ever sets them. What used to be seven more of them is the
+/// dashboard's now, presented from the square that opens it.
 struct SessionHead: View {
     @Bindable var model: AppModel
     let session: Session
     @Binding var confirming: Control?
-    @Binding var renaming: Bool
     @Binding var reading: Bool
-    @Binding var filtering: Bool
-    @Binding var configuring: Bool
     /// How many panes there are and which one is showing. The page indicator lives here rather
-    /// than at the foot because the row it sits on was already being drawn — so the bar of four
-    /// words that used to be down there cost a band of the screen, and this costs nothing.
+    /// than at the foot because the row it sits on was already being drawn — so the bar of words
+    /// that used to be down there cost a band of the screen, and this costs nothing.
     let pages: Int
     let lit: Int
     /// Whether the Mac is writing this session's briefing. It was in the tab bar, which is gone;
@@ -66,23 +64,28 @@ struct SessionHead: View {
         .padding(.top, Spacing.xxs)
     }
 
-    /// Everything you can do to the session rather than say to it, behind one glyph: bringing
-    /// its pane forward, stopping a run, compacting, clearing. A row of four buttons up here
-    /// would be more chrome than the header has, and three of the four are rare.
+    /// What is left of the menu once the dashboard exists: the way out, the file itself, and the
+    /// two things that cannot be undone.
     ///
-    /// All of them are keystrokes in its pane, so all of them need one — without a pane the
-    /// menu is there and says why rather than quietly doing nothing.
+    /// It used to hold eleven items, and seven of them are squares now — with a number on each,
+    /// which is the whole reason the grid is better than this was. Four stayed, each for its own
+    /// reason. **Sessions** is here because leaving is a swipe from the leading edge and a gesture
+    /// nobody is told about is not a way out for somebody using VoiceOver. **Raw transcript** is
+    /// here because there is no honest number to put on a square for it — a tile that is a word
+    /// in a box is a menu row drawn four times too large. And **clear** and **exit** are here
+    /// because a mis-tap on either cannot be undone, and a grid of identical squares is exactly
+    /// where a thumb moves fastest.
     private var controls: some View {
         Menu {
             here
-            setup
             inside
             // Last and on their own, because this is the only group in the menu where a
-            // mis-tap costs something. Two of the four cannot be undone at all.
+            // mis-tap costs something. Both of these ask first — the two that do not are on
+            // the dashboard, where the number that decides whether to press them is printed.
             Section("Run") {
-                ForEach(Control.allCases, id: \.self) { action in
-                    Button(action.label, systemImage: action.symbol, role: role(action)) {
-                        if action.asksFirst { confirming = action } else { send(action) }
+                ForEach(Control.allCases.filter(\.asksFirst), id: \.self) { action in
+                    Button(action.label, systemImage: action.symbol, role: .destructive) {
+                        confirming = action
                     }
                     .disabled(hasNoPane)
                 }
@@ -100,79 +103,43 @@ struct SessionHead: View {
 
     /// Where you go from here. The way back is a menu item because the chevron is gone and a
     /// left-edge swipe, which is what replaced it, is not something VoiceOver offers.
+    ///
+    /// "Show on the Mac" left: it is a square now, and the square says which pane it will bring
+    /// forward, which this row never could.
     private var here: some View {
         Section {
             Button("Sessions", systemImage: "chevron.left") { dismiss() }
-            Button("Show on the Mac", systemImage: "display") {
-                Task { await model.focus(session) }
-            }
-            .disabled(hasNoPane)
         }
     }
 
-    /// The three things you configure rather than do. All of them open a page, all of them are
-    /// rare, and none of them changes the session you are looking at right now — which is why
-    /// they are together and why they are not first.
-    private var setup: some View {
-        Section("Set up") {
-            // The sheet seeds itself from the name this session has now, so there is no draft
-            // for the page to hold on its behalf.
-            Button("Rename…", systemImage: "text.cursor") { renaming = true }
-                .disabled(hasNoPane)
-            // What the Mac does to words on their way into this session — this session's own
-            // setting rather than the Mac's, because what you want done to words going into one
-            // project is not what you want done to words going into another.
-            Button("Words on the way in…", systemImage: "line.3.horizontal.decrease") {
-                filtering = true
-            }
-            // The folder's own page, reached from the session running in it rather than only
-            // from the project picker: this is where a person already is when they want to
-            // change what the Mac may do about this work. Keyed by the path, which outlives
-            // every session in it — a setting filed under a session id would be gone by morning.
-            Button("Project settings…", systemImage: "slider.horizontal.3") { configuring = true }
-        }
-    }
-
-    /// Looking at what the app is reading, and clearing what it cannot read for you.
+    /// The file the whole app is a reading of.
+    ///
+    /// Always reachable, not only when something looks wrong — and it stayed in the menu rather
+    /// than becoming a square because nothing true and short can be printed on one for it. The
+    /// line count is not known until it has been fetched, and a tile whose number arrives only
+    /// after you press it is a tile with no number.
     private var inside: some View {
         Section("Look inside") {
-            // Always reachable, not only when something looks wrong: every other view here is
-            // a reading of that file, and this is the file.
             Button("Raw transcript", systemImage: "scroll") { reading = true }
-            // For prompts that outlived the session that was going to read them: a session
-            // killed mid-queue leaves its enqueues with nothing to remove them.
-            Button("Clear queued prompts", systemImage: "tray.and.arrow.up") {
-                Task { await model.clearQueue(for: session) }
-            }
-            .disabled((model.queued[session.sessionId] ?? []).isEmpty)
         }
     }
 
-    /// Whether the things in that menu which are keystrokes can work at all.
+    /// Whether the two keystrokes left in this menu can work at all.
     ///
-    /// It used to switch off the whole menu, which was right while every item in it was a
-    /// keystroke. Two of them never were — reading the transcript is a file on disk, clearing the
-    /// queue is a file the daemon writes — and the filter chain is a third. With iTerm unreachable
-    /// the menu was the only way to any of those, and the menu was the thing switched off.
+    /// It used to switch off the *whole* menu, which was right while every item in it was a
+    /// keystroke and wrong the moment one was not — with iTerm unreachable the menu was the only
+    /// way to the raw transcript, and the menu was the thing switched off. It is on the two
+    /// buttons now, where it has always belonged.
     private var hasNoPane: Bool { session.pane == nil }
-
-    /// Red for the ones that cannot be undone, which is the same set that asks first.
-    private func role(_ action: Control) -> ButtonRole? {
-        action.asksFirst ? .destructive : nil
-    }
-
-    private func send(_ action: Control) {
-        Task { await model.control(action, of: session) }
-    }
 
     /// One slim row under the header carrying everything that is true of the session rather than
     /// something you press: how much window it has left, whether the Mac is writing about it, and
     /// which of the panes you are on.
     ///
     /// The meter is the one number that changes what you would do next — compact it now, or carry
-    /// on — so it is on every pane. The dots are here because this row exists anyway: the four
-    /// panes are swiped between now, and a bar of four words at the foot of the screen was a band
-    /// of chrome to say something four dots say in the space already spare on this line.
+    /// on — so it is on every pane. The dots are here because this row exists anyway: the panes
+    /// are swiped between now, and a bar of their names at the foot of the screen was a band of
+    /// chrome to say something a dot each says in the space already spare on this line.
     private var fullness: some View {
         HStack(spacing: Spacing.extraSmall) {
             if let context = session.context {
@@ -203,7 +170,7 @@ struct SessionHead: View {
     }
 
     /// Where you are among the panes, and how many there are. Not a control: the panes are swiped
-    /// between, and four dots you can hit are four dots somebody will try to hit.
+    /// between, and dots you can hit are dots somebody will try to hit.
     private var dots: some View {
         HStack(spacing: 5) {
             ForEach(0..<pages, id: \.self) { index in

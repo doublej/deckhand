@@ -154,7 +154,7 @@ Two things make it behave:
 - **The phone obeys only commands newer than the cursor it opened with.** Without that, a
   relaunch replays every piece of navigation the manager has ever asked for, in order, at launch.
 - **`ManagerDesk` has two slots, not one.** The rail owns which session is pushed and the
-  session's own page owns which of its five panes shows — two gates, two views. One slot would
+  session's own page owns which pane shows — two gates, two views. One slot would
   lose the first of them whenever a run asked for both, which is exactly what "open deckhand and
   show me its slips" is, and it is the first thing the manager actually did.
 

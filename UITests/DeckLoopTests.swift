@@ -23,21 +23,44 @@ final class DeckLoopTests: XCTestCase {
         add(screenshot(app, named: "session"))
         XCTAssertTrue(appeared, "the talk button never appeared")
 
-        // The other panes are their own screens and are worth seeing on their own. Swiped to,
-        // not tapped: the bar of tabs at the foot is gone and the four panes sit side by side,
+        // A session opens on its dashboard, and a square is what says so: the grid carries its
+        // own counts, so the page has something true on it before anything is opened.
+        let slips = app.descendants(matching: .any).matching(identifier: "tile-slips").firstMatch
+        XCTAssertTrue(slips.waitForExistence(timeout: 15), "the session did not open on its dashboard")
+        add(screenshot(app, named: "dashboard"))
+
+        // The other two panes are their own screens and are worth seeing on their own. Swiped to,
+        // not tapped: the bar of tabs at the foot is gone and the three panes sit side by side,
         // which is the one thing this test can prove still works.
-        for pane in ["slips", "transcript", "files"] {
+        for pane in ["summary", "transcript"] {
             app.swipeLeft()
             add(screenshot(app, named: pane))
         }
         // A swipe in the content pages and does not leave: the mark is still here, and the
-        // fourth pane is the one we landed on.
+        // dashboard is behind us rather than under us.
         XCTAssertTrue(talk.exists, "the mark went away while paging")
-        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "file-filter")
-            .firstMatch.waitForExistence(timeout: 10), "three swipes did not reach Files")
+        XCTAssertFalse(slips.exists, "two swipes did not leave the dashboard")
         // And the one control the way out must never take a touch from. The mark floats over
         // the panes and does not reach into the leading 20 points the edge strip lives in.
         XCTAssertGreaterThan(talk.frame.minX, 20, "the talk mark reaches into the edge strip")
+    }
+
+    /// Files was the fourth pane and is a square now: the same view, one tap rather than three
+    /// swipes, and the square says how many files there are before it is opened.
+    func testTheFilesSquareOpensTheFilesPane() throws {
+        let app = try launch()
+        let firstSession = app.descendants(matching: .any).matching(identifier: "session-row").firstMatch
+        XCTAssertTrue(firstSession.waitForExistence(timeout: 20), "the deck stayed empty")
+        firstSession.tap()
+        let files = app.descendants(matching: .any).matching(identifier: "tile-files").firstMatch
+        XCTAssertTrue(files.waitForExistence(timeout: 15), "no files square on the dashboard")
+        files.tap()
+        // The sheet's own title, not the suffix row inside the pane: that row is only drawn for a
+        // session with more than one kind of file, so a test that waited for it was really asking
+        // whether this Mac's newest session happens to have touched two. The title is the pane.
+        XCTAssertTrue(app.navigationBars["Files"].waitForExistence(timeout: 10),
+                      "the Files square opened nothing")
+        add(screenshot(app, named: "files"))
     }
 
     /// The way out is a drag from the leading edge, and it has to work from every pane. On any
@@ -49,7 +72,7 @@ final class DeckLoopTests: XCTestCase {
         let talk = app.descendants(matching: .any).matching(identifier: "talk-mark").firstMatch
         XCTAssertTrue(firstSession.waitForExistence(timeout: 20), "the deck stayed empty")
 
-        for paged in 0..<4 {
+        for paged in 0..<3 {
             firstSession.tap()
             XCTAssertTrue(talk.waitForExistence(timeout: 15), "the session never opened")
             for _ in 0..<paged { app.swipeLeft() }
@@ -66,14 +89,17 @@ final class DeckLoopTests: XCTestCase {
         let firstSession = app.descendants(matching: .any).matching(identifier: "session-row").firstMatch
         XCTAssertTrue(firstSession.waitForExistence(timeout: 20), "the deck stayed empty")
         firstSession.tap()
-        let files = app.descendants(matching: .any).matching(identifier: "file-filter").firstMatch
-        for _ in 0..<3 { app.swipeLeft() }
-        XCTAssertTrue(files.waitForExistence(timeout: 15), "three swipes did not reach Files")
+        // One pane along from the dashboard, which is where a leading-edge drag has something to
+        // page *back* to. On the first pane there is nothing behind it and this proves nothing.
+        let slips = app.descendants(matching: .any).matching(identifier: "tile-slips").firstMatch
+        XCTAssertTrue(slips.waitForExistence(timeout: 15), "the session did not open on its dashboard")
+        app.swipeLeft()
+        XCTAssertFalse(slips.waitForExistence(timeout: 2), "a swipe did not leave the dashboard")
 
         drag(app, from: 0.01, to: 0.14)
         let talk = app.descendants(matching: .any).matching(identifier: "talk-mark").firstMatch
         XCTAssertTrue(talk.exists, "a short edge drag left the session")
-        XCTAssertTrue(files.exists, "a short edge drag paged instead of doing nothing")
+        XCTAssertFalse(slips.exists, "a short edge drag paged back to the dashboard")
     }
 
     /// A drag across the middle of the page, from one fraction of the width to another.
