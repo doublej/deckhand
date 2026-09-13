@@ -47,6 +47,10 @@ public struct Project: Codable, Hashable, Identifiable, Sendable {
     public let domains: [String]
     /// How many Claude sessions this folder has ever had. History, where `live` is now.
     public let sessions: Int
+    /// Which machine the folder is on — `m2`, `ubuntu`, `fractal`, as atlas and `/machines` and
+    /// `Session.machine` all spell it. Empty means the Mac the daemon runs on, which is what a
+    /// hand-written list with no host on its rows actually describes.
+    public let machine: String
 
     /// A daemon that predates any of this sends none of it, so every one of them decodes as its
     /// empty value rather than throwing the whole listing away.
@@ -54,7 +58,8 @@ public struct Project: Codable, Hashable, Identifiable, Sendable {
         name: String, path: String, relative: String = "", description: String = "",
         kind: String = "", touchedAt: Double = 0, live: Int = 0, trusted: Bool = false,
         framework: String = "", runner: String = "", branch: String = "", dirty: Bool = false,
-        issues: Int = 0, port: Int = 0, domains: [String] = [], sessions: Int = 0
+        issues: Int = 0, port: Int = 0, domains: [String] = [], sessions: Int = 0,
+        machine: String = ""
     ) {
         self.name = name
         self.path = path
@@ -72,6 +77,7 @@ public struct Project: Codable, Hashable, Identifiable, Sendable {
         self.port = port
         self.domains = domains
         self.sessions = sessions
+        self.machine = machine
     }
 
     public init(from decoder: Decoder) throws {
@@ -92,11 +98,17 @@ public struct Project: Codable, Hashable, Identifiable, Sendable {
         port = try box.decodeIfPresent(Int.self, forKey: .port) ?? 0
         domains = try box.decodeIfPresent([String].self, forKey: .domains) ?? []
         sessions = try box.decodeIfPresent(Int.self, forKey: .sessions) ?? 0
+        machine = try box.decodeIfPresent(String.self, forKey: .machine) ?? ""
     }
 
-    /// The path is the identity, because the path is what a session is started in. Two folders
-    /// can share a name — `app` appears three times on this Mac — and a name is not a handle.
-    public var id: String { path }
+    /// The machine and the path together, because the path alone stopped being unique the day
+    /// the picker grew a second machine: `/home/jurrejan/development/x` is a real folder on
+    /// Ubuntu and could be a real folder here tomorrow. Two folders can share a *name* as well —
+    /// `app` appears three times on this Mac — so a name was never the handle either.
+    ///
+    /// A newline joins them for the reason `ProjectGroup` uses one: it cannot occur in either
+    /// half, so no pair of values can collide by concatenating into the same string.
+    public var id: String { "\(machine)\n\(path)" }
 
     public var lastTouched: Date { Date(timeIntervalSince1970: touchedAt) }
 
@@ -143,7 +155,10 @@ public struct Project: Codable, Hashable, Identifiable, Sendable {
     public func matches(_ typed: String) -> Bool {
         let wanted = typed.trimmingCharacters(in: .whitespaces).lowercased()
         guard !wanted.isEmpty else { return true }
-        let haystack = ([name, relative, description, kind, framework, runner, branch] + domains)
+        // `machine` is in here on purpose: typing "ubuntu" is the shortest way to say "only the
+        // ones over there", and it costs no control on a screen that is already a search field.
+        let haystack = ([name, relative, description, kind, framework, runner, branch, machine]
+            + domains)
             .map { $0.lowercased() }
         return wanted.split(separator: " ").allSatisfy { word in
             haystack.contains { $0.contains(word) }

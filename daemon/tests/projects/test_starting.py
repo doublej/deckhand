@@ -49,8 +49,8 @@ def test_a_name_already_taken_is_numbered(claude_home):
     sessions called `shop` would share all three."""
     running = starting.live_sessions(iterm_only=False)
     assert [s.name for s in running] == ["warm-okapi", "cold-otter"]
-    assert starting._free_name("shop", running) == "shop"
-    assert starting._free_name("warm-okapi", running) == "warm-okapi-2"
+    assert starting.free_name("shop", running) == "shop"
+    assert starting.free_name("warm-okapi", running) == "warm-okapi-2"
 
 
 def test_the_listing_is_the_whole_permission(trusted_home, monkeypatch):
@@ -60,15 +60,67 @@ def test_the_listing_is_the_whole_permission(trusted_home, monkeypatch):
     import anyio
     with pytest.raises(Exception) as raised:
         anyio.run(routes.start_project_session, "/etc")
-    assert "not in this Mac's project list" in str(raised.value)
+    assert "not in the project list" in str(raised.value)
 
 
-def test_a_row_says_whether_it_can_be_started(trusted_home, monkeypatch):
+def test_a_row_says_whether_it_can_be_started(trusted_home, monkeypatch, no_hands):
     monkeypatch.setattr(sources, "catalog", lambda: ([
         sources.Project("shop", "/Users/jj/dev/web/shop"),
         sources.Project("cold", "/Users/jj/dev/web/cold"),
     ], "atlas"))
-    rows = routes.list_projects()["projects"]
+    import anyio
+    rows = anyio.run(routes.list_projects)["projects"]
     assert [(r["name"], r["trusted"]) for r in rows] == [("shop", True), ("cold", False)]
     # The two sessions in the fixture both sit in /Users/jj/dev/web/shop.
     assert rows[0]["live"] == 2
+
+
+def test_a_folder_on_another_machine_is_offered_but_not_trusted_by_this_one(
+    trusted_home, monkeypatch, no_hands
+):
+    """Trust is answered at a keyboard, so this Mac's answer says nothing about Fractal's. A
+    machine that is asleep contributes none, and its rows read as "cannot start here yet"."""
+    monkeypatch.setattr(sources, "catalog", lambda: ([
+        sources.Project("shop", "/Users/jj/dev/web/shop"),
+        sources.Project("rig", "C:\\dev\\thing", machine="fractal"),
+    ], "atlas"))
+    import anyio
+    rows = anyio.run(routes.list_projects)["projects"]
+    assert [(r["name"], r["machine"], r["trusted"]) for r in rows] == [
+        ("shop", "", True), ("rig", "fractal", False)
+    ]
+
+
+def test_starting_a_folder_over_there_goes_to_that_machines_hand(trusted_home, monkeypatch):
+    """Which machine is derived from the catalogue, never taken off the request: the listing is
+    the whole permission, and a machine named by the caller is a target this Mac never offered."""
+    monkeypatch.setattr(sources, "catalog", lambda: (
+        [sources.Project("rig", "C:\\dev\\thing", machine="fractal")], "atlas"))
+    monkeypatch.setattr(starting, "start", lambda cwd: pytest.fail("that folder is not here"))
+    asked = {}
+
+    async def fake_call(machine, method, path, **kwargs):
+        asked.update({"machine": machine, "path": path, "body": kwargs.get("json")})
+        return {"session": {"name": "rig", "machine": "fractal"}, "error": None}
+
+    monkeypatch.setattr(routes.proxy, "call", fake_call)
+    import anyio
+    answer = anyio.run(routes.start_project_session, "C:\\dev\\thing")
+    assert asked["machine"] == "fractal"
+    assert asked["path"] == "/projects/session"
+    assert asked["body"]["path"] == "C:\\dev\\thing"
+    assert answer["session"]["machine"] == "fractal"
+
+
+def test_a_machine_that_is_asleep_says_so_rather_than_failing_silently(trusted_home, monkeypatch):
+    monkeypatch.setattr(sources, "catalog", lambda: (
+        [sources.Project("rig", "C:\\dev\\thing", machine="fractal")], "atlas"))
+
+    async def unreachable(machine, method, path, **kwargs):
+        return None
+
+    monkeypatch.setattr(routes.proxy, "call", unreachable)
+    import anyio
+    with pytest.raises(Exception) as raised:
+        anyio.run(routes.start_project_session, "C:\\dev\\thing")
+    assert "not reachable" in str(raised.value)

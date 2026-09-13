@@ -34,12 +34,14 @@ extension ClientTests {
         let catalog = try await stub().projects()
         let project = try #require(catalog.projects.first)
         #expect(project.touchedAt == 1789010952.354)
-        #expect(project.id == "/Users/jj/dev/multi-stack/deckhand")
+        // Machine and path, joined: the path alone stopped being unique when the picker grew a
+        // second machine. A row with no host on it is this Mac, so its half is empty.
+        #expect(project.id == "\n/Users/jj/dev/multi-stack/deckhand")
         #expect(project.line == "multi-stack/deckhand · iOS remote")
         #expect(StubProtocol.lastRequest?.url?.path == "/projects")
     }
 
-    /// The path is the identity, and the body carries it — a session is started in a folder, and
+    /// The path is what the body carries — a session is started in a folder, and
     /// two projects on this Mac can share a name (`app` appears three times).
     @Test("starting a session posts the project's own path")
     func startsASession() async throws {
@@ -133,6 +135,36 @@ struct ProjectTests {
         #expect(old.framework.isEmpty)
         #expect(old.domains.isEmpty)
         #expect(old.facts == ["node"])
+    }
+
+    @Test("a folder says which machine it is on, and a daemon that predates that says nothing")
+    func machines() throws {
+        let row = try JSONDecoder().decode(Project.self, from: Data("""
+        {"name": "rig", "path": "C:\\\\dev\\\\thing", "machine": "fractal"}
+        """.utf8))
+        #expect(row.machine == "fractal")
+        let old = try JSONDecoder().decode(Project.self, from: Data("""
+        {"name": "shop", "path": "/Users/jj/dev/web/shop"}
+        """.utf8))
+        #expect(old.machine.isEmpty)  // no host on the row is this Mac, not an unknown one
+    }
+
+    @Test("the same path on two machines is two rows, not one")
+    func identity() {
+        let here = Project(name: "x", path: "/home/jurrejan/development/x")
+        let there = Project(name: "x", path: "/home/jurrejan/development/x", machine: "ubuntu")
+        #expect(here.id != there.id)
+        #expect(Set([here, there]).count == 2)
+    }
+
+    @Test("typing a machine name narrows the picker to that machine")
+    func searchingByMachine() {
+        let rig = Project(name: "thing", path: "C:\\dev\\thing", machine: "fractal")
+        let mine = Project(name: "thing", path: "/Users/jj/dev/thing")
+        #expect(rig.matches("fractal"))
+        #expect(!mine.matches("fractal"))
+        // And it still narrows with the rest, rather than replacing them.
+        #expect(rig.matches("fractal thing"))
     }
 
     private func rich() -> Project {

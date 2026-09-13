@@ -161,19 +161,39 @@ Read, plus exactly one primitive.
 By absence. The router is never mounted, so the route 404s:
 
 `/settings` · `/orders` · `/filters` · `/briefings` · `/summary` · `/audio` · `/say` · `/notify` ·
-`/image` · `/live/token` · `/manager` · `/focus` · `/control` · `/name` · `POST /projects/session`
+`/image` · `/live/token` · `/manager` · `/focus` · `/control` · `/name` · `GET /projects`
+
+`GET /projects` is refused for a different reason from the rest: the catalogue is atlas, atlas is
+on the Mac, and a second answer built from a hand's own disk could only ever disagree with it. What
+a hand does serve is the two things only it can answer — `GET /projects/trusted`, and the start.
 
 The last four are pane work. **For v1 a remote session is socket-only**: you can read it and speak
 to it, and focus, stop/compact/clear, `/rename` and image paste are simply not there. Both machines
 run tmux and Claude Code even records a tmux target (Fractal's says `main-2:@2.%3`), so this is a
 decision rather than a limit — see *Left out*.
 
-`POST /projects/session` is on that list for a harder reason than the others: `starting.start()` is
-`it2` from end to end — `it2 window new` for the handle, `it2 session run` to launch, `it2 session
-list --json` to find the pane (`starting.py:109`, `:127`, `:150`). There is no fallback path in it
-to disable. **Starting a session on a remote machine is not a flag, it is a second backend**, and it
-arrives with the rest of the pane work or not at all. The phone lists remote folders; it opens them
-only on this Mac.
+`POST /projects/session` was on that list for a harder reason than the others: `starting.start()`
+is `it2` from end to end — `it2 window new` for the handle, `it2 session run` to launch, `it2
+session list --json` to find the pane. There is no fallback path in it to disable. **Starting a
+session on a remote machine is not a flag, it is a second backend.**
+
+That part was right. What was wrong was the sentence after it — that the backend would arrive with
+the rest of the pane work or not at all. **Built on 2026-09-13** (`projects/tmux.py`), and it
+arrived alone, because the two are not the same job: starting needs one detached tmux session and
+then `starting.settled()`, which is shared unchanged; pane *control* needs keystrokes spelled as
+CSI-u escapes re-proven against tmux. The first is forty lines, the second is a research task.
+
+Two things measured before it was written, both of which decide the code:
+
+- On Fractal `claude.exe` resolves inside a tmux session on its own.
+- On Ubuntu it does not — a detached tmux session reads no login profile — so `~/.local/bin` is
+  prepended exactly as `fleet/link.py` already does for `uv`.
+
+The session it makes has no pane, so it is socket-only like every other remote session, and the
+keyboard route refuses it for the reason it already refused. Verified end to end on 2026-09-13
+from outside the house: `POST /projects/session` for `/home/jurrejan/development/lowlands-watch`
+came back as a real session record stamped `ubuntu`, running under tmux as
+`deckhand-lowlands-watch`.
 
 And the standing invariant gets a second reason to fire: **the keyboard route on a remote session
 returns 409, never a fallback.** It already does this when a session has no pane
@@ -341,12 +361,15 @@ already hands over.
 
 ## Left out, and when to add it
 
-**Pane control on a remote machine**, and with it `POST /projects/session`, `focus_session` and
-`start_session`. Both hands have tmux and Claude Code records the target, so focus,
-stop/compact/clear and `/rename` are reachable via `tmux send-keys`. Add it when reading a remote
-session stops being enough — but note that `deliver.py:32-41` spells keys as CSI-u escape sequences
-for a measured reason, and that reason has to be re-proven against tmux rather than assumed. This
-is one piece of work, not four: every one of them is the same missing backend.
+**Pane control on a remote machine** — `focus_session`, `/control`, `/name`. Both hands have tmux
+and Claude Code records the target, so focus, stop/compact/clear and `/rename` are reachable via
+`tmux send-keys`. Add it when reading a remote session stops being enough — but note that
+`deliver.py:32-41` spells keys as CSI-u escape sequences for a measured reason, and that reason has
+to be re-proven against tmux rather than assumed.
+
+`POST /projects/session` used to be on this list and is not any more (see above). It leaving early
+is the correction worth keeping: these were filed as one piece of work because they shared a
+missing backend, and only three of them actually did.
 
 **Cross-machine session links.** Not left out — impossible. `AF_UNIX` does not cross a machine, so
 no such edge exists to draw.

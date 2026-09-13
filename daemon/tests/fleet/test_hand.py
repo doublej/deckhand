@@ -33,8 +33,9 @@ REFUSED = [
     ("POST", "/sessions/abc/focus"),
     ("POST", "/sessions/abc/control"),
     ("POST", "/sessions/abc/name"),
+    # `/projects` stays refused: the catalogue is atlas, and atlas is on the Mac. What a hand
+    # does serve is the two things only it can answer — `/projects/trusted` and the start itself.
     ("GET", "/projects"),
-    ("POST", "/projects/session"),
 ]
 
 

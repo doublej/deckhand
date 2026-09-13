@@ -34,6 +34,7 @@ from fastapi import Body, Depends, FastAPI, Header, HTTPException, Query
 from .. import __version__, artifacts, config, deliver, sessions
 from ..links import routes as link_routes
 from ..log import log
+from ..projects import starting, tmux
 from ..reading import asked, commands, context, readable, transcripts
 from . import registry
 
@@ -154,6 +155,42 @@ def deliver_text(session_id: str, text: str = Body(embed=True)) -> dict:
     session = session_or_404(session_id)
     delivered_by, error = deliver.deliver(session, text, route="socket")
     return {"delivered": delivered_by is not None, "delivered_by": delivered_by, "error": error}
+
+
+@app.get("/projects/trusted", dependencies=[Depends(require_token)])
+def trusted_folders() -> dict:
+    """Which folders Claude Code has been trusted in on this machine.
+
+    The one fact about a remote project atlas cannot answer: it catalogues folders, not whether
+    somebody once pressed a key in a trust dialog. The daemon asks every machine this when the
+    picker opens, so a row says whether it can be started *before* it is tapped rather than
+    after — and a hand that is asleep simply contributes no trusted rows, which reads as
+    "cannot start here yet", the same answer and for an honest reason.
+    """
+    return {"trusted": sorted(starting.trusted())}
+
+
+@app.post("/projects/session", dependencies=[Depends(require_token)])
+def start_here(path: str = Body(embed=True), model: str = Body(embed=True, default="")) -> dict:
+    """Start a session in that folder on this machine, with tmux.
+
+    **This route is the one thing `docs/network.md` said a hand refuses by absence**, and it is
+    here now for the reason that note gave for adding it: reading a remote session stopped being
+    enough. What has *not* changed is the authority it carries — `tmux.start` fills in no pane,
+    so the session it makes is socket-only exactly like every other session on this machine, and
+    the keyboard route goes on refusing it.
+
+    `path` is not checked against a catalogue here. It is checked against one on the daemon, which
+    is the machine that has atlas; checking it twice against two different lists would mean two
+    answers that can disagree. What this checks is the thing only this machine knows: whether
+    Claude Code has been trusted in that folder.
+
+    200 with an `error` rather than a 4xx, matching `deliver` above: the daemon reads None from
+    `proxy.call` as "that machine is not reachable", so a refusal spelled as a status code would
+    arrive as the wrong sentence entirely.
+    """
+    session, error = tmux.start(path, model)
+    return {"session": session.to_json() if session else None, "error": error}
 
 
 #: When the daemon was last heard from, however it asked. Stamped by the middleware below.

@@ -13,6 +13,7 @@ def _atlas(**over):
         "description": "the shop",
         "type": "node",
         "isLocal": True,
+        "host": "m2",
         "modifiedAt": "2026-09-01T10:00:00.000Z",
     }
     return row | over
@@ -51,11 +52,18 @@ def test_the_cache_carries_the_list_when_atlas_is_down(tmp_path, monkeypatch, cl
     assert found[0].relative == "web/shop"
 
 
-def test_another_machines_folders_are_not_offered():
-    """atlas catalogues the rig and the Ubuntu box too, and this Mac cannot start a session in
-    `C:\\dev`. Only atlas's records are filtered this way — a hand-written list has no flag."""
-    rows = [_atlas(), _atlas(name="rig", path="C:\\dev\\thing", isLocal=None)]
-    assert [p.name for p in sources._from_atlas(rows)] == ["shop"]
+def test_another_machines_folders_are_offered_and_say_whose_they_are():
+    """atlas catalogues the rig and the Ubuntu box too, and a hand can now start a session in
+    either. `host` is atlas's id and deckhand's alike, so nothing maps it."""
+    rows = [_atlas(), _atlas(name="rig", path="C:\\dev\\thing", isLocal=None, host="fractal")]
+    found = sources._from_atlas(rows)
+    assert [(p.name, p.machine) for p in found] == [("shop", "m2"), ("rig", "fractal")]
+
+
+def test_a_hand_written_list_names_no_machine_and_that_means_this_one():
+    """`isLocal` is present-and-true locally and *absent* elsewhere, never false — so a row with
+    no host at all is a folder somebody wrote down here, not one of unknown provenance."""
+    assert sources._project({"name": "shop", "path": "/Users/jj/dev/web/shop"}).machine == ""
 
 
 def test_archived_work_is_never_a_row():

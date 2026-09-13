@@ -122,15 +122,15 @@ def start(cwd: str) -> tuple[Session | None, str | None]:
     chosen = wants.resolved(str(folder)).session_model
     model = ["--model", chosen] if chosen else []
     launch = " ".join(
-        ["claude", "--name", shlex.quote(_free_name(folder.name, running)), *model, *FLAGS]
+        ["claude", "--name", shlex.quote(free_name(folder.name, running)), *model, *FLAGS]
     )
     if not _it2("session", "run", "-s", pane, f"cd {shlex.quote(str(folder))} && {launch}"):
         return None, "opened a window but iTerm would not run claude in it"
     log.info("started claude in %s", folder)
-    return _settled(folder, known)
+    return settled(folder, known)
 
 
-def _free_name(wanted: str, running: list[Session]) -> str:
+def free_name(wanted: str, running: list[Session]) -> str:
     """The project's name, or the first numbered one nothing is using.
 
     Not cosmetic: this app files a star, a hidden row and a filter chain under the name, so two
@@ -160,7 +160,7 @@ def _pane_in(window: str) -> str | None:
     return None
 
 
-def _settled(folder: Path, known: set[str]) -> tuple[Session | None, str | None]:
+def settled(folder: Path, known: set[str]) -> tuple[Session | None, str | None]:
     """Wait for the new session to write its own record, and hand back the session itself.
 
     Matched on the folder as Claude Code resolves it: the dev tree carries a symlink or two, and

@@ -89,6 +89,11 @@ class Project:
     #: How many Claude sessions this folder has ever had. History, not liveness: `live` is the
     #: ones running now.
     sessions: int = 0
+    #: Which machine the folder is on, as atlas's own `host` — `m2`, `ubuntu`, `fractal`. Empty
+    #: means this one, which is what a hand-written list with no such flag actually describes.
+    #: The ids are atlas's and deckhand's alike because deckhand's registry is atlas's registry,
+    #: so this joins to `Session.machine` and to `/machines` with nothing in between.
+    machine: str = ""
 
     def to_json(self) -> dict:
         return {
@@ -108,6 +113,7 @@ class Project:
             "port": self.port,
             "domains": list(self.domains),
             "sessions": self.sessions,
+            "machine": self.machine,
         }
 
 
@@ -174,19 +180,25 @@ def _atlas_cache() -> list[Project]:
 
 
 def _from_atlas(index: object) -> list[Project]:
-    """atlas's records, minus the ones that are not on this Mac.
+    """atlas's records — every machine's, not only this Mac's.
 
-    atlas catalogues the rig and the Ubuntu box as well, and their folders come through as
-    `C:\\dev\\...` and `/home/jurrejan/development/...`. A session can only be started where this
-    daemon is running, so offering those would be offering rows that can only ever fail —
-    `isLocal` is atlas's own answer to which is which. Only the atlas sources are filtered this
-    way: a list somebody wrote by hand names folders they meant, and carries no such flag.
+    This used to drop everything atlas marked as somewhere else, on the grounds that a session
+    can only be started where the daemon runs and offering the rest was offering rows that could
+    only fail. That was true until a hand could start one; it is not true now, and the folders on
+    the other two machines are 54 of the 504 atlas holds.
+
+    **Nothing here has to map anything.** atlas's `host` is `m2`, `ubuntu`, `fractal` — the same
+    ids deckhand's own registry uses, because deckhand's registry *is* atlas's registry. Measured
+    on 2026-09-13: 504 rows, `host` present on every one of them, 450/26/28.
+
+    `isLocal` is still the honest reading of "is this one mine", but note it is present-and-true
+    on local rows and *absent* on the others rather than false — so a check for `is False` finds
+    nothing at all.
     """
     rows = index.get("projects", []) if isinstance(index, dict) else index
     if not isinstance(rows, list):
         return []
-    here = [row for row in rows if isinstance(row, dict) and row.get("isLocal") is True]
-    return [p for row in here if (p := _project(row)) is not None]
+    return [p for row in rows if isinstance(row, dict) and (p := _project(row)) is not None]
 
 
 def _project(row: object) -> Project | None:
@@ -226,6 +238,9 @@ def _project(row: object) -> Project | None:
         port=_count(row.get("port")),
         domains=_names(row.get("domains")),
         sessions=_count(claude.get("count")) if isinstance(claude, dict) else 0,
+        # A hand-written `projects.json` names folders somebody meant, on this Mac, and carries
+        # no host — so an absent one is this machine rather than an unknown one.
+        machine=str(row.get("host") or ""),
     )
 
 

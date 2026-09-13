@@ -71,6 +71,16 @@ def session(session_id: str):
     )
 
 
+def remote_rows() -> list[dict]:
+    """Every remote session the last listing saw, as its row.
+
+    The phone polls `/sessions` every few seconds, so this is never more than that stale — which
+    is why `/projects` counts what is running in a folder out of here rather than paying a second
+    fan-out to every machine for a number that is already on this Mac.
+    """
+    return list(_rows.values())
+
+
 def forget(machine_id: str) -> None:
     for sid in [s for s, m in _owner.items() if m == machine_id]:
         del _owner[sid]

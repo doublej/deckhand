@@ -22,6 +22,19 @@ def keep_the_real_log_clean(tmp_path, monkeypatch):
 
 
 @pytest.fixture
+def no_hands(monkeypatch):
+    """No other machine answers. Every route that merges the fleet asks all of them at once, and
+    a test that did not say this would try to open a real ssh link to whatever atlas's registry
+    happens to hold on the machine running the suite."""
+    from deckhand_daemon.fleet import proxy
+
+    async def nobody(method, path, **kwargs):
+        return {}
+
+    monkeypatch.setattr(proxy, "every", nobody)
+
+
+@pytest.fixture
 def claude_home(tmp_path, monkeypatch):
     """A fake ~/.claude with one live session (pid 4242) and one stale record."""
     home = tmp_path / "claude"

@@ -23,9 +23,22 @@ struct ProjectListView: View {
     /// hundred chances to press the wrong one.
     @State private var configuring: Project?
     @FocusState private var searching: Bool
+    /// The machine whose folders are showing alone, or nil for all of them. Not persisted: a
+    /// filter you did not set and cannot see is a picker that looks like it lost four hundred
+    /// rows, and this screen is opened to find something rather than to be configured.
+    @State private var only: String?
 
     private var shown: [Project] {
-        model.picker.projects.filter { $0.matches(typed) }
+        model.picker.projects.filter { project in
+            (only == nil || project.machine == only) && project.matches(typed)
+        }
+    }
+
+    /// Which id means "the Mac this daemon runs on". A project carries `""` when its source named
+    /// no host, and the primary's own id when atlas did — both are this Mac, and a row must not
+    /// announce the machine you are already on.
+    private var here: String {
+        model.machines.first(where: \.isPrimary)?.id ?? ""
     }
 
     var body: some View {
@@ -72,6 +85,8 @@ struct ProjectListView: View {
                 RoundedRectangle(cornerRadius: Radius.medium, style: .continuous)
                     .fill(Palette.surfacePrimary)
             )
+            MachineChips(projects: model.picker.projects, machines: model.machines, only: $only)
+                .padding(.horizontal, -Spacing.medium)  // the chips carry the gutter themselves
             if let caveat = model.picker.caveat {
                 Text(caveat)
                     .font(Typography.hint)
@@ -140,6 +155,13 @@ struct ProjectListView: View {
             .accessibilityIdentifier("project-row")
     }
 
+    /// `ubuntu · ` in front of the folder, or nothing for a folder on this Mac.
+    private func whose(_ project: Project) -> String {
+        let machine = project.machine
+        guard !machine.isEmpty, machine != here else { return "" }
+        return "\(model.machines.first { $0.id == machine }?.title ?? machine) · "
+    }
+
     private func face(_ project: Project) -> some View {
         HStack(alignment: .top, spacing: Spacing.small) {
             words(project)
@@ -166,7 +188,10 @@ struct ProjectListView: View {
                 .font(Typography.primaryRow)
                 .foregroundStyle(Palette.textPrimary)
                 .lineLimit(1)
-            Text(project.relative)
+            // The machine leads the folder line, and only when it is not this one: a row that
+            // said `m2` four hundred times would be four hundred rows of noise, and the chips
+            // above already say which machines there are at all.
+            Text(whose(project) + project.relative)
                 .font(Typography.hint)
                 .foregroundStyle(Palette.textTertiary)
                 .lineLimit(1)
