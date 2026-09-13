@@ -56,6 +56,28 @@ def test_a_transcript_that_moved_without_new_activity_costs_a_read_not_a_model(c
     assert briefings._due(SID) is False
 
 
+def test_a_transcript_that_moved_for_nothing_is_settled_rather_than_left_stale(claude_home):
+    """The second gate's answer has to be written down, or `stale` never goes out again.
+
+    `stale` costs a `stat` now, which is only the right answer while the mtime it compares
+    against is kept current. A file that moved without saying anything is exactly the case that
+    writes no briefing, so if the worker did not settle it here the phone would show a spinner
+    for a session nothing was ever going to be written about.
+    """
+    path = transcript(claude_home, SID, [said("build it"), did("built")])
+    briefings.save(SID, {"summary": "Built it", "hash": briefings._hash(SID),
+                         "mtime": path.stat().st_mtime})
+
+    path.write_text(path.read_text() + json.dumps({"type": "attachment"}) + "\n")
+    assert briefings.of(SID)["stale"] is True  # the cheap gate cannot know better yet
+
+    assert briefings._due(SID) is False  # the worker opens the expensive gate and settles it
+
+    assert briefings.load(SID)["mtime"] == path.stat().st_mtime
+    assert briefings.of(SID)["stale"] is False
+    assert briefings.load(SID)["summary"] == "Built it"  # settling keeps the briefing itself
+
+
 def test_real_work_puts_a_session_back_in_the_queue(claude_home):
     path = transcript(claude_home, SID, [said("build it"), did("built")])
     briefings.save(SID, {"hash": briefings._hash(SID), "mtime": path.stat().st_mtime})

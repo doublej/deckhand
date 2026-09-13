@@ -70,13 +70,31 @@ def of(session_id: str) -> dict:
         # Whether a newer one is on its way. Not "wrong" — the briefing below it is still the
         # last true thing said about this session.
         #
-        # One session's own answer, never the whole queue's. Asking whether this id was in the
-        # queue meant walking every live session to answer a boolean about one of them, and
-        # `/briefings` calls this once per session: N listings and N² transcript reads for a
-        # route the phone opens cold. `_due` is the same fact — the queue is the live sessions
-        # it is true of — and liveness is already settled by both callers.
-        "stale": _due(session_id),
+        # One session's own answer, never the whole queue's, and the cheap gate rather than
+        # `_due`. Asking whether this id was in the queue meant walking every live session to
+        # answer a boolean about one of them; asking `_due` then read a 4 MB tail per session
+        # and parsed every line of it — 26 MB per `/briefings`, on a route the phone polls
+        # every 12 s, to decide whether to draw a spinner.
+        "stale": _moved(session_id),
     }
+
+
+def _moved(session_id: str) -> bool:
+    """Whether the transcript has moved since the worker last looked at this session.
+
+    Exactly what `stale` means, and it costs a `stat`. It is not an approximation of `_due`:
+    `_due` writes the new mtime down whenever it opens the expensive gate and finds nothing
+    behind it, so a file that moved without saying anything is settled there rather than left
+    reading stale here. Without that half this would be a spinner that never stopped.
+    """
+    kept = load(session_id)
+    file = transcripts.transcript_path(session_id)
+    if file is None:
+        return False
+    try:
+        return kept.get("mtime") != file.stat().st_mtime
+    except OSError:
+        return False
 
 
 def bump(session_id: str) -> None:
@@ -159,7 +177,14 @@ def _due(session_id: str) -> bool:
         return False
     if kept.get("mtime") == moved:
         return False
-    return kept.get("hash") != _hash(session_id)
+    if kept.get("hash") != _hash(session_id):
+        return True
+    # The file moved and nothing in it did. Write the new mtime down rather than buying the
+    # expensive gate to reach this same answer on every sweep from now on — and so that
+    # `_moved`, which is all a read is allowed to spend, stops saying a briefing is on its way
+    # when the worker has already looked and decided none is.
+    save(session_id, kept | {"mtime": moved})
+    return False
 
 
 def _hash(session_id: str) -> str:
