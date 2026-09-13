@@ -3,6 +3,10 @@
 Both are read rather than counted: the context number comes off the last assistant entry in the
 transcript, and the week comes out of the statusline's own cache, so the phone and the Mac
 cannot quote different numbers at each other.
+
+The one exception is a compact, which empties the window without writing an assistant entry —
+`last_request` reads the boundary Claude Code leaves instead, or the session goes on reading as
+nearly full for as long as nobody speaks to it.
 """
 
 from __future__ import annotations
@@ -24,6 +28,19 @@ DEFAULT_WINDOW = 200_000
 # A turn Claude Code wrote itself — an interrupt, an API error. Its usage is all zeros, so
 # stopping at one reports an empty window and `<synthetic>` as the model, not the real last one.
 SYNTHETIC = "<synthetic>"
+
+
+def _emptied(entry: dict) -> int | None:
+    """What a compact left behind, if this entry is the line that recorded one.
+
+    Claude Code writes `{"type":"system","subtype":"compact_boundary"}` with a `compactMetadata`
+    carrying `preTokens` and `postTokens`. Measured across 613 boundaries here, every one had
+    `postTokens`, and `preTokens` matched the last assistant entry before it to within 0.2%
+    (417532 against 416740) — so the two numbers are in the same units and can be swapped in.
+    """
+    meta = entry.get("compactMetadata")
+    post = meta.get("postTokens") if isinstance(meta, dict) else None
+    return post if isinstance(post, int) else None
 
 
 @dataclass(slots=True)
@@ -56,26 +73,47 @@ def last_request(session_id: str) -> LastRequest:
 
     Read over a small window, because this is asked for every session on every listing and the
     answer is always in the last few entries of the file.
+
+    **A compact is the one moment the last assistant entry stops being the answer.** After one,
+    the newest entry in the file is still the request that filled the window right up — so a
+    session that has just emptied reads as nearly full, and goes on reading that way for as long
+    as nobody speaks to it. Measured on this transcript: 417k of a 450k window reported for 80
+    minutes at a session actually holding 21k. So a boundary found before an assistant entry wins
+    over it, and only the model and the effort are then read off the older one — those survive a
+    compact, the number does not. `/clear` needs nothing of the kind: it starts a new transcript,
+    which has no assistant entry to find and so already reads as empty.
+
+    `postTokens` counts the conversation and not the preamble, so it understates by whatever the
+    system prompt, the tools and the CLAUDE.md tree weigh — about 58k here, against the 79k the
+    next real request reports. Left alone: it is one turn of understating a window with plenty of
+    room, where the bug it replaces was telling a person to compact something he had just
+    compacted.
     """
     path = transcript_path(session_id)
     if path is None:
         return LastRequest()
     for window in (USAGE_WINDOW, TAIL_WINDOWS[1]):
+        emptied = None
         for raw in reversed(tail_lines(path, window)):
             entry = parse_line(raw)
-            if entry is None or entry.get("type") != "assistant" or entry.get("isSidechain"):
+            if entry is None:
+                continue
+            if emptied is None:
+                emptied = _emptied(entry)
+            if entry.get("type") != "assistant" or entry.get("isSidechain"):
                 continue
             message = entry.get("message", {})
             usage = message.get("usage")
             if not isinstance(usage, dict) or message.get("model") == SYNTHETIC:
                 continue
+            billed = sum(
+                value
+                for key in ("input_tokens", "cache_creation_input_tokens",
+                            "cache_read_input_tokens")
+                if isinstance(value := usage.get(key), int)
+            )
             return LastRequest(
-                used=sum(
-                    value
-                    for key in ("input_tokens", "cache_creation_input_tokens",
-                                "cache_read_input_tokens")
-                    if isinstance(value := usage.get(key), int)
-                ),
+                used=billed if emptied is None else emptied,
                 model=message.get("model") or "",
                 effort=entry.get("effort") or "",
             )

@@ -84,6 +84,16 @@ context.py      # the CLAUDE.md tree a session in a folder is loaded with, befor
   ceiling: what matters is when *this* Mac folds a session into a summary. It lags by a turn on a
   busy session — the usage of a request in flight is not written until the assistant entry it
   produced lands — and it will not match a statusline counting against the model's full window.
+- **A compact empties the window without writing an assistant entry**, so the newest usage in the
+  file is still the request that filled it right up. Measured here: 417k of a 450k window reported
+  for 80 minutes at a session actually holding 21k, which reads as "compact this" at a session
+  just compacted. Claude Code writes a `compact_boundary` system line carrying `preTokens` and
+  `postTokens` — 613 of them on this Mac, every one with `postTokens`, and `preTokens` matching
+  the last assistant entry before it to within 0.2% — so `sessions.usage` takes a boundary found
+  before an assistant entry over that entry's number, keeping only its model and effort. The
+  `postTokens` count is the conversation and not the preamble, so it understates by what the
+  system prompt, the tools and the CLAUDE.md tree weigh (~58k here) until the next real request.
+  `/clear` needs none of this: it starts a new transcript, which reads as empty already.
 - **`updated_at` is the moment a session's status last changed, not a heartbeat.** Measured here:
   a session reporting `busy` with a 1553 s old stamp while it was mid-turn. So it is only the age
   of an *idle* session.

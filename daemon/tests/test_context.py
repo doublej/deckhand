@@ -47,6 +47,66 @@ def test_the_context_is_what_the_last_request_filled(claude_home):
     assert sessions.last_request(SID).used == 315_225
 
 
+def compacted(post, pre=417_532):
+    """The line Claude Code writes when a conversation is folded into a summary."""
+    return {
+        "type": "system",
+        "subtype": "compact_boundary",
+        "compactMetadata": {"trigger": "auto", "preTokens": pre, "postTokens": post},
+    }
+
+
+def test_a_compact_empties_the_window_before_anything_is_said_again(claude_home):
+    """The newest assistant entry is the request that filled it right up, so without this a
+    session that has just compacted reads as nearly full until somebody speaks to it."""
+    write_transcript(
+        claude_home,
+        [
+            assistant([{"type": "text", "text": "before"}],
+                      message_usage={"input_tokens": 416_740}, model="claude-opus-5"),
+            compacted(21_196),
+            user("This session is being continued from a previous conversation"),
+        ],
+    )
+
+    ran = sessions.last_request(SID)
+    assert ran.used == 21_196
+    # The model survives a compact even though the number does not, so the row keeps its badge.
+    assert ran.model == "claude-opus-5"
+
+
+def test_the_first_request_after_a_compact_wins_over_the_boundary(claude_home):
+    """Once the session has answered, its own usage is the truth again — the boundary only
+    stands in for the turn that has not happened yet."""
+    write_transcript(
+        claude_home,
+        [
+            assistant([{"type": "text", "text": "before"}],
+                      message_usage={"input_tokens": 416_740}),
+            compacted(21_196),
+            assistant([{"type": "text", "text": "after"}],
+                      message_usage={"input_tokens": 79_598}),
+        ],
+    )
+
+    assert sessions.last_request(SID).used == 79_598
+
+
+def test_only_the_newest_compact_counts(claude_home):
+    """A session compacted twice reads the boundary it is actually sitting behind."""
+    write_transcript(
+        claude_home,
+        [
+            compacted(20_433),
+            assistant([{"type": "text", "text": "between"}],
+                      message_usage={"input_tokens": 384_361}),
+            compacted(20_874),
+        ],
+    )
+
+    assert sessions.last_request(SID).used == 20_874
+
+
 def test_a_transcript_with_no_usage_reports_nothing_rather_than_guessing(claude_home):
     write_transcript(claude_home, [user("hello")])
 
