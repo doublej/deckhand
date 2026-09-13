@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import pytest
@@ -127,3 +128,22 @@ def test_only_the_head_of_a_skill_is_read(mac):
     write(mac / "claude/skills/big/SKILL.md", "name: big\ndescription: small", body=body)
 
     assert commands.commands(str(mac / "project"))[0].description == "small"
+
+
+def test_a_frontmatter_that_will_never_parse_is_complained_about_once(tmp_path, caplog):
+    """Read afresh on every `/commands`, and broken YAML does not repair itself: seven files on
+    this Mac wrote 2429 bytes into the log per request, all of them `argument-hint: [a] [b]`,
+    which Claude Code reads perfectly well."""
+    folder = tmp_path / "commands"
+    folder.mkdir()
+    broken = folder / "codesign.md"
+    broken.write_text("---\ndescription: Inspect a bundle\nargument-hint: [app=x] [mode=y]\n---\n")
+    commands._grumbled.discard(broken)
+
+    with caplog.at_level(logging.WARNING, logger="deckhand"):
+        for _ in range(4):
+            assert commands._head(broken) == {}
+    said = [r for r in caplog.records if "frontmatter" in r.getMessage()]
+    assert len(said) == 1
+    # One event, one line — a YAMLError renders as six.
+    assert "\n" not in said[0].getMessage()

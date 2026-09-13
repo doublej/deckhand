@@ -34,6 +34,21 @@ from .reading import asked, transcripts
 # Between two briefings. One model at a time, always: six sessions summarised at once is six
 # models thinking, and nothing on the phone is waiting for any of them.
 GAP = 4
+# Between two briefings **of the same session**, which is a different floor and the one that was
+# missing. `GAP` bounds how fast the worker writes; nothing bounded how often it wrote about the
+# same session, so one fast-moving session took every slot for as long as it kept moving —
+# measured, 20 in a row for `3f91172f` between 16:31 and 16:39 while the other five sat idle.
+#
+# `_due` answers "has anything happened", which is the right question for *whether* to buy a
+# briefing and no answer at all to *how often*. Over the 5849 briefings in this Mac's log the
+# median gap between two of one session was **26 seconds** and 59% were under 30 — a re-summary
+# rate for something a person reads every few minutes. Simulated against that same log, this
+# floor would have cut the model calls by 60% (5849 → 2362); 30 s cuts 39%, 120 s cuts 75%.
+#
+# It costs the phone nothing it was not already built for: a read is always handed the last
+# briefing off disk, and `stale` goes on saying a newer one is on its way — it is, within a
+# minute rather than within four seconds.
+SAME_SESSION = 60.0
 # When nothing is due. The worker is woken early by `bump`, so this is only the floor on
 # noticing work that arrived while it was asleep.
 IDLE = 15
@@ -162,12 +177,19 @@ def _next() -> str | None:
 def _due(session_id: str) -> bool:
     """Whether anything has happened to this session since its briefing was written.
 
-    Two gates, cheapest first. The transcript's own mtime settles the common case without
-    opening the file — a session nobody has touched since the last sweep answers in a `stat`.
-    Only if the file moved is it read, because plenty of what Claude Code appends (a mode
+    Three gates, cheapest first. How long ago the last one was written settles it without
+    touching the disk at all — see `SAME_SESSION` for why that gate is here and what it was
+    costing. Then the transcript's own mtime, for a session nobody has touched since the last
+    sweep. Only if the file moved is it read, because plenty of what Claude Code appends (a mode
     change, an attachment) is not activity anybody wants a briefing about.
+
+    A session that has never had a briefing passes the first gate outright: there is no
+    `written_at` to be inside, and the one moment a briefing is worth buying immediately is the
+    moment there is none.
     """
     kept = load(session_id)
+    if time.time() - kept.get("written_at", 0.0) < SAME_SESSION:
+        return False
     file = transcripts.transcript_path(session_id)
     if file is None:
         return False

@@ -1,6 +1,7 @@
 """The queue: what is owed a briefing, in what order, and what costs nothing at all."""
 
 import json
+import time
 
 import pytest
 
@@ -170,3 +171,39 @@ def test_a_dead_session_is_not_in_the_queue(claude_home):
 def test_the_sessions_it_walks_are_the_live_ones(claude_home):
     """Guards the fixture's own shape: the two live records are the two it should consider."""
     assert {s.session_id for s in sessions.live_sessions()} == {SID, OTHER}
+
+
+def test_one_fast_session_cannot_buy_a_model_every_few_seconds(claude_home):
+    """The floor that was missing. `GAP` bounds the worker; nothing bounded how often it wrote
+    about the *same* session, so one session turning over took every slot — measured at a median
+    of 26 seconds between two briefings of one session, 59% of them under 30."""
+    path = transcript(claude_home, SID, [said("build it"), did("built")])
+    briefings.save(SID, {"summary": "Built it", "hash": "old", "mtime": 0.0,
+                         "written_at": time.time()})
+    path.write_text(path.read_text() + json.dumps(did("and more")) + "\n")
+
+    # Genuinely new work, and still not worth buying again this soon.
+    assert briefings._due(SID) is False
+    # And the phone is told one is coming, because it is.
+    assert briefings.of(SID)["stale"] is True
+
+    briefings.save(SID, {"summary": "Built it", "hash": "old", "mtime": 0.0,
+                         "written_at": time.time() - briefings.SAME_SESSION - 1})
+    assert briefings._due(SID) is True
+
+
+def test_the_floor_never_delays_a_session_that_has_none(claude_home):
+    """A first briefing is the one that is worth buying the moment it is owed."""
+    transcript(claude_home, SID, [said("build it"), did("built")])
+    assert briefings.load(SID) == {}
+    assert briefings._due(SID) is True
+
+
+def test_a_session_inside_its_floor_lets_another_have_the_slot(claude_home):
+    """The floor is what un-starves the rest: the busy one is skipped, not queued in front."""
+    transcript(claude_home, SID, [said("build it"), did("built")])
+    transcript(claude_home, OTHER, [said("and this"), did("done")])
+    briefings.save(SID, {"summary": "recent", "hash": "old", "mtime": 0.0,
+                         "written_at": time.time()})
+    briefings.bump(SID)
+    assert briefings._next() == OTHER

@@ -145,6 +145,27 @@ def _head(path: Path) -> dict:
     try:
         block = yaml.safe_load(head[3:end])
     except yaml.YAMLError as error:
-        log.warning("could not read the frontmatter of %s: %s", path, error)
+        _grumble(path, error)
         return {}
     return block if isinstance(block, dict) else {}
+
+
+#: Files whose frontmatter has already been complained about. Unlike the `OSError` above — a file
+#: caught mid-write, which is worth hearing about every time because it is different every time —
+#: broken YAML does not repair itself, and this is read afresh on every `/commands`. Seven files
+#: on this Mac wrote 2429 bytes into the log on each one, all of them `argument-hint: [a] [b]`,
+#: which Claude Code itself reads perfectly well. Bounded by the number of command files there
+#: are, which is the set being walked anyway.
+_grumbled: set[Path] = set()
+
+
+def _grumble(path: Path, error: Exception) -> None:
+    """Say what could not be read, once per file, on one line.
+
+    One line because a `yaml.YAMLError` renders as six of them — the message, the position, and
+    two lines of pointer art — and `log.py`'s whole premise is one event per line.
+    """
+    if path in _grumbled:
+        return
+    _grumbled.add(path)
+    log.warning("could not read the frontmatter of %s: %s", path, str(error).splitlines()[0])
