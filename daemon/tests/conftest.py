@@ -92,6 +92,19 @@ def token(claude_home):
 
 
 @pytest.fixture(autouse=True)
+def keep_the_real_codex_out(tmp_path, monkeypatch):
+    """No listing in a test reaches the Codex app server a person is using. Its socket is a path
+    that is not there, which is the real failure path and costs nothing, and the listing's memory
+    of the last attempt starts blank."""
+    from deckhand_daemon.sessions import codex
+
+    monkeypatch.setenv("DECKHAND_CODEX_HOME", str(tmp_path / "codex"))
+    monkeypatch.setattr(codex, "_asked", (0.0, False))
+    monkeypatch.setattr(codex, "_link", None)
+    monkeypatch.setattr(codex, "_children", set())
+
+
+@pytest.fixture(autouse=True)
 def keep_utts_plugin_folder_clean(tmp_path, monkeypatch):
     """A test run must not install a plugin page into the utt a person is using."""
     monkeypatch.setenv("DECKHAND_PLUGIN_DIR", str(tmp_path / "plugins"))

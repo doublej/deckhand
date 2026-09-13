@@ -15,15 +15,17 @@ from __future__ import annotations
 import asyncio
 from functools import lru_cache
 from pathlib import Path
+from typing import Annotated
 
 from fastapi import APIRouter, Body, HTTPException
 
 from ..fleet import merge, proxy, registry
-from ..sessions import live_sessions
+from ..sessions import Session, codex, forget_listing, live_sessions
 from ..settings import wants
 from . import sources, starting
 
 router = APIRouter(tags=["projects"])
+PROVIDERS = ("claude", "codex")
 
 
 @router.get("/projects")
@@ -82,7 +84,9 @@ async def _trusted(here: str) -> dict[str, frozenset[str]]:
 
 
 @router.post("/projects/session")
-async def start_project_session(path: str = Body(embed=True)) -> dict:
+async def start_project_session(
+    path: str = Body(embed=True), provider: Annotated[str, Body(embed=True)] = "claude"
+) -> dict:
     """Open a terminal in that folder and start Claude Code in it, wherever that folder is.
 
     Answers with the session itself rather than an acknowledgement, because the phone's next move
@@ -92,19 +96,42 @@ async def start_project_session(path: str = Body(embed=True)) -> dict:
     **Which machine is derived, never sent.** The catalogue already says where every folder is, so
     taking a machine off the request would be letting the caller name a target this Mac never
     offered — and the listing being the whole permission is the rule this route was built on.
+
+    **`provider` says what runs there**: `claude` unless the phone says `codex`. A Codex session is
+    a durable thread in this Mac's app server with Codex's own model, approvals and sandbox —
+    nothing is passed for any of them. The listing gate holds for both. The trust gate is Claude
+    Code's record of its own dialog and has nothing to say about Codex, so it is not asked.
     """
+    if provider not in PROVIDERS:
+        raise HTTPException(status_code=400, detail=f"no such provider {provider!r}")
     project = next((p for p in sources.catalog()[0] if p.path == path), None)
     if project is None:
         raise HTTPException(status_code=400, detail="that folder is not in the project list")
     here = registry.here()
     machine = project.machine or here
+    if machine != here and provider == "codex":
+        raise HTTPException(status_code=409, detail="a Codex session starts on this Mac only")
     if machine != here:
         return await _start_over_there(machine, path)
+    if provider == "codex":
+        return {"session": await asyncio.to_thread(_start_codex, path, here)}
     session, error = await asyncio.to_thread(starting.start, path)
     if session is None:
         raise HTTPException(status_code=409, detail=error or "could not start a session there")
     sources.forget()
     return {"session": session.to_json()}
+
+
+def _start_codex(path: str, here: str) -> dict:
+    """A durable Codex thread in that folder, answered as the row the listing will draw for it."""
+    try:
+        record = codex.start(path)
+    except codex.CodexError as error:
+        raise HTTPException(status_code=409,
+                            detail=f"Codex would not start there: {error}") from error
+    forget_listing()
+    sources.forget()
+    return Session(**record, machine=here).to_json()
 
 
 async def _start_over_there(machine: str, path: str) -> dict:

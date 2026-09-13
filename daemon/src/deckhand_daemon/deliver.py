@@ -28,7 +28,7 @@ import uuid
 from .fleet import here, remote
 from .log import log
 from .reading.transcripts import transcript_path
-from .sessions import Session, sessions_dir
+from .sessions import Session, codex, sessions_dir
 
 TIMEOUT = 5.0
 TYPE_TIMEOUT = 15
@@ -162,6 +162,10 @@ def deliver(session: Session, text: str, route: str = "auto") -> tuple[str | Non
         return None, "nothing to deliver"
     if route not in ROUTES:
         return None, f"no such route {route!r}"
+    # A Codex thread has no pane and no peer inbox, only its own turn lane — and that lane carries
+    # the person's authority, so which routes may use it, and slashes, are Codex's to refuse.
+    if session.provider == "codex":
+        return codex.deliver(session, message, route)
     # A slash command is only a command where it is typed. Down the socket it is a *message* that
     # happens to start with a slash — the receiving session reads it as words, runs nothing, and
     # nothing anywhere reports a failure, because nothing failed. Refusing is the only way that

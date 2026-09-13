@@ -67,6 +67,9 @@ def sweep(now: float | None = None) -> list[str]:
 
 def _consider(session: sessions.Session, now: float) -> bool:
     """Whether this session is quiet, owing, and has not just been asked the same thing."""
+    # A Codex thread's only lane is the person's own, and the idle check is not the person.
+    if session.provider == "codex":
+        return False
     if session.status == "busy":
         _quiet_since.pop(session.session_id, None)
         return False

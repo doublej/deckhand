@@ -258,7 +258,8 @@ def settled(folder: Path, known: set[str]) -> tuple[Session | None, str | None]:
         # again rather than be told what was true a moment ago.
         forget_listing()
         for session in live_sessions(iterm_only=False):
-            if session.session_id in known or not session.cwd:
+            # A Codex thread loaded in the same folder meanwhile is not the session this started.
+            if session.session_id in known or not session.cwd or session.provider != "claude":
                 continue
             if Path(session.cwd).resolve() == wanted:
                 log.info("%s came up in %s", session.name, folder)

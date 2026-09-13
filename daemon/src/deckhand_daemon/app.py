@@ -77,6 +77,7 @@ app = FastAPI(title="Deckhand", version=__version__, lifespan=lifespan)
 # rather than a branch in nine handlers, and an allow-list rather than a skip-list, so a route
 # added later is local until somebody says otherwise: see `fleet/routing.py`.
 app.middleware("http")(fleet_routing.forward_remote_reads)
+app.middleware("http")(sessions.answer_for_codex)
 app.include_router(artifacts.router, dependencies=[Depends(require_token)])
 app.include_router(filter_routes.router, dependencies=[Depends(require_token)])
 app.include_router(link_routes.router, dependencies=[Depends(require_token)])
@@ -97,7 +98,7 @@ def health() -> dict:
         "host": config.base_url(),
         # So the phone can turn a session's `localhost:5173` into something it can actually open.
         "lan": config.lan_address(),
-        "iterm": sessions.iterm_status(),
+        "iterm": sessions.iterm_status(), "codex": sessions.codex.answered(),
         # Who has this Mac. Unauthenticated like the rest of /health, and deliberately so: it
         # says whether a person is at the keyboard, never what they are doing.
         "presence": presence.state(),

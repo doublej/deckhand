@@ -169,6 +169,9 @@ Off the home network that surface is `https://deckhand.jurrejan.com` — the NAS
 the same header in front of the Mac so `/health` is not open to the internet either. See
 [daemon/CLAUDE.md](daemon/CLAUDE.md) under *Off the home network*.
 Both `/health` and `/sessions` carry an `iterm` field saying whether pane data is trustworthy.
+Every row carries `provider`, `claude` or `codex` (a Codex app-server thread: `pid` 0, no `tty`, no
+pane); `/health` carries `codex`, whether the app server answered the last listing; and
+`POST /projects/session` takes `provider` as well. See `daemon/CLAUDE.md` under *Codex threads*.
 
 ## Commands
 

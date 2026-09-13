@@ -93,6 +93,10 @@ And one that is not about the keyboard:
 
 `set_switch` deliberately excludes `route` for the same reason the whole list exists.
 
+**No Codex thread.** Codex has no inbox for another agent: its only way in arrives as the person
+typing. So `say_to_session` refuses a Codex session outright and sends nothing — the one refusal
+here that is a check rather than an absence, because the session is on the same listing.
+
 **`start_session` is allowed where `docs/agent-surface.md` refuses it.** That refusal is about an
 agent starting a process nobody asked for. This one only ever runs because somebody spoke into
 the panel, and both gates are unchanged: the folder must be on this Mac's own project list, and

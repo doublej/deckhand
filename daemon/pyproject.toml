@@ -13,6 +13,7 @@ dependencies = [
     "pyjwt[crypto]>=2.13.0",
     "pyyaml>=6.0.3",
     "mcp>=2.0.0",
+    "websockets>=17.1",
 ]
 
 [project.scripts]
