@@ -166,6 +166,39 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   clip. A sheet covers the mark, so the only control listening is the one under your thumb, and
   `Editor` already opens focused with the keyboard up. Its own loading rather than an `AppModel`
   extension, because `deckhand/` sits on its 16-file gate and nothing outside that pane wants it.
+- **A clip said from the overview is narrated on its own row, because there is nowhere else.** A
+  session's page answers "did that go?" twice — the mark narrates the wait in its left-hand pill,
+  and the words then land in the transcript under it. The rail and the deck have neither: the row
+  *is* the button, and under it is the next session. So `TalkLine` draws the one line those
+  surfaces get, and the words in flight are the mark's own — `TalkNarration` was lifted out of
+  `TalkMark` for exactly that, because a second copy would eventually promise SEND on one screen
+  and PREVIEW on another for the same press. The sentence afterwards is the strip's: `report`
+  writes `status` and the row's `Spoken` together, so a row can never be told something the strip
+  was not, and the row's copy goes quiet after 30 seconds where the strip's does not need to.
+  Nothing at all while a card is up — the card already says where the words are going.
+- **Neither overview has a staging area; both hand off to the one that already exists.** The rail
+  had the deck column's card — `compact`, 10pt words, the verbs crushed onto one line — on a
+  full-width phone, and the answer is not a second full-size copy of the card the session's own
+  page already gets right. Both surfaces get `SendOrRefine` instead: send the words as they stand,
+  or open the session and work on them there. **Refine carries nothing, and that is why it is
+  small.** Held words already live on the model under the session's own id (`review`, with
+  `reviewFiltered`, `reviewTiming`, `heldClips` and `attached` beside it) and `SessionFoot` draws
+  its card straight out of them — so carrying the clip across *is* `chosen = session`, and the
+  card is there when the page arrives with the chain's notes and the round-trip line on it. The
+  one thing that surface must still say out loud is a refusal: the card's red line is where that
+  normally lives, and without it Send would be a button that quietly does nothing. Discard is not
+  offered — it is the answer that loses something, and it belongs beside the words it is losing.
+  A full card on the rail was also barred from `more` for the orders-pane reason above (the row
+  over it is a live `TalkControl` on the same recorder), which is one more argument against one.
+- **Landscape had no way into a session's page, and Refine is why it has one now.** `RootView`
+  swaps the deck for the rail on geometry alone, and only the rail held a `NavigationStack` — so
+  a column's Refine had nowhere to go. `DeckView` is now a host of its own, and deliberately the
+  rail's arrangement rather than a new one: the same `navigationDestination(item:)` pushing the
+  same page, with the bar hidden for the same reason. **Rotating while that page is up loses the
+  page, not the work.** The rotation swaps the whole screen, so the pushed view goes with it —
+  but the words being worked on are model state under the session's id, so the rail offers them
+  again the moment it appears. This is the first screen landscape has ever pushed; if a session
+  page turns out to be wrong at that height, the host is four lines to take back out.
 - **The transcript poll asks for what is on screen, not for a fixed page.** It fetched the newest
   eight every five seconds and replaced the list with them, so a step back into the conversation
   was taken away again before it could be read — which is what "I cannot see the whole transcript

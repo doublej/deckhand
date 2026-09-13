@@ -9,6 +9,14 @@ struct DeckView: View {
     @Bindable var model: AppModel
     @State private var recorder = Recorder()
     @State private var active: String?
+    /// The session Refine opened, if any. Landscape had no way into a session's page at all —
+    /// `RootView` swaps the deck for the rail on geometry and only the rail held a
+    /// `NavigationStack` — so a column's Refine had nowhere to go. This is that host, and it is
+    /// the rail's own arrangement rather than a new one: the same `navigationDestination(item:)`
+    /// pushing the same page. Rotating while it is up swaps the whole screen for the rail and the
+    /// page goes with it; nothing is lost, because the words being worked on live on the model
+    /// under the session's id and the rail will offer them again.
+    @State private var chosen: Session?
     /// Columns showing the briefing rather than the conversation. Per column, not per deck:
     /// the reason to have both is to keep one project's brief up while another one runs.
     @State private var briefed: Set<String> = []
@@ -17,9 +25,19 @@ struct DeckView: View {
     private static let minColumnWidth: CGFloat = 240
 
     var body: some View {
+        NavigationStack {
+            deck
+        }
+    }
+
+    private var deck: some View {
         Group {
             if model.deckSessions.isEmpty { placeholder } else { columns }
         }
+        .navigationDestination(item: $chosen) { SessionView(model: model, opened: $0) }
+        // No bar over the deck, the same as the rail: it would be a band of chrome across a wall
+        // of terminals, which is the one thing this screen has never had.
+        .toolbar(.hidden, for: .navigationBar)
         .background(Palette.lcdGround)
         .environment(\.colorScheme, .dark)
         // The whole deck goes utt orange while a column is listening, not only that column: one
@@ -115,20 +133,10 @@ struct DeckView: View {
             confirms: model.preferences.confirms,
             spoken: model.spoken(for: session),
             review: model.review[session.sessionId],
-            filtered: model.reviewFiltered[session.sessionId],
-            say: say(for: session),
+            refusal: model.reviewFiltered[session.sessionId]?.refusal,
             send: { text in Task { await model.send(text, to: session) } },
-            discard: { model.discard(for: session) }
+            refine: { chosen = session }
         ).accessibilityIdentifier("deck-column")
-    }
-
-    /// The deck's own recorder, lent to the editor behind a column's Edit — which is a full sheet
-    /// even here, and the one place in landscape with room for a control. The column itself has
-    /// none: 240pt of width is the whole reason its card is the compact one.
-    private func say(for session: Session) -> Dictation {
-        Dictation(recorder: recorder, mode: model.preferences.talkMode) {
-            await model.dictated($0, for: session)
-        }
     }
 
     private func flip(_ session: Session) {
@@ -156,13 +164,11 @@ private struct Column: View {
     let spoken: String?
     /// Held for reading, if this column is the one that just heard something.
     let review: String?
-    /// What the chain changed about those words, and what it will do to them if they go as
-    /// they stand.
-    let filtered: Filtered?
-    /// Handed straight through to the card, which hands it to the editor behind Edit.
-    let say: Dictation?
+    /// What the chain will do to those words if they go as they stand. The one thing a column
+    /// with no card still has to say out loud — see `SendOrRefine`.
+    let refusal: String?
     let send: (String) -> Void
-    let discard: () -> Void
+    let refine: () -> Void
     @Environment(\.accent) private var accent
 
     private var isRecording: Bool { state.isRecording }
@@ -176,21 +182,18 @@ private struct Column: View {
             }
             .scrollDisabled(isRecording)
             // One slot at the foot of a column and two things that can be in it, the way a
-            // session's page holds the mark or the card: the words waiting to be answered, or
-            // what is happening to the clip that was said into this column. Never both — a line
-            // saying "Read it, then send it" over the card holding those very words is the deck
+            // session's page holds the mark or the card: the two answers to words waiting to be
+            // sent, or what is happening to the clip that was said into this column. Never both —
+            // a line saying "Read it, then send it" beside the buttons that send it is the deck
             // saying one thing twice in 240 points.
             if let review {
-                ReviewCard(
-                    text: review,
-                    target: session.name,
-                    send: { send($0) },
-                    discard: discard,
-                    filtered: filtered,
-                    compact: true,
-                    say: say
-                )
-                .padding(Spacing.xxs)
+                SendOrRefine(words: review,
+                             target: session.name,
+                             refusal: refusal,
+                             send: send,
+                             refine: refine,
+                             compact: true)
+                    .padding(Spacing.extraSmall)
             } else if TalkLine.speaks(state, spoken: spoken) {
                 TalkLine(state: state, confirms: confirms, spoken: spoken, compact: true)
                     .padding(.horizontal, Spacing.extraSmall)

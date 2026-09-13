@@ -1,13 +1,13 @@
 import DeckhandKit
 import SwiftUI
 
-/// The two answers the rail can give about words it is holding: send them as they stand, or go
+/// The two answers an overview can give about words it is holding: send them as they stand, or go
 /// where they can be worked on properly.
 ///
-/// **The overview has no staging area and is not getting one.** It had the deck column's card —
-/// 10pt words, the verbs crushed onto one line — on a full-width phone, and the fix is not a
-/// second copy of the card the session's own page already gets right. It is these two, which are
-/// the answers a person actually has while looking at a list of six sessions.
+/// **Neither overview has a staging area, and neither is getting one.** The rail had the deck
+/// column's card — 10pt words, the verbs crushed onto one line — on a full-width phone, and the
+/// fix is not a second copy of the card the session's own page already gets right. It is these
+/// two, which are the answers a person actually has while looking at a wall of sessions.
 ///
 /// **Refine carries nothing, and that is the whole trick.** Words held for reading already live
 /// on the model under the session's own id — `review`, with `reviewFiltered`, `reviewTiming`,
@@ -26,12 +26,15 @@ struct SendOrRefine: View {
     /// The words being held, which is what Send sends. Never edited here — editing them is the
     /// whole of what Refine is for.
     let words: String
-    /// Whose words they are, for the hint that says where Refine goes.
+    /// Whose words they are: the hint that says where Refine goes, and in a deck column the word
+    /// that tells one card from the next.
     let target: String
     /// What the chain will do to them if they go as they stand, where it will do anything at all.
     let refusal: String?
     let send: (String) -> Void
     let refine: () -> Void
+    /// A deck column, which is 240 points wide and has room for none of the row below.
+    var compact = false
     @Environment(\.accent) private var accent
 
     /// The minimum a finger can be asked to hit. The same raw number `ReviewActions`, `SayRest`
@@ -50,12 +53,37 @@ struct SendOrRefine: View {
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            verbs
+            if compact { tight } else { verbs }
         }
         // The row's own inner gutter, so these line up with the session's glyph above them rather
-        // than with the edge its slab bleeds out to.
-        .padding(.horizontal, Spacing.small)
-        .padding(.bottom, Spacing.extraSmall)
+        // than with the edge its slab bleeds out to. A column sets its own, outside.
+        .padding(.horizontal, compact ? 0 : Spacing.small)
+        .padding(.bottom, compact ? 0 : Spacing.extraSmall)
+    }
+
+    /// A deck column. `ReviewActions.tight`'s row minus the verb this surface does not offer:
+    /// 44pt controls would be taller than the column they sit in, so these are words at the
+    /// deck's own size. The session's name stays, because the columns stand side by side and it
+    /// is what tells one card from the next — on the rail the row above already said it.
+    private var tight: some View {
+        HStack(spacing: Spacing.small) {
+            Text("→ \(target)")
+                .font(Typography.hint)
+                .foregroundStyle(Palette.textTertiary)
+                .lineLimit(1)
+            Spacer(minLength: Spacing.extraSmall)
+            Button("Refine", action: refine)
+                .buttonStyle(.plain)
+                .font(Typography.hint)
+                .foregroundStyle(Palette.textSecondary)
+                .accessibilityHint("Opens \(target) with these words ready to change")
+                .accessibilityIdentifier("refine-prompt")
+            Button("Send") { send(words) }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .tint(accent)
+                .accessibilityIdentifier("send-prompt")
+        }
     }
 
     /// `ReviewActions.roomy`'s arrangement, because the thumb that learned it there is the same
