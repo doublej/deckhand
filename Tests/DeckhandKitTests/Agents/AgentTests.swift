@@ -34,6 +34,34 @@ struct AgentTests {
         #expect(Tool(name: "Bash", detail: "ls").id == "Bashlstrue")
     }
 
+    @Test("the agents still going that no turn on the page started are the ones gathered up")
+    func loose() {
+        let drawn = Turn(role: "assistant", text: "delegating", timestamp: "1",
+                         tools: [Tool(name: "Agent", detail: "look", toolId: "toolu_on_screen"),
+                                 Tool(name: "Bash", detail: "ls", toolId: "toolu_bash")])
+        let onScreen = Agent(id: "agent-a1", toolUseId: "toolu_on_screen", running: true)
+        let offScreen = Agent(id: "agent-a2", toolUseId: "toolu_older", running: true,
+                              updatedAt: 10)
+        let newer = Agent(id: "agent-a3", toolUseId: "toolu_oldest", running: true, updatedAt: 20)
+        let finished = Agent(id: "agent-a4", toolUseId: "toolu_done", running: false)
+        let held = [onScreen, offScreen, newer, finished]
+        // Only what is still going, only what the page does not already show, newest first —
+        // the caller holds these in a dictionary, which has no order of its own.
+        #expect(Agent.loose(held, notIn: [drawn]).map(\.id) == ["agent-a3", "agent-a2"])
+        // With nothing drawn, every running agent is loose.
+        #expect(Agent.loose(held, notIn: []).count == 3)
+    }
+
+    @Test("an agent with no tool call behind it is not claimed by a tool that has no id either")
+    func looseWithoutIds() {
+        // A daemon a version behind sends neither id. Matching empty against empty would hide
+        // every running agent behind the first tool call on the page.
+        let drawn = Turn(role: "assistant", text: "", timestamp: "1",
+                         tools: [Tool(name: "Agent", detail: "look")])
+        let orphan = Agent(id: "agent-a1", running: true)
+        #expect(Agent.loose([orphan], notIn: [drawn]).map(\.id) == ["agent-a1"])
+    }
+
     private func decoder() -> JSONDecoder {
         let made = JSONDecoder()
         made.keyDecodingStrategy = .convertFromSnakeCase

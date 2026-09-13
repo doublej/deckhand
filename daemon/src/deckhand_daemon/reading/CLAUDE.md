@@ -139,12 +139,14 @@ context.py      # the CLAUDE.md tree a session in a folder is loaded with, befor
 ## Subagents are a second transcript, not a lane in this one
 
 `agents.py`. Claude Code keeps a subagent's conversation in its own file beside the session's —
-`<sessionId>/subagents/agent-<id>.jsonl`, with an `agent-<id>.meta.json` next to it — and the
-`toolUseId` in that meta file is the `id` of the `tool_use` block in the parent. That is the join,
-and it means nothing here guesses: a dot in the conversation and a folder on disk are two views of
-one thing. The tool is called `Agent`; `Task` is the older spelling and both are read.
+`<sessionId>/subagents/agent-<id>.jsonl`, with an `agent-<id>.meta.json` next to it — and where
+the `toolUseId` in that meta file is written it is the `id` of the `tool_use` block in the parent.
+That is the join, and it means nothing here guesses: a dot in the conversation and a folder on
+disk are two views of one thing. The tool is called `Agent`; `Task` is the older spelling and both
+are read.
 
-Three things that cost something to learn:
+Five things that cost something to learn, and the last two were the whole of why nobody could open
+a subagent from the phone:
 
 - **Every row of a subagent's transcript carries `isSidechain: true`.** `entries.blocks_of` drops
   those, which is right while reading the session — its agents' chatter is not its conversation —
@@ -155,8 +157,20 @@ Three things that cost something to learn:
   the tail like everything else here, so an agent that finished last week has none in the window.
   On the first live run that made 16 of one session's 45 agents read as still going while the
   session sat idle. A subagent runs inside its parent's turn, so `turn_ended` is the other half.
-- **The agent id names a file, so it is checked** (`_safe`), not trusted. Claude Code's own are
-  `agent-` and hex; anything with a separator in it is refused before a path is built.
+- **The agent id names a file, so it is checked** (`_safe`), not trusted — but a hyphen is not a
+  separator. An unnamed agent is `agent-` and hex; a **named** one is `agent-<name>-<hex>`, and an
+  `isalnum()` check refused every one of those before a path was built: 1889 of the 3651 meta
+  files on this Mac, all 18 in the session the bug was found in, and every agent in every live
+  session that day. The route answered `{"turns": [], "more": false}` and the phone drew "Nothing
+  was written down", which reads as a subagent that said nothing rather than as a refusal. What is
+  refused is a path separator, a dot and therefore a traversal.
+- **A named teammate's meta file has no `toolUseId` key at all**, so the name is the join. 1888 of
+  3651 here, every one of them `"taskKind": "in_process_teammate"` — and with no join the phone
+  drew the row from the tool call alone, which is a row with no chevron that opens nothing. The
+  name is in both files: `input.name` on the parent's `tool_use` block, `name` in the meta file.
+  `_parent` indexes one against the other in the same walk of the tail that collects the results,
+  and a written `toolUseId` always wins over it — the name is the fallback, never the first
+  answer, or a name reused across a session's life could move an agent's join.
 
 `reading/routes.py` is mounted on the daemon *and* on a hand, like `artifacts` and `links`: a
 subagent's transcript is a file on the disk of the machine that ran it.

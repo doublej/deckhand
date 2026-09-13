@@ -8,12 +8,19 @@ SESSION = "aaaa1111-2222-3333-4444-555566667777"
 
 
 def _spawn(claude_home, name, *, tool_use_id, kind="Explore", description="look around",
-           rows=(), model=None, depth=1):
-    """One subagent on disk: the meta file Claude Code writes at spawn, and its transcript."""
+           rows=(), model=None, depth=1, called=None):
+    """One subagent on disk: the meta file Claude Code writes at spawn, and its transcript.
+
+    `tool_use_id=None` is the named teammate's meta file, which has no such key at all; `called`
+    is the `name:` it was spawned with, which is then the only join there is.
+    """
     folder = claude_home / "projects" / "-Users-jj-dev" / SESSION / "subagents"
     folder.mkdir(parents=True, exist_ok=True)
-    meta = {"agentType": kind, "description": description, "toolUseId": tool_use_id,
-            "spawnDepth": depth}
+    meta = {"agentType": kind, "description": description, "spawnDepth": depth}
+    if tool_use_id is not None:
+        meta["toolUseId"] = tool_use_id
+    if called:
+        meta["name"] = called
     if model:
         meta["model"] = model
     (folder / f"{name}.meta.json").write_text(json.dumps(meta))
@@ -108,8 +115,49 @@ def test_an_id_off_the_wire_cannot_name_a_file_of_its_own_choosing(claude_home):
     """The id names a file, so it is checked rather than trusted."""
     _transcript(claude_home, [_said("hi", sidechain=False)])
     _spawn(claude_home, "agent-a1", tool_use_id="toolu_1", rows=[_said("hello")])
-    for bad in ("../../../etc/passwd", "agent-../secrets", "agent-a/b", "", "notanagent"):
+    for bad in ("../../../etc/passwd", "agent-../secrets", "agent-a/b", "", "notanagent",
+                "agent-", "agent-a.b"):
         assert agents.read_turns(SESSION, bad) == ([], False)
+
+
+def test_a_named_teammates_hyphens_do_not_make_its_id_unsafe(claude_home):
+    """A named agent's id is `agent-<name>-<hex>`, and refusing the hyphen refused every one of
+    them: the row opened and said nothing was written down. 1889 of 3651 on this Mac."""
+    _transcript(claude_home, [_said("hi", sidechain=False)])
+    _spawn(claude_home, "agent-adaemon-map-fc38", tool_use_id="toolu_1",
+           rows=[_said("mapped the daemon")])
+    turns, _ = agents.read_turns(SESSION, "agent-adaemon-map-fc38")
+    assert [t.text for t in turns] == ["mapped the daemon"]
+
+
+def test_a_named_teammate_is_joined_by_name_because_its_meta_file_has_no_tool_use_id(claude_home):
+    """Claude Code writes no `toolUseId` for an agent spawned with a `name:`, so the phone's join
+    found nothing and the row could not be opened. The name is in both files."""
+    _transcript(claude_home, [
+        {"type": "assistant", "timestamp": "2026-09-13T10:00:00.000Z",
+         "message": {"content": [{"type": "tool_use", "id": "toolu_team", "name": "Agent",
+                                  "input": {"name": "daemon-map", "subagent_type": "Explore",
+                                            "description": "map it"}}]}},
+        _said("started it", sidechain=False),
+    ])
+    _spawn(claude_home, "agent-adaemon-map-fc38", tool_use_id=None, called="daemon-map",
+           rows=[_said("mapped")])
+    found = agents.spawned(SESSION)
+    assert [a.tool_use_id for a in found] == ["toolu_team"]
+
+
+def test_a_written_tool_use_id_beats_the_name_index(claude_home):
+    """The name is the fallback, never the first answer: an unnamed agent's own id is the join
+    Claude Code wrote down, and a name collision must not be able to move it."""
+    _transcript(claude_home, [
+        {"type": "assistant", "timestamp": "2026-09-13T10:00:00.000Z",
+         "message": {"content": [{"type": "tool_use", "id": "toolu_other", "name": "Agent",
+                                  "input": {"name": "scout", "description": "look"}}]}},
+        _said("started it", sidechain=False),
+    ])
+    _spawn(claude_home, "agent-a1", tool_use_id="toolu_mine", called="scout",
+           rows=[_said("hello")])
+    assert agents.spawned(SESSION)[0].tool_use_id == "toolu_mine"
 
 
 def test_a_tool_call_carries_the_id_that_joins_it_to_its_agent(claude_home):

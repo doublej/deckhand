@@ -12,9 +12,14 @@ session's transcript rather than inside it:
 
 Measured on 2026-09-13, not assumed, and three of those facts are load-bearing:
 
-- **`toolUseId` is the join.** It is the `id` of the `tool_use` block in the parent's own
-  transcript, so a row in the conversation and a folder on disk are two views of one thing with
-  nothing to guess at. Nothing here diffs timestamps or matches on descriptions.
+- **`toolUseId` is the join, and a named teammate has none.** Where it is written it is the `id`
+  of the `tool_use` block in the parent's own transcript, so a row in the conversation and a
+  folder on disk are two views of one thing. An agent spawned with a `name:` is written a meta
+  file with no `toolUseId` key at all — 1888 of 3651 on this Mac — and for those the name is the
+  join, because Claude Code writes it into both files. See `_parent`. Nothing here diffs
+  timestamps or matches on descriptions.
+- **A named teammate's id has hyphens in it** (`agent-<name>-<hex>`), which is why `_safe` allows
+  one. It once did not, and every named agent's conversation came back empty.
 - **The tool is called `Agent`, not `Task`.** Older transcripts say `Task`; both are read, because
   the name is only a fallback — the meta index is what actually decides.
 - **A subagent's rows carry the *parent's* `sessionId`** and `isSidechain: true`, and are otherwise
@@ -108,14 +113,15 @@ def spawned(session_id: str) -> list[Agent]:
     # Nothing is running in a session that is not in a turn. See the module docstring: without
     # this, every agent whose result has scrolled out of the tail reads as still going.
     mid_turn = turn_ended(session_id) == 0.0
-    answered = _answered(session_id)
+    answered, started = _parent(session_id)
     found = [agent for meta in sorted(folder.glob("*.meta.json"))
-             if (agent := _agent(meta, answered, mid_turn)) is not None]
+             if (agent := _agent(meta, answered, started, mid_turn)) is not None]
     found.sort(key=lambda a: a.updated_at, reverse=True)
     return found
 
 
-def _agent(meta: Path, answered: set[str], mid_turn: bool) -> Agent | None:
+def _agent(meta: Path, answered: set[str], started: dict[str, str], mid_turn: bool
+           ) -> Agent | None:
     try:
         record = json.loads(meta.read_text())
     except (OSError, json.JSONDecodeError):
@@ -125,6 +131,10 @@ def _agent(meta: Path, answered: set[str], mid_turn: bool) -> Agent | None:
     # `agent-abc.meta.json` -> `agent-abc`, which is the transcript's own name beside it.
     name = meta.name.removesuffix(".meta.json")
     tool_use_id = str(record.get("toolUseId") or "")
+    # A named teammate's meta file carries no `toolUseId` at all, so the name is the join. See
+    # `_parent`. Only when the id is genuinely absent — a written one is always the better answer.
+    if not tool_use_id and (called := str(record.get("name") or "")):
+        tool_use_id = started.get(called, "")
     agent = Agent(
         id=name,
         tool_use_id=tool_use_id,
@@ -152,29 +162,55 @@ def _count(transcript: Path, agent: Agent) -> None:
     agent.steps = sum(len(turn.tools) for turn in turns)
 
 
-def _answered(session_id: str) -> set[str]:
-    """Every tool call in the parent's transcript that has come back.
+def _parent(session_id: str) -> tuple[set[str], dict[str, str]]:
+    """What the parent's own transcript says about its agents, in one walk of the tail.
 
-    Only the tail is read, as everywhere else here. An agent whose result has scrolled out of it
-    is not therefore running — `spawned` requires the session to be mid-turn as well, which is
-    what makes a short window safe.
+    Two questions about the same lines, so one read. **Which calls have come back**, which is what
+    makes an agent finished rather than running — only the tail is read, as everywhere else here,
+    and an agent whose result has scrolled out of it is not therefore running, because `spawned`
+    requires the session to be mid-turn as well.
+
+    **And which `Agent` call started the teammate of a given name**, which is the join for every
+    agent spawned with a name. Measured on 2026-09-13: a named teammate's meta file has no
+    `toolUseId` key in it at all — 1888 of 3651 meta files on this Mac, and every one in every
+    live session that day — so the dot in the conversation and the folder on disk have nothing in
+    common but the name, which Claude Code writes into both: `input.name` on the `tool_use` block
+    and `name` in the meta file. Without it the phone's join finds nothing and the row is drawn
+    from the tool call alone, which is a row that cannot be opened.
+
+    The newest call of a name wins: a name is reused over a session's life and the transcript on
+    disk is the one that ran last.
+
+    The tail is the ceiling, and it is deliberate: an agent spawned far enough back that its call
+    has scrolled out of the window keeps an empty `tool_use_id` and cannot be reached from the
+    conversation. Measured here, 3 of 10 in a 13 MB transcript. Widening to the 32 MB window would
+    buy those three at the cost of reading it on every poll that draws the conversation, so the
+    phone covers the gap instead: it keys such an agent by its own id rather than losing them all
+    to one empty key, and gathers up any that are still running (`Agent.loose`).
     """
     path = transcript_path(session_id)
     if path is None:
-        return set()
+        return set(), {}
     done: set[str] = set()
+    started: dict[str, str] = {}
     for raw in tail_lines(path, TAIL_WINDOWS[1]):
         entry = parse_line(raw)
-        if entry is None or entry.get("type") != "user":
+        if entry is None:
             continue
         content = entry.get("message", {}).get("content")
         if not isinstance(content, list):
             continue
         for block in content:
-            if (isinstance(block, dict) and block.get("type") == "tool_result"
+            if not isinstance(block, dict):
+                continue
+            if (block.get("type") == "tool_result"
                     and (found := block.get("tool_use_id"))):
                 done.add(str(found))
-    return done
+            elif block.get("type") == "tool_use" and block.get("name") in AGENT_TOOLS:
+                asked = block.get("input")
+                if isinstance(asked, dict) and (called := asked.get("name")):
+                    started[str(called)] = str(block.get("id") or "")
+    return done, started
 
 
 def read_turns(session_id: str, agent_id: str, limit: int = 8, before: int = 0
@@ -202,6 +238,13 @@ def read_turns(session_id: str, agent_id: str, limit: int = 8, before: int = 0
 
 
 def _safe(agent_id: str) -> bool:
-    """An id off the wire names a file, so it is checked rather than trusted. Claude Code's own
-    are `agent-` and seventeen hex digits; anything with a separator in it is not one."""
-    return bool(agent_id) and agent_id.startswith("agent-") and agent_id[6:].isalnum()
+    """An id off the wire names a file, so it is checked rather than trusted.
+
+    A hyphen is allowed, and leaving it out is what made this route answer an empty conversation
+    for every agent anybody had. An unnamed agent is `agent-` and hex, but a **named** one is
+    `agent-<name>-<hex>` — 1889 of 3651 on this Mac, and all of them refused here, so a row that
+    opened showed "Nothing was written down". What is refused is what could name a different
+    file: a separator, a dot, a traversal.
+    """
+    return (bool(agent_id) and agent_id.startswith("agent-") and len(agent_id) > 6
+            and all(char.isalnum() or char == "-" for char in agent_id[6:]))

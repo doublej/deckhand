@@ -54,7 +54,12 @@ extension AppModel {
             agents = [:]
             return
         }
-        agents = Dictionary(found.map { ($0.toolUseId, $0) }) { first, _ in first }
+        // Keyed by the tool call where there is one, and by the agent's own id where there is
+        // not: `toolUseId` is empty for an agent whose spawning call has scrolled out of the
+        // window the Mac reads, and every one of those sharing the empty key collapsed the whole
+        // listing to a single row. The two spellings cannot collide — `toolu_…` against `agent-…`.
+        let keyed = found.map { ($0.toolUseId.isEmpty ? $0.id : $0.toolUseId, $0) }
+        agents = Dictionary(keyed) { first, _ in first }
     }
 
     /// The page before the one on screen, put in front of it. Hands back how many arrived — the

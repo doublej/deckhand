@@ -81,3 +81,25 @@ public struct Agent: Codable, Hashable, Identifiable, Sendable {
         return found.joined(separator: " · ")
     }
 }
+
+public extension Agent {
+    /// The agents still going that none of these turns started.
+    ///
+    /// A transcript is a page — the last handful of turns — and an agent outlives the call that
+    /// started it by design, so the row that would open one is routinely nowhere on screen. That
+    /// is measurable rather than theoretical: on this Mac every agent in every live session was
+    /// spawned before the visible page began.
+    ///
+    /// **Running only.** Every agent a session ever started, pinned to the foot of its transcript,
+    /// is a second listing nobody asked for; this empties itself when the work does.
+    ///
+    /// Newest first, off `updatedAt`, because the caller holds them in a dictionary and a
+    /// dictionary has no order — without this the rows would shuffle on every poll.
+    static func loose(_ agents: [Agent], notIn turns: [Turn]) -> [Agent] {
+        let drawn = Set(turns.flatMap(\.tools).filter(\.isAgent).map(\.toolId)
+            .filter { !$0.isEmpty })
+        return agents
+            .filter { $0.running && !drawn.contains($0.toolUseId) }
+            .sorted { $0.updatedAt > $1.updatedAt }
+    }
+}

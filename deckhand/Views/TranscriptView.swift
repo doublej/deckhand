@@ -57,6 +57,10 @@ struct TranscriptView: View {
                         }
                         .id(index)
                     }
+                    // Agents still going whose own row is off this page of the conversation.
+                    // Above the working line rather than below it, because they started before
+                    // the line was reached and are part of what the session is doing now.
+                    if !loose.isEmpty { LooseAgents(agents: loose) { reading = $0 } }
                     // Everything above has happened; this is the line it has reached.
                     if session.isBusy { ActiveLine(doing: doing).id("active") }
                     if !queued.isEmpty {
@@ -99,6 +103,10 @@ struct TranscriptView: View {
             .sheet(item: $reading) { AgentView(model: model, session: session, agent: $0) }
         }
     }
+
+    /// The agents still going that no turn on this page started, so a person can see several at
+    /// once and reach any of them. The arithmetic is in `DeckhandKit`, where a test can reach it.
+    private var loose: [Agent] { Agent.loose(Array(model.agents.values), notIn: model.turns) }
 
     /// What you have said that the session has not picked up yet, and only that. Its own
     /// bookkeeping, read off the transcript by the Mac — never inferred from the conversation.
