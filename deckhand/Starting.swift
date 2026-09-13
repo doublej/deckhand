@@ -47,19 +47,19 @@ extension AppModel {
         picker.loading = false
     }
 
-    /// Open a terminal in that folder on the Mac and start Claude Code in it.
+    /// Start Claude Code or Codex in that folder on the Mac — whichever the person chose.
     ///
     /// Answers with the session, so the caller can go straight into it. Nil when it did not
     /// start, and the reason is already in `status` — a folder Claude Code has never been
     /// trusted in is the common one, and it says so by name rather than as a failure.
-    func start(_ project: Project) async -> Session? {
+    func start(_ project: Project, as provider: Provider) async -> Session? {
         guard let client = settings.client() else { return nil }
         picker.starting = project.id
         status = "Starting a session in \(project.name)…"
         defer { picker.starting = nil }
         var made: Session?
         await run {
-            let session = try await client.startSession(in: project)
+            let session = try await client.startSession(in: project, as: provider)
             made = session
             self.status = "\(session.name) is up in \(project.name)"
         }

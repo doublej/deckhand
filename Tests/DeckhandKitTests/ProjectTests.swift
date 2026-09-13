@@ -42,8 +42,9 @@ extension ClientTests {
     }
 
     /// The path is what the body carries — a session is started in a folder, and
-    /// two projects on this Mac can share a name (`app` appears three times).
-    @Test("starting a session posts the project's own path")
+    /// two projects on this Mac can share a name (`app` appears three times) — and beside it the
+    /// program the person chose, which a Mac left to guess would take to be Claude Code.
+    @Test("starting a session posts the project's own path and the program chosen")
     func startsASession() async throws {
         // What comes back does not matter here: this is about what goes out, and the answer is
         // read through a `try?` so an unparseable body cannot hide the request that produced it.
@@ -52,12 +53,36 @@ extension ClientTests {
             name: "shop", path: "/Users/jj/dev/web/shop", relative: "web/shop",
             description: "", kind: "node", touchedAt: 0, live: 0, trusted: true
         )
-        _ = try? await stub().startSession(in: project)
+        _ = try? await stub().startSession(in: project, as: .codex)
         let body = try #require(StubProtocol.lastBody)
         let sent = try #require(try JSONSerialization.jsonObject(with: body) as? [String: String])
         #expect(sent["path"] == "/Users/jj/dev/web/shop")
+        #expect(sent["provider"] == "codex")
         #expect(StubProtocol.lastRequest?.url?.path == "/projects/session")
         #expect(StubProtocol.lastRequest?.httpMethod == "POST")
+    }
+
+    /// Three rows: one from a Mac that predates Codex, one Codex thread, and one naming a program
+    /// this phone has never heard of. All three have to arrive — a newer Mac costs a phone nothing.
+    @Test("a session says which program it is, and no key or an unknown word is Claude Code")
+    func decodesProvider() async throws {
+        StubProtocol.respond(with: Data("""
+        {"sessions":[
+          {"session_id":"old","pid":1,"name":"a","cwd":"/c","folder":"c","status":"idle",
+           "updated_at":1.0,"tty":"ttys001","pane":null},
+          {"session_id":"cdx","pid":0,"name":"b","cwd":"/c","folder":"c","status":"busy",
+           "updated_at":1.0,"tty":"","pane":null,"provider":"codex"},
+          {"session_id":"new","pid":2,"name":"c","cwd":"/c","folder":"c","status":"idle",
+           "updated_at":1.0,"tty":"ttys002","pane":null,"provider":"gemini"}]}
+        """.utf8))
+        let sessions = try await stub().sessions().sessions
+        #expect(sessions.map(\.sessionId) == ["old", "cdx", "new"])
+        #expect(sessions[0].provider == nil)
+        #expect(!sessions[0].isCodex)
+        #expect(sessions[1].provider == .codex)
+        #expect(sessions[1].isCodex)
+        #expect(sessions[2].provider == .claude)
+        #expect(!sessions[2].isCodex)
     }
 }
 

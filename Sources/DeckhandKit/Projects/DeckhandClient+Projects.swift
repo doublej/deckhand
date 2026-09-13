@@ -17,19 +17,20 @@ public extension DeckhandClient {
         return try decode(try await send(req))
     }
 
-    /// Open a terminal in that folder on the Mac and start Claude Code in it.
+    /// Start a session in that folder on the Mac: Claude Code in a new terminal, or a Codex thread
+    /// in the Mac's Codex app-server, which has no terminal at all.
     ///
     /// Answers with the session itself rather than an acknowledgement, so the phone can go
     /// straight into the conversation instead of back to the rail to guess which row is new. The
     /// Mac waits for the session to write its own record before answering, which is why this is
     /// given far longer than any other call — and why a failure here is a sentence worth showing
     /// rather than a code: a folder Claude Code has never been trusted in is refused by name.
-    func startSession(in project: Project) async throws -> Session {
+    func startSession(in project: Project, as provider: Provider) async throws -> Session {
         struct Started: Decodable { let session: Session }
         var req = request(.post, "projects/session")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.timeoutInterval = 90
-        let body = try JSONEncoder().encode(["path": project.path])
+        let body = try JSONEncoder().encode(["path": project.path, "provider": provider.rawValue])
         let started: Started = try decode(try await send(req, body: body))
         return started.session
     }

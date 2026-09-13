@@ -69,6 +69,12 @@ public struct Week: Codable, Hashable, Sendable {
 }
 
 public extension Session {
+    /// The one question every screen asks about the provider. A Codex thread has no pane and no
+    /// CLAUDE.md tree, so the Mac refuses rename, focus, compact, clear, exit, the context tree, the
+    /// slash commands and the inbox line for it, and the phone does not offer them. Stop is the
+    /// exception: the Mac asks Codex to interrupt its own turn.
+    var isCodex: Bool { provider == .codex }
+
     /// "sonnet", out of `claude-sonnet-5`. The family is the whole of what a glance wants; the
     /// build date on a haiku is the first thing that would not fit and the last anyone reads.
     var family: String? {
@@ -92,5 +98,20 @@ public extension Session {
         let efforts = Set(answered.map(\.effort))
         guard efforts.count == 1, let effort = efforts.first ?? nil else { return family }
         return "\(family) \(effort)"
+    }
+}
+
+/// Which program a session is. The raw values are the wire words.
+///
+/// An unknown word decodes as `.claude` rather than throwing, for `ManagerRole`'s reason: the Mac
+/// and the phone are routinely a version apart, and a Mac that grows a third provider must not
+/// take the whole listing down on a phone nobody has rebuilt. Claude is what every surface was
+/// written for, so such a session is offered what a Claude one is and the Mac refuses the rest.
+public enum Provider: String, Codable, Sendable {
+    case claude, codex
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = Provider(rawValue: raw) ?? .claude
     }
 }

@@ -22,6 +22,8 @@ struct ProjectListView: View {
     /// row here has one job — start a session — and a second button on four hundred rows is four
     /// hundred chances to press the wrong one.
     @State private var configuring: Project?
+    /// The project a session is about to start in, while the person says which program runs it.
+    @State private var choosing: Project?
     @FocusState private var searching: Bool
     /// The machine whose folders are showing alone, or nil for all of them. Not persisted: a
     /// filter you did not set and cannot see is a picker that looks like it lost four hundred
@@ -58,6 +60,18 @@ struct ProjectListView: View {
         }
         .task { await model.loadProjects() }
         .sheet(item: $configuring) { ProjectSettingsView(model: model, project: $0) }
+        // Which program, asked every time rather than remembered. Claude Code and Codex are two
+        // different sessions with two different pages, and a row that quietly started whichever
+        // was chosen last would be a row doing something nobody said.
+        .confirmationDialog(
+            "Start a session in \(choosing?.name ?? "")",
+            isPresented: .init(get: { choosing != nil }, set: { if !$0 { choosing = nil } }),
+            titleVisibility: .visible,
+            presenting: choosing
+        ) { project in
+            Button("Claude Code") { begin(project, as: .claude) }
+            Button("Codex") { begin(project, as: .codex) }
+        }
     }
 
     private var field: some View {
@@ -137,11 +151,14 @@ struct ProjectListView: View {
             .padding(.top, Spacing.large)
     }
 
-    /// One project. Tapping it starts a session and hands it back — and while that is happening
-    /// the row says so, because opening a terminal and waiting for Claude Code to report itself
-    /// takes seconds and a row that does nothing visible reads as a tap that missed.
+    /// One project. Tapping it asks Claude Code or Codex, then starts a session and hands it back —
+    /// and while that is happening the row says so, because waiting for the session to report
+    /// itself takes seconds and a row that does nothing visible reads as a tap that missed.
     private func row(_ project: Project) -> some View {
-        Button { begin(project) } label: { face(project) }
+        Button {
+            searching = false
+            choosing = project
+        } label: { face(project) }
             .buttonStyle(.plain)
             .disabled(model.picker.starting != nil)
             // The one row that cannot work says so rather than being hidden: hidden is a project
@@ -231,10 +248,9 @@ struct ProjectListView: View {
         }
     }
 
-    private func begin(_ project: Project) {
-        searching = false
+    private func begin(_ project: Project, as provider: Provider) {
         Task {
-            guard let session = await model.start(project) else { return }
+            guard let session = await model.start(project, as: provider) else { return }
             dismiss()
             opened(session)
         }

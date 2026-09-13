@@ -117,8 +117,11 @@ struct ProjectSettingsView: View {
                                 .foregroundStyle(Palette.textPrimary)
                                 .lineLimit(1)
                             Spacer(minLength: Spacing.extraSmall)
-                            act(.compact, on: session)
-                            act(.exit, on: session)
+                            // Both are typed into a pane; a Codex thread has none to type into.
+                            if !session.isCodex {
+                                act(.compact, on: session)
+                                act(.exit, on: session)
+                            }
                         }
                         .frame(minHeight: 40)
                     }

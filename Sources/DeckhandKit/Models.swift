@@ -41,6 +41,9 @@ public struct Session: Codable, Hashable, Identifiable, Sendable {
     /// missing key only on an optional, so a non-optional here would make an older Mac's whole
     /// listing fail to decode rather than simply say nothing about machines.
     public var machine: String?
+    /// Claude Code in a terminal, or Codex as an app-server thread with no terminal. Optional for
+    /// the same reason: a Mac that predates Codex sends no key, and that row is Claude Code.
+    public var provider: Provider?
 
     public var id: String { sessionId }
     public var isBusy: Bool { status == "busy" }

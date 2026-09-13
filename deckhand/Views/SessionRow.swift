@@ -201,6 +201,7 @@ struct SessionRow: View {
                     .foregroundStyle(accent)
                     .accessibilityLabel("Starred")
             }
+            if session.isCodex { CodexWord() }
             StateWord(talk.isRecording ? .rec : talk.busy ? .wait : session.isBusy ? .busy : .idle)
         }
     }

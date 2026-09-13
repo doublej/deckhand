@@ -474,6 +474,14 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   card carries one line of what the session said rather than the prompt it is blocked on. No
   `compact`, `clear` or `exit` either: two of them cannot be undone and a Lock Screen has nowhere
   to ask first.
+- **A Codex session is offered what the Mac will do for it, and what it will not is absent rather
+  than dimmed.** A Codex thread has no pane and no CLAUDE.md tree, so `Session.isCodex` removes
+  the dashboard's Context, Compact, Name, On the Mac and Clear inbox squares, the header's Run
+  section, the project page's compact and exit, and the review card's Command button — and
+  `AppModel.context` does not ask, or the refusal would land in `status`. Stop stays, and is live
+  with no pane: the Mac asks Codex to interrupt its own turn. The word `CODEX` (`CodexWord`) sits
+  beside the state on the rail row and in the header, and the transcript's eyebrow says CODEX. A
+  project row asks Claude Code or Codex in a `confirmationDialog` every time — never remembered.
 - **ATS:** the app talks plain HTTP to a `.local` name, which needs `NSAllowsLocalNetworking` plus
   `NSLocalNetworkUsageDescription` — both in `project.yml`, not a checked-in plist.
 
