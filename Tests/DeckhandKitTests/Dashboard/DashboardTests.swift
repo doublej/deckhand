@@ -86,6 +86,69 @@ struct DashboardTests {
         #expect(Dashboard.answering(family: nil, effort: "high") == nil)
     }
 
+    @Test("a preview is three lines and never a fourth")
+    func few() {
+        // The cap is the grid's, not the content's: a fourth line either shrinks the type past
+        // reading distance or puts back the height the preview exists to take out.
+        #expect(Dashboard.few([1, 2, 3, 4, 5]) == [1, 2, 3])
+        #expect(Dashboard.few([Int]()) == [])
+    }
+
+    @Test("the orders preview carries on where the headline stopped")
+    func rest() {
+        let orders = "\n  Keep the diffs small\n\nand say why\n\n  then stop\nand a fourth line"
+        #expect(Dashboard.orders(orders) == "Keep the diffs small")
+        #expect(Dashboard.rest(of: orders) == ["and say why", "then stop", "and a fourth line"])
+        // A blank line is not a line. It would spend one of the three and show nothing.
+        #expect(Dashboard.rest(of: "One line only") == [])
+        #expect(Dashboard.rest(of: "   \n\t\n") == [])
+    }
+
+    @Test("a slip still waiting is named before one already answered")
+    func asking() {
+        let found = [Artifact(id: "a", title: "Old and answered", modified: 90, answered: true),
+                     Artifact(id: "b", title: "Which branch", modified: 10, answered: false),
+                     Artifact(id: "c", title: "Release check", modified: 20, answered: false),
+                     Artifact(id: "d", title: "New and answered", modified: 99, answered: true)]
+        // Waiting first however old, newest first inside each half — the same precedence the
+        // count above it follows, because the square is asked the same question.
+        #expect(Dashboard.asking(found) == ["Release check", "Which branch", "New and answered"])
+        #expect(Dashboard.asking([]) == [])
+    }
+
+    @Test("a subagent still going is named before one that has finished")
+    func doing() {
+        let found = [Agent(id: "a", description: "Finished lately", running: false, updatedAt: 90),
+                     Agent(id: "b", description: "Started lately", running: true, updatedAt: 20),
+                     Agent(id: "c", description: "Started long ago", running: true, updatedAt: 10)]
+        #expect(Dashboard.doing(found)
+            == ["Started lately", "Started long ago", "Finished lately"])
+        // No description is what an agent has when the session wrote none, and `kind` is the
+        // fallback `Agent.title` already picked for every other surface.
+        #expect(Dashboard.doing([Agent(id: "d", kind: "Explore")]) == ["Explore"])
+    }
+
+    @Test("the files preview is what was touched most recently")
+    func touched() {
+        let found = [Asset(path: "/a/old.swift", name: "old.swift", kind: "text",
+                           size: 1, modified: 10),
+                     Asset(path: "/b/new.swift", name: "new.swift", kind: "text",
+                           size: 1, modified: 90)]
+        #expect(Dashboard.touched(found) == ["new.swift", "old.swift"])
+    }
+
+    @Test("the chain is previewed by the names the settings sheet uses, not by its slugs")
+    func running() {
+        let known = [Filter(name: "max_words", title: "Word limit"),
+                     Filter(name: "replacements", title: "Replacements")]
+        let steps = [FilterStep(filter: "max_words", isOn: true),
+                     FilterStep(filter: "replacements", isOn: false),
+                     // A step naming a filter this Mac no longer offers keeps its own slug
+                     // rather than vanishing, exactly as the filters sheet refuses to drop one.
+                     FilterStep(filter: "gone_filter", isOn: true)]
+        #expect(Dashboard.running(steps, over: known) == ["Word limit", "gone_filter"])
+    }
+
     @Test("the family a session reports is the one the tile names")
     func family() {
         // The join to the listing: `Session.family` is what strips `claude-` and the build date,

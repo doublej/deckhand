@@ -52,6 +52,12 @@ extension DashboardView {
         return DashboardTile(glyph: "tray.and.arrow.up",
                              title: "Clear inbox",
                              value: Dashboard.inbox(queued.count),
+                             // The opening line of each, because "is this worth keeping" is the
+                             // only question somebody hovering over Clear is actually asking,
+                             // and it cannot be answered by a count.
+                             preview: Dashboard.few(queued).compactMap {
+                                 Dashboard.opening($0.text)
+                             },
                              lit: queued.isEmpty ? nil : accent,
                              ready: !queued.isEmpty,
                              spoken: "Clear queued prompts") {

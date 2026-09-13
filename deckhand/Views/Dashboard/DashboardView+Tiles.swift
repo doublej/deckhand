@@ -35,13 +35,15 @@ extension DashboardView {
         stopTile
     }
 
-    /// The slips, waiting ones first. Both counts ride on every listing, so this square is as
-    /// fresh as the rail is and costs no request of its own.
+    /// The slips, waiting ones first. The two counts ride on every listing, so the number is as
+    /// fresh as the rail is; the titles under it are the one thing here that costs a request,
+    /// and it is the same directory listing the slips pane makes when it opens.
     var slipsTile: some View {
         DashboardTile(glyph: "questionmark.bubble",
                       title: "Slips",
                       value: Dashboard.slips(waiting: session.waitingPages,
                                              answered: session.answeredPages),
+                      preview: Dashboard.asking(model.artifacts[session.sessionId] ?? []),
                       lit: session.waitingPages > 0 ? accent : nil) { opened = .slips }
     }
 
@@ -60,6 +62,7 @@ extension DashboardView {
                              title: "Agents",
                              value: Dashboard.agents(running: running,
                                                      finished: model.agents.count - running),
+                             preview: Dashboard.doing(Array(model.agents.values)),
                              lit: running > 0 ? accent : nil,
                              ready: !model.agents.isEmpty,
                              spoken: "Subagents") { opened = .agents }
@@ -68,10 +71,11 @@ extension DashboardView {
     /// What the session made. The listing says nothing about files, so this one waits for its
     /// own request rather than claiming "None yet" about a folder it has not looked in.
     var filesTile: some View {
-        DashboardTile(glyph: "doc.on.doc",
-                      title: "Files",
-                      value: model.assets[session.sessionId]
-                          .map { Dashboard.files($0.count) } ?? "…") { opened = .files }
+        let touched = model.assets[session.sessionId]
+        return DashboardTile(glyph: "doc.on.doc",
+                             title: "Files",
+                             value: touched.map { Dashboard.files($0.count) } ?? "…",
+                             preview: Dashboard.touched(touched ?? [])) { opened = .files }
     }
 
     /// The standing orders, opened on their first written line — which is the whole reason this
@@ -81,6 +85,7 @@ extension DashboardView {
         DashboardTile(glyph: "list.bullet.clipboard",
                       title: "Orders",
                       value: orders.map { Dashboard.orders($0.text) } ?? "…",
+                      preview: Dashboard.rest(of: orders?.text ?? ""),
                       lit: orders?.inForce == true ? accent : nil) { opened = .orders }
     }
 
@@ -89,8 +94,11 @@ extension DashboardView {
         DashboardTile(glyph: "line.3.horizontal.decrease",
                       title: "On the way in",
                       value: chain.map {
-                          Dashboard.chain(running: $0.running, of: $0.offered)
+                          Dashboard.chain(running: $0.running.count, of: $0.offered)
                       } ?? "…",
+                      // Which steps, not only how many: "3 of 6 running" is the question
+                      // "which three" with the answer left out.
+                      preview: Dashboard.few(chain?.running ?? []),
                       spoken: "Words on the way in") { opened = .filters }
     }
 
@@ -105,7 +113,18 @@ extension DashboardView {
                       value: docs.map {
                           Dashboard.context(tokens: $0.tokens, files: $0.documents.count)
                       } ?? "…",
-                      caption: "Every CLAUDE.md it started with") { opened = .context }
+                      // No caption any more. It read "Every CLAUDE.md it started with", which is
+                      // a sentence explaining the tile rather than a fact about the session —
+                      // the one thing this grid's own rule forbids — and it was only there
+                      // because the square had nothing else in it. The three folder names say
+                      // what it is, and they are true.
+                      //
+                      // In the tree's own order, which is the order a session reads them in.
+                      // The label rather than the path: every one of these is a CLAUDE.md, so
+                      // the folder it speaks for is the only part that tells them apart.
+                      preview: Dashboard.few(docs?.documents ?? []).map(\.label)) {
+            opened = .context
+        }
     }
 
     /// How much window is left, what is spending it, and the one thing to do about it.
@@ -123,6 +142,9 @@ extension DashboardView {
                       // no sentence on it is a square nobody can act on.
                       caption: needsPane ?? Dashboard.answering(family: session.family,
                                                                 effort: session.effort),
+                      // The one square whose fact is a share, so the one square with a bar.
+                      // "372k of 450k" is arithmetic; the bar has already done it.
+                      meter: session.context?.share,
                       lit: session.context.map { Palette.pressure($0.pressure) },
                       ready: hasPane,
                       spoken: Control.compact.label) { run(.compact) }

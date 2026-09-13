@@ -8,10 +8,14 @@ import SwiftUI
 /// five, each of them a screen you had to arrive at to find out whether it had anything on it —
 /// and rename, the filter chain and the project's settings were behind a glyph in the corner, in
 /// a list of words with no numbers beside any of them. The grid answers both: a square carries
-/// the count, so the page says what is waiting before anything is opened, and the thing it opens
-/// is the pane or the sheet that already existed. **Nothing here draws a slip, a file or a
-/// paragraph of orders** — `ArtifactsView`, `FilesView` and `OrdersView` are untouched and arrive
-/// on a sheet.
+/// the count and three lines of what the count is *of*, so the page says what is waiting before
+/// anything is opened, and the thing it opens is the pane or the sheet that already existed.
+///
+/// **A square names things; it does not draw them.** A tile lists three slip titles, three
+/// filenames, three subagent descriptions — one line of plain text each, which is the difference
+/// between a preview and a second copy of a pane. Nothing here renders a slip's page, a file's
+/// contents or a paragraph of orders: `ArtifactsView`, `FilesView` and `OrdersView` are untouched
+/// and arrive on a sheet, and that is still the rule the whole page is built on.
 ///
 /// What stayed a swipe is the reading: this, the briefing, the transcript. Those three are things
 /// you *read*, one after another, and paging between them with a thumb is the whole reason the
@@ -34,9 +38,9 @@ struct DashboardView: View {
     @State var orders: Orders?
     /// The CLAUDE.md tree, for the one tile that is about what a session started with.
     @State var docs: ContextDocs?
-    /// The chain, counted. Two numbers rather than the chain itself: nothing on this page edits
-    /// it — the sheet does, against the model — so holding the rows here would be a second copy
-    /// of something that already has one owner.
+    /// The chain: which steps run, and how many were on offer. The names rather than a count,
+    /// because the square says which three of the six — but still not the rows themselves, which
+    /// carry each step's settings and are the sheet's to edit against the model.
     @State var chain: Chain?
     /// A document opened out of the context tree. Its sheet is declared *inside* the context
     /// sheet's content, not here: a view presents one sheet at a time, and a second one attached
@@ -48,9 +52,9 @@ struct DashboardView: View {
     /// The page's colour, which goes utt orange while the mark at the foot of it is open.
     @Environment(\.accent) var accent
 
-    /// The chain as a square needs it.
+    /// The chain as a square needs it: what is running, by name, out of how many were offered.
     struct Chain: Equatable {
-        let running: Int
+        let running: [String]
         let offered: Int
     }
 
@@ -77,8 +81,14 @@ struct DashboardView: View {
     /// How many squares fit across, and the gutter between them. The count is `Dashboard`'s,
     /// where `just test` can hold the thresholds down; the columns themselves are flexible, so
     /// the arithmetic that turns a width into a tile size stays SwiftUI's.
+    ///
+    /// **Top-aligned, which is what lets a tile be honestly short.** Tiles are no longer squares
+    /// and no longer a fixed height — one carrying three filenames is taller than one saying
+    /// "None standing" and nothing else. Centred, the short one would float in the middle of its
+    /// row with a gap above and below; aligned to the top, the whole difference falls underneath
+    /// it and reads as the gutter it is.
     private func across(_ width: CGFloat) -> [GridItem] {
-        Array(repeating: GridItem(.flexible(), spacing: Spacing.small),
+        Array(repeating: GridItem(.flexible(), spacing: Spacing.small, alignment: .top),
               count: Dashboard.columns(across: width))
     }
 
@@ -97,7 +107,11 @@ struct DashboardView: View {
         case .files: framed("Files") { FilesView(model: model, session: session) }
         case .orders: framed("Orders") { OrdersView(model: model, session: session, say: say) }
         case .context: framed("Context") { tree }
-        case .filters: SessionFilters(model: model, session: session, say: say)
+        // Everything that rewrites what was said, in the order it runs — utt's hints, this Mac's
+        // word list and this session's chain — rather than the chain alone. The square's label
+        // was already the wider question ("On the way in"), and the chain editor is one press
+        // further in from here rather than gone: `Swapping` presents `SessionFilters` itself.
+        case .filters: Swapping(model: model, session: session, say: say)
         case .project: ProjectSettingsView(model: model, project: here)
         case .name: rename
         }
@@ -138,28 +152,33 @@ struct DashboardView: View {
 
     /// Everything the squares need that the listing does not already carry, once.
     ///
-    /// The slips are not in here: their two counts ride on every listing (`Session.artifactsWaiting`)
-    /// and are therefore newer than anything a request of this page's own could fetch. The other
-    /// four are two walks on the Mac and two fields, and they go **together**. Awaited one after
-    /// another they arrived over about ten seconds and the grid sat on four "…" for most of it —
-    /// which is the one thing a dashboard must not do, since a square with no number on it is
-    /// exactly the square this page exists to replace. The two client calls still go through
-    /// `model.run`, so a Mac that will not answer says so in the same status line as everything
-    /// else; the two model calls report themselves.
+    /// They go **together**. Awaited one after another they arrived over about ten seconds and
+    /// the grid sat on four "…" for most of it — which is the one thing a dashboard must not do,
+    /// since a square with no number on it is exactly the square this page exists to replace.
+    /// The two client calls still go through `model.run`, so a Mac that will not answer says so
+    /// in the same status line as everything else; the three model calls report themselves.
+    ///
+    /// The slips are the one thing here asked for twice over. Their two *counts* ride on every
+    /// listing (`Session.artifactsWaiting`) and are therefore fresher than this could ever be, so
+    /// the number on that square is still the listing's. What this fetches is the titles under
+    /// it, which no listing carries — and it is the same directory read `ArtifactsView` makes
+    /// when the square is opened, so nothing new was put on the wire for it.
     private func load() async {
         guard !asked, let client = model.settings.client() else { return }
         asked = true
         async let touched: Void = model.loadFiles(for: session)
+        async let written: Void = model.loadArtifacts(for: session)
         async let tree = model.context(for: session)
         await model.run {
-            async let written = client.orders(of: session.sessionId)
+            async let standing = client.orders(of: session.sessionId)
             async let offered = client.filters(of: session.sessionId)
-            orders = try await written
+            orders = try await standing
             let chosen = try await offered
-            chain = Chain(running: chosen.steps.filter(\.isOn).count,
+            chain = Chain(running: Dashboard.running(chosen.steps, over: chosen.known),
                           offered: chosen.known.count)
         }
         await touched
+        await written
         docs = await tree
     }
 }

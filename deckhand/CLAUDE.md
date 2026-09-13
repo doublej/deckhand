@@ -233,16 +233,32 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   tile carries the count it is about — slips waiting, files touched, the first written line of the
   standing orders, how many filters run out of how many this Mac offers, what the CLAUDE.md tree
   costs, how full the window is and what is answering. That is the whole reason it beats the menu
-  it replaced, which was nine words with no figures beside any of them. **Nothing on the dashboard
-  draws a slip, a file or a paragraph of orders**: `ArtifactsView`, `FilesView` and `OrdersView`
-  are untouched and arrive on a sheet, framed with a title because all three were written to sit
-  under a header that named the session and would otherwise land with none. The rule is enforced
+  it replaced, which was nine words with no figures beside any of them. **A square names things;
+  it does not draw them**: under the number sit up to three lines of what the number is *of* —
+  three slip titles, three filenames, three subagent descriptions, one line of plain text each.
+  `ArtifactsView`, `FilesView` and `OrdersView` are untouched and arrive on a sheet, framed with a
+  title because all three were written to sit under a header that named the session and would
+  otherwise land with none, and none of them is what a tile draws. The rule is enforced
   by what is *not* on the grid — a tile whose only content is a word in a box is a menu row drawn
   four times too large, which is why the raw transcript stayed in the `…` menu: its line count is
   not known until it has been fetched, and a number that arrives only after you press the tile is
   not a number on the tile. What a tile *says* is `DeckhandKit/Dashboard/`, where `just test` can
   prove every sentence; the order they are read in is the order they are written, because a grid's
   reading order is a layout fact rather than a rule anything can check.
+- **A tile is as tall as what it says, and no taller.** They were literal squares once, with the
+  eyebrow pinned to the top and the number to the bottom and a third of each card empty between
+  them — which reads as a card that failed to load, and cost so much room that two and a half rows
+  of a twelve-square grid were visible at once. Three things fixed it and the third is the one
+  that is easy to undo by accident. The number moved up under the eyebrow. The preview took the
+  middle. And **a tile with nothing to preview is short rather than stretched**: filling the row's
+  height was tried first and put the void straight back, because ORDERS with nothing standing
+  drawn to the height of a FILES square listing three filenames is the same empty card under
+  another rule. So the cards hug their content and `GridItem` is `alignment: .top`, which puts
+  what is left over *between* squares, where it reads as a gutter. Nothing is padded to a shape,
+  and nothing is invented to fill one — a tile with no true line shows none, exactly as a tile
+  with no true number says "None yet" rather than "0". This is also why `CONTEXT` lost its
+  caption: "Every CLAUDE.md it started with" explains the tile rather than saying anything about
+  the session, and it was only ever there because the square had nothing else in it.
 - **The subagents square is the one tile that costs nothing and answers the most.** `model.agents`
   is refreshed at the tail of every `loadTurns`, which the session page polls every five seconds
   whichever pane is showing, so the count of what is running is free and always current. Finding a
