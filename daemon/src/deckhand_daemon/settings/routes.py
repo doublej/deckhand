@@ -38,8 +38,9 @@ def write_aliases(aliases_sent: Annotated[list, Body(embed=True, alias="aliases"
     """Replace the list whole, the way `/settings` and `/filters` are written.
 
     Answers with what was stored rather than what was sent: a row with nothing on its left is
-    dropped, and a word aliased twice keeps only the later answer. A screen that followed its own
-    copy would then be showing a list this Mac is not running.
+    dropped, a word aliased twice keeps only the later answer, and a row that is not two elements
+    goes with them — a hand-rolled `{"heard":…,"meant":…}` is discarded here with a 200 back. A
+    screen that followed its own copy would then be showing a list this Mac is not running.
     """
     return {"aliases": aliases.save(aliases_sent)}
 
