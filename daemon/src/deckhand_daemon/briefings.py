@@ -157,13 +157,28 @@ _cursor = 0
 
 
 def _next() -> str | None:
-    """The next session to write about: anything bumped, else the cycle, else nothing at all."""
+    """The next session to write about: anything bumped, else the cycle, else nothing at all.
+
+    **A bump is popped, so a refusal throws it away** — which was harmless while the only
+    refusals were "gone" and "nothing has happened", and is not once `SAME_SESSION` refuses too.
+    At the measured 26-second median between two briefings of one session, most bumps land
+    inside that floor, and a bump destroyed for being early is somebody opening a session page
+    and never being promoted for it. Only that one refusal puts the request back.
+    """
     global _cursor
     live = [s.session_id for s in sessions.live_sessions()]
     while _bumped:
         wanted = _bumped.pop(0)
-        if wanted in live and _due(wanted):
+        if wanted not in live:
+            continue
+        if _due(wanted):
             return wanted
+        if _too_soon(wanted):
+            # The person is looking at this session now, so the request waits the floor out
+            # rather than being dropped. `break` and not `continue`: reinserting at the front
+            # of a loop that pops from the front is otherwise forever.
+            _bumped.insert(0, wanted)
+            break
     if not live:
         return None
     for step in range(len(live)):
@@ -187,9 +202,9 @@ def _due(session_id: str) -> bool:
     `written_at` to be inside, and the one moment a briefing is worth buying immediately is the
     moment there is none.
     """
-    kept = load(session_id)
-    if time.time() - kept.get("written_at", 0.0) < SAME_SESSION:
+    if _too_soon(session_id):
         return False
+    kept = load(session_id)
     file = transcripts.transcript_path(session_id)
     if file is None:
         return False
@@ -207,6 +222,16 @@ def _due(session_id: str) -> bool:
     # when the worker has already looked and decided none is.
     save(session_id, kept | {"mtime": moved})
     return False
+
+
+def _too_soon(session_id: str) -> bool:
+    """Whether this session was briefed so recently that another one is not worth buying.
+
+    Its own function rather than a line inside `_due`, because `_next` has to tell this refusal
+    from the others: every other reason to say no means there is nothing to write about, and
+    this one means there is and it can wait.
+    """
+    return time.time() - load(session_id).get("written_at", 0.0) < SAME_SESSION
 
 
 def _hash(session_id: str) -> str:

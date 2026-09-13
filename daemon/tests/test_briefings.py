@@ -207,3 +207,34 @@ def test_a_session_inside_its_floor_lets_another_have_the_slot(claude_home):
                          "written_at": time.time()})
     briefings.bump(SID)
     assert briefings._next() == OTHER
+
+
+def test_a_bump_inside_the_floor_waits_rather_than_being_thrown_away(claude_home):
+    """`_next` pops, so a refusal used to destroy the request — harmless while the only
+    refusals meant "nothing to say", and not once the floor refuses too. Opening a session is
+    the one moment its briefing is worth more than any other's; at the measured 26-second median
+    most bumps land inside the floor, so this is nearly every one of them."""
+    transcript(claude_home, SID, [said("build it"), did("built")])
+    transcript(claude_home, OTHER, [said("and this"), did("done")])
+    briefings.save(SID, {"summary": "recent", "hash": "old", "mtime": 0.0,
+                         "written_at": time.time() - 30})
+    briefings.bump(SID)
+
+    assert briefings._next() == OTHER
+    assert briefings._bumped == [SID]  # still asked for, not forgotten
+
+    briefings.save(SID, {"summary": "recent", "hash": "old", "mtime": 0.0,
+                         "written_at": time.time() - briefings.SAME_SESSION - 1})
+    assert briefings._next() == SID
+
+
+def test_a_bump_for_a_session_that_has_gone_quiet_is_still_dropped(claude_home):
+    """Only "too soon" waits. A bump with nothing behind it is a request nothing can answer, and
+    holding it would block every bump behind it."""
+    transcript(claude_home, SID, [said("build it"), did("built")])
+    briefings.save(SID, {"summary": "said", "hash": briefings._hash(SID), "mtime": 0.0,
+                         "written_at": time.time() - briefings.SAME_SESSION - 1})
+    briefings.bump(SID)
+
+    assert briefings._next() is None
+    assert briefings._bumped == []
