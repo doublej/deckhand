@@ -97,14 +97,28 @@ public enum AliasText {
     /// will not compile leaves the words alone, which is the same answer as an alias that never
     /// fires.
     public static func swapped(_ text: String, heard: String, meant: String) -> String {
-        let pattern = "(?<!\\w)\(NSRegularExpression.escapedPattern(for: heard))(?!\\w)"
-        guard !heard.isEmpty,
-              let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive])
-        else { return text }
+        guard let regex = rule(for: heard) else { return text }
         return regex.stringByReplacingMatches(
             in: text,
             range: NSRange(text.startIndex..., in: text),
             withTemplate: NSRegularExpression.escapedTemplate(for: meant)
         )
+    }
+
+    /// Whether these words are in that text at all, by the same rule ``swapped(_:heard:meant:)``
+    /// replaces by. Asking it with a replacement instead would mean picking a string nobody
+    /// could ever say, and ``Replacements`` asks it of every rule against every other one.
+    public static func matches(_ heard: String, in text: String) -> Bool {
+        guard let regex = rule(for: heard) else { return false }
+        return regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil
+    }
+
+    /// The one whole-word, case-ignoring pattern, so the two above cannot drift apart — and
+    /// neither from `aliases._whole` on the Mac, which is the one that actually runs. A pattern
+    /// that will not compile is no match, which is the same answer as an alias that never fires.
+    private static func rule(for heard: String) -> NSRegularExpression? {
+        guard !heard.isEmpty else { return nil }
+        let pattern = "(?<!\\w)\(NSRegularExpression.escapedPattern(for: heard))(?!\\w)"
+        return try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive])
     }
 }
