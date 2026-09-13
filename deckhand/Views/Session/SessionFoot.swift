@@ -106,7 +106,7 @@ struct SessionFoot: View {
             mode: model.preferences.talkMode,
             isMine: true,
             onReach: { reaching = true },
-            onStart: { model.status = "Recording for \(session.name)" },
+            onStart: { model.report("Recording for \(session.name)", to: session) },
             onClip: { await model.upload(clip: $0, to: session, spans: recorder.spans) },
             content: {
                 TalkMark(state: $0,

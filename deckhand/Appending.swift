@@ -89,7 +89,7 @@ extension AppModel {
                 // measured is the same lie in numbers.
                 self.reviewTiming[session.sessionId] = nil
             }
-            self.status = self.outcome(of: receipt, to: session, held: true)
+            self.report(self.outcome(of: receipt, to: session, held: true), to: session)
         }
     }
 

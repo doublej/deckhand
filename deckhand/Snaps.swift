@@ -117,7 +117,8 @@ extension AppModel {
         guard let client = settings.client() else { return }
         let pinned = snaps(for: session)
         hold(nil, for: session)
-        status = pinned.isEmpty ? "Sending to \(session.name)…" : "Sending the pictures first…"
+        report(pinned.isEmpty ? "Sending to \(session.name)…" : "Sending the pictures first…",
+               to: session)
         await run {
             let paths = try await self.keep(pinned, for: session, with: client)
             // Always prepared: every caller of this is a review card, so these words have been
@@ -145,10 +146,11 @@ extension AppModel {
                  notes: sent.notes,
                  stoppedBy: sent.stoppedBy,
                  because: sent.deliveryError)
-            status = sent.stoppedBy
-                .map { stopped(by: $0, because: sent.deliveryError, notes: sent.notes) }
-                ?? sent.deliveryError
-                ?? "\(session.name) did not take it"
+            report(sent.stoppedBy
+                       .map { stopped(by: $0, because: sent.deliveryError, notes: sent.notes) }
+                       ?? sent.deliveryError
+                       ?? "\(session.name) did not take it",
+                   to: session)
             return false
         }
         attached[session.sessionId] = nil
@@ -156,8 +158,9 @@ extension AppModel {
         // point every clip held for reading is filed as not yet delivered, which is true and is
         // also why the archive would otherwise never sweep a single one of them.
         markSent(for: session)
-        status = said("Sent to \(session.name) by \(sent.deliveredBy ?? "the Mac")",
-                      notes: sent.notes)
+        report(said("Sent to \(session.name) by \(sent.deliveredBy ?? "the Mac")",
+                    notes: sent.notes),
+               to: session)
         return true
     }
 

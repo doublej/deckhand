@@ -125,6 +125,10 @@ final class AppModel {
     /// words that exist and have been said to nobody, and this is how sending them finally marks
     /// the clips they came from as having arrived.
     var heldClips: [String: [String]] = [:]
+    /// What became of the last clip said to each session. `status` carries the same sentence and
+    /// only the newest of them, which is all a strip can say; the rail talks to six sessions from
+    /// one screen and has to be able to answer for one row — see `report(_:to:)` and `TalkLine`.
+    var spoke: [String: Spoken] = [:]
 
     /// Every machine the Mac can see, newest listing wins. Empty until the first one lands,
     /// and empty forever from a Mac that has only itself — which is the same thing to every
@@ -232,30 +236,7 @@ final class AppModel {
         answeredAt[session.sessionId] = nil
         unheld(for: session)
         attached[session.sessionId] = nil
-        status = "Discarded"
-    }
-
-    /// What actually happened to the clip, in the order the person cares about it. A filter
-    /// refusing it comes first: that is the one outcome that looks like success from the outside.
-    ///
-    /// `held` is the difference between a refusal that has happened and one that is coming. On
-    /// the preview path nothing was delivered because nothing was meant to be, so "not sent" is
-    /// true and useless; what is worth saying is what Send is about to do.
-    func outcome(of receipt: UploadReceipt, to session: Session, held: Bool = false) -> String {
-        guard receipt.transcript != nil else {
-            return receipt.transcriptError ?? "Sent \(receipt.bytes / 1024) KB, no transcript"
-        }
-        if let refused = receipt.stoppedBy {
-            return held
-                ? said("Read it — \(title(of: refused)) will not pass it", notes: receipt.notes)
-                : stopped(by: refused, because: receipt.deliveryError, notes: receipt.notes)
-        }
-        if held { return "Read it, then send it" }
-        if receipt.delivered {
-            return said("Sent to \(session.name) by \(receipt.deliveredBy ?? "the Mac")",
-                        notes: receipt.notes)
-        }
-        return receipt.deliveryError ?? "Transcribed, but \(session.name) did not take it"
+        report("Discarded", to: session)
     }
 
     func checkConnection() async {

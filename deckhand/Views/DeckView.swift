@@ -84,7 +84,7 @@ struct DeckView: View {
 
     private func startTalking(to session: Session) {
         active = session.sessionId
-        model.status = "Recording for \(session.name)"
+        model.report("Recording for \(session.name)", to: session)
     }
 
     private func column(for session: Session) -> some View {
@@ -112,6 +112,8 @@ struct DeckView: View {
             briefed: briefed.contains(session.sessionId),
             flip: { flip(session) },
             state: state,
+            confirms: model.preferences.confirms,
+            spoken: model.spoken(for: session),
             review: model.review[session.sessionId],
             filtered: model.reviewFiltered[session.sessionId],
             say: say(for: session),
@@ -148,6 +150,10 @@ private struct Column: View {
     let briefed: Bool
     let flip: () -> Void
     let state: TalkState
+    /// Whether words are held for reading before they go, which is what a release promises.
+    let confirms: Bool
+    /// What became of the last clip said to this column, while it is still worth reading.
+    let spoken: String?
     /// Held for reading, if this column is the one that just heard something.
     let review: String?
     /// What the chain changed about those words, and what it will do to them if they go as
@@ -169,6 +175,11 @@ private struct Column: View {
                 if briefed { briefing } else { conversation }
             }
             .scrollDisabled(isRecording)
+            // One slot at the foot of a column and two things that can be in it, the way a
+            // session's page holds the mark or the card: the words waiting to be answered, or
+            // what is happening to the clip that was said into this column. Never both — a line
+            // saying "Read it, then send it" over the card holding those very words is the deck
+            // saying one thing twice in 240 points.
             if let review {
                 ReviewCard(
                     text: review,
@@ -180,6 +191,10 @@ private struct Column: View {
                     say: say
                 )
                 .padding(Spacing.xxs)
+            } else if TalkLine.speaks(state, spoken: spoken) {
+                TalkLine(state: state, confirms: confirms, spoken: spoken, compact: true)
+                    .padding(.horizontal, Spacing.extraSmall)
+                    .padding(.vertical, Spacing.xxs)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)

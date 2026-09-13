@@ -20,9 +20,6 @@ struct SessionListView: View {
     /// Pushed by hand rather than by a NavigationLink: a link inside a List draws the system's
     /// disclosure chevron outside the row's own fill, which broke the one edge this page has.
     @State private var chosen: Session?
-    /// Which pinned picture is being marked up, and whose card it is pinned to — the rail can be
-    /// holding a card for more than one session, so the picture alone does not say.
-    @State private var marking: Pinned?
     @Environment(\.scenePhase) private var phase
 
     /// What this page's accents are drawn in. Read here rather than from the environment because
@@ -63,9 +60,6 @@ struct SessionListView: View {
             .sheet(isPresented: $showProjects) {
                 ProjectListView(model: model) { chosen = $0 }
             }
-            // On the page rather than on the row: a row is recycled as the listing refreshes, and
-            // a sheet presented from one goes with it.
-            .sheet(item: $marking) { SnapView(model: model, session: $0.session, snap: $0.snap) }
             // Where the manager has asked this phone to go. The gate is this page's own
             // `@State`, so this page is the only thing that can move it — the desk holds the
             // ask and hands it over, which is the whole of the app's command surface today.
@@ -209,7 +203,7 @@ struct SessionListView: View {
 
     private func startTalking(to session: Session) {
         talking = session.sessionId
-        model.status = "Recording for \(session.name)"
+        model.report("Recording for \(session.name)", to: session)
     }
 
     private func heard(_ clip: URL, for session: Session) async {
@@ -227,6 +221,8 @@ struct SessionListView: View {
             headline: model.headlines[session.sessionId],
             asks: model.tasks[session.sessionId] ?? [],
             talk: talk,
+            confirms: model.preferences.confirms,
+            spoken: model.spoken(for: session),
             starred: model.preferences.isFavorite(session),
             first: first,
             last: last
@@ -236,25 +232,23 @@ struct SessionListView: View {
         .accessibilityIdentifier("session-row")
     }
 
-    /// What it heard, under the row it was heard for. Sitting anywhere else it would be a card
-    /// that names a session rather than one belonging to it.
+    /// What it heard, under the row it was heard for, and the two answers this screen can give
+    /// about it: send it as it stands, or open the session and work on it there.
+    ///
+    /// Sitting anywhere else it would be a row that names a session rather than one belonging to
+    /// it. The card itself stays on the session's page and is what Refine opens — see
+    /// `SendOrRefine`, which is also where the reason nothing is handed over is written down.
     @ViewBuilder private func review(for session: Session) -> some View {
         if let text = model.review[session.sessionId] {
-            ReviewCard(
-                text: text,
+            SendOrRefine(
+                words: text,
                 target: session.name,
+                refusal: model.reviewFiltered[session.sessionId]?.refusal,
                 send: { edited in Task { await model.send(edited, to: session) } },
-                discard: { model.discard(for: session) },
-                filtered: model.reviewFiltered[session.sessionId],
-                compact: true,
-                snaps: model.snaps(for: session),
-                attach: { model.attach($0, to: session) },
-                paste: { model.attachFromClipboard(to: session) },
-                mark: { snap, said in
-                    model.settle(said, for: session)
-                    marking = Pinned(snap: snap, session: session)
-                },
-                commands: { await model.commands(for: session) }
+                // The same push a tap on the row makes, and deliberately not `manager.route`:
+                // this view owns `chosen`, and the route exists for asks arriving from outside
+                // the phone. What lands there is the card, already holding these words.
+                refine: { chosen = session }
             )
         }
     }

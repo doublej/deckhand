@@ -16,6 +16,11 @@ struct SessionRow: View {
     let asks: [Ask]
     /// Whether this is the row the microphone is open for, and whether the clip is on its way.
     let talk: TalkState
+    /// Whether words are held for reading before they go, which is what a release promises.
+    let confirms: Bool
+    /// What became of the last clip said to this session, while it is still worth reading. The
+    /// row is the button here, so this is the only place that answer can land — see `TalkLine`.
+    let spoken: String?
     /// Favourites are no longer a section of their own — a star would split a project in two —
     /// so the mark that used to be the section header is now on the row itself.
     let starred: Bool
@@ -38,6 +43,19 @@ struct SessionRow: View {
                 }
             VStack(alignment: .leading, spacing: Spacing.xxs) {
                 title
+                // What your thumb is doing to this session, on the line under its name.
+                //
+                // Here rather than under the slab, because the row is the button: a clip said
+                // from the rail has no mark to narrate it and no transcript to land in, so
+                // without this a press went out in silence and came back in silence. Under the
+                // name is where the mark's own pill sits in relation to the mark.
+                //
+                // Asked before it is built. `TalkLine` draws nothing on a quiet row, and a
+                // zero-height view is still a child of this stack — every other row would pay
+                // a gap for the one that is talking.
+                if TalkLine.speaks(talk, spoken: spoken) {
+                    TalkLine(state: talk, confirms: confirms, spoken: spoken)
+                }
                 // The row is worth its extra height only when there is something in it; a
                 // placeholder saying "reading…" on six rows at once is worse than nothing.
                 if let headline {
@@ -81,7 +99,13 @@ struct SessionRow: View {
         // same reason a busy one does: the fade spends contrast on how long ago something
         // happened, and a question nobody has answered has not happened yet. A session that
         // stopped to ask you something this morning is the row you most need to see at six.
-        .opacity(talk.isRecording || talk.busy || current || session.waitingPages > 0
+        //
+        // A row still saying what became of a clip keeps it for the same reason, and that one is
+        // load-bearing: the clip whose outcome matters most is the refusal, and a session that
+        // has been quiet since breakfast is exactly the one whose row would be at half contrast
+        // while it tried to say so.
+        .opacity(talk.isRecording || talk.busy || current
+                 || session.waitingPages > 0 || spoken != nil
                  ? 1 : session.contrast())
     }
 

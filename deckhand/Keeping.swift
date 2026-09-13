@@ -27,7 +27,7 @@ extension AppModel {
         guard let kept = keep(clip, for: session) else { return }
         spans.keeping = PhoneSpans.since(filing)
         let confirms = preferences.confirms
-        status = confirms ? "Transcribing…" : "Sending to \(session.name)…"
+        report(confirms ? "Transcribing…" : "Sending to \(session.name)…", to: session)
         logger.info("uploading clip for \(session.name, privacy: .public)")
         // The clip is on the wire: locking here suspends the app and loses it.
         Awake.hold()
@@ -58,9 +58,54 @@ extension AppModel {
             received(receipt, for: session, confirms: confirms)
         } catch {
             archive.finish(kept.id, transcript: nil, delivered: false, failure: reason(error))
-            status = reason(error)
+            report(reason(error), to: session)
             logger.error("clip kept, upload failed: \(String(describing: error))")
         }
+    }
+
+    /// The one sentence about a clip, on the strip and on the row it was said to.
+    ///
+    /// Both, because they answer different questions. The strip at the foot of the rail says what
+    /// the Mac last did; the row says what became of *this* session's clip, which is the question
+    /// somebody holding a row down has actually asked. Every outcome in the clip's path goes
+    /// through here, so a row can never be told something the strip was not — and the row's copy
+    /// goes quiet on its own, which the strip's does not need to.
+    func report(_ outcome: String, to session: Session) {
+        status = outcome
+        spoke[session.sessionId] = Spoken(outcome)
+    }
+
+    /// What to say on a session's row about the last clip said to it.
+    ///
+    /// Nothing at all while its review card is up: the card is already saying where the words are
+    /// going and what will be done to them, and a line above it repeating "Read it, then send it"
+    /// is the app saying the same thing twice on one row.
+    func spoken(for session: Session) -> String? {
+        guard review[session.sessionId] == nil else { return nil }
+        return spoke[session.sessionId]?.fresh()
+    }
+
+    /// What actually happened to the clip, in the order the person cares about it. A filter
+    /// refusing it comes first: that is the one outcome that looks like success from the outside.
+    ///
+    /// `held` is the difference between a refusal that has happened and one that is coming. On
+    /// the preview path nothing was delivered because nothing was meant to be, so "not sent" is
+    /// true and useless; what is worth saying is what Send is about to do.
+    func outcome(of receipt: UploadReceipt, to session: Session, held: Bool = false) -> String {
+        guard receipt.transcript != nil else {
+            return receipt.transcriptError ?? "Sent \(receipt.bytes / 1024) KB, no transcript"
+        }
+        if let refused = receipt.stoppedBy {
+            return held
+                ? said("Read it — \(title(of: refused)) will not pass it", notes: receipt.notes)
+                : stopped(by: refused, because: receipt.deliveryError, notes: receipt.notes)
+        }
+        if held { return "Read it, then send it" }
+        if receipt.delivered {
+            return said("Sent to \(session.name) by \(receipt.deliveredBy ?? "the Mac")",
+                        notes: receipt.notes)
+        }
+        return receipt.deliveryError ?? "Transcribed, but \(session.name) did not take it"
     }
 
     /// What the whole journey cost, onto the clip and onto the card.
@@ -109,7 +154,7 @@ extension AppModel {
     /// were said to nobody, and the card is the one place in this app that can hold those.
     private func received(_ receipt: UploadReceipt, for session: Session, confirms: Bool) {
         guard let text = receipt.words, confirms || receipt.stoppedBy != nil else {
-            status = outcome(of: receipt, to: session)
+            report(outcome(of: receipt, to: session), to: session)
             // Fetch rather than fake it: the words are in the session's own transcript within
             // a moment, and showing them from there means they are shown once, in order, and
             // looking like every other thing said in this conversation.
@@ -131,7 +176,7 @@ extension AppModel {
              heard: receipt.transcript,
              raw: receipt.uttRewrote ? receipt.raw : nil,
              uttStages: receipt.uttStages)
-        status = outcome(of: receipt, to: session, held: confirms)
+        report(outcome(of: receipt, to: session, held: confirms), to: session)
     }
 
     // MARK: - the archive, from the rest of the app
@@ -142,7 +187,7 @@ extension AppModel {
         do {
             return try archive.keep(clip, for: session.sessionId, named: session.name)
         } catch {
-            status = "Could not keep that clip: \(error.localizedDescription)"
+            report("Could not keep that clip: \(error.localizedDescription)", to: session)
             logger.error("archiving failed: \(String(describing: error))")
             return nil
         }
@@ -178,18 +223,18 @@ extension AppModel {
     /// screen since: a second pass would rewrite a prompt the person has read.
     func resend(_ kept: KeptClip, to session: Session) async {
         guard let client = settings.client(), let text = kept.transcript else { return }
-        status = "Sending to \(session.name)…"
+        report("Sending to \(session.name)…", to: session)
         await run {
             let sent = try await client.say(text,
                                             to: session.sessionId,
                                             route: self.preferences.route,
                                             prepared: true)
             guard sent.went else {
-                self.status = sent.deliveryError ?? "\(session.name) did not take it"
+                self.report(sent.deliveryError ?? "\(session.name) did not take it", to: session)
                 return
             }
             self.archive.markSent([kept.id])
-            self.status = self.said("Sent to \(session.name)", notes: sent.notes)
+            self.report(self.said("Sent to \(session.name)", notes: sent.notes), to: session)
         }
     }
 
@@ -213,7 +258,7 @@ extension AppModel {
         var spans = PhoneSpans()
         spans.spoken = kept.timings?.spoken ?? 0
         let confirms = preferences.confirms
-        status = confirms ? "Transcribing…" : "Sending to \(session.name)…"
+        report(confirms ? "Transcribing…" : "Sending to \(session.name)…", to: session)
         logger.info("trying clip again on \(session.name, privacy: .public)")
         Awake.hold()
         defer { Awake.release() }
