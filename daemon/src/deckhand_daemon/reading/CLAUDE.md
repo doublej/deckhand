@@ -75,8 +75,10 @@ context.py      # the CLAUDE.md tree a session in a folder is loaded with, befor
   `POST /sessions/{id}/queue/clear` writes a timestamp to `queue/<sessionId>.json` and the replay
   starts after it. Claude Code's transcript is never touched — it is not this daemon's file.
   There is no way to make a session read its inbox early; the queue drains when a turn ends.
-- **The keyboard route's ctrl-U travels with the message.** Queued content written by Deckhand
-  starts with `\x15`, so `asked._unwrap` strips control characters as well as the envelope tags.
+- **The keyboard route's ctrl-U used to travel with the message.** Queued content written by
+  Deckhand before 2026-09-10 starts with `\x15`, so `asked._unwrap` strips control characters as
+  well as the envelope tags. It is a CSI-u keypress in its own write now (`deliver.CLEAR_LINE`)
+  and reaches no transcript, but the transcripts that already have it are not rewritten.
 - **How full a session's context is comes off its own transcript.** Every assistant entry carries
   the usage of the request that produced it, and the window is what was billed as input —
   `input_tokens` + `cache_creation_input_tokens` + `cache_read_input_tokens`. Output is not in it.

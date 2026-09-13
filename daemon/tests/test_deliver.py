@@ -65,7 +65,8 @@ def test_a_session_with_a_pane_is_typed_into(inbox, claude_home, monkeypatch):
     session.pane = a_pane()
     assert deliver.deliver(session, "  run  the tests  ") == ("keyboard", None)
     assert typed == [
-        ["it2", "session", "send", "-s", "PANE-1", deliver.CLEAR_LINE + "run the tests"],
+        ["it2", "session", "send", "-s", "PANE-1", deliver.CLEAR_LINE],
+        ["it2", "session", "send", "-s", "PANE-1", "run the tests"],
         ["it2", "session", "send", "-s", "PANE-1", deliver.RETURN],
     ]
 
@@ -193,7 +194,8 @@ def test_the_controls_are_keystrokes_in_the_pane(inbox, claude_home, monkeypatch
 
     assert typed == [
         ["it2", "session", "send", "-s", "PANE-1", deliver.ESCAPE],
-        ["it2", "session", "send", "-s", "PANE-1", deliver.CLEAR_LINE + "/compact"],
+        ["it2", "session", "send", "-s", "PANE-1", deliver.CLEAR_LINE],
+        ["it2", "session", "send", "-s", "PANE-1", "/compact"],
         ["it2", "session", "send", "-s", "PANE-1", deliver.RETURN],
     ]
 
@@ -221,7 +223,8 @@ def test_exit_is_typed_and_returned_like_any_other_slash_command(inbox, claude_h
 
     assert deliver.control(session, "exit") is None
     assert typed == [
-        ["it2", "session", "send", "-s", "PANE-1", deliver.CLEAR_LINE + "/exit"],
+        ["it2", "session", "send", "-s", "PANE-1", deliver.CLEAR_LINE],
+        ["it2", "session", "send", "-s", "PANE-1", "/exit"],
         ["it2", "session", "send", "-s", "PANE-1", deliver.RETURN],
     ]
 
@@ -286,7 +289,8 @@ def test_a_rename_runs_claude_code_s_own_command(inbox, claude_home, monkeypatch
 
     assert deliver.rename(session, "  the   promo  edit \n") is None
     assert typed == [
-        ["it2", "session", "send", "-s", "PANE-1", deliver.CLEAR_LINE + "/rename the promo edit"],
+        ["it2", "session", "send", "-s", "PANE-1", deliver.CLEAR_LINE],
+        ["it2", "session", "send", "-s", "PANE-1", "/rename the promo edit"],
         ["it2", "session", "send", "-s", "PANE-1", deliver.RETURN],
     ]
 
@@ -367,4 +371,4 @@ def test_a_control_byte_in_the_words_is_never_typed(inbox, claude_home, monkeypa
 
     assert deliver.deliver(session, "run \x1b\x07the \x15tests", route="keyboard")[0] == "keyboard"
 
-    assert typed[0] == deliver.CLEAR_LINE + "run the tests"
+    assert typed[:2] == [deliver.CLEAR_LINE, "run the tests"]

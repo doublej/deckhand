@@ -22,10 +22,12 @@ import json
 import socket
 import subprocess
 import sys
+import time
 import uuid
 
 from .fleet import here, remote
 from .log import log
+from .reading.transcripts import transcript_path
 from .sessions import Session, sessions_dir
 
 TIMEOUT = 5.0
@@ -43,6 +45,23 @@ MSG_VERSION = 1
 # be wrong about.
 CLEAR_LINE = "\x1b[117;5u"  # ctrl-U: a half-typed line is not part of what was said
 RETURN = "\x1b[13u"
+# A pane's tty hands Claude Code at most 1022 bytes per read, so one `it2 session send` longer
+# than that arrives as two reads a fraction of a millisecond apart — and Claude Code keeps only
+# one of them often enough to matter. Measured against a live session on 2026-09-13, a
+# 1212-character message: sent as one write with the ctrl-U on its front, mangled 13 times in 52;
+# every failure arrived with its first 1014 characters simply gone and only the tail submitted,
+# which is a prompt that *looks* delivered and says something else. Ctrl-U on its own write took
+# it to 1 in 14, a bare message to 1 in 24, and the words chopped below the buffer to 0 in 46 —
+# including at 4000 characters. So each write stays under the buffer, and ctrl-U and the return
+# keep the writes of their own they already had. The CSI-u spelling is why the *keys* survive a
+# shared read; nothing makes the *words* survive one.
+BURST = 1000
+# How long the session's own transcript is watched for the words before they count as staged.
+# Measured over 130 real sends: median 0.5 s, slowest 2.2 s.
+SUBMITTED = 3.0
+POLL = 0.05
+REFUSED = "iTerm would not type into {name}"
+STAGED = "{name} took the words but not the return — they are sitting unsent in its box"
 # The receiver already wraps a socket message in its own "another Claude session sent this"
 # framing, so this only has to say who is actually speaking — and it has to be short, because
 # it sits in JJ's pane taking up room he wanted for the message.
@@ -57,11 +76,11 @@ ESCAPE = "\x1b"
 # there is no other way to interrupt a run, and a slash command is typed like any other line.
 CONTROLS = {
     "cancel": (ESCAPE,),
-    "compact": (CLEAR_LINE + "/compact", RETURN),
-    "clear": (CLEAR_LINE + "/clear", RETURN),
+    "compact": (CLEAR_LINE, "/compact", RETURN),
+    "clear": (CLEAR_LINE, "/clear", RETURN),
     # Quits Claude Code. Nothing on the phone can start one again, so this is the one control
     # whose cost is the session itself rather than what is in it.
-    "exit": (CLEAR_LINE + "/exit", RETURN),
+    "exit": (CLEAR_LINE, "/exit", RETURN),
 }
 
 
@@ -90,7 +109,7 @@ def rename(session: Session, name: str) -> str | None:
     """Give the session a new display name. Returns None on success, or why not.
 
     `/rename` is Claude Code's own command and it takes the name as an argument, so this is the
-    same two keystroke bursts as anything else typed into the pane. The registry only picks the
+    same keystroke bursts as anything else typed into the pane. The registry only picks the
     new name up once the session runs the command, which for a busy one is when its turn ends —
     so a rename can look like nothing happened for a while, and that is the truth of it.
     """
@@ -99,7 +118,7 @@ def rename(session: Session, name: str) -> str | None:
         return "a name cannot be empty"
     if not session.pane:
         return f"{session.name} has no iTerm pane — nothing to type the rename into"
-    for burst in (CLEAR_LINE + f"/rename {wanted}", RETURN):
+    for burst in (CLEAR_LINE, f"/rename {wanted}", RETURN):
         if not _keystrokes(session.pane.iterm_session_id, burst):
             return f"iTerm would not rename {session.name}"
     log.info("renamed %s to %s", session.name, wanted)
@@ -151,11 +170,16 @@ def deliver(session: Session, text: str, route: str = "auto") -> tuple[str | Non
         return None, (f"{message.split()[0]} is a slash command and only works typed into a "
                       f"pane; {session.name} would receive it as words")
     if route != "socket" and session.pane:
-        if _type_into_pane(session.pane.iterm_session_id, message):
+        failed = _type_into_pane(session.pane.iterm_session_id, message, session.session_id)
+        if failed is None:
             log.info("typed %d chars into %s's pane", len(message), session.name)
             return "keyboard", None
-        if route == "keyboard":
-            return None, f"iTerm would not type into {session.name}"
+        log.warning("%s", failed.format(name=session.name))
+        # Only a pane that would not take the keys at all leaves the socket a job. Words already
+        # sitting in a session's box are not words to say again down another route: it would end
+        # up holding both, and the person said one thing once.
+        if route == "keyboard" or failed == STAGED:
+            return None, failed.format(name=session.name)
     if route == "keyboard":
         return None, f"{session.name} has no iTerm pane to type into"
     # A session on another machine takes the same last step, one machine over. The guard is here
@@ -170,26 +194,84 @@ def deliver(session: Session, text: str, route: str = "auto") -> tuple[str | Non
     return ("socket" if delivered else None), error
 
 
-def _type_into_pane(pane_id: str, message: str) -> bool:
+def _type_into_pane(pane_id: str, message: str, session_id: str) -> str | None:
     """Type the words and press return, so they arrive as the person's own prompt.
+
+    None once the session has them; otherwise why it has not, as a template naming it.
 
     Only ever aimed at a pane whose tty carries a live `claude` process — that is how the pane
     was found — so the text lands in a prompt, never in a shell.
 
-    Two keystroke bursts. Ctrl-U leads the first, because a half-finished line already sitting
-    in the prompt would otherwise be glued to the front of what was said; the return follows in
-    its own write, so a refusal between the two is still a failure this can report. Neither key
-    relies on that separation to be read as a keypress — both are CSI-u sequences, which
-    survive arriving in the same chunk as the words. The constants say why that matters.
+    Ctrl-U leads, in a write of its own, because a half-finished line already sitting in the
+    prompt would otherwise be glued to the front of what was said; the return follows in its
+    own write, so a refusal between the two is still a failure this can report. Neither key
+    needs that separation to be read as a keypress — both are CSI-u sequences, which survive
+    arriving in the same chunk as the words. The *words* need it, and need the chopping too:
+    `BURST` says what a read costs one that gets it wrong.
 
-    ponytail: no read-back. A submitted message and a staged one look the same to
-    `it2 session read`, and a session that is mid-turn queues the message for minutes, so there
-    is nothing to poll for. The receipt says the words were typed, which is what is known.
+    Then the question the log used to answer with a guess: did it go in. A staged message and a
+    sent one look the same to `it2 session read`, so this asks the session's own transcript
+    instead, which is the log of what arrived rather than of what was written at it.
     """
-    for burst in (CLEAR_LINE + message, RETURN):
+    watch = _watch(session_id)
+    for burst in (CLEAR_LINE, *_pieces(message), RETURN):
         if not _keystrokes(pane_id, burst):
+            return REFUSED
+    if watch is None or _arrived(session_id, watch, message):
+        return None
+    # The words are in the box and the return was not taken. Press it again — on a box the
+    # first one already emptied this does nothing at all, so it cannot send anything twice.
+    # A shorter window this time: the words are already typed, so there is nothing left to wait
+    # for but the submit, and the phone is holding a clip open the whole while.
+    _keystrokes(pane_id, RETURN)
+    return None if _arrived(session_id, watch, message, SUBMITTED / 3) else STAGED
+
+
+def _pieces(message: str) -> list[str]:
+    """The words as writes small enough that the pane's tty hands each of them to one read.
+
+    Cut by bytes and not by characters, because the buffer is bytes and a sentence of accented
+    words is half again as long once it is UTF-8 — and never through the middle of a character,
+    which would put two broken halves on the wire.
+    """
+    raw, pieces = message.encode(), []
+    while raw:
+        cut = BURST
+        while cut < len(raw) and raw[cut] & 0xC0 == 0x80:  # a continuation byte: back off
+            cut -= 1
+        pieces.append(raw[:cut].decode())
+        raw = raw[cut:]
+    return pieces
+
+
+def _watch(session_id: str) -> int | None:
+    """How long this session's transcript is before anything is typed, so only what is appended
+    afterwards has to be read back. None when there is no transcript to watch — which is not the
+    same as a failure, and is the one case where the keys being accepted is all that is known."""
+    path = transcript_path(session_id)
+    return path.stat().st_size if path else None
+
+
+def _arrived(session_id: str, watch: int, message: str, budget: float = SUBMITTED) -> bool:
+    """Whether the session's own transcript says it took the words, within `budget`.
+
+    The transcript is the only honest answer: an idle session writes the prompt as a turn and a
+    busy one writes a `queue-operation` for its inbox, and both land inside a second. The whole
+    message is looked for rather than its opening, because the failure this catches is a prompt
+    arriving with its front missing — an opening that matched would be the half that was lost.
+    """
+    wanted = json.dumps(message, ensure_ascii=False)[1:-1]
+    end = time.monotonic() + budget
+    while True:
+        path = transcript_path(session_id)
+        if path is not None:
+            with path.open("rb") as file:
+                file.seek(watch)
+                if wanted in file.read().decode(errors="replace"):
+                    return True
+        if time.monotonic() >= end:
             return False
-    return True
+        time.sleep(POLL)
 
 
 def _keystrokes(pane_id: str, burst: str) -> bool:
