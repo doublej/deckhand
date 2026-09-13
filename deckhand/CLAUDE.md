@@ -245,6 +245,21 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   not a number on the tile. What a tile *says* is `DeckhandKit/Dashboard/`, where `just test` can
   prove every sentence; the order they are read in is the order they are written, because a grid's
   reading order is a layout fact rather than a rule anything can check.
+- **A sheet does not remove the view that presented it, so the grid reads itself again on the way
+  back.** `DashboardView` fills every square from one `load()`, and a sheet leaves the presenter
+  in the hierarchy — so `.task` never fires a second time and every tile went stale the moment its
+  own sheet changed the thing it counts. Answer a slip and SLIPS kept the old count; add the alias
+  that fixes "web" and ON THE WAY IN still said "Nothing changed", which is that square's whole
+  demo path ending on the sentence it was rewritten to stop telling. One `onDismiss` on the
+  `$opened` sheet covers all twelve. Three things make it work and each was a separate bug.
+  `load()` used to latch on an `asked` flag and could only run once, so adding `onDismiss` alone
+  changed *nothing* — the latch had to go first. Every assignment replaces a value and never
+  clears one, so a failed re-read leaves a square saying the last true thing instead of falling to
+  a zero that reads as a fact. And `AppModel.context` answers a refused request with an **empty**
+  `ContextDocs` rather than nil, so a plain `docs = await tree` would swap fifteen CLAUDE.md files
+  for "No CLAUDE.md" on any re-read that failed; an empty tree is believed only the first time.
+  The `$doc` sheet needs none of this — it is declared *inside* the context sheet, so closing a
+  document returns to the tree and the reload fires when the tree closes.
 - **A tile is as tall as what it says, and no taller.** They were literal squares once, with the
   eyebrow pinned to the top and the number to the bottom and a third of each card empty between
   them — which reads as a card that failed to load, and cost so much room that two and a half rows
