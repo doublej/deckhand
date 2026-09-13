@@ -128,6 +128,7 @@ struct Swapping: View {
                       hint: "Swapped on every clip, in every session and the manager alike.",
                       rows: $aliases,
                       say: say)
+                NotKept(rows: aliases)
                 // Only the rows with something to say: the rest are already on screen in the
                 // editor above, and printing all of them twice makes the warned one harder to
                 // find rather than easier.

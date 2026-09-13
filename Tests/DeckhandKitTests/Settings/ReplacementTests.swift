@@ -131,6 +131,76 @@ struct ReplacementTests {
         #expect(!Replacements.tally(aliased).isEmpty)
     }
 
+    // MARK: - rows the Mac will not keep
+
+    @Test("a fresh empty row is not a mistake and says nothing")
+    func freshRowIsSilent() {
+        #expect(Replacements.dropped([["", ""]]).isEmpty)
+        #expect(Replacements.dropped([[" ", "  "]]).isEmpty)
+    }
+
+    @Test("a row with a meaning but nothing to match is named by its meaning")
+    func blankLeftIsNamed() {
+        let gone = Replacements.dropped([["we", "web"], ["", "deckhand"]])
+        #expect(gone.map(\.row) == [1])
+        #expect(gone[0].why.contains(#""deckhand""#))
+        #expect(gone[0].why.contains("nothing on its left"))
+    }
+
+    @Test("the earlier of two rows for one word goes, and the later answer wins")
+    func duplicateLosesTheEarlier() {
+        let gone = Replacements.dropped([["we", "first"], ["other", "x"], ["we", "second"]])
+        // Row 2 survives — marking it dropped would be false, its answer is the one that runs.
+        #expect(gone.map(\.row) == [0])
+        #expect(gone[0].why.contains(#""we" is aliased again below"#))
+    }
+
+    @Test("case is ignored deciding a duplicate, the way the Mac decides it")
+    func duplicateIgnoresCase() {
+        #expect(Replacements.dropped([["We", "a"], ["we", "b"]]).map(\.row) == [0])
+    }
+
+    @Test("a list the Mac keeps whole drops nothing")
+    func nothingDropped() {
+        #expect(Replacements.dropped([["we", "web"], ["deck hand", "deckhand"]]).isEmpty)
+    }
+
+    /// The two halves have to agree: a row that is dropped is not a rule in force, and a rule in
+    /// force is not a dropped row. They are worked out separately and would drift silently.
+    @Test("what is dropped and what is in force do not overlap")
+    func droppedIsNotInForce() {
+        let list = [["we", "first"], ["", "orphan"], ["we", "second"]]
+        let inForce = Replacements.inForce(aliases: list, chain: [], known: [])[0].rules
+        #expect(Replacements.dropped(list).map(\.row) == [0, 1])
+        // One rule, not two: the Mac keys its list on the heard side, so a word written twice is
+        // one alias written twice. Listing both would show a rule that cannot exist — and worse,
+        // `follow` would mark the *surviving* answer as shadowed by the one being thrown away,
+        // which is the truth exactly inverted.
+        #expect(inForce.map(\.meant) == ["second"])
+        #expect(inForce[0].follow == nil)
+    }
+
+    @Test("a duplicate keeps the earlier row's place and the later row's answer")
+    func duplicateKeepsPlaceAndLaterAnswer() {
+        let list = [["we", "first"], ["deck hand", "deckhand"], ["WE", "second"]]
+        let inForce = Replacements.inForce(aliases: list, chain: [], known: [])[0].rules
+        // Position of the first, answer of the last — `aliases._kept`'s rule, so that correcting
+        // an alias does not move it to the bottom of the list.
+        #expect(inForce.map(\.heard) == ["WE", "deck hand"])
+        #expect(inForce.map(\.meant) == ["second", "deckhand"])
+    }
+
+    /// The chain is not deduplicated and must not be: `aliases._pairs` keeps both rows for a
+    /// filter's `pairs`, so both fire, the second on the first's output. Only the Mac's own list
+    /// is keyed by word.
+    @Test("a filter's pairs are not deduplicated the way aliases are")
+    func chainKeepsBothRows() {
+        let stages = Replacements.inForce(aliases: [],
+                                          chain: [step([["we", "first"], ["we", "second"]])],
+                                          known: [words])
+        #expect(stages[1].rules.map(\.meant) == ["first", "second"])
+    }
+
     // MARK: - hints
 
     @Test("hints mirror the Mac: alias meanings, the name split, the last of the folder")

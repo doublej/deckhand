@@ -117,7 +117,7 @@ public enum Replacements {
                             title: "This Mac's aliases",
                             detail: "Every session, and the manager. Swapped the moment utt "
                             + "answers, before any of the steps below.",
-                            doing: .swaps(rows(aliases, from: .aliases)))]
+                            doing: .swaps(rows(keptAliases(aliases), from: .aliases)))]
         for (place, step) in chain.enumerated() where step.isOn {
             stages.append(stage(step, place: place, known: known))
         }

@@ -189,6 +189,9 @@ struct SettingsView: View {
             Pairs(label: "Heard, and meant",
                   hint: "Swapped on every clip, in every session and the manager alike.",
                   rows: $aliases)
+            // This page writes on the way out too, so a row the Mac will not keep goes quietly
+            // and is simply absent the next time the list is read. Same view as `Swapping`.
+            NotKept(rows: aliases)
         }
     }
 
