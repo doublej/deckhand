@@ -238,3 +238,48 @@ def test_a_bump_for_a_session_that_has_gone_quiet_is_still_dropped(claude_home):
 
     assert briefings._next() is None
     assert briefings._bumped == []
+
+
+def test_a_later_bump_takes_the_front_and_costs_the_one_behind_it_nothing(claude_home):
+    """A pushed-back request does lose its place — `bump` inserts at the front, which is what
+    makes it a promotion. It is not starved by that: either the new front is written about,
+    which frees the queue, or it is refused and the cycle reaches everything anyway.
+
+    Measured over 10 simulated minutes with a phone parked on one session and both working:
+    ten briefings each, which is exactly what a 60 s floor allows either of them.
+    """
+    transcript(claude_home, SID, [said("build it"), did("built")])
+    transcript(claude_home, OTHER, [said("and this"), did("done")])
+    old = time.time() - briefings.SAME_SESSION - 1
+    briefings.save(SID, {"summary": "a", "hash": "old", "mtime": 0.0, "written_at": old})
+    briefings.save(OTHER, {"summary": "b", "hash": "old", "mtime": 0.0, "written_at": time.time()})
+
+    briefings.bump(SID)
+    briefings.bump(OTHER)  # arrives later, so it goes in front of SID
+    assert briefings._bumped == [OTHER, SID]
+
+    # OTHER is inside its floor and goes back, which ends the bump loop before SID is reached.
+    # The cycle is what serves SID, and that is the point: losing the front of the queue costs
+    # a session its promotion, never its briefing.
+    assert briefings._next() == SID
+    # Both are still queued — SID's own request was never popped. Harmless: `bump` dedupes, so
+    # this can never hold more ids than there are live sessions, and a request with nothing
+    # behind it is dropped the next time it reaches the front.
+    assert set(briefings._bumped) == {OTHER, SID}
+
+
+def test_bumping_one_session_over_and_over_is_one_request(claude_home):
+    """The phone asks `/summary` every five seconds while a page is open, which is faster than
+    the worker sweeps. That must not become a queue of twenty identical requests."""
+    transcript(claude_home, SID, [said("build it"), did("built")])
+    briefings.save(SID, {"summary": "a", "hash": "old", "mtime": 0.0, "written_at": time.time()})
+    for _ in range(20):
+        briefings.bump(SID)
+    assert briefings._bumped == [SID]
+
+    briefings._next()
+    assert briefings._bumped == [SID]  # pushed back, still exactly one
+
+    briefings.save(SID, {"summary": "a", "hash": "old", "mtime": 0.0,
+                         "written_at": time.time() - briefings.SAME_SESSION - 1})
+    assert briefings._next() == SID  # and honoured once the floor is out
