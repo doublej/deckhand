@@ -1,0 +1,24 @@
+# Over-the-air install for Deckhand — the way onto a phone that is not on this network.
+#
+# iOS fetches `manifest.plist` itself, from Safari's installer rather than from the page, and it
+# is fussy about the two content types below: an empty one on the manifest reads to the phone as
+# "cannot connect to install.jurrejan.com", which says nothing about what is wrong. Caddy has no
+# MIME entry for either extension, so they are spelled out.
+#
+# Nothing here is secret — the ipa holds the app binary and no token; the pairing token is typed
+# on the phone. It is still meant to be short-lived: `cdy rm install` once it has been installed.
+install.jurrejan.com {
+	import default_site
+	root * /var/www/install.jurrejan.com
+	@manifest path *.plist
+	header @manifest Content-Type "text/xml; charset=utf-8"
+	@package path *.ipa
+	header @package Content-Type "application/octet-stream"
+	# Never cached: this hostname exists to serve a *new* build, and a phone holding yesterday's
+	# manifest would install yesterday's app and report success.
+	header Cache-Control "no-store"
+	@static {
+		path *.png *.jpg *.jpeg *.gif *.svg *.ico
+	}
+	header @static Cache-Control "public, max-age=3600"
+}

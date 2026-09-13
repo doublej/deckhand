@@ -376,6 +376,36 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   starts the app already paired; the model writes launch-argument settings back to defaults, so
   the pairing survives a cold start. The `--` matters: devicectl eats the flags without it.
 
+### Installing on a phone that is somewhere else
+
+`just release` — archive, package, publish to `install.jurrejan.com`, and the phone installs it
+from Safari. `just unpublish-release` takes it down again.
+
+**`just device` cannot reach a phone off this network and no VPN fixes it.** Xcode finds a
+wireless device over Bonjour, which is link-local multicast; a routed tunnel carries none, and
+even reflected it would not help, because iOS advertises `_remotepairing._tcp` on its physical
+link and never into a `utun`. Measured on 2026-09-13 with the phone on the house WireGuard:
+`devicectl` still said `unavailable` and a 6-second browse found nothing. That road is closed.
+
+**The ordinary development signature installs over the air, and that is the surprise.** Apple
+documents this as needing an Ad Hoc or Enterprise profile, and the whole apparatus for one was
+built here first — a distribution certificate, which needs the developer portal, which needs an
+account, which on a locked Mac needs an App Store Connect key. None of it turned out to be
+necessary. Measured on iOS 26: a Release build signed `iOS Team Provisioning Profile:
+dev.jurrejan.deckhand`, served with a manifest, installed. Being in the profile's device list
+appears to be the whole of what the installer checks.
+
+Three things follow, all of them better than the Ad Hoc build would have been: `aps-environment`
+stays `development`, so the daemon goes on pushing to the sandbox APNs host and the Lock Screen
+card keeps working; `get-task-allow` stays true, so a debugger still attaches; and nothing
+expires before the profile does. The one real limit is that device list — a phone that has never
+had a build from this Mac is not in it, and adding one needs Xcode at an unlocked screen.
+
+**The manifest's content type is not optional.** Caddy has no MIME entry for `.plist`, and iOS
+reports an empty one as "cannot connect to install.jurrejan.com" — a sentence about the wrong
+thing entirely. `cdy site` regenerates the vhost config and drops it, which is why
+`publish-release` writes `tools/install.caddy` back every time rather than once.
+
 ## Verification
 
 `just build` and `just test`; `just ui-test` drives the simulator against a daemon started with

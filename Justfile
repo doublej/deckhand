@@ -41,67 +41,75 @@ sync-apns:
     @chmod 600 ~/Library/Application\ Support/Deckhand/apns.p8 ~/Library/Application\ Support/Deckhand/apns-key-id
     @echo 'push key written; restart the daemon to pick it up'
 
-# Materialise the App Store Connect signing key, the way sync-apns does the push key.
-#
-# An API key rather than an Apple ID, and that is the whole reason this recipe exists: signing a
-# build needs the developer portal, the portal needs authentication, and the only authentication
-# that works on a Mac nobody is sitting at is one with no password and no 2FA round trip. Xcode's
-# own account sign-in needs a dialog on an unlocked screen, which is exactly what is missing when
-# this is wanted. Revocable on its own, too — it is not the account.
-
-# Materialise the App Store Connect signing key out of 1Password.
-[group('setup')]
-sync-signing:
-    @mkdir -p ~/.appstoreconnect/private_keys
-    @onenv get deckhand ASC_KEY > ~/.appstoreconnect/private_keys/AuthKey_$(onenv get deckhand ASC_KEY_ID).p8
-    @chmod 600 ~/.appstoreconnect/private_keys/*.p8
-    @echo 'signing key written; `just release` can now export'
-
-# Build an Ad Hoc ipa and publish it where a phone anywhere can install it.
-#
 # The way onto a phone that is not on this network. `just device` needs the phone discoverable
-# over Bonjour, which no VPN can arrange — iOS advertises the pairing service on its physical
-# link only — so the alternative is not a better tunnel, it is a different kind of build: one
-# signed for distribution and fetched over HTTPS by the phone itself.
+# over Bonjour, and no VPN can arrange that — iOS advertises the pairing service on its physical
+# link only, never into a tunnel. So the alternative is not a better tunnel: it is the phone
+# fetching the build over HTTPS and installing it itself.
 #
-# Two things travel with that choice and are not incidental. An Ad Hoc build signs
-# `aps-environment: production`, so the daemon must push to the production APNs host or the Lock
-# Screen card goes quiet. And it drops `get-task-allow`, so no debugger attaches to it.
+# **It is the ordinary development signature, and that is the surprise.** Apple documents
+# over-the-air install as needing an Ad Hoc or Enterprise profile, and the whole Ad Hoc apparatus
+# was built here first: a distribution certificate, which needs the developer portal, which needs
+# an account, which on a Mac nobody is sitting at needs an App Store Connect key. None of it is
+# necessary. Measured on 2026-09-13, iOS 26, a Release build signed with `iOS Team Provisioning
+# Profile: dev.jurrejan.deckhand`: it installed. The device is in the profile, which appears to be
+# the whole of what the installer checks.
+#
+# Three things fall out of that and all three are better than the Ad Hoc build would have been:
+# `aps-environment` stays `development`, so the daemon goes on pushing to the sandbox APNs host
+# and the Lock Screen card keeps working; `get-task-allow` stays true, so a debugger still
+# attaches; and nothing expires before the profile does, 2027-09-09.
+#
+# The one real limit is the profile's device list. A phone that has never had a build from this
+# Mac is not in it, and adding one needs Xcode at an unlocked screen.
 
-# Build an Ad Hoc ipa and publish it where a phone anywhere can install it.
+# Build and publish a build a phone anywhere can install.
 [group('build')]
 release: generate
     #!/usr/bin/env zsh
     set -e
     root={{ justfile_directory() }}/.build/adhoc
-    key=$(ls ~/.appstoreconnect/private_keys/AuthKey_*.p8 2>/dev/null | head -1)
-    if [[ -z "$key" ]]; then echo 'no signing key — run: just sync-signing'; exit 1; fi
     rm -rf $root && mkdir -p $root
     xcodebuild {{ project }} -configuration Release -destination 'generic/platform=iOS' \
         -archivePath $root/Deckhand.xcarchive -allowProvisioningUpdates archive
-    xcodebuild -exportArchive -archivePath $root/Deckhand.xcarchive -exportPath $root/export \
-        -exportOptionsPlist {{ justfile_directory() }}/ExportOptions.plist -allowProvisioningUpdates \
-        -authenticationKeyPath $key \
-        -authenticationKeyID $(basename $key .p8 | sed 's/AuthKey_//') \
-        -authenticationKeyIssuerID $(onenv get deckhand ASC_ISSUER_ID)
     just publish-release
 
-# Put the exported build behind install.jurrejan.com. Split from `release` so a failed publish
-# can be retried without paying for the archive again.
+# Split from `release` so a failed publish can be retried without paying for the archive again,
+# and so a build already made can be put back up after `just unpublish-release`.
 
-# Put the exported build behind install.jurrejan.com.
+# Package the archive and put it behind install.jurrejan.com.
 [group('build')]
 publish-release:
     #!/usr/bin/env zsh
     set -e
     root={{ justfile_directory() }}/.build/adhoc
-    site=$root/site && rm -rf $site && mkdir -p $site
-    cp $root/export/Deckhand.ipa $root/export/manifest.plist $site/
-    sips -Z 57 {{ justfile_directory() }}/deckhand/Assets.xcassets/AppIcon.appiconset/icon.png --out $site/icon-57.png
-    sips -Z 512 {{ justfile_directory() }}/deckhand/Assets.xcassets/AppIcon.appiconset/icon.png --out $site/icon-512.png
-    cp {{ justfile_directory() }}/tools/install-page.html $site/index.html
-    cdy site install $site
-    @echo 'open https://install.jurrejan.com in Safari on the phone'
+    app=$root/Deckhand.xcarchive/Products/Applications/Deckhand.app
+    if [[ ! -d $app ]]; then echo 'nothing archived — run: just release'; exit 1; fi
+    rm -rf $root/Payload $root/site && mkdir -p $root/Payload $root/site
+    cp -R $app $root/Payload/
+    # `zip` from the archive root, because an ipa is a zip whose only top-level entry is Payload.
+    cd $root && zip -qry site/Deckhand.ipa Payload && cd {{ justfile_directory() }}
+    version=$(plutil -extract CFBundleShortVersionString raw -o - $app/Info.plist)
+    sed "s|__VERSION__|$version|" {{ justfile_directory() }}/tools/manifest.plist > $root/site/manifest.plist
+    sips -Z 57 {{ justfile_directory() }}/deckhand/Assets.xcassets/AppIcon.appiconset/icon.png --out $root/site/icon-57.png > /dev/null
+    sips -Z 512 {{ justfile_directory() }}/deckhand/Assets.xcassets/AppIcon.appiconset/icon.png --out $root/site/icon-512.png > /dev/null
+    cp {{ justfile_directory() }}/tools/install-page.html $root/site/index.html
+    # --force because this hostname exists to be republished: every build lands on the same one.
+    cdy site install $root/site --force
+    # And then the config back, because `cdy site` regenerates it and the generated one serves
+    # `manifest.plist` with no content type at all. iOS reports that as "cannot connect to
+    # install.jurrejan.com" — a sentence about the wrong thing entirely, and the reason this line
+    # is not optional. EDITOR is a copy so the edit goes through cdy's own validate-and-rollback.
+    EDITOR="cp {{ justfile_directory() }}/tools/install.caddy" cdy edit install
+    echo 'open https://install.jurrejan.com in Safari on the phone'
+
+# The ipa is readable by anyone who knows the hostname. It carries the app binary and no secrets
+# — the pairing token is typed on the phone — but there is no reason to leave it up between
+# builds either.
+
+# Take the install page down again.
+[group('build')]
+unpublish-release:
+    cdy rm install --force
 
 # Follow the daemon log (the same file Console.app shows under ~/Library/Logs).
 [group('develop')]
