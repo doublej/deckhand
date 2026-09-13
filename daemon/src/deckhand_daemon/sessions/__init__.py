@@ -7,7 +7,14 @@ Three files, one surface. `live.py` is the join that makes the whole app work â€
 Everything below is re-exported so callers read `sessions.live_sessions()` as they always have.
 """
 
-from .live import Session, focus, live_sessions, sessions_dir, succeeded_by
+from .live import (
+    Session,
+    focus,
+    forget_listing,
+    live_sessions,
+    sessions_dir,
+    succeeded_by,
+)
 from .panes import Pane
 from .panes import forget as forget_panes
 from .panes import status as iterm_status
@@ -24,6 +31,6 @@ from .usage import (
 
 __all__ = [
     "DEFAULT_WINDOW", "SYNTHETIC", "USAGE_WINDOW", "WEEK_CACHE", "LastRequest", "Pane",
-    "Session", "context_window", "focus", "forget_panes", "iterm_status", "last_request",
-    "live_sessions", "sessions_dir", "succeeded_by", "week_usage",
+    "Session", "context_window", "focus", "forget_listing", "forget_panes", "iterm_status",
+    "last_request", "live_sessions", "sessions_dir", "succeeded_by", "week_usage",
 ]

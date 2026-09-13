@@ -24,6 +24,8 @@ import json
 import os
 import subprocess
 import sys
+import threading
+import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -60,17 +62,29 @@ class Session:
         return d
 
 
-def _processes() -> dict[int, str]:
-    """pid -> tty short name (`ttys014`), for every running claude process.
+def _processes(pids: set[int]) -> dict[int, str]:
+    """pid -> tty short name (`ttys014`), for those of `pids` still running claude.
+
+    Asked about the pids that have a session record rather than about the whole machine, which
+    is all that was ever read out of it. `command=` makes `ps` pull each process's entire argv
+    out of the kernel one by one: over the 1254 processes on this Mac that measured 1.8-3.5 s,
+    paid on every call — and `live_sessions` is on nearly every route, so it was most of what
+    `/sessions` cost. The eight pids with a record answer in 0.2 s and the join is unchanged.
+
+    `check=False` because a record outliving its process is the normal case and `ps -p` exits 1
+    when it cannot find one of them; the pids it did find are on stdout either way.
 
     Empty on Windows, which has neither `ps` nor a tty: there, `_still_running` answers per
     record instead, and a tty of "" is right rather than missing — nothing on that machine has
     a pane for it to name.
     """
-    if sys.platform == "win32":
+    if sys.platform == "win32" or not pids:
         return {}
     out = subprocess.run(
-        ["ps", "-eo", "pid=,tty=,command="], capture_output=True, text=True, check=True
+        ["ps", "-o", "pid=,tty=,command=", "-p", ",".join(str(p) for p in sorted(pids))],
+        capture_output=True,
+        text=True,
+        check=False,
     ).stdout
     procs: dict[int, str] = {}
     for line in out.splitlines():
@@ -182,20 +196,96 @@ def succeeded_by(session_id: str) -> str:
     return _current.get(pid, "") if pid is not None else ""
 
 
-def live_sessions(iterm_only: bool = True) -> list[Session]:
-    """Live interactive Claude sessions, most recently active first."""
-    procs = _processes()
-    found_panes = panes.lookup()
-    machine = fleet.here()  # every record under this root belongs to the machine we are on
-    found: list[Session] = []
+def _records() -> list[dict]:
+    """Every interactive session record on this Mac, whether or not its pid is still running.
+
+    Read before `ps` rather than alongside it, because the pids in them are what `ps` is asked
+    about. An unreadable file is skipped: Claude Code writes these while the daemon reads them.
+    """
+    found: list[dict] = []
     for path in sessions_dir().glob("*.json"):
         try:
             rec = json.loads(path.read_text())
         except (json.JSONDecodeError, OSError):
             continue
-        pid = rec.get("pid")
-        if not isinstance(pid, int) or rec.get("kind") != "interactive":
-            continue
+        if isinstance(rec.get("pid"), int) and rec.get("kind") == "interactive":
+            found.append(rec)
+    return found
+
+
+#: The whole listing, and whether iTerm answered when it was built. Cached because building it
+#: costs two subprocesses — `ps` for the pid join, `it2` for the panes — and nearly every route
+#: in the daemon asks for it. Without this the phone paid for both on every poll of every route:
+#: the session page alone re-reads turns every 1.1 s, the rail every 4 s and the deck every 6 s,
+#: each arriving as its own threadpool thread sitting on a subprocess. Forty of those is the
+#: whole pool, and then everything queues behind them, `/health` included.
+LISTING_TTL = 2.0
+_listing: tuple[float, list[Session], bool] = (0.0, [], False)
+#: One thread builds, the rest take what it built. The lock is not an optimisation on top of the
+#: cache, it is most of the point: a bare TTL lets forty threads miss together and run forty
+#: `ps` calls, which is the pile-up this exists to stop happening at all.
+_building = threading.Lock()
+
+
+def forget_listing() -> None:
+    """Drop the cached listing, so the next call reads the records and asks `ps` again.
+
+    For the callers that know it is stale rather than merely old — a session started a second
+    ago cannot be in a listing built before it existed, and `projects.starting` is sitting in a
+    loop waiting for exactly that. Same reason `panes.forget` exists, one layer up.
+    """
+    global _listing
+    _listing = (0.0, [], False)
+
+
+def _listed() -> tuple[list[Session], bool]:
+    """The cached listing, rebuilt when it is older than `LISTING_TTL`."""
+    global _listing
+    built_at, found, answered = _listing
+    if time.monotonic() - built_at < LISTING_TTL:
+        return found, answered
+    with _building:
+        # Somebody may have built it while this thread waited for the lock. Taking theirs is
+        # the whole reason for waiting.
+        built_at, found, answered = _listing
+        if time.monotonic() - built_at < LISTING_TTL:
+            return found, answered
+        found, answered = _build()
+        _listing = (time.monotonic(), found, answered)
+    return found, answered
+
+
+def live_sessions(iterm_only: bool = True) -> list[Session]:
+    """Live interactive Claude sessions, most recently active first.
+
+    The pane filter is applied here rather than inside `_build`, so one cached listing answers
+    both callers. `iterm_only` drops the sessions iTerm has no pane for, and only while iTerm
+    answered at all: a lookup that came back with nothing is iTerm being unavailable, which
+    keeps every session rather than hiding all of them.
+    """
+    found, answered = _listed()
+    if iterm_only and answered:
+        return [s for s in found if s.pane is not None]
+    # A new list every time, because the one behind it is now shared between every caller and
+    # a caller that sorted it in place would quietly reorder the rail for everybody.
+    return list(found)
+
+
+def _build() -> tuple[list[Session], bool]:
+    """Every live session with its pane attached, and whether iTerm answered at all.
+
+    Built unfiltered on purpose. The pane filter used to run inside this loop, which meant a
+    live session iTerm had no pane for was missing from `found` — and `found` is what the three
+    maps below are pruned against, so that session's own `/clear` tracking was dropped while it
+    was still running. Filtering after the fact is both the shareable answer and the right one.
+    """
+    records = _records()
+    procs = _processes({rec["pid"] for rec in records})
+    found_panes = panes.lookup()
+    machine = fleet.here()  # every record under this root belongs to the machine we are on
+    found: list[Session] = []
+    for rec in records:
+        pid = rec["pid"]
         if not _still_running(pid, procs, rec.get("procStart", "")):
             continue
         session_id = rec.get("sessionId", "")
@@ -205,8 +295,6 @@ def live_sessions(iterm_only: bool = True) -> list[Session]:
             _current[pid] = session_id
         tty = procs.get(pid, "")
         pane = found_panes.get(tty)
-        if pane is None and iterm_only and found_panes:
-            continue
         status, updated_at = _reading(rec, session_id)
         found.append(
             Session(
@@ -230,7 +318,7 @@ def live_sessions(iterm_only: bool = True) -> list[Session]:
             del _retired[old]
     _frozen.intersection_update(s.session_id for s in found)
     found.sort(key=lambda s: s.updated_at, reverse=True)
-    return [s for s in found if s.session_id]
+    return [s for s in found if s.session_id], bool(found_panes)
 
 
 def focus(session: Session) -> bool:

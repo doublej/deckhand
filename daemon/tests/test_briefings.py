@@ -107,6 +107,29 @@ def test_the_last_briefing_survives_a_restart(claude_home):
     assert kept["writtenAt"] == 1.0
 
 
+def test_stale_is_this_session_and_not_a_walk_of_the_whole_queue(claude_home):
+    """`stale` used to ask whether this id was in the queue, which listed every live session and
+    read every one of their transcripts — once per session, from a route that calls this once
+    per session. Same answer, one session's worth of work: nothing has happened, so nothing is
+    on its way; then real work lands and a newer briefing is owed.
+    """
+    path = transcript(claude_home, SID, [said("build it"), did("built")])
+    briefings.save(SID, {
+        "summary": "Built it", "hash": briefings._hash(SID), "mtime": path.stat().st_mtime,
+    })
+
+    assert briefings.of(SID)["stale"] is False
+
+    path.write_text(path.read_text() + json.dumps(did("and shipped it")) + "\n")
+
+    assert briefings.of(SID)["stale"] is True
+
+
+def test_a_briefing_for_a_session_that_is_gone_is_not_on_its_way(claude_home):
+    """The store outlives the session, and a briefing nothing will ever write is not pending."""
+    assert briefings.of("dddd1111-2222-3333-4444-555566667777")["stale"] is False
+
+
 def test_a_session_never_written_about_says_so(claude_home):
     kept = briefings.of("cccc1111-2222-3333-4444-555566667777")
 

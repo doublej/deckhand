@@ -246,7 +246,12 @@ replacement list cannot be written from here and have it apply to Deckhand's cli
   (Claude Code appends plenty — a mode change, an attachment — that nobody wants a briefing
   about). Reading `/sessions/{id}/summary` never waits for a model: it answers off disk and
   **bumps** that session to the front of the queue. `GET /briefings` hands back every live
-  session's last briefing in one call, which is what makes a cold start whole.
+  session's last briefing in one call, which is what makes a cold start whole — but the phone
+  **polls** it, every 6 s from the deck and 12 s from the rail, so it is a hot route and not
+  only a first-sweep one. It cost 19 s while `briefings.of` answered `stale` by walking the
+  whole queue: a request outliving its own poll interval fills FastAPI's threadpool, and then
+  every route queues behind it, `/health` included. Anything added here is paid per session
+  per six seconds.
 - **The task list is the Mac's, not the model's.** It lives in `tasks/<sessionId>.json` and the
   summariser changes it only through three in-process SDK tools (`add_task`, `set_task_state`,
   `drop_task`) bound to one session's file. Written as part of the briefing it was a *new* list

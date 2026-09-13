@@ -69,7 +69,13 @@ def of(session_id: str) -> dict:
         "writtenAt": kept.get("written_at"),
         # Whether a newer one is on its way. Not "wrong" — the briefing below it is still the
         # last true thing said about this session.
-        "stale": session_id in _queue(),
+        #
+        # One session's own answer, never the whole queue's. Asking whether this id was in the
+        # queue meant walking every live session to answer a boolean about one of them, and
+        # `/briefings` calls this once per session: N listings and N² transcript reads for a
+        # route the phone opens cold. `_due` is the same fact — the queue is the live sessions
+        # it is true of — and liveness is already settled by both callers.
+        "stale": _due(session_id),
     }
 
 
@@ -115,13 +121,6 @@ _wake = asyncio.Event()
 # Where the round-robin got to, so a session at the end of the list is not starved by one at
 # the start that keeps changing.
 _cursor = 0
-
-
-def _queue() -> list[str]:
-    """Everything owed a briefing right now, the bumped ones first. Also what `stale` reads."""
-    live = [s.session_id for s in sessions.live_sessions()]
-    owed = [s for s in live if _due(s)]
-    return [s for s in _bumped if s in owed] + [s for s in owed if s not in _bumped]
 
 
 def _next() -> str | None:

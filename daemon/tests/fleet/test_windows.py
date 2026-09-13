@@ -46,7 +46,7 @@ class TestWhetherAPidIsStillThatSession:
         monkeypatch.setattr(live.sys, "platform", "win32")
         monkeypatch.setattr(live.subprocess, "run", lambda *a, **k: pytest.fail("ran ps"))
 
-        assert live._processes() == {}
+        assert live._processes({44736}) == {}
 
 
 class TestWhichDoorTheFramesGoThrough:

@@ -1,4 +1,5 @@
 import json
+import time
 from datetime import UTC, datetime
 
 import pytest
@@ -25,6 +26,79 @@ def test_sessions_without_a_pane_are_dropped_while_iterm_answers(claude_home, mo
         lambda: {"ttys014": sessions.Pane("ITERM-A", "win-1", "180", "◐ warm-okapi")},
     )
     assert [s.name for s in sessions.live_sessions()] == ["warm-okapi"]
+
+
+def test_ps_is_asked_only_about_the_pids_that_have_a_record(claude_home, monkeypatch):
+    """Narrowing what `ps` is asked must not narrow the join it answers.
+
+    `ps -eo pid=,tty=,command=` pulls every process's whole argv out of the kernel — 1.8-3.5 s
+    over the 1254 processes on this Mac, paid on every listing. Only the pids with a session
+    record were ever read out of it, so those are what it is asked about now; the dead one is
+    still among them, because being asked and being alive are what this call tells apart.
+    """
+    asked: list[set[int]] = []
+
+    def watched(pids):
+        asked.append(pids)
+        return {4242: "ttys014", 4243: "ttys015"}
+
+    monkeypatch.setattr(sessions.live, "_processes", watched)
+    listed = sessions.live_sessions()
+
+    assert asked == [{4242, 4243, 9999}]
+    assert [s.name for s in listed] == ["warm-okapi", "cold-otter"]
+
+
+def test_one_listing_is_shared_rather_than_rebuilt_for_every_route(claude_home, monkeypatch):
+    """Nearly every route in the daemon asks for this, and building it costs two subprocesses.
+
+    The phone polls several of them at once — turns every 1.1 s, the rail every 4 s, the deck
+    every 6 s — and each arrived as its own threadpool thread sitting on its own `ps`. Forty of
+    those is the whole pool, and then every route queues, `/health` with them.
+    """
+    monkeypatch.setattr(sessions.live, "LISTING_TTL", 30.0)
+    asked: list[set[int]] = []
+
+    def watched(pids):
+        asked.append(pids)
+        return {4242: "ttys014", 4243: "ttys015"}
+
+    monkeypatch.setattr(sessions.live, "_processes", watched)
+
+    first = sessions.live_sessions()
+    again = sessions.live_sessions()
+    both = sessions.live_sessions(iterm_only=False)
+
+    assert len(asked) == 1  # three routes' worth of listing, one `ps`
+    assert [s.name for s in again] == [s.name for s in first]
+    assert [s.name for s in both] == [s.name for s in first]
+
+
+def test_the_shared_listing_expires_on_its_own(claude_home, monkeypatch):
+    """A cache over the pid join has to be a window and not a memory.
+
+    Nothing calls `forget_listing` on the polling path, so expiry is the only thing that lets a
+    session that has stopped running disappear from the phone — and that join is what the whole
+    repo hangs off. The window is shorter than every poll the app makes.
+    """
+    monkeypatch.setattr(sessions.live, "LISTING_TTL", 0.05)
+    assert [s.name for s in sessions.live_sessions()] == ["warm-okapi", "cold-otter"]
+
+    monkeypatch.setattr(sessions.live, "_processes", lambda pids: {4243: "ttys015"})
+    time.sleep(0.06)
+
+    assert [s.name for s in sessions.live_sessions()] == ["cold-otter"]
+
+
+def test_a_caller_waiting_on_a_new_session_can_make_it_ask_again(claude_home, monkeypatch):
+    """`projects.starting` polls for a session that did not exist when the listing was built."""
+    monkeypatch.setattr(sessions.live, "LISTING_TTL", 30.0)
+    sessions.live_sessions()
+    _clear(claude_home, 4242, "dddd1111-2222-3333-4444-555566667777")
+
+    sessions.forget_listing()
+
+    assert sessions.live_sessions()[0].session_id == "dddd1111-2222-3333-4444-555566667777"
 
 
 def test_every_session_survives_when_iterm_is_unavailable(claude_home, monkeypatch):
@@ -58,7 +132,7 @@ def test_an_id_from_a_pid_that_has_gone_resolves_to_nothing(claude_home, monkeyp
     was = sessions.live_sessions()[0].session_id
     _clear(claude_home, 4242, "dddd1111-2222-3333-4444-555566667777")
     sessions.live_sessions()
-    monkeypatch.setattr(sessions.live, "_processes", lambda: {4243: "ttys015"})
+    monkeypatch.setattr(sessions.live, "_processes", lambda pids: {4243: "ttys015"})
     sessions.live_sessions()
     assert sessions.succeeded_by(was) == ""
 

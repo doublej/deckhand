@@ -61,13 +61,20 @@ def claude_home(tmp_path, monkeypatch):
             )
         )
     monkeypatch.setattr(sessions.panes, "_pane_cache", (0.0, {}))
+    # The listing is cached for a couple of seconds in the daemon, which every test that moves
+    # a record and looks again would have to sleep through. Off here; `test_sessions` turns it
+    # back on for the two tests that are about the cache itself.
+    monkeypatch.setattr(sessions.live, "LISTING_TTL", 0.0)
+    monkeypatch.setattr(sessions.live, "_listing", (0.0, [], False))
     # Which conversation is running under which pid outlives a single listing, so it outlives a
     # single test too unless it is blanked here.
     monkeypatch.setattr(sessions.live, "_current", {})
     monkeypatch.setattr(sessions.live, "_retired", {})
     monkeypatch.setenv("DECKHAND_CLAUDE_HOME", str(home))
     monkeypatch.setenv("DECKHAND_DATA_DIR", str(tmp_path / "data"))
-    monkeypatch.setattr(sessions.live, "_processes", lambda: {4242: "ttys014", 4243: "ttys015"})
+    monkeypatch.setattr(
+        sessions.live, "_processes", lambda pids: {4242: "ttys014", 4243: "ttys015"}
+    )
     monkeypatch.setattr(
         sessions.panes,
         "lookup",

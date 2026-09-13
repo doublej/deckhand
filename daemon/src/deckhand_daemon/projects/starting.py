@@ -66,7 +66,7 @@ import time
 from pathlib import Path
 
 from ..log import log
-from ..sessions import Session, forget_panes, live_sessions, sessions_dir
+from ..sessions import Session, forget_listing, forget_panes, live_sessions, sessions_dir
 from ..settings import wants
 
 IT2_TIMEOUT = 15
@@ -253,6 +253,10 @@ def settled(folder: Path, known: set[str]) -> tuple[Session | None, str | None]:
     deadline = time.monotonic() + SETTLE
     while time.monotonic() < deadline:
         time.sleep(POLL)
+        # The listing is cached for a couple of seconds, and this loop is waiting for a session
+        # that did not exist when the cached one was built — the one caller that has to ask
+        # again rather than be told what was true a moment ago.
+        forget_listing()
         for session in live_sessions(iterm_only=False):
             if session.session_id in known or not session.cwd:
                 continue
@@ -273,6 +277,7 @@ def _with_pane(session: Session) -> Session:
     if session.pane is not None:
         return session
     forget_panes()
+    forget_listing()
     for fresh in live_sessions(iterm_only=False):
         if fresh.session_id == session.session_id:
             return fresh
