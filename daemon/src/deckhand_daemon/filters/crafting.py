@@ -75,10 +75,13 @@ async def _run(prompt: Prompt, target: str) -> tuple[str | None, str | None]:
             skill=SKILL, target=target, cwd=prompt.cwd, name=prompt.session_name
         ),
         # Read alone. The skill is a file and following it is reading it; nothing here writes,
-        # runs or fetches. `bypassPermissions` is what makes that unattended, and it is only
-        # safe because of how short this list is — there is nobody at the daemon to answer a
-        # prompt. ponytail: Read is not confined to the skill folder by anything but the system
-        # prompt. Narrow it with a hook if a filter ever gets a tool that writes.
+        # runs or fetches. `bypassPermissions` is what makes that unattended, so the list has to
+        # be the one in `tools`: allowed_tools auto-approves calls, tools= is what removes the
+        # built-ins. Measured — with allowed_tools alone the model was asked to Write a file and
+        # did. ponytail: Read is still not confined to the skill folder by anything but the
+        # system prompt. A PreToolUse hook denying a file_path is what narrows that, and it does
+        # fire under bypassPermissions; add one if a filter ever reads somewhere it should not.
+        tools=CRAFTING.settings["allowed_tools"],
         allowed_tools=CRAFTING.settings["allowed_tools"],
         permission_mode="bypassPermissions",
         max_turns=MAX_TURNS,
