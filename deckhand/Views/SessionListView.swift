@@ -166,10 +166,17 @@ struct SessionListView: View {
                     .plainRow()
             }
         } header: {
+            // `plainRow()` on the header too, and that is a fix rather than tidying. A section
+            // header keeps the List's own row insets unless it is told not to, so the folder's
+            // name stood about sixteen points right of every other thing on this page — a fourth
+            // left edge down a screen that `gutter` says should have two. With the insets gone
+            // the header's own `Spacing.small` lands it on the row's content column, beside the
+            // glyph, which is what that comment has claimed all along.
             ProjectHeader(
                 project: project,
                 machine: model.namesMachines ? model.label(of: project.machine) : ""
             )
+            .plainRow()
         }
     }
 

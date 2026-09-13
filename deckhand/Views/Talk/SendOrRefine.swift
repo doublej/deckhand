@@ -47,17 +47,18 @@ struct SendOrRefine: View {
                 // The colour is the whole of the difference, as everywhere else in this app: the
                 // words alone in the state's own colour, never a label inside a capsule that
                 // reads as something you press — and there is a real button just below it.
+                //
+                // Ink, so it stands on the row's own content column at both ends, exactly as the
+                // sentence in the row above it does.
                 Text(refusal)
                     .font(Typography.hint)
                     .foregroundStyle(Palette.lcdRed)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, compact ? 0 : SessionRow.gutter)
             }
             if compact { tight } else { verbs }
         }
-        // The row's own inner gutter, so these line up with the session's glyph above them rather
-        // than with the edge its slab bleeds out to. A column sets its own, outside.
-        .padding(.horizontal, compact ? 0 : Spacing.small)
         .padding(.bottom, compact ? 0 : Spacing.extraSmall)
     }
 
@@ -90,6 +91,14 @@ struct SendOrRefine: View {
     /// thumb: the one that finishes the prompt is filled and at the end you press things at, the
     /// other is quiet and as far from it as the row is wide. Distance is the actual fix for
     /// hitting the wrong one.
+    ///
+    /// **And its alignment rule, which is the whole of why this row is not padded as a unit.**
+    /// `ReviewCard.gutter` states it: *ink lines up with text, a capsule with the box*. So Refine
+    /// is inset to `SessionRow.gutter` — the very number the row above applies to its own glyph
+    /// and name — and Send is not inset at all, because a filled shape aligns by its own edge and
+    /// the edge it belongs on is the slab's. Padded as one row, both sat on the content column
+    /// and the capsule ended on the meter inside the card rather than on the card, which read as
+    /// nearly-right instead of meant.
     private var verbs: some View {
         HStack(spacing: Spacing.xxs) {
             Button(action: refine) { quiet("Refine", glyph: "square.and.pencil") }
@@ -105,11 +114,16 @@ struct SendOrRefine: View {
 
     /// The way back into the words, in the quiet colour with no fill under it. Edit's own glyph,
     /// because the card it opens is where this lands and Edit is what is waiting there.
+    ///
+    /// The leading inset is the row's, not this view's: `ReviewActions.quiet` takes the card's
+    /// gutter for the same reason, and unfilled means this is ink and ink lines up with the text
+    /// above it. The touch box moves with it and keeps all 44 points.
     private func quiet(_ label: String, glyph: String) -> some View {
         Label(label, systemImage: glyph)
             .font(.system(size: 14))
             .foregroundStyle(Palette.textTertiary)
             .lineLimit(1)
+            .padding(.leading, SessionRow.gutter)
             .padding(.trailing, Spacing.extraSmall)
             .frame(minHeight: Self.touch)
             .contentShape(.capsule)

@@ -32,6 +32,13 @@ struct SessionRow: View {
     /// The rail's accent, which is utt orange while any row on it is listening.
     @Environment(\.accent) private var accent
 
+    /// The inset from a row's own edge to the content standing on it — the glyph, the name, the
+    /// bands. Published rather than written twice because the controls drawn *under* a row have
+    /// to land on the same column: see `SendOrRefine`, which puts its ink here and lets its one
+    /// filled shape align with the row's outer edge instead. `TalkMark.clearance` is published
+    /// for the same kind of reason.
+    static let gutter = Spacing.small
+
     var body: some View {
         HStack(alignment: .top, spacing: Spacing.small) {
             GlyphTile(DotGlyph.forName(session.name), size: 32, prominent: current || talk.isRecording)
@@ -78,7 +85,7 @@ struct SessionRow: View {
                 }
             }
         }
-        .padding(Spacing.small)
+        .padding(Self.gutter)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(slab.fill(Color.primary.opacity(current ? 0.11 : 0.045)))
         // The one row that is listening says so in the language the rest of the app uses for
