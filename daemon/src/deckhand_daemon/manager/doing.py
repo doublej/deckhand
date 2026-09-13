@@ -222,30 +222,35 @@ def server(described: dict[str, str]):
     does, out of `prompts/manager.md`: a tool description is prompt, and every prompt in this
     daemon lives in a file.
     """
-    from claude_agent_sdk import create_sdk_mcp_server, tool
+    from claude_agent_sdk import ToolAnnotations, create_sdk_mcp_server, tool
+
+    # The same annotation mcp/server.py hands its own readers. read_only_hint is the one
+    # the SDK acts on rather than merely shows: it is what lets a turn that reads three
+    # sessions call them at once instead of one after another.
+    reads = ToolAnnotations(read_only_hint=True, open_world_hint=False)
 
     from . import tools as reading
 
-    @tool("list_sessions", described["list_sessions"], {})
+    @tool("list_sessions", described["list_sessions"], {}, annotations=reads)
     async def list_sessions(_: dict) -> dict:
         return reading.listing()
 
-    @tool("read_session", described["read_session"], {"session": str, "turns": int})
+    @tool("read_session", described["read_session"], {"session": str, "turns": int}, annotations=reads)
     async def read_session(args: dict) -> dict:
         session = find(str(args.get("session", "")))
         if session is None:
             return missing(str(args.get("session", "")))
         return reading.one(session, max(0, min(int(args.get("turns") or 0), 20)))
 
-    @tool("list_projects", described["list_projects"], {"query": str})
+    @tool("list_projects", described["list_projects"], {"query": str}, annotations=reads)
     async def list_projects(args: dict) -> dict:
         return reading.catalogue(str(args.get("query", "")), limit=30)
 
-    @tool("read_settings", described["read_settings"], {"folder": str})
+    @tool("read_settings", described["read_settings"], {"folder": str}, annotations=reads)
     async def read_settings(args: dict) -> dict:
         return reading.switches(str(args.get("folder", "")))
 
-    @tool("read_context", described["read_context"], {"session": str})
+    @tool("read_context", described["read_context"], {"session": str}, annotations=reads)
     async def read_context(args: dict) -> dict:
         session = find(str(args.get("session", "")))
         if session is None:
