@@ -96,7 +96,7 @@ struct TranscriptView: View {
             .onChange(of: model.turns.last?.timestamp) { scroll(proxy) }
             .onChange(of: queued.count) { scroll(proxy) }
             .onChange(of: session.isBusy) { scroll(proxy) }
-            .onAppear { scroll(proxy) }
+            .onAppear { open(proxy) }
             // Held here rather than on the card: a sheet per row in a lazy stack is a sheet
             // that is torn down the moment the row it hangs off scrolls out of the list.
             .sheet(item: $held) { TurnReader(turn: $0.turn) }
@@ -158,14 +158,39 @@ struct TranscriptView: View {
 
     /// The newest thing is always what you want to see, and what is still in the inbox is
     /// newer than anything the session has written down.
-    private func scroll(_ proxy: ScrollViewProxy) {
-        withAnimation {
+    private func scroll(_ proxy: ScrollViewProxy, animated: Bool = true) {
+        let jump = {
             if !queued.isEmpty {
                 proxy.scrollTo("queued", anchor: .bottom)
             } else if session.isBusy {
                 proxy.scrollTo("active", anchor: .bottom)
             } else {
                 proxy.scrollTo(model.turns.count - 1, anchor: .bottom)
+            }
+        }
+        if animated { withAnimation { jump() } } else { jump() }
+    }
+
+    /// The opening jump, made again once the rows it skipped over have been measured.
+    ///
+    /// A `LazyVStack` knows its rows' identities and not their heights, so the offset a
+    /// `scrollTo` lands on is however many rows have actually been laid out plus a guess for the
+    /// rest — and this transcript's rows run from a 20pt tool trace to a 2000pt turn, so the
+    /// guess is never close. Measured on one session's twenty-five turns over six cold opens,
+    /// the scroll view's own idea of its content came back as anything between 18,216 and 25,036
+    /// points. Aim at the high end of that and the open lands past the end of the conversation:
+    /// a page that looks empty with the transcript sitting above it, and the space below it
+    /// disappears the moment scrolling back measures the rows for real.
+    ///
+    /// So it is aimed again, twice, after the layout has been round. Not animated on the way in:
+    /// a glide over twenty thousand points is realising rows the whole way down, which is the
+    /// same guess made continuously and a transcript flying past on every open.
+    private func open(_ proxy: ScrollViewProxy) {
+        scroll(proxy, animated: false)
+        Task {
+            for _ in 0..<2 {
+                try? await Task.sleep(for: .milliseconds(50))
+                scroll(proxy, animated: false)
             }
         }
     }
