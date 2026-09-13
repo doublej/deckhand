@@ -124,6 +124,26 @@ public enum Replacements {
         return numbered(stages)
     }
 
+    /// How much is in force, for a surface with room for a number rather than a list.
+    ///
+    /// Counted over every scope at once, which is the whole point of it: a square counting only
+    /// the chain says "nothing running" at somebody whose every clip is being rewritten by the
+    /// alias list, and that sentence is the exact misreading this screen was built to end.
+    public struct Tally: Hashable, Sendable {
+        /// Rows of two in force, across every scope.
+        public let swaps: Int
+        /// Scopes that change the words some other way. A model handed the whole sentence is not
+        /// a row and must not be counted as one — it is a different kind of fact about the words.
+        public let others: Int
+
+        public var isEmpty: Bool { swaps == 0 && others == 0 }
+    }
+
+    public static func tally(_ stages: [Stage]) -> Tally {
+        Tally(swaps: stages.reduce(0) { $0 + $1.rules.count },
+              others: stages.filter { if case .otherwise = $0.doing { true } else { false } }.count)
+    }
+
     /// The words utt is told to expect, as far as this phone can know them.
     ///
     /// Deliberately not the whole list: `transcribe.VOCABULARY` is a fixed set of this

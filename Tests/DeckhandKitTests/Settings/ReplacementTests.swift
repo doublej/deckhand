@@ -110,6 +110,27 @@ struct ReplacementTests {
         #expect(stages[1].doing == .otherwise("This Mac no longer offers this filter."))
     }
 
+    // MARK: - the number a square has room for
+
+    @Test("the tally counts every scope, not the chain alone")
+    func tallyCountsEverything() {
+        let stages = Replacements.inForce(aliases: [["we", "web"], ["deck hand", "deckhand"]],
+                                          chain: [step([["a", "b"]]), FilterStep(filter: "craft")],
+                                          known: [words, craft])
+        let tally = Replacements.tally(stages)
+        // Two aliases and one filter row: the alias half is the half a chain count misses.
+        #expect(tally.swaps == 3)
+        // A model handed the whole sentence is not a row and is not counted as one.
+        #expect(tally.others == 1)
+    }
+
+    @Test("nothing in force is empty, and an alias alone is not")
+    func tallyEmptiness() {
+        #expect(Replacements.tally(Replacements.inForce(aliases: [], chain: [], known: [])).isEmpty)
+        let aliased = Replacements.inForce(aliases: [["we", "web"]], chain: [], known: [])
+        #expect(!Replacements.tally(aliased).isEmpty)
+    }
+
     // MARK: - hints
 
     @Test("hints mirror the Mac: alias meanings, the name split, the last of the folder")

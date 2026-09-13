@@ -114,10 +114,29 @@ public enum Dashboard {
         return few(newest.filter(\.running) + newest.filter { !$0.running }).map(\.title)
     }
 
-    /// The files worth naming under the count, most recently touched first. The name alone —
-    /// a square is not wide enough for a path, and the pane behind the square has the path.
+    /// The files worth naming under the count, most recently touched first.
+    ///
+    /// The name alone, because a square is not wide enough for a path and the pane behind it has
+    /// the path — **except where the name is not an answer.** A session that touched three
+    /// CLAUDE.md files drew "CLAUDE.md" three times, which says a session touched three files and
+    /// nothing else at all; a repeated name takes the folder it sits in, which is the same choice
+    /// `Doc.label` already makes for the context tree and for the same reason. Only the repeats,
+    /// so one ordinary filename is never widened into a path to keep a rule tidy.
     public static func touched(_ found: [Asset]) -> [String] {
-        few(found.sorted { $0.modified > $1.modified }).map(\.name)
+        let newest = few(found.sorted { $0.modified > $1.modified })
+        var seen: [String: Int] = [:]
+        for asset in newest { seen[asset.name, default: 0] += 1 }
+        return newest.map { asset in
+            guard seen[asset.name] ?? 0 > 1 else { return asset.name }
+            let above = folder(of: asset.path)
+            return above.isEmpty ? asset.name : "\(above)/\(asset.name)"
+        }
+    }
+
+    /// The folder a path sits in, by name. Empty for a file with nothing above it.
+    private static func folder(of path: String) -> String {
+        let parts = path.split(separator: "/")
+        return parts.count >= 2 ? String(parts[parts.count - 2]) : ""
     }
 
     /// The chain's running steps, under the names the filters sheet gives them.
@@ -138,13 +157,29 @@ public enum Dashboard {
             .filter { !$0.isEmpty }
     }
 
-    /// The chain: how many steps run, out of everything this Mac can do to words on the way in.
+    /// Everything being done to words on their way into this session, counted over every scope.
     ///
-    /// Both halves, because one is not a fact on its own — "3 running" says nothing about whether
-    /// that is most of them or a corner of what is available.
-    public static func chain(running: Int, of offered: Int) -> String {
-        if offered == 0 { return "None offered" }
-        return running == 0 ? "Nothing running" : "\(running) of \(offered) running"
+    /// **It counts the whole cascade and not the chain, and that is the whole point of it.** The
+    /// square used to say "3 of 6 running" off the filter chain alone, which meant somebody with
+    /// twelve aliases rewriting every clip and an empty chain read "Nothing running" and believed
+    /// it. That is the misreading `Replacements` was built to end — JJ's "we" arriving at a
+    /// session as "web" while every surface on the phone said nothing was touching his words.
+    ///
+    /// Swaps and rewrites are counted apart because they are different kinds of fact. A swap is a
+    /// row of two, a word for a word. A rewrite is a scope that hands the whole sentence to a
+    /// model and takes back another sentence, which cannot be added to a row count without the
+    /// number meaning nothing.
+    public static func swapping(_ counted: Replacements.Tally) -> String {
+        if counted.isEmpty { return "Nothing changed" }
+        let swaps = counted.swaps > 0 ? plural(counted.swaps, "swap") : nil
+        let others = counted.others > 0 ? plural(counted.others, "rewrite") : nil
+        return [swaps, others].compactMap { $0 }.joined(separator: ", ")
+    }
+
+    /// A count and the thing it counts, singular where there is one of it. "1 swaps" is the
+    /// small wrongness that makes somebody stop trusting the rest of the number.
+    private static func plural(_ count: Int, _ thing: String) -> String {
+        "\(count) \(count == 1 ? thing : thing + "s")"
     }
 
     /// What a session in this folder is loaded with before it reads a word: the CLAUDE.md tree

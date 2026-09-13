@@ -38,10 +38,14 @@ struct DashboardView: View {
     @State var orders: Orders?
     /// The CLAUDE.md tree, for the one tile that is about what a session started with.
     @State var docs: ContextDocs?
-    /// The chain: which steps run, and how many were on offer. The names rather than a count,
-    /// because the square says which three of the six — but still not the rows themselves, which
-    /// carry each step's settings and are the sheet's to edit against the model.
-    @State var chain: Chain?
+    /// Everything being done to words on their way in: how much of it there is, and which chain
+    /// steps are doing their part of it. Not the rows themselves, which carry each step's
+    /// settings and are `Swapping`'s to edit against the model.
+    ///
+    /// Nil until **both** halves have arrived — the chain and this Mac's alias list. A number
+    /// tallied before the aliases are asked for is confidently smaller than the truth, which is
+    /// worse than the "…" it would have replaced.
+    @State var chain: Incoming?
     /// A document opened out of the context tree. Its sheet is declared *inside* the context
     /// sheet's content, not here: a view presents one sheet at a time, and a second one attached
     /// to this view would have nowhere to go while the first is up.
@@ -52,10 +56,11 @@ struct DashboardView: View {
     /// The page's colour, which goes utt orange while the mark at the foot of it is open.
     @Environment(\.accent) var accent
 
-    /// The chain as a square needs it: what is running, by name, out of how many were offered.
-    struct Chain: Equatable {
+    /// Words on their way in, as a square needs them: how much is in force across every scope,
+    /// and which chain steps are switched on, by name.
+    struct Incoming: Equatable {
+        let counted: Replacements.Tally
         let running: [String]
-        let offered: Int
     }
 
     var body: some View {
@@ -166,20 +171,39 @@ struct DashboardView: View {
     private func load() async {
         guard !asked, let client = model.settings.client() else { return }
         asked = true
+        async let heard: Void = model.loadAliases()
         async let touched: Void = model.loadFiles(for: session)
         async let written: Void = model.loadArtifacts(for: session)
         async let tree = model.context(for: session)
+        var offer: (known: [Filter], steps: [FilterStep])?
         await model.run {
             async let standing = client.orders(of: session.sessionId)
             async let offered = client.filters(of: session.sessionId)
             orders = try await standing
-            let chosen = try await offered
-            chain = Chain(running: Dashboard.running(chosen.steps, over: chosen.known),
-                          offered: chosen.known.count)
+            offer = try await offered
         }
+        // Both halves before the square shows a number, and the aliases are the half easy to
+        // forget: `loadAliases` is the only thing that fills `wants.aliases`, and until something
+        // calls it the list is empty rather than unknown — so a tally taken early is confidently
+        // smaller than the truth.
+        await heard
+        if let offer { chain = incoming(offer) }
         await touched
         await written
         docs = await tree
+    }
+
+    /// What the square about words on their way in knows, once the chain and this Mac's alias
+    /// list are both here.
+    ///
+    /// The tally is `Replacements`' own, which is the point: the number on the square and the
+    /// listing `Swapping` draws behind it are the one function, so they cannot drift apart.
+    private func incoming(_ offer: (known: [Filter], steps: [FilterStep])) -> Incoming {
+        let stages = Replacements.inForce(aliases: model.wants.aliases,
+                                          chain: offer.steps,
+                                          known: offer.known)
+        return Incoming(counted: Replacements.tally(stages),
+                        running: Dashboard.running(offer.steps, over: offer.known))
     }
 }
 

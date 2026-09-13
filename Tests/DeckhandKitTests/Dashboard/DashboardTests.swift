@@ -46,8 +46,7 @@ struct DashboardTests {
         #expect(Dashboard.inbox(0) == "Empty")
         #expect(Dashboard.orders("") == "None standing")
         #expect(Dashboard.context(tokens: 0, files: 0) == "No CLAUDE.md")
-        #expect(Dashboard.chain(running: 0, of: 6) == "Nothing running")
-        #expect(Dashboard.chain(running: 0, of: 0) == "None offered")
+        #expect(Dashboard.swapping(Replacements.Tally(swaps: 0, others: 0)) == "Nothing changed")
     }
 
     @Test("one of a thing is not one things")
@@ -58,9 +57,16 @@ struct DashboardTests {
         #expect(Dashboard.context(tokens: 2400, files: 1) == "~2k in 1 file")
     }
 
-    @Test("the chain says what it runs out of")
-    func chain() {
-        #expect(Dashboard.chain(running: 3, of: 6) == "3 of 6 running")
+    @Test("the square counts every scope, not only the chain")
+    func swapping() {
+        // The case the square exists for: no chain step on at all, and twelve rows of two still
+        // rewriting every clip. "Nothing running" over that is the lie this replaced.
+        #expect(Dashboard.swapping(Replacements.Tally(swaps: 12, others: 0)) == "12 swaps")
+        // A model handed the whole sentence is not a row and is counted apart from one.
+        #expect(Dashboard.swapping(Replacements.Tally(swaps: 12, others: 1))
+            == "12 swaps, 1 rewrite")
+        #expect(Dashboard.swapping(Replacements.Tally(swaps: 0, others: 2)) == "2 rewrites")
+        #expect(Dashboard.swapping(Replacements.Tally(swaps: 1, others: 0)) == "1 swap")
     }
 
     @Test("orders open on their first written line, not on their first line")
@@ -135,6 +141,25 @@ struct DashboardTests {
                      Asset(path: "/b/new.swift", name: "new.swift", kind: "text",
                            size: 1, modified: 90)]
         #expect(Dashboard.touched(found) == ["new.swift", "old.swift"])
+    }
+
+    @Test("a filename that says nothing on its own takes the folder it sits in")
+    func repeated() {
+        // Found on screen: a session that had touched three CLAUDE.md files drew "CLAUDE.md"
+        // three times, which says a session touched three files and nothing else at all.
+        let same = ["/dev/CLAUDE.md", "/dev/deckhand/CLAUDE.md", "/dev/deckhand/one.swift"]
+            .enumerated()
+            .map { place, path in
+                Asset(path: path, name: (path as NSString).lastPathComponent, kind: "text",
+                      size: 1, modified: Double(90 - place))
+            }
+        // Only the repeats are widened — the file with an unambiguous name keeps it.
+        #expect(Dashboard.touched(same) == ["dev/CLAUDE.md", "deckhand/CLAUDE.md", "one.swift"])
+        // A file with nothing above it keeps its name rather than gaining a leading slash.
+        let bare = [Asset(path: "notes.md", name: "notes.md", kind: "text", size: 1, modified: 2),
+                    Asset(path: "/a/notes.md", name: "notes.md", kind: "text", size: 1,
+                          modified: 1)]
+        #expect(Dashboard.touched(bare) == ["notes.md", "a/notes.md"])
     }
 
     @Test("the chain is previewed by the names the settings sheet uses, not by its slugs")

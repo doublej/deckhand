@@ -89,15 +89,17 @@ extension DashboardView {
                       lit: orders?.inForce == true ? accent : nil) { opened = .orders }
     }
 
-    /// What this Mac does to words on their way into this session, out of everything it could.
+    /// Everything being done to this session's words on their way in, counted over every scope.
+    ///
+    /// The number is the whole cascade — utt's hints, this Mac's alias list and the chain — and
+    /// not the chain alone, which is what it counted first. A person with twelve aliases
+    /// rewriting every clip and no chain step switched on read "Nothing running" and believed
+    /// it, and that sentence is the exact misreading the screen behind this square was built to
+    /// end. The preview stays the chain's steps, which is the half a square has room to name.
     var chainTile: some View {
         DashboardTile(glyph: "line.3.horizontal.decrease",
                       title: "On the way in",
-                      value: chain.map {
-                          Dashboard.chain(running: $0.running.count, of: $0.offered)
-                      } ?? "…",
-                      // Which steps, not only how many: "3 of 6 running" is the question
-                      // "which three" with the answer left out.
+                      value: chain.map { Dashboard.swapping($0.counted) } ?? "…",
                       preview: Dashboard.few(chain?.running ?? []),
                       spoken: "Words on the way in") { opened = .filters }
     }
