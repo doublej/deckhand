@@ -65,6 +65,24 @@ public struct StateWord: View {
     }
 }
 
+/// The word a Codex session carries beside its state, on the rail and on its own page.
+///
+/// Not a `RunState`: it never changes, so it is not a state and has no state's colour. It borrows
+/// the state word's voice — 9pt mono, tracked — in the quietest ink, with nothing around it for
+/// `StateWord`'s reason. A Claude session carries nothing: every surface was written for one.
+public struct CodexWord: View {
+    public init() {}
+
+    public var body: some View {
+        Text("CODEX")
+            .font(Typography.state)
+            .tracking(2)
+            .lineLimit(1)
+            .foregroundStyle(Palette.textTertiary)
+            .accessibilityLabel("Codex")
+    }
+}
+
 /// A glyph on its tile: grey until it is the current one, when it fills with the accent.
 /// The corner is 0.28 of the size at every size, which is what keeps 20pt and 36pt tiles
 /// looking like the same object.

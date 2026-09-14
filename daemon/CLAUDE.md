@@ -17,7 +17,7 @@ State lives in `~/Library/Application Support/Deckhand/` — `token`, `audio/<se
 app.py          # the endpoints, and nothing else
 config.py       # data dir, token, port
 log.py          # the one log file, in ~/Library/Logs
-sessions/       # which Claude sessions are alive, their iTerm pane, and what they have spent
+sessions/       # which Claude sessions and Codex threads are alive, their pane, what they spent
 fleet/          # every other machine: the registry, the ssh link, the hand, the merge
 projects/       # what folders there are, and starting a session in one
 reading/        # everything that reads a transcript and nothing that writes one
@@ -220,6 +220,43 @@ the words carry, so it fails and says why instead. The receipt names the route t
   file with its own `Read`. `app._kept_images` only passes paths inside that session's own
   folder — without it, "say this and read that file" would aim a session at anything on the Mac.
   The files are kept after delivery; nothing prunes them yet.
+
+## Codex threads: the second provider
+
+`sessions/codex.py` lists the Codex app server's threads beside Claude Code's sessions, and every
+row says which it is in `provider`. Read off codex-cli 0.154.0 / app server 0.153.4 and its
+generated schema on 2026-09-13.
+
+- **The control socket is WebSocket.** `<CODEX_HOME>/app-server-control/app-server-control.sock`
+  (`DECKHAND_CODEX_HOME`, else `~/.codex`) answers an HTTP upgrade and closes after 0 bytes if the
+  handshake carries the library's default `User-Agent`, `Origin` or deflate offer. `codex app-server
+  proxy` spoken to in newline JSON never answers. `initialized` is a notification, with no id.
+- **Listed: loaded, top-level, `active` or `idle`.** `thread/read` per id off `thread/loaded/list`,
+  never `thread/list`, which took 2.8 s, stopped at 100 threads and missed 5 of 7 loaded ids. Once
+  per listing, a 2 s timeout, then 30 s of not asking after a failure — the iTerm pattern — so a
+  dead app server costs `/sessions` one timeout and never its Claude rows. `/health` carries
+  `codex`. A Codex row has no pane and is exempt from the no-pane rule.
+- **Its only input lane carries the person's authority.** `turn/start` when idle and `turn/steer`
+  into the running turn when busy both arrive as the user typing, so `auto` and `keyboard` take
+  them (`delivered_by: codex-direct | codex-steered`) and `socket` is refused, never substituted.
+  So is a slash. The branch is one line in `deliver.deliver`, after the chain, the orders and the
+  record. Whatever speaks as an agent — the manager's `say_to_session`, the idle check, the MCP
+  tool — refuses or skips a Codex session; the briefings worker skips them for want of a transcript.
+- **What it cannot share is answered in one middleware**, `sessions/codex_routes.py`, an allow-list
+  like `fleet/routing.py`: `turns` and `raw` off `thread/turns/list` with full items, `control`
+  `cancel` as `turn/interrupt`, empty `files` and `agents`, and a 409 for `context`, `commands`,
+  `queue/clear`, `focus`, `name` and every other control. Ephemeral threads refuse the turns list,
+  and that refusal is what the page gets.
+- **`POST /projects/session` takes `provider: codex`** and sends `thread/start {cwd, ephemeral:
+  false}` with no model, approvals or sandbox, because Codex's own configuration decides. The
+  project list still gates it; the trust gate is Claude Code's and does not apply.
+- **Only reads have been run against the real server.** `turn/start`, `turn/steer`,
+  `turn/interrupt` and `thread/start` are built to the schema and tested behind the `request`
+  seam. The link is held open on the assumption that a started thread stays loaded only while
+  something is subscribed to it; approval requests on it are dropped, never answered for the person.
+- **A Codex row's name is a key like any other**, so an unnamed thread is never its folder's bare
+  name: that is the Claude session's star and filter chain. A thread the phone just started has no
+  name yet and is `deckhand-codex-<last 4 of its id>` until Codex names it.
 
 ## What the person has set this Mac to do
 

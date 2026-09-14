@@ -59,6 +59,12 @@ def speak(wanted: str, text: str) -> dict:
     session = find(wanted)
     if session is None:
         return missing(wanted)
+    # Codex has no inbox for another agent. Its only lane arrives as the person typing, and the
+    # manager speaking down it would be the manager speaking as them.
+    if session.provider == "codex":
+        return said(f"{session.name} is a Codex thread. Codex's only way in carries the person's "
+                    f"own authority, and there is no inbox for another agent — nothing was sent. "
+                    f"The person has to say this to it themselves.")
     text = text.strip()
     if not text:
         return said("nothing to say — say_to_session needs the words themselves.")

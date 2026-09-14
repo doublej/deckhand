@@ -166,7 +166,8 @@ def _next() -> str | None:
     and never being promoted for it. Only that one refusal puts the request back.
     """
     global _cursor
-    live = [s.session_id for s in sessions.live_sessions()]
+    # A Codex thread has no transcript to write a briefing from, so it is never in the cycle.
+    live = [s.session_id for s in sessions.live_sessions() if s.provider == "claude"]
     while _bumped:
         wanted = _bumped.pop(0)
         if wanted not in live:

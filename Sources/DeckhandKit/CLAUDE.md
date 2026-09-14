@@ -17,6 +17,9 @@ Design is its own packet (`Design/CLAUDE.md`).
   that grows a sixth kind of entry would otherwise take the whole conversation down on a phone
   nobody has rebuilt. The text of that entry is still worth reading whatever kind it is. Same
   argument `Turn`'s tolerant decoder is written for, one level down.
+- **`Provider` decodes an unknown word as `.claude`, and a row with no key has `provider == nil`,
+  which is Claude too.** `ManagerRole`'s argument again: a Mac that grows a third provider must
+  not take the listing down. Views ask `Session.isCodex` and nothing else — never the raw word.
 - **`ManagerFeed.newest` is the cursor, never `entries.last?.id`.** A poll that brought nothing
   back still has to leave the phone asking for the right thing, or the next one re-fetches the
   whole conversation. A test holds it down.

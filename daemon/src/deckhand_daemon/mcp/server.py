@@ -177,6 +177,10 @@ async def say_to_session(session: str, text: str) -> dict:
     if match is None:
         return {"went": False, "why": f"no live session called {session!r} — "
                                       f"there is {', '.join(s.get('name', '?') for s in live)}"}
+    if match.get("provider") == "codex":
+        return {"went": False, "why": f"{match.get('name')} is a Codex thread: its only way in "
+                                      f"carries the person's own authority, so no agent speaks "
+                                      f"into it"}
     answered = await here.reach("POST", f"/sessions/{match['session_id']}/say",
                                 params={"route": "socket"}, json={"text": text})
     if "error" in answered:

@@ -82,12 +82,15 @@ struct SessionHead: View {
             // Last and on their own, because this is the only group in the menu where a
             // mis-tap costs something. Both of these ask first — the two that do not are on
             // the dashboard, where the number that decides whether to press them is printed.
-            Section("Run") {
-                ForEach(Control.allCases.filter(\.asksFirst), id: \.self) { action in
-                    Button(action.label, systemImage: action.symbol, role: .destructive) {
-                        confirming = action
+            // Absent for Codex: both are a command typed into a pane, and a Codex thread has none.
+            if !session.isCodex {
+                Section("Run") {
+                    ForEach(Control.allCases.filter(\.asksFirst), id: \.self) { action in
+                        Button(action.label, systemImage: action.symbol, role: .destructive) {
+                            confirming = action
+                        }
+                        .disabled(hasNoPane)
                     }
-                    .disabled(hasNoPane)
                 }
             }
         } label: {
@@ -161,6 +164,7 @@ struct SessionHead: View {
             }
             Spacer(minLength: Spacing.extraSmall)
             if working { ProgressView().controlSize(.mini) }
+            if session.isCodex { CodexWord() }
             StateWord(session.isBusy ? .busy : .idle)
             dots
         }

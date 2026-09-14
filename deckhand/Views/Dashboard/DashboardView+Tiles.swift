@@ -26,12 +26,19 @@ extension DashboardView {
         filesTile
         ordersTile
         chainTile
-        contextTile
-        windowTile
+        // Absent for Codex rather than dimmed. A Codex thread has no pane to type into and no
+        // CLAUDE.md tree, so the Mac refuses all five, and a square that can never light is a menu
+        // row somebody keeps pressing. Stop stays: Codex interrupts its own turn.
+        if !session.isCodex {
+            contextTile
+            windowTile
+        }
         projectTile
-        nameTile
-        macTile
-        inboxTile
+        if !session.isCodex {
+            nameTile
+            macTile
+            inboxTile
+        }
         stopTile
     }
 
