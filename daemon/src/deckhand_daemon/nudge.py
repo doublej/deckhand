@@ -18,6 +18,7 @@ import time
 
 from . import deliver, prompts, sessions, tasks
 from .log import log
+from .reading import agents
 from .settings import wants
 
 # Between sweeps. Nothing here is urgent — a session that has stopped stays stopped.
@@ -76,6 +77,16 @@ def _consider(session: sessions.Session, now: float) -> bool:
     # Before anything is read off disk: a folder set not to be chased is not chased, and the
     # environment switch stays what it is — the whole Mac, off.
     if not wants.resolved(session.cwd).chase:
+        return False
+    # A session whose subagents are still working is **not quiet**, whatever its own status says:
+    # stopping a turn with a background agent running is the ordinary way to leave one going, and
+    # asking then interrupts the work to ask whether the work is done. Treated exactly as `busy`
+    # above — the clock restarts, so the question waits out another `SETTLE` after they finish —
+    # rather than as a veto further down, which would let the quiet clock run out underneath it
+    # and fire the moment the last agent stopped. It sits below the switch only because it is the
+    # first thing here that costs a disk read, and a folder nobody chases should not pay it.
+    if agents.alive(session.session_id, now):
+        _quiet_since.pop(session.session_id, None)
         return False
     since = _quiet_since.setdefault(session.session_id, now)
     if now - since < SETTLE:

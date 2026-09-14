@@ -324,7 +324,11 @@ replacement list cannot be written from here and have it apply to Deckhand's cli
   labelled as another agent rather than as JJ typing, either to finish or to say why not. Two
   guards against a daemon that will not let a session stop: the same list is never asked about
   twice (fingerprint of ids and states), and never more often than `AGAIN` whatever the list
-  does. `DECKHAND_NUDGE=0` turns it off.
+  does. `DECKHAND_NUDGE=0` turns it off. **A session whose subagents are still working is not
+  quiet** — stopping a turn with a background agent running is the ordinary way to leave one
+  going, and asking then interrupts the work to ask whether the work is done. `agents.alive`
+  answers it for the price of a `stat` per agent and the quiet clock restarts, exactly as `busy`
+  does; `reading/CLAUDE.md` carries what makes that answer honest.
 - Anything the summariser or the transcriber needs must be reachable without a person present.
   The summariser passes `setting_sources=[]` for the same reason it is fast: loading the user
   settings starts every configured MCP server, which cost more than a minute.

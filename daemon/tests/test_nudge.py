@@ -10,6 +10,9 @@ from deckhand_daemon import nudge, sessions, tasks
 @pytest.fixture
 def deckhand_data(tmp_path, monkeypatch):
     monkeypatch.setenv("DECKHAND_DATA_DIR", str(tmp_path / "data"))
+    # The sweep reads the session's subagent folder, and a suite that answered that off the real
+    # ~/.claude would pass or fail by what this Mac happens to be running.
+    monkeypatch.setenv("DECKHAND_CLAUDE_HOME", str(tmp_path / "claude"))
 
 
 def make_session(session_id="s1", status="idle"):
@@ -59,6 +62,31 @@ def test_a_busy_session_is_left_alone(deckhand_data, monkeypatch):
     quiet_since(time.time())
     assert nudge.sweep(time.time() + nudge.SETTLE + 1) == []
     assert sent == []
+
+
+def test_a_session_whose_subagents_are_working_is_left_alone(deckhand_data, monkeypatch):
+    """The report this exists for: a turn stopped with a background agent still running, and the
+    session was asked to account for the asks that agent was working through.
+
+    Treated as `busy` is — the quiet clock restarts — rather than as a veto at the end. A veto
+    would let the clock run out underneath the agents and fire the question the instant the last
+    one stopped, which is the same interruption a minute later.
+    """
+    clear()
+    session, sent = make_session(), []
+    stub(monkeypatch, session, sent)
+    tasks.add("s1", "wire the settings screen")
+    working = {"any": True}
+    monkeypatch.setattr(nudge.agents, "alive", lambda session_id, now=None: working["any"])
+
+    now = time.time()
+    quiet_since(now)
+    assert nudge.sweep(now + nudge.SETTLE + 1) == []
+    assert sent == []
+    working["any"] = False
+    # The clock restarted with the last sweep, so it waits out another SETTLE before asking.
+    assert nudge.sweep(now + nudge.SETTLE + 2) == []
+    assert nudge.sweep(now + 2 * nudge.SETTLE + 3) == ["s1"]
 
 
 def test_a_finished_list_is_nothing_to_ask_about(deckhand_data, monkeypatch):

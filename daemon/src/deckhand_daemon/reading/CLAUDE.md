@@ -155,10 +155,24 @@ a subagent from the phone:
   and wrong while reading the agent, where it is the only thing there is. Hence the `sidechain`
   argument threaded through `blocks_of`, `text_of` and `_scan`: it says which *file* is being read,
   never which entry. Without it three real agents read as `turns=0`.
-- **"Running" needs the session to be mid-turn, not just a missing result.** Results are read off
-  the tail like everything else here, so an agent that finished last week has none in the window.
-  On the first live run that made 16 of one session's 45 agents read as still going while the
-  session sat idle. A subagent runs inside its parent's turn, so `turn_ended` is the other half.
+- **"Running" is the agent's own file, because neither the parent's turn nor the parent's results
+  can say.** A subagent was held to run inside its parent's turn, so an idle session had none by
+  construction. Measured 2026-09-14, false: an idle session's teammate transcript was 4.5 MB and
+  written that same second — a background agent outlives the turn that started it — and the idle
+  check reads precisely the sessions that have stopped, so every agent read as stopped exactly
+  when it mattered (0 of 18, against the 2 that were going). The parent's `tool_result` is no
+  better: 15 of those 18 were spawned in the background and every one had its result written *at
+  spawn*. So `answered` may only confirm, and only where `requestShape: "foreground"` says the
+  parent waited — 260 of 3701 meta files carry that key at all. The file decides instead: a
+  finished agent's last entry is an assistant entry of `text` and no `tool_use` (3549 of the 3638
+  transcripts untouched for a day; the live ones sampled that minute ended on a `tool_use`), and
+  `stop_reason` is not the test — it is missing from a third of those finished entries and from
+  the live ones alike. Behind it `STALE`, 900 s, for the killed agent that never finishes its
+  step: the p99.99 of 262691 gaps between one agent's consecutive entries is 673 s, and a live
+  agent inside one model call writes nothing for minutes. Ambiguity resolves to **still running** —
+  a false "still running" is one question not asked, a false "finished" interrupts a session whose
+  agents are working. `agents.alive` is that same question with the fan-out left off, for the idle
+  check's 30 s sweep: 0.9 ms over six live sessions where `spawned` costs 122 ms.
 - **The agent id names a file, so it is checked** (`_safe`), not trusted — but a hyphen is not a
   separator. An unnamed agent is `agent-` and hex; a **named** one is `agent-<name>-<hex>`, and an
   `isalnum()` check refused every one of those before a path was built: 1889 of the 3651 meta
