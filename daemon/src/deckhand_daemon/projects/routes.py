@@ -22,7 +22,7 @@ from fastapi import APIRouter, Body, HTTPException
 from ..fleet import merge, proxy, registry
 from ..sessions import Session, codex, forget_listing, live_sessions
 from ..settings import wants
-from . import sources, starting
+from . import commands, sources, starting
 
 router = APIRouter(tags=["projects"])
 PROVIDERS = ("claude", "codex")
@@ -154,6 +154,57 @@ async def _start_over_there(machine: str, path: str) -> dict:
         raise HTTPException(status_code=409, detail=error)
     sources.forget()
     return {"session": answer.get("session")}
+
+
+@router.get("/projects/commands")
+async def project_commands(path: str) -> dict:
+    """The `just` recipes that folder offers, for the phone to run one directly — a deploy, a
+    server, anything else the project's own justfile knows how to do.
+
+    Same gate as `/projects/session`: a folder this Mac's project list does not name never gets a
+    subprocess spawned in it, on this route or the three below it.
+    """
+    _local_project(path)
+    return await asyncio.to_thread(commands.list_recipes, path)
+
+
+@router.post("/projects/commands/run")
+async def run_project_command(
+    path: str = Body(embed=True), recipe: str = Body(embed=True)
+) -> dict:
+    """Start that recipe in that folder. Refused unless it is one `/projects/commands` just
+    listed — never a name the phone typed itself, which is the difference between running a
+    button and running a string."""
+    _local_project(path)
+    listing = await asyncio.to_thread(commands.list_recipes, path)
+    if recipe not in {r["name"] for r in listing["recipes"]}:
+        raise HTTPException(status_code=400, detail=f"no such recipe {recipe!r}")
+    return await asyncio.to_thread(commands.run, path, recipe)
+
+
+@router.post("/projects/commands/stop")
+async def stop_project_command(
+    path: str = Body(embed=True), recipe: str = Body(embed=True)
+) -> dict:
+    _local_project(path)
+    return {"stopped": commands.stop(path, recipe)}
+
+
+@router.get("/projects/commands/status")
+async def project_command_status(path: str, recipe: str) -> dict:
+    _local_project(path)
+    return await asyncio.to_thread(commands.status, path, recipe)
+
+
+def _local_project(path: str) -> sources.Project:
+    """The listing is the whole permission, and a command only ever runs on this Mac: a remote
+    folder has no process for this daemon to spawn or find again."""
+    project = next((p for p in sources.catalog()[0] if p.path == path), None)
+    if project is None:
+        raise HTTPException(status_code=400, detail="that folder is not in the project list")
+    if (project.machine or registry.here()) != registry.here():
+        raise HTTPException(status_code=409, detail="commands only run on this Mac")
+    return project
 
 
 # ponytail: cached for the life of the daemon, so a folder that gains or loses a symlink after

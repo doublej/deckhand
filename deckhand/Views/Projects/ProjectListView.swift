@@ -22,6 +22,9 @@ struct ProjectListView: View {
     /// row here has one job — start a session — and a second button on four hundred rows is four
     /// hundred chances to press the wrong one.
     @State private var configuring: Project?
+    /// The project whose `just` recipes are open — a deploy, a server, anything else its own
+    /// justfile knows how to do. Same long-press as `configuring`, same reason.
+    @State private var commanding: Project?
     /// The project a session is about to start in, while the person says which program runs it.
     @State private var choosing: Project?
     @FocusState private var searching: Bool
@@ -60,6 +63,7 @@ struct ProjectListView: View {
         }
         .task { await model.loadProjects() }
         .sheet(item: $configuring) { ProjectSettingsView(model: model, project: $0) }
+        .sheet(item: $commanding) { ProjectCommandsView(model: model, project: $0) }
         // Which program, asked every time rather than remembered. Claude Code and Codex are two
         // different sessions with two different pages, and a row that quietly started whichever
         // was chosen last would be a row doing something nobody said.
@@ -165,6 +169,9 @@ struct ProjectListView: View {
             // you go looking for, and greyed out with no word is a row you press twice.
             .opacity(project.trusted ? 1 : 0.55)
             .contextMenu {
+                Button("Run a command", systemImage: "terminal") {
+                    commanding = project
+                }
                 Button("Project settings", systemImage: "slider.horizontal.3") {
                     configuring = project
                 }
