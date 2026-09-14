@@ -30,8 +30,8 @@ def stub(monkeypatch, session, sent):
 
 
 def clear():
+    """What a restart forgets. What was asked lives in the test's own data dir."""
     nudge._quiet_since.clear()
-    nudge._asked_about.clear()
 
 
 def quiet_since(now):
@@ -128,6 +128,42 @@ def test_a_changed_list_waits_for_the_cooldown(deckhand_data, monkeypatch):
     assert nudge.sweep(now + 60) == []
     assert nudge.sweep(now + nudge.AGAIN + 1) == ["s1"]
     assert "crash on rotate" in sent[1]
+
+
+def test_asks_moving_along_are_not_a_new_question(deckhand_data, monkeypatch):
+    """Seen 2026-09-14: a session answered "waiting on JJ", the summariser moved the ask to doing
+    on reading that, and the same ask was asked about again. Nor may one ask finishing reopen the
+    rest."""
+    clear()
+    session, sent = make_session(), []
+    stub(monkeypatch, session, sent)
+    blocked = tasks.add("s1", "decide what to leave out of the backup")
+    finished = tasks.add("s1", "start the first upload")
+
+    quiet_since(time.time())
+    now = time.time() + nudge.SETTLE + 1
+    assert nudge.sweep(now) == ["s1"]
+    tasks.set_state("s1", blocked["id"], "doing")
+    tasks.set_state("s1", finished["id"], "done")
+    assert nudge.sweep(now + nudge.AGAIN + 1) == []
+    assert len(sent) == 1
+
+
+def test_a_restart_does_not_ask_the_same_question_again(deckhand_data, monkeypatch):
+    """The daemon restarted 11 times on 2026-09-14, and while this was kept in memory every one of
+    those restarts asked every owing session again."""
+    clear()
+    session, sent = make_session(), []
+    stub(monkeypatch, session, sent)
+    tasks.add("s1", "wire the settings screen")
+
+    quiet_since(time.time())
+    now = time.time() + nudge.SETTLE + 1
+    assert nudge.sweep(now) == ["s1"]
+    clear()                                # everything a restart forgets
+    quiet_since(now + nudge.AGAIN)
+    assert nudge.sweep(now + nudge.AGAIN + nudge.SETTLE + 1) == []
+    assert len(sent) == 1
 
 
 def test_the_question_is_addressed_to_the_session_by_name(deckhand_data, monkeypatch):

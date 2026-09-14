@@ -9,7 +9,7 @@ logs to `~/Library/Logs/Deckhand/deckhand.log`.
 
 State lives in `~/Library/Application Support/Deckhand/` — `token`, `audio/<sessionId>/`,
 `images/<sessionId>/`, `tasks/<sessionId>.json`, `briefings/<sessionId>.json`,
-`queue/<sessionId>.json`, `timings.jsonl`.
+`queue/<sessionId>.json`, `timings.jsonl`, `nudged.json`.
 
 ## Mental model
 
@@ -324,9 +324,13 @@ replacement list cannot be written from here and have it apply to Deckhand's cli
 - **The idle check messages sessions on its own** (`nudge.py`). A session quiet for `SETTLE`
   with anything unfinished on its list is asked, over the **socket** route so it arrives
   labelled as another agent rather than as JJ typing, either to finish or to say why not. Two
-  guards against a daemon that will not let a session stop: the same list is never asked about
-  twice (fingerprint of ids and states), and never more often than `AGAIN` whatever the list
-  does. `DECKHAND_NUDGE=0` turns it off. **A session whose subagents are still working is not
+  guards against a daemon that will not let a session stop: a session is asked again only when
+  an ask it was not already asked about is open, and never more often than `AGAIN` whatever the
+  list does. **Ids, never states**: the summariser moves an ask to `doing` on reading the answer
+  to this very question ("waiting on JJ" is blocked work), so counting states made every answer
+  arm the next one. **What was asked is kept in `nudged.json`, not in the process** — the daemon
+  restarted 11 times on 2026-09-14 and each restart asked every owing session again.
+  `DECKHAND_NUDGE=0` turns it off. **A session whose subagents are still working is not
   quiet** — stopping a turn with a background agent running is the ordinary way to leave one
   going, and asking then interrupts the work to ask whether the work is done. `agents.alive`
   answers it for the price of a `stat` per agent and the quiet clock restarts, exactly as `busy`

@@ -6,17 +6,21 @@ Nobody is watching every pane, so the Mac watches instead and puts the question 
 itself — which is the only party that knows whether the remaining asks are unfinished, already
 done under another name, or ones it decided against.
 
-The message itself is `prompts/idle-check.md`. Deliberately not a task runner. It asks once per state of the list and takes any answer, because
-the wrong failure here is a daemon that will not let a session stop working.
+The message itself is `prompts/idle-check.md`. Deliberately not a task runner. It asks once about
+each ask and takes any answer, because the wrong failure here is a daemon that will not let a
+session stop working.
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import time
+from pathlib import Path
 
 from . import deliver, prompts, sessions, tasks
+from .config import data_dir
 from .log import log
 from .reading import agents
 from .settings import wants
@@ -29,11 +33,14 @@ SETTLE = 120
 # The floor between two questions to the same session, whatever its list does in between. A
 # session that cannot finish an ask must still be able to sit still.
 AGAIN = 30 * 60
+# How long what a session was asked about is remembered. Session ids are never reused, so this
+# only keeps the file from growing without bound: a session still alive a week on, holding the
+# same blocked ask, is asked about it once more.
+KEEP = 7 * 24 * 3600
 
-# What each session was last seen doing, when it went quiet, and what its list said last time
-# it was asked. All three are this process's, not the file's: a restarted daemon asks again.
+# When each session went quiet. This process's, not the file's: a restarted daemon only waits out
+# SETTLE again. What each session was asked about is on disk — see `_asked`.
 _quiet_since: dict[str, float] = {}
-_asked_about: dict[str, tuple[float, str]] = {}
 
 IDLE_CHECK = prompts.load("idle-check")
 
@@ -67,7 +74,7 @@ def sweep(now: float | None = None) -> list[str]:
 
 
 def _consider(session: sessions.Session, now: float) -> bool:
-    """Whether this session is quiet, owing, and has not just been asked the same thing."""
+    """Whether this session is quiet, owing, and has not already been asked about these asks."""
     # A Codex thread's only lane is the person's own, and the idle check is not the person.
     if session.provider == "codex":
         return False
@@ -94,25 +101,50 @@ def _consider(session: sessions.Session, now: float) -> bool:
     open_asks = tasks.outstanding(session.session_id)
     if not open_asks:
         return False
-    when, about = _asked_about.get(session.session_id, (0.0, ""))
-    standing = _fingerprint(open_asks)
-    # Both guards, because they catch different runaways: the same list twice is a session that
-    # has answered and moved on, and a changing list is one churning through a job it cannot end.
-    if standing == about or now - when < AGAIN:
+    when, asked_ids = _asked().get(session.session_id, (0.0, []))
+    open_ids = [task["id"] for task in open_asks]
+    # Both guards, because they catch different runaways: nothing open that was not already asked
+    # about is a session that has answered and moved on, and a changing list is one churning
+    # through a job it cannot end.
+    #
+    # Ids, never states. The summariser moves an ask to doing on reading the session's answer to
+    # this very question — "waiting on JJ" is blocked work, and blocked work is doing — so counting
+    # states made every answer arm the next question. And a subset rather than the same list, so
+    # one ask finishing does not reopen the ones already answered.
+    if set(open_ids) <= set(asked_ids) or now - when < AGAIN:
         return False
     route, error = deliver.deliver(
         session, _question(open_asks, session.name), route=IDLE_CHECK.settings["route"])
     if error:
         log.warning("idle check could not reach %s: %s", session.name, error)
         return False
-    _asked_about[session.session_id] = (now, standing)
+    _remember(session.session_id, now, open_ids)
     log.info("idle check asked %s about %d open asks by %s", session.name, len(open_asks), route)
     return True
 
 
-def _fingerprint(open_asks: list[dict]) -> str:
-    """What was asked about last time. Its state counts: todo becoming doing is an answer."""
-    return "|".join(f"{task['id']}:{task['state']}" for task in open_asks)
+def _asked() -> dict[str, list]:
+    """What each session was last asked about, and when: `{session_id: [when, [ids]]}`.
+
+    On disk, not in this process. The daemon is restarted many times a day — 11 on 2026-09-14 —
+    and while this was a dict, every restart asked every owing session the same question again.
+    An unreadable file reads as empty, which costs one repeated question and nothing else.
+    """
+    try:
+        asked = json.loads(_asked_path().read_text())
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return asked if isinstance(asked, dict) else {}
+
+
+def _remember(session_id: str, now: float, ids: list[str]) -> None:
+    asked = {sid: entry for sid, entry in _asked().items() if now - entry[0] < KEEP}
+    asked[session_id] = [now, ids]
+    _asked_path().write_text(json.dumps(asked))
+
+
+def _asked_path() -> Path:
+    return data_dir() / "nudged.json"
 
 
 def _question(open_asks: list[dict], name: str) -> str:
