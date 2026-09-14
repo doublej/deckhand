@@ -17,6 +17,9 @@ struct ProjectCommandsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var listing = RecipeListing()
     @State private var loading = true
+    /// Set only when the listing itself failed — a dead Mac, a daemon too old to know this route.
+    /// Kept apart from `listing.hasJustfile == false`, which is an honest answer and not a failure.
+    @State private var error: String?
     /// The recipe whose panel is open. Nil collapses every panel and stops the poll.
     @State private var watching: Recipe?
     @State private var statuses: [String: CommandStatus] = [:]
@@ -42,6 +45,8 @@ struct ProjectCommandsView: View {
         if loading {
             ProgressView().tint(Palette.textTertiary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let error {
+            failure(error)
         } else if !listing.hasJustfile {
             Text("No justfile in this folder.")
                 .font(Typography.primaryRow)
@@ -67,6 +72,20 @@ struct ProjectCommandsView: View {
                 .padding(Spacing.medium)
             }
         }
+    }
+
+    private func failure(_ message: String) -> some View {
+        VStack(spacing: Spacing.small) {
+            Text(message)
+                .font(Typography.primaryRow)
+                .foregroundStyle(Palette.textSecondary)
+                .multilineTextAlignment(.center)
+            Button("Try again") { Task { await load() } }
+                .font(Typography.primaryRow)
+                .tint(Palette.tint)
+        }
+        .padding(Spacing.large)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     /// Recipes in the order `just` gave them, folded into their groups without losing that order —
@@ -177,7 +196,12 @@ struct ProjectCommandsView: View {
     private func load() async {
         guard let client = model.settings.client() else { return }
         loading = true
-        await model.run { listing = try await client.recipes(for: project) }
+        error = nil
+        do {
+            listing = try await client.recipes(for: project)
+        } catch {
+            self.error = model.reason(error)
+        }
         loading = false
     }
 
