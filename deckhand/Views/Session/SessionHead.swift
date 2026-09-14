@@ -8,14 +8,16 @@ import SwiftUI
 /// than a line count: below this strip the page is three interchangeable panes swiped between,
 /// and none of them know anything about ending a session or clearing it.
 ///
-/// What it does not own is the presenting. Both sheets this menu opens are declared on the page,
-/// because one belongs to the whole page and not to the strip that triggered it — so they arrive
-/// here as bindings and this view only ever sets them. What used to be seven more of them is the
-/// dashboard's now, presented from the square that opens it.
+/// What it does not own is the presenting, with one exception it does own. The sheets this *menu*
+/// opens are declared on the page, because they belong to the whole page and not to the strip that
+/// triggered it — so they arrive here as bindings and this view only ever sets them. What used to
+/// be seven more of them is the dashboard's now, presented from the square that opens it. Renaming
+/// is the exception and follows that same rule from the other end: it is triggered by the title in
+/// this strip and by nothing else, so the state and the sheet are both here.
 struct SessionHead: View {
     @Bindable var model: AppModel
     let session: Session
-    @Binding var confirming: Control?
+    @Binding var confirming: Confirmation?
     @Binding var reading: Bool
     /// How many panes there are and which one is showing. The page indicator lives here rather
     /// than at the foot because the row it sits on was already being drawn — so the bar of words
@@ -25,6 +27,13 @@ struct SessionHead: View {
     /// Whether the Mac is writing this session's briefing. It was in the tab bar, which is gone;
     /// it belongs beside the other things this strip says about the session's state.
     let working: Bool
+    /// The page's recorder, so a new name can be said rather than typed. Handed down for the
+    /// reason every sheet here is lent it: one recorder per screen, or a sheet that made its own
+    /// would record while the page behind it stayed teal.
+    let say: Dictation
+    /// Whether the rename sheet is up. This view's own, unlike the two bindings above: it belongs
+    /// to the title that opens it, the way a dashboard square owns the sheet it presents.
+    @State private var renaming = false
     /// The page's colour, which goes utt orange while the mark at the foot of it is open. Read
     /// from the environment here: `SessionView` is the view that puts it there, and a view never
     /// sees what it hands its own children.
@@ -36,26 +45,30 @@ struct SessionHead: View {
             header
             fullness
         }
+        .sheet(isPresented: $renaming) {
+            Renaming(session: session, say: say) { wanted in
+                Task { await model.rename(session, to: wanted) }
+            }
+        }
     }
 
     /// The name and the way to everything else. Nothing more.
     ///
-    /// The chevron went with the tab bar: the panes are swiped between now, and a swipe from the
-    /// left edge of the first one leaves the session — so the arrow was a second way to do a
-    /// thing the page already does, taking a corner of every screen to offer it. The way out is
-    /// still named in the menu, because a gesture nobody is told about is not a way out for
-    /// somebody using VoiceOver.
+    /// The chevron went with the tab bar: the panes are swiped between now and a swipe from the
+    /// left edge of the first leaves the session, so the arrow was a second way to do a thing the
+    /// page already does, taking a corner of every screen to offer it. The way out is still named
+    /// in the menu — a gesture nobody is told about is not a way out for somebody using VoiceOver.
     ///
     /// The tile went too. A session's glyph tells one row from another in a list of them; on the
     /// session's own page there is only one session, and it was 28 points of picture saying what
     /// the name beside it already said.
+    ///
+    /// **The name is the thing you rename now.** It was a square on the dashboard printing the
+    /// same name this header already draws in this same 20pt — two copies of one word, and the
+    /// one you could press was the lower. The title took the job and the square is gone.
     private var header: some View {
         HStack(spacing: Spacing.extraSmall) {
-            Text(session.name)
-                .font(Typography.pageTitle)
-                .foregroundStyle(Palette.textPrimary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+            name
             Spacer(minLength: Spacing.extraSmall)
             controls
         }
@@ -64,8 +77,48 @@ struct SessionHead: View {
         .padding(.top, Spacing.xxs)
     }
 
+    /// The session's name, and — where a rename could actually land — the way to change it.
+    ///
+    /// The pencil is here rather than nowhere because this app labels nothing at rest, and a
+    /// title that is secretly tappable is a rename nobody finds. **It is the menu's own size,
+    /// weight and colour**, which is measured rather than tidy: a bare `pencil` in tertiary ink
+    /// at 11pt photographs as a stray slash after the name, near enough to a typo that the thing
+    /// it advertises disappears. Circled, accent, 16pt semibold is what this strip already uses
+    /// to mean "press this".
+    ///
+    /// **Absent, never dimmed, when it cannot work.** `/rename` is typed into a pane, so a Codex
+    /// thread and a session iTerm cannot see both get the title alone. The square it replaces
+    /// said "Needs its pane"; a strip has nowhere to put that, and a dead pencil with no
+    /// explanation is worse than a title that simply is one.
+    @ViewBuilder private var name: some View {
+        if session.isCodex || hasNoPane {
+            title
+        } else {
+            Button { renaming = true } label: {
+                HStack(spacing: Spacing.xxs) {
+                    title
+                    Image(systemName: "pencil.circle")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(accent)
+                }
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Rename \(session.name)")
+            .accessibilityIdentifier("session-rename")
+        }
+    }
+
+    private var title: some View {
+        Text(session.name)
+            .font(Typography.pageTitle)
+            .foregroundStyle(Palette.textPrimary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+    }
+
     /// What is left of the menu once the dashboard exists: the way out, the file itself, and the
-    /// two things that cannot be undone.
+    /// two things nothing brings back.
     ///
     /// It used to hold eleven items, and seven of them are squares now — with a number on each,
     /// which is the whole reason the grid is better than this was. Four stayed, each for its own
@@ -80,14 +133,16 @@ struct SessionHead: View {
             here
             inside
             // Last and on their own, because this is the only group in the menu where a
-            // mis-tap costs something. Both of these ask first — the two that do not are on
-            // the dashboard, where the number that decides whether to press them is printed.
+            // mis-tap costs something. `isIrreversible` and not `asksFirst`, which used to be
+            // the same set and is not any more: compacting asks first too, and it belongs on
+            // the dashboard where the window figure that decides it is printed — not in here,
+            // drawn red among the two nothing brings back.
             // Absent for Codex: both are a command typed into a pane, and a Codex thread has none.
             if !session.isCodex {
                 Section("Run") {
-                    ForEach(Control.allCases.filter(\.asksFirst), id: \.self) { action in
+                    ForEach(Control.allCases.filter(\.isIrreversible), id: \.self) { action in
                         Button(action.label, systemImage: action.symbol, role: .destructive) {
-                            confirming = action
+                            ask(action)
                         }
                         .disabled(hasNoPane)
                     }
@@ -124,6 +179,17 @@ struct SessionHead: View {
     private var inside: some View {
         Section("Look inside") {
             Button("Raw transcript", systemImage: "scroll") { reading = true }
+        }
+    }
+
+    /// The control's own question, or — for one that asks nothing — just send it. Only controls
+    /// that ask reach this menu, so the second branch is unreachable today and written anyway: a
+    /// menu item that silently does nothing is the worst way for a filter to turn out wrong.
+    private func ask(_ action: Control) {
+        if let asked = Confirmation(action, of: session, on: model) {
+            confirming = asked
+        } else {
+            Task { await model.control(action, of: session) }
         }
     }
 

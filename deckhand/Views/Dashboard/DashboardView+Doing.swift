@@ -9,25 +9,29 @@ import SwiftUI
 /// file the daemon writes rather than anything typed, so it stays live with iTerm unreachable and
 /// goes dim only when there is nothing queued to draw a line under.
 ///
+/// **Two of the squares here ask before they run, and neither brings a dialog with it.** Compact
+/// and Clear inbox both hand a `Confirmation` to the page and the page draws the one sheet it has
+/// always drawn. Clearing an inbox is the reason that slot is no longer typed as `Control`: it
+/// costs something worth a question — prompts waiting are dropped and the session never reads
+/// them — and it is not a keystroke, so the only other way to ask would have been a second
+/// dialog on this pane.
+///
 /// **Two of the four controls are not here and are not going to be.** `clear` and `exit` cannot be
-/// undone — they are the set `Control.asksFirst` names — and a grid is eleven identical squares a
-/// thumb moves across quickly. They stayed in the `…` menu, in their own section, drawn red and
+/// undone — they are the set `Control.isIrreversible` names — and a grid is ten identical squares
+/// a thumb moves across quickly. They stayed in the `…` menu, in their own section, drawn red and
 /// asking first, which is the arrangement that was already protecting them. The two that *are*
 /// here are the two that only ever make a session do less: Escape takes work away, and compacting
 /// folds a conversation rather than losing it. It is the same line the Lock Screen card draws,
 /// for the same reason.
+///
+/// **Compact asks before it runs, and it is still a square.** Those are two different questions
+/// and the split is `Control`'s: `asksFirst` is whether the phone puts a question in front of it,
+/// `isIrreversible` is whether anything can bring it back. Compacting costs the detail of
+/// everything said so far, which is worth a sentence and a second tap; it is not `clear`, and
+/// demoting it into the red section would have said it was. So the square stays — it is the one
+/// that prints the window figure the decision is made on — and `run` routes it through the page's
+/// dialog.
 extension DashboardView {
-    /// The name, which is also the way to change it. `/rename` is typed into the pane, so this
-    /// needs one — see `SessionHead.hasNoPane`, which is the same rule one file over.
-    var nameTile: some View {
-        DashboardTile(glyph: "text.cursor",
-                      title: "Name",
-                      value: session.name,
-                      caption: needsPane,
-                      ready: hasPane,
-                      spoken: "Rename this session") { opened = .name }
-    }
-
     /// Where it is running, and bringing that window to the front. The pane's own title, because
     /// "which of the nine splits is this" is the question somebody at the Mac is actually asking.
     var macTile: some View {
@@ -58,10 +62,21 @@ extension DashboardView {
                              preview: Dashboard.few(queued).compactMap {
                                  Dashboard.opening($0.text)
                              },
+                             // Behind a prompt, the same as the subagents: a queued prompt is
+                             // words waiting to be typed into a session, which is the one thing
+                             // in this app that literally is a line at a terminal.
+                             look: .terminal,
                              lit: queued.isEmpty ? nil : accent,
                              ready: !queued.isEmpty,
                              spoken: "Clear queued prompts") {
-            Task { await model.clearQueue(for: session) }
+            // Through the page's one dialog, the same as Compact beside it. Clearing an inbox is
+            // **not** a `Control` — the daemon writes a timestamp rather than typing anything
+            // into a pane — so the slot it lands in is a `Confirmation` and the words are
+            // `Caution`'s own. That widening is the whole reason this square can ask at all
+            // without a second sheet on the page.
+            confirming = Confirmation(caution: .clearingInbox(of: session.name)) {
+                await model.clearQueue(for: session)
+            }
         }
     }
 
@@ -87,10 +102,19 @@ extension DashboardView {
     /// the noise the "nothing is labelled at rest" rule exists to stop.
     var needsPane: String? { hasPane ? nil : "Needs its pane" }
 
-    /// Neither of the two tiles here asks first, by definition: the ones that do are the ones
-    /// that are not on this grid. So this is the model directly, exactly as the menu's own
-    /// `send` is, and there is no confirmation to route through the page.
+    /// A control from a square, through the page's one confirmation where the control asks for
+    /// one.
+    ///
+    /// Compacting asks now, so this is no longer the model directly. It is the *same* dialog the
+    /// menu's two use — `SessionView.confirming`, reading its words off the control's own
+    /// `Caution` — rather than a second one on this pane: an action carrying its own question is
+    /// the whole reason that type exists, and a dialog per surface is how one of them ends up
+    /// saying "Clear this?" before compacting.
     func run(_ action: Control) {
-        Task { await model.control(action, of: session) }
+        if let asked = Confirmation(action, of: session, on: model) {
+            confirming = asked
+        } else {
+            Task { await model.control(action, of: session) }
+        }
     }
 }

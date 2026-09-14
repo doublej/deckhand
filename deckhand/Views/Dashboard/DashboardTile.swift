@@ -32,6 +32,10 @@ struct DashboardTile: View {
     /// first grid that looked finished. Empty where there is nothing true to put here, and then
     /// the tile is simply shorter rather than padded out to a shape.
     var preview: [String] = []
+    /// What kind of thing those lines are, so the square says it before a word of it is read —
+    /// a slip draws as a page, a subagent as something typed at a prompt, a file in mono. The
+    /// default is plain sentences, which is what a square whose preview is prose still wants.
+    var look: TileLook = .lines
     /// The same fact as a bar, where the fact is a share of something. Only the window has one:
     /// "372k of 450k" is arithmetic somebody has to do, and the bar is the answer already done.
     var meter: Double?
@@ -110,15 +114,13 @@ struct DashboardTile: View {
         }
     }
 
-    /// The preview lines. Secondary ink rather than tertiary: this is the content of the square,
-    /// not a footnote to it, and the caption underneath is the thing that should recede. Indexed
-    /// rather than keyed on the line itself, because two files in two folders share a name.
+    /// The preview lines, each drawn as its kind — see `TileLook`. Secondary ink rather than
+    /// tertiary: this is the content of the square, not a footnote to it, and the caption
+    /// underneath is the thing that should recede. Indexed rather than keyed on the line itself,
+    /// because two files in two folders share a name.
     private var lines: some View {
         ForEach(Array(preview.enumerated()), id: \.offset) { _, line in
-            Text(line)
-                .font(Typography.hint)
-                .foregroundStyle(Palette.textSecondary)
-                .lineLimit(1)
+            TileLine(look: look, words: line)
         }
     }
 

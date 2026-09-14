@@ -31,6 +31,11 @@ struct DashboardView: View {
     /// Which of the folded panes is open. Held by the page rather than here because the manager
     /// can ask for one by name before anybody has looked at this view — see `SessionView.show`.
     @Binding var opened: DashboardDestination?
+    /// What is waiting to be confirmed, which is the page's and not this pane's. Two squares set
+    /// it — Compact and Clear inbox — and both land in the same `confirmationDialog`
+    /// `SessionHead`'s menu uses. One dialog for everything on this page that asks, wherever it
+    /// was pressed. See `DashboardView+Doing`.
+    @Binding var confirming: Confirmation?
 
     /// The standing orders, this view's own, exactly as `OrdersView` keeps its own: it is one
     /// screen's state and nothing else in the app wants it. Nil until the Mac answers, so a tile
@@ -123,7 +128,6 @@ struct DashboardView: View {
         // further in from here rather than gone: `Swapping` presents `SessionFilters` itself.
         case .filters: Swapping(model: model, session: session, say: say)
         case .project: ProjectSettingsView(model: model, project: here)
-        case .name: rename
         }
     }
 
@@ -156,12 +160,6 @@ struct DashboardView: View {
     private var tree: some View {
         ContextTree(context: docs ?? ContextDocs()) { doc = $0 }
             .sheet(item: $doc) { AssetView(model: model, session: session, asset: $0) }
-    }
-
-    private var rename: some View {
-        Renaming(session: session, say: say) { wanted in
-            Task { await model.rename(session, to: wanted) }
-        }
     }
 
     /// Everything the squares need that the listing does not already carry.
@@ -236,11 +234,13 @@ struct DashboardView: View {
     }
 }
 
-/// What a tile opens. Top level rather than nested, because the page holds it: the manager can
+/// What a tile opens. Renaming is not one of them any more — it is the page's title that opens
+/// that, and `manager/doing.py`'s `PANES` never knew the word, so nothing on the wire loses a
+/// name it could ask for. Top level rather than nested, because the page holds it: the manager can
 /// ask for "slips" before this view has ever been on screen, and the ask has to land somewhere
 /// that survives the pane being rebuilt.
 enum DashboardDestination: String, Identifiable, CaseIterable {
-    case slips, agents, files, orders, filters, context, project, name
+    case slips, agents, files, orders, filters, context, project
 
     var id: String { rawValue }
 }

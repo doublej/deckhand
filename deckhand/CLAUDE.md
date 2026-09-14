@@ -234,7 +234,8 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
 - **A square that cannot carry a number is not a square.** `Views/Dashboard/` is a grid, and every
   tile carries the count it is about — slips waiting, files touched, the first written line of the
   standing orders, how many filters run out of how many this Mac offers, what the CLAUDE.md tree
-  costs, how full the window is and what is answering. That is the whole reason it beats the menu
+  costs, how full the window is and what is answering. The name is not one of them — it is the
+  page's title, which is where it already was. That is the whole reason it beats the menu
   it replaced, which was nine words with no figures beside any of them. **A square names things;
   it does not draw them**: under the number sit up to three lines of what the number is *of* —
   three slip titles, three filenames, three subagent descriptions, one line of plain text each.
@@ -291,10 +292,33 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
 - **Two of the four controls are on the grid and two are not, and it is the same line the Lock
   Screen card draws.** `cancel` and `compact` only ever make a session do less, so they are
   squares — and compact carries the window figure that decides whether to press it, which is the
-  argument for a dashboard in one tile. `clear` and `exit` cannot be undone, which is the set
-  `Control.asksFirst` names, and they stayed in the menu in their own section, red and asking
-  first: a grid of identical squares is where a thumb moves fastest, and that is the worst place
-  in the app for a mis-tap that costs something.
+  argument for a dashboard in one tile. `clear` and `exit` cannot be undone and they stayed in the
+  menu in their own section, red and asking first: a grid of identical squares is where a thumb
+  moves fastest, and that is the worst place in the app for a mis-tap that costs something.
+- **Asking first and cannot-be-undone are two questions, and `Control` answers them separately.**
+  They were one property while the two sets happened to be equal, and the menu filtered on
+  `asksFirst` to draw its red section. Compacting now asks — it costs the detail of everything
+  said so far — so `isIrreversible` is what that section filters on, and compact stays a square.
+  Demoting it into the red group would have said it was `clear`, and putting it on the grid
+  ungated was how it got pressed by accident. The dashboard's `run` routes it through
+  `SessionView.confirming`, which is the *same* dialog the menu's two use: a control carries its
+  own `Caution`, so a second surface needs no second dialog and cannot ask the wrong question.
+- **A tile's preview lines are drawn as the kind of thing they are.** They were three lines of
+  11pt text whatever was in them, so what kind of thing a square held could only be learned by
+  reading it. `TileLook` is the four kinds — a slip draws each title behind a small ruled page,
+  because a slip *is* an HTML page; subagents and queued prompts draw in mono behind a prompt
+  chevron; files and CLAUDE.md documents draw in mono behind a `doc`; everything else, being
+  prose somebody wrote, stays plain. It changes the **line and never the ground**: nothing draws
+  a filled shape inside the card, which is the nesting the tile's own packet forbids, and the one
+  drawn thing (`PageMark`) is a glyph at glyph scale with no fill, right on both surfaces.
+- **The session's name is the page's title and the title is the rename.** It was a `NAME` square
+  on the grid, printing the same name `SessionHead` already draws in the same 20pt two rows above
+  it — two copies of one word, and the pressable one was the lower. The title carries a pencil
+  now and opens the same `Renaming` sheet; the square, the `.name` destination and the page's
+  `rename` are gone. The pencil is **absent** rather than dimmed on a Codex thread or a session
+  with no pane: `/rename` is typed into a pane, and a strip has nowhere to put the square's
+  "Needs its pane" caption. `manager/doing.py`'s `PANES` never knew the word, so nothing on the
+  wire lost a name it could ask for.
 - **The manager still knows five pane names and the phone still answers to all five.**
   `manager/doing.py`'s `PANES` is unchanged and is not the app's to change. `SessionView.show`
   maps "summary" and "transcript" onto panes and "slips", "files" and "orders" onto the dashboard

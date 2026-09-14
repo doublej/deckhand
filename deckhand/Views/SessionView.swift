@@ -10,8 +10,11 @@ struct SessionView: View {
     let opened: Session
     @State private var recorder = Recorder()
     @State private var showing: Pane = .dashboard
-    /// Set while the one control that cannot be undone waits to be confirmed.
-    @State private var confirming: Control?
+    /// Set while something that asks first waits to be confirmed — the menu's two controls, the
+    /// dashboard's Compact square, or its Clear inbox square. One slot, one dialog, whichever
+    /// surface the press came from. It is a `Confirmation` rather than a `Control` because the
+    /// last of those is not one: see `Confirmation` in `Controlling`.
+    @State private var confirming: Confirmation?
     @State private var reading = false
     /// Which square of the dashboard is open, held here rather than on the pane: the manager can
     /// ask for "slips" before anybody has looked at this session, and `show` has to be able to
@@ -27,8 +30,9 @@ struct SessionView: View {
     /// Which way this language reads, so the edge that leaves the page is the leading one.
     @Environment(\.layoutDirection) private var direction
 
-    /// What the confirmation is about to do, in that control's own words.
-    private var asking: Caution? { confirming?.caution(about: session.name) }
+    /// What the confirmation is about to do, in that action's own words. Never this view's:
+    /// a dialog that writes its own sentence is a dialog that says "Clear" before compacting.
+    private var asking: Caution? { confirming?.caution }
 
     /// Three panes, and what they have in common is that all three are things you *read*.
     ///
@@ -72,7 +76,8 @@ struct SessionView: View {
                         reading: $reading,
                         pages: Pane.allCases.count,
                         lit: Pane.allCases.firstIndex(of: showing) ?? 0,
-                        working: model.summarising.contains(session.sessionId))
+                        working: model.summarising.contains(session.sessionId),
+                        say: say)
             pane
                 // All the way down, under the home indicator and into the corners. The panes
                 // stopped at the safe area, which left a band of bare ground across the foot of
@@ -135,19 +140,21 @@ struct SessionView: View {
         // are presented from there — a sheet belongs to whatever triggers it, and what triggers
         // those three is now a square rather than a strip.
         .sheet(isPresented: $reading) { RawView(model: model, session: session) }
-        // One dialog for every control that cannot be undone, and it says whatever that control
-        // says. It used to be written for `clear` alone, so adding `exit` to the menu would have
-        // asked "Clear this?" before quitting Claude Code.
+        // One dialog for everything on this page that asks first, and it says whatever that
+        // thing says. It was written for `clear` alone, so adding `exit` to the menu would have
+        // asked "Clear this?" before quitting Claude Code; `compact` arriving from a square two
+        // panes down then needed nothing here at all, and clearing an inbox — which is not a
+        // control and could not be held in a `Control?` slot — needed only that the slot widen.
         .confirmationDialog(
             asking?.title ?? "",
             isPresented: .init(get: { confirming != nil }, set: { if !$0 { confirming = nil } }),
             titleVisibility: .visible
         ) {
             Button(asking?.verb ?? "", role: .destructive) {
-                // The model directly rather than a helper: the one in `SessionHead` is
-                // for its menu, and a second copy here would be the same three lines
-                // twice. `send` unqualified is the C syscall, which compiles.
-                if let confirming { Task { await model.control(confirming, of: session) } }
+                // Whatever was handed over, which is why this line never names a control. It
+                // used to call `model.control` directly, so a thing to confirm that was not a
+                // keystroke had nowhere to go but a second dialog.
+                if let confirming { Task { await confirming.proceed() } }
                 confirming = nil
             }
             Button("Keep it", role: .cancel) { confirming = nil }
@@ -271,7 +278,11 @@ struct SessionView: View {
     /// which is the one place on this page something must not be drawn.
     private var pane: some View {
         TabView(selection: $showing) {
-            DashboardView(model: model, session: session, say: say, opened: $square)
+            DashboardView(model: model,
+                          session: session,
+                          say: say,
+                          opened: $square,
+                          confirming: $confirming)
                 .tag(Pane.dashboard)
             BriefingView(model: model, session: session).tag(Pane.summary)
             TranscriptView(model: model, session: session, earlier: $earlier).tag(Pane.transcript)

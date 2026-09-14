@@ -1,6 +1,38 @@
 import DeckhandKit
 import Foundation
 
+/// A question the page is about to put up, and the thing to do if the answer is yes.
+///
+/// The page holds one of these at a time and draws one dialog from it, so every surface that can
+/// set it — the session menu, a dashboard square — gets the same sheet and cannot grow one of its
+/// own. It carries the `Caution` rather than a `Control`, which is the whole widening: clearing
+/// an inbox needs confirming and is not a keystroke in a pane, so a slot typed as `Control` could
+/// not hold it and the alternative was a second `confirmationDialog` on the same page.
+///
+/// The words are still the action's own. Nothing here writes a sentence: a control hands over
+/// `Control.caution(about:)` and the inbox hands over `Caution.clearingInbox(of:)`.
+@MainActor
+struct Confirmation {
+    let caution: Caution
+    /// What happens on yes. Not `go`: SwiftLint wants three characters and this repo has
+    /// already renamed two-letter names three times — see `.claude/rules/swift-naming.md`.
+    let proceed: () async -> Void
+
+    init(caution: Caution, proceed: @escaping () async -> Void) {
+        self.caution = caution
+        self.proceed = proceed
+    }
+
+    /// A control as the question it asks, or nil for one that asks nothing.
+    ///
+    /// Failable rather than "always a question" because `cancel` is a real control with no
+    /// caution, and stopping a run is the one thing a thumb may fire straight off the grid.
+    init?(_ action: Control, of session: Session, on model: AppModel) {
+        guard let caution = action.caution(about: session.name) else { return nil }
+        self.init(caution: caution) { await model.control(action, of: session) }
+    }
+}
+
 /// The four things you do *to* a session rather than say to it.
 ///
 /// Split from `Model.swift` for size, but they belong together anyway: three of them are

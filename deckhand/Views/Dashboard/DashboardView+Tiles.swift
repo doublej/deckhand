@@ -14,8 +14,13 @@ extension DashboardView {
     /// Then what it made, what it is running under and what it started with, which is the rest of
     /// "where am I". Compact closes that half rather than opening the next one, because it is a
     /// reading before it is a button: the figure on it is the window, and the press is only what
-    /// you do about the figure. Then the four things you change about the session, and Stop last,
+    /// you do about the figure. Then the things you change about the session, and Stop last,
     /// where a thumb crossing the grid quickly reaches it slowest.
+    ///
+    /// **The name is not a square any more.** It was one — `NAME`, with the session's name
+    /// printed on it — two rows under a page header already drawing that same name in the same
+    /// 20pt. The title is the thing you rename now (`SessionHead`), and this grid is one square
+    /// shorter for it.
     ///
     /// The two controls that cannot be undone are not here at all: they stayed in the menu,
     /// grouped and red, because a grid of identical squares is exactly where a mis-tap costs the
@@ -35,7 +40,6 @@ extension DashboardView {
         }
         projectTile
         if !session.isCodex {
-            nameTile
             macTile
             inboxTile
         }
@@ -51,6 +55,10 @@ extension DashboardView {
                       value: Dashboard.slips(waiting: session.waitingPages,
                                              answered: session.answeredPages),
                       preview: Dashboard.asking(model.artifacts[session.sessionId] ?? []),
+                      // A slip *is* an HTML page, so each title carries one. It is the square
+                      // this whole idea started from: three titles in a box said nothing about
+                      // what you would be opening.
+                      look: .pages,
                       lit: session.waitingPages > 0 ? accent : nil) { opened = .slips }
     }
 
@@ -70,6 +78,9 @@ extension DashboardView {
                              value: Dashboard.agents(running: running,
                                                      finished: model.agents.count - running),
                              preview: Dashboard.doing(Array(model.agents.values)),
+                             // Behind a prompt, in mono: a subagent is a Claude Code session of
+                             // its own, and its title is the sentence this one typed to start it.
+                             look: .terminal,
                              lit: running > 0 ? accent : nil,
                              ready: !model.agents.isEmpty,
                              spoken: "Subagents") { opened = .agents }
@@ -82,7 +93,8 @@ extension DashboardView {
         return DashboardTile(glyph: "doc.on.doc",
                              title: "Files",
                              value: touched.map { Dashboard.files($0.count) } ?? "…",
-                             preview: Dashboard.touched(touched ?? [])) { opened = .files }
+                             preview: Dashboard.touched(touched ?? []),
+                             look: .files) { opened = .files }
     }
 
     /// The standing orders, opened on their first written line — which is the whole reason this
@@ -131,7 +143,10 @@ extension DashboardView {
                       // In the tree's own order, which is the order a session reads them in.
                       // The label rather than the path: every one of these is a CLAUDE.md, so
                       // the folder it speaks for is the only part that tells them apart.
-                      preview: Dashboard.few(docs?.documents ?? []).map(\.label)) {
+                      preview: Dashboard.few(docs?.documents ?? []).map(\.label),
+                      // Every one of these is a CLAUDE.md, which is a file like any other on the
+                      // FILES square beside it — so it is drawn as one.
+                      look: .files) {
             opened = .context
         }
     }
