@@ -25,6 +25,7 @@ the wire.** Everywhere else the word is the same on both sides.
 | **hand** | This same daemon in `--hand` mode on a machine that is not this Mac: it reads its own disk, writes one inbox, and decides nothing. | agent, worker, remote daemon |
 | **link** | The one ssh process per machine that both forwards a port and runs the hand behind it. Its state *is* that machine's reachability. | tunnel, connection, probe |
 | **primary** | The machine this daemon runs on — the one that holds every setting and makes every decision. | master, server |
+| **beacon** | What the Mac's daemon says on the local network so the phone can find it: `_deckhand._tcp` on 4180, carrying both of `/health`'s addresses in its TXT record and never the token. | advert, broadcast, mDNS record |
 
 `host` is deliberately absent: it already means the daemon's own address in the app's
 `ServerSettings`, and one word cannot mean both. The phone never learns a hand exists — a machine

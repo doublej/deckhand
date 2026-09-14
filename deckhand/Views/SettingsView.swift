@@ -70,6 +70,7 @@ struct SettingsView: View {
                     .font(Typography.mono)
                     .frame(maxWidth: 150)
             }
+            Beacons(model: model)
             SettingRow("Token", detail: "Deckhand's page in utt: Copy pairing code.") {
                 TextField("token", text: $model.settings.token)
                     .textInputAutocapitalization(.never)

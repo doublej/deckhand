@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse
 from . import (
     __version__,
     artifacts,
+    beacon,
     briefings,
     config,
     deliver,
@@ -57,6 +58,9 @@ async def lifespan(_: FastAPI):
     """Deckhand's page inside utt, put there fresh on every start: it is what survives utt
     being reinstalled or the folder being cleared, and it costs one file write."""
     plugin.install()
+    # And say on the LAN where this Mac answers, so the phone can find it rather than be
+    # told. A child process rather than a task: `beacon.py` says why that is the whole of it.
+    beacon.start()
     watchers = [asyncio.create_task(plugin.watch()), asyncio.create_task(push.watch()),
                 asyncio.create_task(nudge.watch()), asyncio.create_task(briefings.watch()),
                 asyncio.create_task(manager_agent.watch()),
@@ -66,6 +70,7 @@ async def lifespan(_: FastAPI):
                 # and the hand behind it never falls silent long enough to time itself out.
                 asyncio.create_task(fleet.keep_warm())]
     yield
+    beacon.stop()
     for watcher in watchers:
         watcher.cancel()
     # Every hand dies with its link, which is why nothing had to be installed as a service.
@@ -359,23 +364,6 @@ def live_token(token: str = Body(embed=True), kind: str = Body(embed=True),
         raise HTTPException(status_code=400, detail=f"no such token kind {kind!r}")
     push.remember(token, kind, session)
     return {"registered": kind}
-
-
-def main() -> None:
-    import sys
-
-    import uvicorn
-
-    # `--hand` is a different app, not this one with routes switched off: see `fleet/hand.py`.
-    # Imported here rather than at module scope so the daemon does not pay for it, and so a
-    # hand never constructs this app — with its utt page, its APNs watcher and its manager.
-    if "--hand" in sys.argv[1:]:
-        from .fleet import hand
-
-        hand.main()
-        return
-    log.info("deckhand %s  token: %s", config.base_url(), config.token())
-    uvicorn.run(app, host="0.0.0.0", port=config.PORT, log_level="info")
 
 
 @app.post("/sessions/{session_id}/notify", dependencies=[Depends(require_token)])

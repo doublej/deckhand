@@ -63,6 +63,32 @@ Design is its own packet (`Design/CLAUDE.md`).
 - **`delivered: true` is not the same as "it was said".** The daemon can answer `delivered: true`
   alongside a filter's stop, so every screen asks `Delivery.went` — `delivered && stoppedBy == nil`
   — and never `delivered` alone.
+- **A beacon's addresses are in its TXT record, and the browse is what reads them.**
+  `Finding/Beacon.swift` browses with `NWBrowser.Descriptor.bonjourWithTXTRecord`, so the metadata
+  arrives on the browse result and nothing is resolved — opening an `NWConnection` to an
+  `NWEndpoint.service` to read `currentPath.remoteEndpoint` buys one IP address, where what is
+  wanted is the Mac's own pair in its own order. Both are checked through
+  `ServerSettings(host:).baseURL`, so a tap can only ever fill the Address field with something
+  that field would have accepted typed, and a Mac that could work out only one of the two is a
+  beacon with one candidate rather than no beacon. The same Mac is heard once per interface it is
+  reachable on — measured, `if 1` and `if 17` on this network — so results are keyed by address.
+- **Which of the two goes in is asked, not guessed — but only one of them is asked.**
+  `Beacon.answering` calls `/health` on the `.local` name and takes the IP when that fails: the
+  question is whether this phone's link resolves the name, which is a fact about the phone and
+  not about the Mac, and it is askable at pairing time only because `/health` is the one route
+  with no token on it. **The IP is deliberately never probed**, and the measurement is the
+  argument: in the simulator on 2026-09-14 a first connection to a raw private address came back
+  `-1001` timed out at five seconds while the same address connected fine through
+  `DeckhandClient`'s twenty — so a probe quick enough to sit under a thumb rejects a working
+  address, and one patient enough to be right is twenty seconds of dead tap. A fallback that must
+  prove itself before it may be used is not a fallback, and both ways of being wrong here are
+  cheap: the IP reaches the same daemon, and a dead address is what the Connection row is for.
+- **`Looking` has five cases because three of them are kinds of silence.** Still browsing, heard
+  nothing, and refused permission are different facts, and on iOS a refused local network
+  permission browses silently forever — so a single "no results" would tell somebody there is no
+  Mac when the truth is that this phone would not look. `ServerSettings.adopts` carries the same
+  distinction as a `Bool?`: nil is "nobody asked", which is not a failure and never moves an
+  address somebody typed.
 - **Favourites and the hidden set are keyed by name**, so `Preferences.renamed(from:to:)` has to
   carry them or a starred session silently loses its star on a rename.
 - **Never call a public type `Context` in this module.** Inside a `UIViewRepresentable`, `Context`

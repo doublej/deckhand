@@ -22,7 +22,8 @@ load-bearing: it never types into a pane. See [docs/manager.md](docs/manager.md)
 
 - **Daemon** — Python 3.13, FastAPI, uv. Port **4180**, binds `0.0.0.0`, launchd agent
   `com.jurrejan.deckhand`. Logs to `~/Library/Logs/Deckhand/deckhand.log` (`just logs`). State in
-  `~/Library/Application Support/Deckhand/`.
+  `~/Library/Application Support/Deckhand/`. Says where it is on the LAN as `_deckhand._tcp`,
+  so the phone's pairing screen finds the address; the token is still typed.
 - **Transcription** — utt, on-device, over its plugin file lane. No listener, no token, nothing on
   the network.
 - **Summaries** — the Claude Agent SDK, Haiku 4.5, thinking off, three task tools and nothing else.

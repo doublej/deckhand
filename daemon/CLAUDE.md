@@ -15,6 +15,7 @@ State lives in `~/Library/Application Support/Deckhand/` — `token`, `audio/<se
 
 ```
 app.py          # the endpoints, and nothing else
+__init__.py     # the version, and `main` — the process from the outside, `--hand` included
 config.py       # data dir, token, port
 log.py          # the one log file, in ~/Library/Logs
 sessions/       # which Claude sessions and Codex threads are alive, their pane, what they spent
@@ -37,6 +38,7 @@ files.py        # what the session touched that a person could open, and the per
 artifacts.py    # slips: what a session left for the phone to answer
 transcribe.py   # utt turns a clip into text, through its jobs folder
 plugin.py       # Deckhand's page inside utt: the manifest, its settings, its buttons
+beacon.py       # saying on the LAN where this Mac answers, so the phone need not be told
 push/           # the Lock Screen: `sending.py` is APNs, `__init__.py` is what is worth a card
 ```
 
@@ -461,6 +463,42 @@ whole of it is `docs/manager.md`; three things are worth having here.
   says `no push key on this Mac`. **The host must match the entitlement**: the app signs
   `aps-environment: development`, so the daemon talks to `api.sandbox.push.apple.com`; a token
   minted for one host is refused by the other. See `widgets/CLAUDE.md` for the payload contract.
+
+## Being found on the LAN
+
+`beacon.py` advertises `_deckhand._tcp` on 4180 from the FastAPI lifespan, and the phone's
+pairing screen browses for it. Discovery answers *where*; the pairing code is still typed once.
+
+- **The addresses are in the TXT record, not in the SRV target.** `host=` and `lan=`, plus
+  `name=` and `version=`, so the phone reads a beacon off the browse result itself and never
+  opens a connection to resolve one.
+- **Both of them come out of `config`, and neither is worked out again in `beacon.py`.**
+  `host=` is `urlsplit(base_url()).netloc` and `lan=` is `lan_address()` with the port on it —
+  the same two functions `/health` answers with. This is the same question asked in a second
+  place, and two answers to one question is how they come apart: the argument
+  `settings/routes.for_project` makes for resolving a folder's switches on the Mac.
+- **Two addresses because one of them moves.** The `.local` name is first, because it survives
+  DHCP; the raw IP is behind it, because mDNS name resolution is not something this Mac can
+  promise on every link. Measured 2026-09-14, hours apart: `lan` was `172.20.10.8` (an iPhone
+  personal-hotspot range) and then `192.168.178.180` (the house). The name did not move. The
+  phone asks `/health` whether the **name** resolves for it and takes the IP when it does not;
+  the IP itself is not probed, for the reason written on `Beacon.answering`.
+- **It is `dns-sd -R` held open as a child, not a Python dependency.** The registration lives
+  exactly as long as that process, so there is no unregister path to get wrong. Verified on
+  2026-09-14: `beacon.start()` puts the service on two interfaces, `dns-sd -L` reads back
+  `host=m2-2.local name=deckhand version=0.1.0`, and after `beacon.stop()` the identical browse
+  finds nothing.
+- **The child is in this daemon's process group, and that is the whole of how it dies.** Measured
+  the same day: `dns-sd` comes up with the parent's own pgid, and a `kill -KILL` to that group
+  takes both — which is what launchd does to a job and what Ctrl-C does in `just daemon`. A signal
+  sent to the daemon's **pid alone** leaks it: the parent dies before `stop` runs and the child
+  goes on advertising an address nothing answers, until the next start registers over it.
+- **The token is never advertised**, and a test asserts it against the secret itself rather than
+  against the word "token". mDNS is an unauthenticated broadcast to the whole network, and that
+  token is the only thing in front of every route but `/health`.
+- **A missing `dns-sd` is a log line.** Nothing here may keep the daemon from starting, and a
+  hand on Linux has no such binary — though a hand never reaches this lifespan anyway, since
+  `--hand` builds `fleet/hand.py`'s own app.
 
 ## Off the home network
 

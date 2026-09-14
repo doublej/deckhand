@@ -23,7 +23,9 @@ the model's half of it together, the way `Views/Rail/Linking.swift` already does
 `Views/Archive/` every clip this phone has recorded and the one player that sounds any of them —
 `Listening` is that player's transport, drawn for a sound file the Files tab opens,
 `Views/Talk/` the mark itself,
-`Views/Reading/` the one turn a hold opens and the text view that makes it selectable.
+`Views/Reading/` the one turn a hold opens and the text view that makes it selectable,
+`Views/Settings/` the parts of the settings page that are more than a row — today the Macs
+found on this network.
 `Views/Artifacts/AloudCards.swift` is the other way a slip can be drawn — cards with the app's own
 talk mark, from a page that declared its questions (`Aloud`); `ArtifactView` is the one place that
 chooses between it and the web view. `Views/Projects/` is the picker that starts a new session; its state is `ProjectPicker`, in
@@ -482,6 +484,21 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   with no pane: the Mac asks Codex to interrupt its own turn. The word `CODEX` (`CodexWord`) sits
   beside the state on the rail row and in the header, and the transcript's eyebrow says CODEX. A
   project row asks Claude Code or Codex in a `confirmationDialog` every time — never remembered.
+- **The pairing screen finds the Mac, and never moves one that is working.** `Beacons` (in
+  `Views/Settings/`) browses for `_deckhand._tcp` through `DeckhandKit`'s `Lookout` and fills the
+  Address field in — the `.local` name when `/health` answers on it at the moment of the tap,
+  and the Mac's raw IP when it does not. The row says so while it asks: a tap that costs seconds
+  has to admit it, the same rule the slip's send button is written to. The Token field is untouched, because mDNS is an
+  unauthenticated broadcast and discovery finds an address rather than a secret. Auto-filling is `ServerSettings.adopts` and
+  nothing else: an address nobody has typed, one still on the built-in default, or one this phone
+  has just failed to reach — so two Macs on one network cannot quietly swap under a pairing that
+  answers. `Connection.answering` is `Bool?` for that rule, and the nil matters: a check in flight
+  and a missing token are both "nobody has asked", not "it failed".
+- **Three silences, three sentences.** A browse that has not finished, one that heard nothing, and
+  one this phone refused to run are `Looking`'s separate cases, and the row says a different thing
+  for each — a refused local network permission finds nothing *silently* on iOS, so collapsing
+  them would print "no Mac here" at somebody whose phone simply would not look. Turning that
+  permission on is Settings › Deckhand › Local Network, and the row says so.
 - **ATS:** the app talks plain HTTP to a `.local` name, which needs `NSAllowsLocalNetworking` plus
   `NSLocalNetworkUsageDescription` — both in `project.yml`, not a checked-in plist.
 

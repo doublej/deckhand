@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [project.scripts]
-deckhand-daemon = "deckhand_daemon.app:main"
+deckhand-daemon = "deckhand_daemon:main"
 deckhand-mcp = "deckhand_daemon.mcp.server:main"
 
 [dependency-groups]

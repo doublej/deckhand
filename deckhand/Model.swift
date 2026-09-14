@@ -22,6 +22,20 @@ enum Connection: Equatable {
     var isWorking: Bool { self == .checking }
     var isHealthy: Bool { if case .connected = self { true } else { false } }
 
+    /// Whether the Mac at the saved address answered — and nil when nobody has asked it.
+    ///
+    /// Three-valued because two of these states are not answers: a check in flight has not
+    /// finished, and unpaired is usually a token that has not been typed yet rather than an
+    /// address that is wrong. Only `ServerSettings.adopts` reads this, and reading either of
+    /// those as "failed" would move an address the person typed by hand.
+    var answering: Bool? {
+        switch self {
+        case .connected: true
+        case .failed: false
+        case .checking, .unpaired: nil
+        }
+    }
+
     /// The same four-letter vocabulary utt uses, so the two apps say a state the same way.
     var state: RunState {
         switch self {

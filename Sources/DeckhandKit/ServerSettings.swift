@@ -36,6 +36,22 @@ public struct ServerSettings: Equatable, Sendable {
 
     public var isComplete: Bool { baseURL != nil && !token.isEmpty }
 
+    /// Whether a Mac found on the network may be written into the address field unasked.
+    ///
+    /// A pairing that is working is never moved: somebody with two Macs on one network would
+    /// otherwise find the phone quietly talking to the other one. There are three openings and
+    /// no more — an address nobody has typed, one still on the built-in default, and one this
+    /// phone has just failed to reach.
+    ///
+    /// `answering` is three-valued on purpose. Nil is "not asked", which a check still in
+    /// flight and a phone with no token yet both are, and neither of those is a failure — the
+    /// same empty-versus-nil distinction `Looking` is built around, one screen along.
+    public static func adopts(_ current: String, answering: Bool?) -> Bool {
+        let text = current.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.isEmpty || text == defaultHost { return true }
+        return answering == false
+    }
+
     public func client(urlSession: URLSession = .shared) -> DeckhandClient? {
         guard let baseURL, !token.isEmpty else { return nil }
         return DeckhandClient(baseURL: baseURL, token: token, urlSession: urlSession)

@@ -593,8 +593,12 @@ Sourced from the commit messages and checked against the tree on 2026-09-10.
 - The MCP surface in `docs/agent-surface.md` is designed and phased fourth, not built; making an
   agent's refusals real needs a second token, the same one `docs/control-surface.md`'s last phase
   needs (`6e4e7a0`, `420d9d0`).
-- `NSBonjourServices` is still in `project.yml:51`, kept until someone can test on a device that
-  removing it does not break resolving a `.local` name (`38908eb`).
+- `_http._tcp` is still in `NSBonjourServices` beside the `_deckhand._tcp` the pairing screen
+  now actually browses. Nothing in the app browses it — there is no `NWBrowser` outside
+  `Finding/Beacon.swift` — and Apple's local network privacy note puts `.local` *name*
+  resolution under `NSLocalNetworkUsageDescription` rather than under this list, so it should
+  be removable; it is kept because that has still never been tested on a device and the thing
+  it would break is the app's only working address (`38908eb`).
 - `test_a_clip_becomes_text` polls a wall clock and loses under heavy parallel load; still at
   `daemon/tests/test_transcribe.py:44`, still deadline-based rather than event-based (`41cddfb`).
 - Nothing bounds what *other* utt extensions do to a transcript before Deckhand sees it;

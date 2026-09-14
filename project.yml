@@ -53,7 +53,17 @@ targets:
           - UIInterfaceOrientationLandscapeRight
         NSMicrophoneUsageDescription: Deckhand records what you say and sends it to your Mac for the session you picked.
         NSLocalNetworkUsageDescription: Deckhand talks to the deckhand daemon on your Mac over the local network.
+        # What the app is allowed to browse for. iOS answers a type that is not listed here with
+        # silence — no error, no prompt, an empty browse — so `_deckhand._tcp` being here is the
+        # whole of whether the pairing screen can find a Mac. It matches `beacon.SERVICE` on the
+        # daemon and `Lookout.service` on the phone; all three move together or none do.
+        # `_http._tcp` is browsed by nothing in this app (there is no `NWBrowser` outside
+        # `Finding/Beacon.swift`), and Apple's local network privacy note says resolving a
+        # `.local` *name* is covered by NSLocalNetworkUsageDescription rather than by this list.
+        # It is still here because that last sentence has never been tested on a device, and the
+        # thing it would break is the app's only working address.
         NSBonjourServices:
+          - _deckhand._tcp
           - _http._tcp
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
