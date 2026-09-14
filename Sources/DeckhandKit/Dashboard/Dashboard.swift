@@ -139,6 +139,17 @@ public enum Dashboard {
         return parts.count >= 2 ? String(parts[parts.count - 2]) : ""
     }
 
+    /// The `just` recipes this folder's own justfile offers to run directly.
+    public static func commands(_ count: Int) -> String {
+        count == 0 ? "No justfile" : "\(count) \(count == 1 ? "recipe" : "recipes")"
+    }
+
+    /// The recipes worth naming under the count, in the order `just` itself gave them — the tile
+    /// has no groups to sort by, so it shows the file's own order rather than inventing one.
+    public static func commandNames(_ recipes: [Recipe]) -> [String] {
+        few(recipes).map { "just \($0.name)" }
+    }
+
     /// The chain's running steps, under the names the filters sheet gives them.
     ///
     /// A chain is stored by slug — `max_words`, `replacements` — and a square listing slugs is a

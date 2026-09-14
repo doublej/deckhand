@@ -51,6 +51,9 @@ struct DashboardView: View {
     /// tallied before the aliases are asked for is confidently smaller than the truth, which is
     /// worse than the "…" it would have replaced.
     @State var chain: Incoming?
+    /// This folder's own `just` recipes, for the tile that runs one without a session or a
+    /// terminal in the way. Nil until the Mac answers, same as `docs`.
+    @State var recipes: RecipeListing?
     /// A document opened out of the context tree. Its sheet is declared *inside* the context
     /// sheet's content, not here: a view presents one sheet at a time, and a second one attached
     /// to this view would have nowhere to go while the first is up.
@@ -122,6 +125,7 @@ struct DashboardView: View {
         case .files: framed("Files") { FilesView(model: model, session: session) }
         case .orders: framed("Orders") { OrdersView(model: model, session: session, say: say) }
         case .context: framed("Context") { tree }
+        case .commands: ProjectCommandsView(model: model, project: here)
         // Everything that rewrites what was said, in the order it runs — utt's hints, this Mac's
         // word list and this session's chain — rather than the chain alone. The square's label
         // was already the wider question ("On the way in"), and the chain editor is one press
@@ -188,6 +192,7 @@ struct DashboardView: View {
         async let touched: Void = model.loadFiles(for: session)
         async let written: Void = model.loadArtifacts(for: session)
         async let tree = model.context(for: session)
+        async let justfile = try? client.recipes(for: here)
         var offer: (known: [Filter], steps: [FilterStep])?
         await model.run {
             async let standing = client.orders(of: session.sessionId)
@@ -202,6 +207,7 @@ struct DashboardView: View {
         if let offer, let aliases = await heard { chain = incoming(offer, aliases) }
         await touched
         await written
+        if let justfile = await justfile { recipes = justfile }
         // `model.context` answers a refused request with an *empty* tree rather than nil, so on
         // a re-read this line would quietly replace fifteen CLAUDE.md files with "No CLAUDE.md"
         // — the same confident wrong answer the tally guard above exists to stop, arriving
@@ -240,7 +246,7 @@ struct DashboardView: View {
 /// ask for "slips" before this view has ever been on screen, and the ask has to land somewhere
 /// that survives the pane being rebuilt.
 enum DashboardDestination: String, Identifiable, CaseIterable {
-    case slips, agents, files, orders, filters, context, project
+    case slips, agents, files, orders, filters, context, project, commands
 
     var id: String { rawValue }
 }

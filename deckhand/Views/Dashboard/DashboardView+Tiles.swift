@@ -4,7 +4,7 @@ import SwiftUI
 /// The squares themselves, and the order they are read in.
 ///
 /// Split from the page for the 300-line gate, and the seam is a real one: the page is a grid, a
-/// loader and seven destinations, and none of that changes when a tile is added. What a tile
+/// loader and eight destinations, and none of that changes when a tile is added. What a tile
 /// *says* is `Dashboard`, one module over, where `just test` can prove it.
 extension DashboardView {
     /// The grid, in reading order, and the order is the argument.
@@ -14,8 +14,10 @@ extension DashboardView {
     /// Then what it made, what it is running under and what it started with, which is the rest of
     /// "where am I". Compact closes that half rather than opening the next one, because it is a
     /// reading before it is a button: the figure on it is the window, and the press is only what
-    /// you do about the figure. Then the things you change about the session, and Stop last,
-    /// where a thumb crossing the grid quickly reaches it slowest.
+    /// you do about the figure. Project and Commands come next, and Codex keeps both — neither
+    /// needs a pane, which is exactly what running a recipe never did either. Then the things you
+    /// change about the session, and Stop last, where a thumb crossing the grid quickly reaches
+    /// it slowest.
     ///
     /// **The name is not a square any more.** It was one — `NAME`, with the session's name
     /// printed on it — two rows under a page header already drawing that same name in the same
@@ -39,6 +41,7 @@ extension DashboardView {
             windowTile
         }
         projectTile
+        commandsTile
         if !session.isCodex {
             macTile
             inboxTile
@@ -182,6 +185,18 @@ extension DashboardView {
                       value: session.folder,
                       caption: parent.map { "in \($0)" },
                       spoken: "Project settings") { opened = .project }
+    }
+
+    /// The `just` recipes this folder's own justfile offers — a deploy, a server, anything else,
+    /// run without a session or a terminal in the way. `.terminal`, the same look the subagents
+    /// square draws: a recipe is a prompt somebody would otherwise type, the same as a subagent is.
+    var commandsTile: some View {
+        DashboardTile(glyph: "terminal",
+                      title: "Commands",
+                      value: recipes.map { Dashboard.commands($0.recipes.count) } ?? "…",
+                      preview: Dashboard.commandNames(recipes?.recipes ?? []),
+                      look: .terminal,
+                      spoken: "Run a command") { opened = .commands }
     }
 
     /// The folder one level up, which is most of what tells two `web` folders apart. Nil at the

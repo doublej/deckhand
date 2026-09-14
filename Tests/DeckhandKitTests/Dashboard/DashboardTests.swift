@@ -162,6 +162,21 @@ struct DashboardTests {
         #expect(Dashboard.touched(bare) == ["notes.md", "a/notes.md"])
     }
 
+    @Test("the commands square says how many recipes, or that there is no justfile at all")
+    func commands() {
+        #expect(Dashboard.commands(0) == "No justfile")
+        #expect(Dashboard.commands(1) == "1 recipe")
+        #expect(Dashboard.commands(12) == "12 recipes")
+    }
+
+    @Test("the commands preview reads as the words you would actually type")
+    func commandNames() {
+        let recipes = [Recipe(name: "daemon"), Recipe(name: "build"), Recipe(name: "check"),
+                       Recipe(name: "clean")]
+        #expect(Dashboard.commandNames(recipes) == ["just daemon", "just build", "just check"])
+        #expect(Dashboard.commandNames([]) == [])
+    }
+
     @Test("the chain is previewed by the names the settings sheet uses, not by its slugs")
     func running() {
         let known = [Filter(name: "max_words", title: "Word limit"),
