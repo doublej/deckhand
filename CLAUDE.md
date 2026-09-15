@@ -130,6 +130,10 @@ the session. `?deliver=false` transcribes without sending, for the review card, 
 
 - `GET /projects` — every folder on this Mac a session could be started in, and which source
   said so; `POST /projects/session` opens a terminal there and answers with the session itself
+- `GET|POST|DELETE /bindings`, `GET /bindings/match?url=` — web pages pinned to a listed project
+  folder, as an origin plus optional path prefix; a match answers best first, longest prefix then
+  most recently used. `POST /feedback`, `GET /feedback?path=` — what was said about one spot on
+  such a page, kept per folder, oldest first (`bindings/`)
 - `GET|PUT /settings` — what this Mac has been set to do, globally and per folder; `GET
   /settings/project?path=` is the resolved answer for one of them
 - `GET|PUT /aliases` — the words this Mac always mishears and what they were meant to be, as rows
