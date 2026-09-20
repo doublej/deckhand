@@ -3,7 +3,7 @@
 `starting.py` is `it2` from end to end — a window, then the pane id out of that window, then a
 line run in that pane — and there is no fallback in it to switch off. So this is the second
 backend that observation always implied (`docs/network.md`, *Left out*), and it is deliberately
-the smallest one that can exist: tmux makes a detached session, runs `claude` in it, and
+the smallest one that can exist: tmux makes a detached window, runs `claude` in it, and
 everything after that is `starting`'s own waiting, unchanged and shared.
 
 **Two facts, measured on 2026-09-13 rather than assumed.**
@@ -11,7 +11,8 @@ everything after that is `starting`'s own waiting, unchanged and shared.
 - On Fractal `claude.exe` resolves inside a tmux session on its own, to
   `C:\\Users\\jurre\\.local\\bin\\claude.exe`.
 - On Ubuntu it does not. `command -v claude` inside a detached tmux session finds nothing,
-  because that session reads no login profile — the same hole `fleet/link.py` already patches
+  because a detached session or window reads no login profile — the same hole `fleet/link.py`
+  already patches
   for `uv`, and patched here the same way. Without it the tmux session is created, exits
   instantly, and the failure reads as "claude was started but has not reported itself yet":
   a timeout forty seconds later describing the wrong thing entirely.
@@ -25,6 +26,7 @@ invariant is relaxed to let this exist.
 from __future__ import annotations
 
 import shlex
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -65,16 +67,34 @@ def start(cwd: str, model: str = "") -> tuple[Session | None, str | None]:
 
 
 def _new_session(name: str, folder: Path, model: str) -> bool:
-    """`tmux new-session -d`, detached, in that folder, running claude.
+    """A window in the session the person actually attaches to where there is one, a detached
+    session of its own where there is not. Detached either way, because nobody is watching: the
+    hand has to outlive this request, and that is what makes tmux the supervisor and not us.
 
-    Detached because there is nobody watching it: the session has to outlive this request, and
-    `-d` is what makes tmux the supervisor rather than this process.
+    A hand used to be a session of its own always, and that was the bug: bare `tmux` starting the
+    server meant the server was started from `~/.tmux.conf`, so a byobu login arriving second
+    joined it and silently lost byobu's status bar and keybinds entirely. Measured on mbp-ubuntu
+    on 2026-09-20 — whoever wins the race to start the server decides whether the person has a
+    byobu at all. A window in their own session cannot win that race.
     """
-    command = ["tmux", "new-session", "-d", "-s", _handle(name), "-c", str(folder), _launch(name, model)]
+    handle = _handle(name)
     try:
+        target = _person_session()
+        if target is None:
+            command = [_tmux(), "new-session", "-d", "-s", handle, "-c", str(folder)]
+        else:
+            command = [_tmux(), "new-window", "-d", "-t", f"{target}:", "-n", handle, "-c", str(folder)]
         done = subprocess.run(
-            command, capture_output=True, text=True, timeout=TMUX_TIMEOUT, check=False
+            [*command, _launch(name, model)],
+            capture_output=True, text=True, timeout=TMUX_TIMEOUT, check=False
         )
+        if done.returncode == 0 and target is not None:
+            # Or claude renames the tab off `deckhand-…` the moment it starts, and the prefix
+            # `_handle` exists for stops meaning anything.
+            subprocess.run(
+                [_tmux(), "set-window-option", "-t", f"{target}:{handle}", "automatic-rename", "off"],
+                capture_output=True, text=True, timeout=TMUX_TIMEOUT, check=False
+            )
     except (OSError, subprocess.SubprocessError) as error:
         log.warning("tmux failed: %s", error)
         return False
@@ -84,9 +104,43 @@ def _new_session(name: str, folder: Path, model: str) -> bool:
     return True
 
 
+def _tmux() -> str:
+    """byobu's wrapper where the machine has one, which is `tmux -u -2 -f <byobu profile>`.
+
+    `-f` is read only by a *starting* server, so this is what decides the config when deckhand is
+    the one that starts it. Never `-L` or `-S` and never `TMUX_TMPDIR`: byobu is on the default
+    socket, and a hand on any other socket is a hand the person cannot see.
+    """
+    return shutil.which("byobu-tmux") or "tmux"
+
+
+def _person_session() -> str | None:
+    """The session to hang a hand off: one a person is attached to, else the most recently used.
+
+    Hands are excluded by their own prefix, so on a machine nobody is logged into each one stays
+    a session of its own rather than piling into the first one's and dying with it. No server at
+    all exits non-zero here, which is the same answer — and then the old behaviour, exactly.
+    """
+    listed = subprocess.run(
+        [_tmux(), "list-sessions", "-F", "#{session_attached} #{session_activity} #{session_name}"],
+        capture_output=True, text=True, timeout=TMUX_TIMEOUT, check=False
+    )
+    if listed.returncode != 0:
+        return None
+    return _pick(listed.stdout)
+
+
+def _pick(listing: str) -> str | None:
+    """The newest attached session in that listing, or the newest of any, ignoring hands."""
+    rows = [line.split(" ", 2) for line in listing.splitlines() if line.count(" ") >= 2]
+    theirs = [r for r in rows if not r[2].startswith("deckhand-")]
+    theirs.sort(key=lambda r: (int(r[0]), int(r[1])), reverse=True)
+    return theirs[0][2] if theirs else None
+
+
 def _handle(name: str) -> str:
-    """What tmux calls the window. Prefixed, so a person looking at `tmux ls` on that machine can
-    see which sessions arrived from a phone and which they started themselves."""
+    """What tmux calls the window. Prefixed, so a person looking at their tab bar can see which
+    of them arrived from a phone and which they opened themselves."""
     return f"deckhand-{name}"
 
 
