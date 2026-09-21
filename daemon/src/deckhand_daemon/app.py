@@ -28,6 +28,7 @@ from . import (
     sessions,
     summarize,
 )
+from .bindings import routes as binding_routes
 from .filters import routes as filter_routes
 from .fleet import routing as fleet_routing
 from .links import routes as link_routes
@@ -84,6 +85,7 @@ app = FastAPI(title="Deckhand", version=__version__, lifespan=lifespan)
 app.middleware("http")(fleet_routing.forward_remote_reads)
 app.middleware("http")(sessions.answer_for_codex)
 app.include_router(artifacts.router, dependencies=[Depends(require_token)])
+app.include_router(binding_routes.router, dependencies=[Depends(require_token)])
 app.include_router(filter_routes.router, dependencies=[Depends(require_token)])
 app.include_router(link_routes.router, dependencies=[Depends(require_token)])
 app.include_router(manager_routes.router, dependencies=[Depends(require_token)])
