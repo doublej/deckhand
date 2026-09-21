@@ -1,8 +1,11 @@
 """The two documents: `bindings.json` and `feedback.json`, in the data dir.
 
 `bindings.json` is `{"bindings": [{"pattern", "path", "last_used"}]}` and `feedback.json` is
-`{"<folder>": [entry, ...]}`. Read whole and written whole, like `settings/wants.py`, but through
-`os.replace`, so a crash mid-write leaves the last good file rather than half of one.
+`{"<folder>": [entry, ...]}`. An entry's screenshot and its crop are JPEGs in `feedback-shots/`
+beside them, named by the entry's `id`, and the entry holds only their absolute paths.
+
+Read whole and written whole, like `settings/wants.py`, but through `os.replace`, so a crash
+mid-write leaves the last good file rather than half of one.
 
 Every change is read, modify, write, so one lock covers both files: two entries posted in the same
 instant would otherwise each read the list without the other, and one of them would be lost.
@@ -16,12 +19,14 @@ import json
 import os
 import threading
 from datetime import UTC, datetime
+from pathlib import Path
 
 from ..config import data_dir
 from . import patterns
 
 BINDINGS = "bindings.json"
 FEEDBACK = "feedback.json"
+SHOTS = "feedback-shots"
 
 _lock = threading.Lock()
 
@@ -77,6 +82,43 @@ def add_feedback(entry: dict) -> dict:
             best[0]["last_used"] = entry["created_at"]
             _write(BINDINGS, {"bindings": every})
     return entry
+
+
+def entry(entry_id: str) -> dict | None:
+    """The entry with that id, in whichever folder. Entries kept before ids existed have none."""
+    return _with_id(_read(FEEDBACK, {}), entry_id)
+
+
+def shot(entry_id: str, kind: str) -> Path:
+    """Where an entry's `screenshot` or `crop` lives. Only ever called with a kept or new id."""
+    name = f"{entry_id}.jpg" if kind == "screenshot" else f"{entry_id}-crop.jpg"
+    return data_dir() / SHOTS / name
+
+
+def save_shot(entry_id: str, kind: str, jpeg: bytes) -> str:
+    """Write the image and answer its absolute path, the string the entry keeps."""
+    final = shot(entry_id, kind)
+    final.parent.mkdir(exist_ok=True)
+    half = final.with_name(f"{final.name}.part")
+    half.write_bytes(jpeg)
+    os.replace(half, final)
+    return str(final.resolve())
+
+
+def set_crop(entry_id: str, jpeg: bytes) -> dict | None:
+    """Keep a crop for that entry, replacing any before it. None when no entry has that id."""
+    with _lock:
+        kept = _read(FEEDBACK, {})
+        found = _with_id(kept, entry_id)
+        if found is None:
+            return None
+        found["crop"] = save_shot(entry_id, "crop", jpeg)
+        _write(FEEDBACK, kept)
+    return found
+
+
+def _with_id(kept: dict, entry_id: str) -> dict | None:
+    return next((e for entries in kept.values() for e in entries if e.get("id") == entry_id), None)
 
 
 def _read(name: str, empty: dict) -> dict:
