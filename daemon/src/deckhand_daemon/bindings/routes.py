@@ -15,10 +15,14 @@ carries, and `bindings/__init__.py` must not import this module.
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
 import math
+import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Body, HTTPException
+from fastapi.responses import FileResponse
 
 from ..projects import sources
 from . import patterns, stored
@@ -55,14 +59,19 @@ async def remove_binding(pattern: str, path: str) -> dict:
 
 @router.post("/feedback")
 async def add_feedback(sent: Annotated[dict, Body()]) -> dict:
-    """Keep one thing said about one spot on a page, stamped here, under its folder."""
+    """Keep one thing said about one spot on a page, stamped here, under its folder.
+
+    A `screenshot` sent with it is written beside `feedback.json`; the entry keeps its path only.
+    """
     path = await _listed(sent.get("path"))
     url = sent.get("url")
     _normalised(url, "url")
     transcript = sent.get("transcript")
     if not isinstance(transcript, str) or not transcript.strip():
         raise HTTPException(status_code=400, detail="transcript must be a non-empty string")
+    jpeg = None if sent.get("screenshot") is None else _jpeg(sent, "screenshot")
     entry = {
+        "id": uuid.uuid4().hex,
         "path": path,
         "url": url,
         "title": _text(sent, "title"),
@@ -73,7 +82,12 @@ async def add_feedback(sent: Annotated[dict, Body()]) -> dict:
         "viewport_height": _number(sent, "viewport_height"),
         "transcript": transcript,
         "created_at": stored.now(),
+        "screenshot": None,
+        "crop": None,
     }
+    if jpeg is not None:
+        entry["screenshot"] = await asyncio.to_thread(
+            stored.save_shot, entry["id"], "screenshot", jpeg)
     return await asyncio.to_thread(stored.add_feedback, entry)
 
 
@@ -81,6 +95,33 @@ async def add_feedback(sent: Annotated[dict, Body()]) -> dict:
 async def list_feedback(path: str) -> dict:
     folder = await _listed(path)
     return {"entries": await asyncio.to_thread(stored.feedback, folder)}
+
+
+@router.get("/feedback/image")
+async def feedback_image(id: str, kind: str) -> FileResponse:
+    """An entry's screenshot or crop. Found by the kept entry's id, never by a path sent here."""
+    if kind not in ("screenshot", "crop"):
+        raise HTTPException(status_code=400, detail="kind must be screenshot or crop")
+    entry = await asyncio.to_thread(stored.entry, id)
+    if entry is None or not entry.get(kind):
+        raise HTTPException(status_code=404, detail=f"no {kind} for that id")
+    found = stored.shot(entry["id"], kind)
+    if not found.is_file():
+        raise HTTPException(status_code=404, detail=f"no {kind} for that id")
+    return FileResponse(found, media_type="image/jpeg")
+
+
+@router.put("/feedback/crop")
+async def crop_feedback(sent: Annotated[dict, Body()]) -> dict:
+    """Keep the crop of an entry's screenshot the person drew, replacing any before it."""
+    entry_id = sent.get("id")
+    jpeg = _jpeg(sent, "image")
+    found = None
+    if isinstance(entry_id, str):
+        found = await asyncio.to_thread(stored.set_crop, entry_id, jpeg)
+    if found is None:
+        raise HTTPException(status_code=404, detail="no feedback entry has that id")
+    return found
 
 
 async def _listed(path: object) -> str:
@@ -99,6 +140,17 @@ def _normalised(value: object, name: str) -> str:
         return patterns.normalised(value)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=f"{name}: {error}") from error
+
+
+def _jpeg(sent: dict, name: str) -> bytes:
+    """Base64 without a `data:` prefix, decoded. Not checked for being a JPEG: it is only kept."""
+    value = sent.get(name)
+    if isinstance(value, str) and value:
+        try:
+            return base64.b64decode(value, validate=True)
+        except binascii.Error as error:
+            raise HTTPException(status_code=400, detail=f"{name} must be base64") from error
+    raise HTTPException(status_code=400, detail=f"{name} must be base64")
 
 
 def _number(sent: dict, name: str) -> int | float:
