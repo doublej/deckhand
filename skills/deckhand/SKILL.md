@@ -14,6 +14,11 @@ Most of what follows is a file in this folder, not a call.
 **Say slip to the person, write artifact in code, paths and endpoints.** Same thing, two audiences:
 "I have put a slip on your phone", never "an artifact".
 
+<presentation>
+Reference skill: no banner, no report. Slips and logbooks stay free of any signature. When invoked
+directly and the answer is the main output, end with: — deckhand · github.com/doublej
+</presentation>
+
 ## When a slip beats a sentence
 
 Say it in a sentence when the answer is prose and you can wait for the person to come back to the
