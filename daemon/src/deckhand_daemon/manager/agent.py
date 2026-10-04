@@ -23,13 +23,17 @@ thread was lost.
 from __future__ import annotations
 
 import asyncio
+import time
 
-from .. import prompts
+from .. import prompts, push
 from ..config import data_dir
 from ..log import log
 from . import doing, talk
 
 MANAGER = prompts.load("manager")
+#: Added to the system prompt for a run nobody is watching the panel for: every word of it is
+#: going to be read off a Lock Screen, so it is written for one.
+AWAY = prompts.load("manager-away")
 MODEL = MANAGER.settings["model"]
 TIMEOUT = MANAGER.settings["timeout"]
 MAX_TURNS = MANAGER.settings["max_turns"]
@@ -43,11 +47,44 @@ IDLE = 30.0
 _queue: list[str] = []
 _wake = asyncio.Event()
 _working = False
+#: What the model is writing right now and has not finished, and the tool it is in. In memory
+#: and never in the file: a half sentence is not an entry, and the next poll replaces it anyway.
+_partial = ""
+_doing = ""
+#: When the panel last asked for the conversation. The panel polls only while it is on screen,
+#: so this is the whole of how the daemon knows whether anybody is reading it.
+_seen = 0.0
+#: How stale that may be and still count as watched. The panel polls every four seconds at rest.
+WATCHED = 10.0
 
 
 def working() -> bool:
     """Whether a run is in flight. What makes the panel poll fast and draw a thinking line."""
     return _working or bool(_queue)
+
+
+def progress() -> dict:
+    """The run in flight, as far as it has got: the sentence half-written and the tool it is in."""
+    return {"partial": _partial, "doing": _doing}
+
+
+def seen() -> None:
+    """The panel just read the conversation."""
+    global _seen
+    _seen = time.monotonic()
+
+
+def watched() -> bool:
+    """Whether somebody has the panel open, judged by how recently it polled."""
+    return time.monotonic() - _seen < WATCHED
+
+
+def speak(role: str, text: str) -> dict:
+    """Write one thing the person should hear, and push it when the panel is not on screen."""
+    entry = talk.say(role, text)
+    if entry and not watched():
+        push.told(entry["text"])
+    return entry
 
 
 def ask(text: str) -> dict:
@@ -83,20 +120,21 @@ async def _sleep(seconds: float) -> None:
 
 
 async def _answer(text: str) -> None:
-    global _working
+    global _working, _partial, _doing
     _working = True
     try:
         spoke, error = await _run(text, talk.resumes())
         if error and not spoke and talk.resumes():
             log.warning("the manager could not resume, starting a new conversation: %s", error)
-            talk.say("note", "That conversation could not be picked up again, so this is a new "
+            speak("note", "That conversation could not be picked up again, so this is a new "
                              "one. Nothing before this line is in front of me any more.")
             talk.resumes_at("")
             spoke, error = await _run(text, "")
         if error and not spoke:
-            talk.say("note", error)
+            speak("note", error)
     finally:
         _working = False
+        _partial = _doing = ""
 
 
 async def _run(text: str, resume: str) -> tuple[bool, str | None]:
@@ -112,7 +150,9 @@ async def _run(text: str, resume: str) -> tuple[bool, str | None]:
             ClaudeAgentOptions,
             ClaudeSDKError,
             ResultMessage,
+            StreamEvent,
             TextBlock,
+            ToolUseBlock,
             query,
         )
     except ImportError:
@@ -120,7 +160,13 @@ async def _run(text: str, resume: str) -> tuple[bool, str | None]:
 
     options = ClaudeAgentOptions(
         model=MODEL,
-        system_prompt=SYSTEM_PROMPT,
+        # Decided once per run, when it starts. A run is seconds; a person who puts the phone
+        # away halfway through still gets each message pushed, and `<lock_screen>` in the base
+        # prompt is what makes the first line of every one of them fit there.
+        system_prompt=SYSTEM_PROMPT if watched() else f"{SYSTEM_PROMPT}\n\n{AWAY.body}",
+        # Token by token, so the panel can draw the sentence being written rather than a dot
+        # until the whole block is done. Only `_partial` sees these; the file still gets blocks.
+        include_partial_messages=True,
         # `allowed_tools` only auto-approves; `tools=[]` is what actually removes the built-ins.
         # Together they are the whole surface: twelve in-process functions and no shell, no
         # file access and no network. `bypassPermissions` is safe for exactly that reason —
@@ -143,12 +189,19 @@ async def _run(text: str, resume: str) -> tuple[bool, str | None]:
     )
 
     async def collect() -> tuple[bool, str | None]:
+        global _partial, _doing
         spoke = False
         async for message in query(prompt=text, options=options):
+            if isinstance(message, StreamEvent):
+                _follow(message.event)
+                continue
             if isinstance(message, AssistantMessage):
                 for block in message.content:
-                    if isinstance(block, TextBlock) and block.text.strip():
-                        talk.say("manager", block.text)
+                    if isinstance(block, ToolUseBlock):
+                        _doing = _bare(block.name)
+                    elif isinstance(block, TextBlock) and block.text.strip():
+                        _partial = ""
+                        await asyncio.to_thread(speak, "manager", block.text)
                         spoke = True
             session_id = getattr(message, "session_id", "")
             if session_id:
@@ -157,7 +210,7 @@ async def _run(text: str, resume: str) -> tuple[bool, str | None]:
                 if message.is_error:
                     return spoke, f"the model returned an error: {message.subtype}"
                 if not spoke and (message.result or "").strip():
-                    talk.say("manager", message.result)
+                    await asyncio.to_thread(speak, "manager", message.result)
                     spoke = True
                 return spoke, None if spoke else "the model returned nothing."
         return spoke, None if spoke else "the model returned nothing."
@@ -174,3 +227,24 @@ async def _run(text: str, resume: str) -> tuple[bool, str | None]:
     except (ClaudeSDKError, OSError) as error:
         log.warning("the manager failed: %s", error)
         return False, f"the model could not be reached: {error}"
+
+
+def _follow(event: dict) -> None:
+    """One streamed event: a tool starting, or more of the sentence being written."""
+    global _partial, _doing
+    kind = event.get("type")
+    if kind == "content_block_start":
+        block = event.get("content_block") or {}
+        if block.get("type") == "tool_use":
+            _doing = _bare(block.get("name", ""))
+        elif block.get("type") == "text":
+            _doing = ""
+    elif kind == "content_block_delta":
+        delta = event.get("delta") or {}
+        if delta.get("type") == "text_delta":
+            _partial += delta.get("text", "")
+
+
+def _bare(name: str) -> str:
+    """`mcp__deckhand__list_sessions` is `list_sessions` to anybody reading a phone."""
+    return name.rsplit("__", 1)[-1]

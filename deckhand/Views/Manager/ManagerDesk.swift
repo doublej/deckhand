@@ -42,6 +42,18 @@ final class ManagerDesk {
     var draft = ""
     var sending = false
     var failure: String?
+    /// What was said and is on its way to the Mac, drawn at once rather than when the Mac has
+    /// written it down. Each goes the moment its own entry comes back.
+    var pending: [String] = []
+    /// A clip is with the Mac being turned into words.
+    var hearing = false
+    /// What a clip was heard as, held for reading before it goes — the review card, as a
+    /// session's clip has it, and under the same preference.
+    var review: String?
+    /// The run in flight as far as it has got: the sentence being written, and the tool it is in.
+    /// Replaced by every poll, never appended to.
+    var partial = ""
+    var doing = ""
 
     /// The last entry id the Mac has. What the next poll asks for everything after.
     var cursor = 0
@@ -61,9 +73,16 @@ final class ManagerDesk {
     /// Fold a poll's answer in, and hand back any commands that are new enough to obey.
     func absorb(_ feed: ManagerFeed) -> [ManagerCommand] {
         if cursor == 0 { entries.removeAll() }
-        entries.append(contentsOf: feed.entries)
+        // By id rather than by position: `landed` may already hold one of these, drawn the moment
+        // the Mac answered the send, and a poll can still bring entries older than that one.
+        let known = Set(entries.map(\.id))
+        let fresh = feed.entries.filter { !known.contains($0.id) }
+        entries.append(contentsOf: fresh)
+        if !fresh.isEmpty { entries.sort { $0.id < $1.id } }
         cursor = max(feed.newest, entries.last?.id ?? 0)
         working = feed.working
+        partial = feed.working ? feed.partial ?? "" : ""
+        doing = feed.working ? feed.doing ?? "" : ""
         let floor = obeyFrom ?? feed.newest
         obeyFrom = cursor
         return feed.entries.filter { $0.id > floor }.compactMap(\.command)
@@ -75,6 +94,18 @@ final class ManagerDesk {
         cursor = 0
         obeyFrom = nil
         working = false
+        partial = ""
+        doing = ""
+        pending.removeAll()
+    }
+
+    /// The Mac has written down something this phone drew ahead of it. The cursor is left where
+    /// it is: the poll still owes everything between it and this entry.
+    func landed(_ entry: ManagerEntry, from words: String) {
+        if let index = pending.firstIndex(of: words) { pending.remove(at: index) }
+        guard !entries.contains(where: { $0.id == entry.id }) else { return }
+        entries.append(entry)
+        entries.sort { $0.id < $1.id }
     }
 }
 
@@ -136,46 +167,60 @@ extension AppModel {
         }
     }
 
-    /// Say something to the manager. The panel shows it at once; the reply arrives by poll.
+    /// Say something to the manager. Drawn at once, before the Mac has it; the reply arrives by
+    /// poll. Words that never reached the Mac go back into the field rather than vanishing.
     func askManager(_ text: String) async {
         let words = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !words.isEmpty, let client = settings.client() else { return }
         manager.sending = true
         manager.draft = ""
+        manager.pending.append(words)
         // Held true until the poll that brings the first block back, so the panel does not go
         // quiet between the words landing and the model starting. The Mac's own `working` takes
         // over on the next poll and this stops mattering.
         manager.working = true
         defer { manager.sending = false }
-        await run {
-            let entry = try await client.askManager(words)
-            self.manager.entries.append(entry)
-            self.manager.cursor = max(self.manager.cursor, entry.id)
+        do {
+            manager.landed(try await client.askManager(words), from: words)
+        } catch {
+            manager.pending.removeAll { $0 == words }
+            manager.draft = words
+            manager.working = false
+            manager.failure = reason(error)
+            return
         }
         await pollManager()
     }
 
-    /// A clip spoken into the panel. Transcribed on the Mac and handed straight to the manager.
-    ///
-    /// Never held for review the way a session's clip is. A prompt into a busy session cannot be
-    /// undone, which is what the review card exists for; the manager is a conversation and the
-    /// worst a mishearing costs here is one more sentence.
+    /// A clip spoken into the panel. Held on the review card first when the person has asked for
+    /// that, exactly as a session's clip is — `preferences.confirms` is the one switch for both.
+    /// Otherwise transcribed and handed straight to the manager.
     func askManager(clip: URL) async {
         guard let client = settings.client() else { return }
-        manager.working = true
+        let confirms = preferences.confirms
+        manager.hearing = true
+        defer { manager.hearing = false }
+        if !confirms { manager.working = true }
         await run {
-            let heard = try await client.upload(clip: clip)
+            let heard = try await client.upload(clip: clip, say: !confirms)
             if let error = heard.error {
                 self.manager.working = false
                 self.manager.failure = error
                 return
             }
-            if let entry = heard.entry {
-                self.manager.entries.append(entry)
-                self.manager.cursor = max(self.manager.cursor, entry.id)
+            if confirms {
+                self.manager.review = heard.text
+            } else if let entry = heard.entry {
+                self.manager.landed(entry, from: entry.text)
             }
         }
-        await pollManager()
+        if !confirms { await pollManager() }
+    }
+
+    /// The review card's Send, with the words as they stand on it.
+    func sendReviewed(_ words: String) async {
+        manager.review = nil
+        await askManager(words)
     }
 
     /// Start over: the Mac drops the entries and the thread behind them, both together.

@@ -34,11 +34,18 @@ AUDIO_SUFFIXES = (".m4a", ".wav", ".caf", ".mp3", ".aac")
 def read_manager(
     since: int = Query(default=0, ge=0, description="the last entry id this phone has seen"),
 ) -> dict:
-    """What has been said, after the id the phone already has, and whether more is coming."""
+    """What has been said, after the id the phone already has, and whether more is coming.
+
+    `partial` and `doing` are the run in flight as far as it has got, so the panel can draw the
+    sentence being written and the tool being called rather than a dot until a block is done.
+    Asking is also what tells the daemon the panel is open — see `agent.watched`.
+    """
+    agent.seen()
     return {
         "entries": talk.entries(since),
         "newest": talk.newest(),
         "working": agent.working(),
+        **agent.progress(),
     }
 
 

@@ -12,6 +12,8 @@ __init__.py     # frontmatter and body, out of one markdown file
 briefing.md     # the briefing agent: what it writes, its model, its three tools
 crafting.md     # the prompt-crafting filter's agent
 idle-check.md   # what a session that has gone quiet is asked
+manager.md      # the manager: its voice, its authority, its twelve tool descriptions
+manager-away.md # added to the manager for a run read off the Lock Screen
 ```
 
 ## Invariants

@@ -187,3 +187,25 @@ and each is a line on `ManagerDesk` plus a case in `ManagerRoute` when it is wan
 `daemon/src/deckhand_daemon/prompts/manager.md`, `Sources/DeckhandKit/Manager/`,
 `deckhand/Views/Manager/`, `daemon/tests/manager/test_manager.py`,
 `Tests/DeckhandKitTests/Wire/ClientTests+Manager.swift`, `UITests/ManagerPanelTests.swift`.
+
+## Live, and away from the panel
+
+**The run in flight is drawn as it goes.** The SDK streams tokens (`include_partial_messages`),
+and `agent.py` keeps the half-written sentence and the tool it is in — in memory, never in the
+file, because half a sentence is not an entry. `GET /manager` carries both as `partial` and
+`doing`; the panel draws the sentence as a card and the tool in the working line, and the block
+replaces it as an entry on the same poll. The poll loop restarts when `working` flips, so a send
+is followed by a one-second pace at once rather than after a four-second rest.
+
+**What is said is drawn before the Mac has it.** A typed send is on screen, dimmed, the moment
+it is sent, and goes back into the field if the Mac never took it. A clip shows *Hearing…* while
+utt works and, under the same `confirms` preference a session's clip uses, lands on the review
+card rather than going straight in — a mishearing here is an instruction to every session.
+
+**A message nobody is watching for is pushed.** The panel polls only while it is on screen, so
+the daemon's own record of the last poll (`agent.watched`, ten seconds) is the whole of how it
+knows. A `manager` or `note` entry written while unwatched goes out as a plain notification
+(`push.told`, the app's own *device* token, `thread-id: manager`); a tap opens the panel. A run
+that starts unwatched gets `prompts/manager-away.md` added to its system prompt — one message,
+lock-screen length, no markdown — and every run is told the first line of each message must
+stand alone (`<lock_screen>`), because a person can pocket the phone halfway through one.

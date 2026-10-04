@@ -361,8 +361,11 @@ def live_token(token: str = Body(embed=True), kind: str = Body(embed=True),
     One card is one session, so an *activity* token says which one it addresses. A phone that
     sends none is a build from before that — taken rather than refused, and dropped, because a
     token that cannot say which card it is could only ever end the wrong one.
+
+    A *device* token is the app's own, for plain notifications — the manager's messages, pushed
+    while its panel is not on screen. One per phone, like *start*.
     """
-    if kind not in ("activity", "start"):
+    if kind not in ("activity", "start", "device"):
         raise HTTPException(status_code=400, detail=f"no such token kind {kind!r}")
     push.remember(token, kind, session)
     return {"registered": kind}

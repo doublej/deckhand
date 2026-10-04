@@ -37,7 +37,9 @@ struct ManagerView: View {
         .environment(\.colorScheme, .dark)
         .accent(accent)
         .overlay(alignment: .top) { arrival }
-        .task(id: desk.open) { await poll() }
+        // Keyed on `working` as well, so a send restarts the loop at the fast pace at once rather
+        // than after whatever is left of a four-second rest.
+        .task(id: [desk.open, desk.working]) { await poll() }
         .onChange(of: desk.open) { _, now in
             named = now
             if !now { typing = false }
@@ -56,7 +58,33 @@ struct ManagerView: View {
                             // a scroll-to that lands on one would silently do nothing.
                             .id(entry.id)
                     }
-                    if desk.working { ActiveLine(doing: nil).padding(.top, Spacing.xxs) }
+                    // Drawn ahead of the Mac: the words are on screen the moment they are sent,
+                    // dimmed until the Mac has written them down.
+                    ForEach(Array(desk.pending.enumerated()), id: \.offset) { _, words in
+                        TurnCard(turn: Turn(role: "user", text: words, timestamp: ""),
+                                 showsRole: desk.entries.last?.role != .person)
+                            .opacity(0.55)
+                    }
+                    if desk.hearing {
+                        Text("Hearing…")
+                            .font(Typography.hint)
+                            .foregroundStyle(Palette.textTertiary)
+                            .padding(.horizontal, Spacing.extraSmall)
+                    }
+                    // The sentence being written, as far as it has got. Replaced by its entry
+                    // when the block is done, on the same poll.
+                    if !desk.partial.isEmpty {
+                        TurnCard(turn: Turn(role: "assistant", text: desk.partial, timestamp: ""),
+                                 showsRole: desk.entries.last?.role != .manager,
+                                 theirWord: "MANAGER")
+                            .id("partial")
+                    }
+                    if desk.working {
+                        ActiveLine(doing: desk.doing.isEmpty ? nil
+                                       : Tool(name: desk.doing, detail: ""))
+                            .padding(.top, Spacing.xxs)
+                            .id("working")
+                    }
                     if let failure = desk.failure {
                         Text(failure)
                             .font(Typography.hint)
@@ -73,6 +101,8 @@ struct ManagerView: View {
             // and pinning to the bottom on a count change would fight a person reading back.
             .onChange(of: desk.entries.last?.id) { _, _ in bottom(scroller) }
             .onChange(of: desk.working) { _, _ in bottom(scroller) }
+            .onChange(of: desk.pending.count) { _, _ in bottom(scroller) }
+            .onChange(of: desk.partial) { _, _ in bottom(scroller) }
             .onAppear { bottom(scroller) }
         }
     }
@@ -99,8 +129,20 @@ struct ManagerView: View {
     /// The one line you write on, and the mark under it. Both send to the same place, so unlike
     /// the orders pane there is no second meaning to keep them apart — a clip goes to the
     /// manager and so does the field.
-    private var foot: some View {
+    @ViewBuilder private var foot: some View {
+        if let heard = desk.review {
+            ReviewCard(text: heard, target: "the manager",
+                       send: { edited in Task { await model.sendReviewed(edited) } },
+                       discard: { model.manager.review = nil })
+                .padding(.bottom, Spacing.extraSmall)
+        } else {
+            writing
+        }
+    }
+
+    private var writing: some View {
         VStack(spacing: Spacing.extraSmall) {
+            if desk.draft.isEmpty && !desk.working { ManagerStarters { send($0) } }
             HStack(spacing: Spacing.extraSmall) {
                 field
                 if desk.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -135,7 +177,7 @@ struct ManagerView: View {
             .lineLimit(1...4)
             .focused($typing)
             .submitLabel(.send)
-            .onSubmit(send)
+            .onSubmit { send() }
             .padding(.horizontal, Spacing.extraSmall)
             .padding(.vertical, Spacing.xxs + 2)
             .background(
@@ -163,10 +205,9 @@ struct ManagerView: View {
             onClip: { await model.askManager(clip: $0) },
             content: { state in
                 TalkMark(state: state, level: recorder.level, saying: "Talk to the manager",
-                         // Nothing here is held for reading first: the review card exists
-                         // because a prompt into a busy session cannot be undone, and a
-                         // sentence to the manager can simply be followed by another.
-                         confirms: false)
+                         // Held for reading under the same switch as a session's clip: a
+                         // mishearing here is an instruction to every session, not one.
+                         confirms: model.preferences.confirms)
             }
         )
     }
@@ -193,13 +234,18 @@ struct ManagerView: View {
         return desk.entries[index - 1].role != desk.entries[index].role
     }
 
-    private func send() {
-        let words = desk.draft
+    private func send() { send(desk.draft) }
+
+    private func send(_ words: String) {
         Task { await model.askManager(words) }
     }
 
+    /// The last thing drawn, whichever kind it is: the working line, the sentence being written,
+    /// or the newest entry.
     private func bottom(_ scroller: ScrollViewProxy) {
-        guard let last = desk.entries.last?.id else { return }
+        let last: AnyHashable? = desk.working ? "working" : !desk.partial.isEmpty ? "partial"
+            : desk.entries.last.map { AnyHashable($0.id) }
+        guard let last else { return }
         withAnimation(Motion.arriving) { scroller.scrollTo(last, anchor: .bottom) }
     }
 

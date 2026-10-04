@@ -62,9 +62,14 @@ enum Awake {
     }
 }
 
-/// The only reason this app has a delegate: UIKit asks it, not SwiftUI, which orientations a
-/// window may take.
+/// UIKit asks this, not SwiftUI, which orientations a window may take — and it is where UIKit
+/// hands over the device token for the manager's notifications.
 final class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication,
+                     didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        MainActor.assumeIsolated { Notifier.shared.received(token: deviceToken) }
+    }
+
     func application(
         _ application: UIApplication,
         supportedInterfaceOrientationsFor window: UIWindow?

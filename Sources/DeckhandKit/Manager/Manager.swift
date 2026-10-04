@@ -73,11 +73,20 @@ public struct ManagerFeed: Codable, Sendable {
     /// `entries.last?.id`, which is nil on a poll that brought nothing back.
     public var newest: Int = 0
     public var working: Bool = false
+    /// The sentence the manager is writing right now, before it is an entry. Optional because a
+    /// daemon from before streaming sends no such key, and a synthesised decoder only forgives a
+    /// missing key on an optional.
+    public var partial: String?
+    /// The tool the run is in right now, by its bare name. Optional for the same reason.
+    public var doing: String?
 
-    public init(entries: [ManagerEntry] = [], newest: Int = 0, working: Bool = false) {
+    public init(entries: [ManagerEntry] = [], newest: Int = 0, working: Bool = false,
+                partial: String? = nil, doing: String? = nil) {
         self.entries = entries
         self.newest = newest
         self.working = working
+        self.partial = partial
+        self.doing = doing
     }
 }
 

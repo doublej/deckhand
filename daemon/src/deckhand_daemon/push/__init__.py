@@ -23,10 +23,10 @@ from .. import artifacts, briefings, config, sessions, tasks
 from ..log import log
 from ..reading import transcripts
 from ..settings import wants
-from .sending import ASKING, FINISHED, NOTHING, Card, end, remember, shortened, show
+from .sending import ASKING, FINISHED, NOTHING, Card, end, remember, shortened, show, told
 
 __all__ = ["ASKING", "FINISHED", "Card", "called", "end", "remember", "spoke_to", "sweep",
-           "watch"]
+           "told", "watch"]
 
 POLL = 5.0
 #: Slips waiting per session last sweep. A *new* one is the event; one sitting there all

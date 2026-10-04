@@ -32,6 +32,11 @@ from ..log import log
 # other host, and a token minted for one is rejected by the other.
 HOST = "api.sandbox.push.apple.com"
 TOPIC = "dev.jurrejan.deckhand.push-type.liveactivity"
+#: A plain notification goes to the app itself, under its bare bundle id.
+APP_TOPIC = "dev.jurrejan.deckhand"
+#: How much of a manager message a notification carries. iOS shows four lines on the Lock Screen
+#: and the rest when it is pulled down; past this the panel is the better place to read it.
+MAX_TOLD = 900
 TEAM = "KA6433FU8U"
 # APNs will not take a token older than an hour; refreshing well inside that is free.
 JWT_LIFETIME = 45 * 60
@@ -254,11 +259,33 @@ def _start(card: Card, mac: str) -> dict:
                     "alert": _alert(card)}}
 
 
-def _post(token: str, payload: dict, auth: str, kind: str) -> str | None:
+def told(text: str) -> str | None:
+    """One manager message as a notification. Returns an error, or None.
+
+    The *device* token is the app's own, handed over once notifications were allowed; a Live
+    Activity card is per session and the manager is not one, which is why this is not a card.
+    `thread-id` stacks them as one conversation, and `deckhand` is what a tap opens.
+    """
+    if not (token := tokens().get("device")):
+        return "the phone has not allowed notifications yet"
+    if not (auth := bearer()):
+        return "no push key on this Mac — run `just sync-apns`"
+    body = text if len(text) <= MAX_TOLD else text[:MAX_TOLD - 1].rstrip() + "…"
+    payload = {"aps": {"alert": {"title": "Manager", "body": body}, "sound": "default",
+                       "thread-id": "manager"},
+               "deckhand": "manager"}
+    error = _post(token, payload, auth, "notification", push_type="alert", topic=APP_TOPIC)
+    if error:
+        log.info("manager: %s", error)
+    return error
+
+
+def _post(token: str, payload: dict, auth: str, kind: str, *, push_type: str = "liveactivity",
+          topic: str = TOPIC) -> str | None:
     import httpx  # HTTP/2 only: APNs refuses anything else
 
-    headers = {"authorization": f"bearer {auth}", "apns-topic": TOPIC,
-               "apns-push-type": "liveactivity", "apns-priority": "10"}
+    headers = {"authorization": f"bearer {auth}", "apns-topic": topic,
+               "apns-push-type": push_type, "apns-priority": "10"}
     try:
         with httpx.Client(http2=True, timeout=TIMEOUT) as client:
             answer = client.post(f"https://{HOST}/3/device/{token}", json=payload,

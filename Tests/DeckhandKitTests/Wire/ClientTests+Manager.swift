@@ -32,6 +32,17 @@ extension ClientTests {
         let feed = try await client().manager(since: 12)
         #expect(feed.entries.isEmpty)
         #expect(feed.newest == 12)
+        #expect(feed.partial == nil)
+    }
+
+    @Test("a run in flight carries the sentence being written and the tool it is in")
+    func decodesProgress() async throws {
+        StubProtocol.respond(with: Data("""
+        {"entries":[],"newest":4,"working":true,"partial":"Three are bu","doing":"list_sessions"}
+        """.utf8))
+        let feed = try await client().manager(since: 4)
+        #expect(feed.partial == "Three are bu")
+        #expect(feed.doing == "list_sessions")
     }
 
     /// The Mac is upgraded by a git pull and the phone by a rebuild, so they are routinely a
