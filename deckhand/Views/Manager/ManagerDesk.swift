@@ -223,6 +223,20 @@ extension AppModel {
         await askManager(words)
     }
 
+    /// Where a tapped notification goes. The manager pops any session page first, so the panel
+    /// is not opened underneath one with its swipe switched off; a session is found in a fresh
+    /// listing, for the cold-launch reason `onOpenURL` gives.
+    func open(_ target: Notifier.Target) async {
+        switch target {
+        case .manager:
+            manager.route = .list
+            manager.open = true
+        case .session(let id):
+            await refreshSessions()
+            manager.route = .session(id)
+        }
+    }
+
     /// Tell the Mac the panel is off screen. Best effort: a phone that never says so is noticed
     /// anyway once its polls stop, only later.
     func leaveManager() async {

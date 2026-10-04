@@ -12,13 +12,50 @@ import UserNotifications
 final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     static let shared = Notifier()
 
-    private var register: ((String) async throws -> Void)?
-    private var opened: (() -> Void)?
+    /// What a tapped notification is about: the manager's chat, or one session's.
+    enum Target: Equatable {
+        case manager
+        case session(String)
 
-    func begin(register: @escaping (String) async throws -> Void, opened: @escaping () -> Void) {
+        /// `deckhand: manager` from the manager, `session: <id>` from anything about one session.
+        init?(_ info: [AnyHashable: Any]) {
+            if let session = info["session"] as? String, !session.isEmpty {
+                self = .session(session)
+            } else if info["deckhand"] as? String == "manager" {
+                self = .manager
+            } else {
+                return nil
+            }
+        }
+    }
+
+    private var register: ((String) async throws -> Void)?
+    private var opened: ((Target) -> Void)?
+    /// Whether that chat is on screen right now. Its notification is then dropped in the
+    /// foreground: the words are already arriving in front of the person.
+    private var showing: ((Target) -> Bool)?
+    /// A tap that arrived before the app had a model to act on it — every tap that launches the
+    /// app cold, since iOS hands it over during launch and the scene's `.task` runs later.
+    private var waiting: Target?
+
+    /// From `AppDelegate`, at launch. The delegate has to be in place before launch finishes or
+    /// the tap that launched the app is delivered to nobody — which is what opening the app
+    /// "wherever it was" was.
+    func listen() {
+        UNUserNotificationCenter.current().delegate = self
+    }
+
+    func begin(register: @escaping (String) async throws -> Void,
+               opened: @escaping (Target) -> Void,
+               showing: @escaping (Target) -> Bool) {
         self.register = register
         self.opened = opened
-        UNUserNotificationCenter.current().delegate = self
+        self.showing = showing
+        listen()
+        if let waiting {
+            self.waiting = nil
+            opened(waiting)
+        }
         Task {
             let allowed = try? await UNUserNotificationCenter.current()
                 .requestAuthorization(options: [.alert, .sound])
@@ -33,19 +70,26 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         Task { try? await register?(hex) }
     }
 
-    /// Shown in the foreground as well: the Mac only sends one while the panel is not showing,
-    /// so a banner over the rail is exactly the case it is for.
+    /// Shown in the foreground too — a banner over the rail or over another session is exactly
+    /// the case it is for — except over the chat it came from. The Mac guesses whether the panel
+    /// is open from how recently it polled, and a guess was what buzzed a person mid-sentence;
+    /// the phone knows.
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter, willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
-        [.banner, .list, .sound]
+        let target = Target(notification.request.content.userInfo)
+        let onScreen = await MainActor.run { target.map { showing?($0) ?? false } ?? false }
+        return onScreen ? [] : [.banner, .list, .sound]
     }
 
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse
     ) async {
-        let manager = response.notification.request.content.userInfo["deckhand"] as? String
-        guard manager == "manager" else { return }
-        await MainActor.run { opened?() }
+        guard let target = Target(response.notification.request.content.userInfo) else { return }
+        await MainActor.run { tapped(target) }
+    }
+
+    private func tapped(_ target: Target) {
+        if let opened { opened(target) } else { waiting = target }
     }
 }

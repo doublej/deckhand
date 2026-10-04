@@ -27,13 +27,14 @@ struct DeckhandApp: App {
                             .register(pushToken: hex, kind: kind, session: session)
                     }
                     // The manager's messages, pushed while its panel is not on screen. A tap
-                    // opens the panel, over whatever was showing.
+                    // opens the chat it came from: the manager's panel, or a session's page.
                     Notifier.shared.begin(
                         register: { hex in
                             try await model.settings.client()?
                                 .register(pushToken: hex, kind: "device", session: nil)
                         },
-                        opened: { model.manager.open = true }
+                        opened: { target in Task { await model.open(target) } },
+                        showing: { $0 == .manager && model.manager.open }
                     )
                 }
                 // A tap on a Lock Screen card opens the session that card is about. The card

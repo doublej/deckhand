@@ -80,6 +80,7 @@ def away() -> None:
     closed-app test sent nothing at all."""
     global _seen
     _seen = 0.0
+    log.info("manager: the phone left the panel")
 
 
 def watched() -> bool:

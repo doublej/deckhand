@@ -66,6 +66,13 @@ enum Awake {
 /// hands over the device token for the manager's notifications.
 final class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
+                     didFinishLaunchingWithOptions options: [UIApplication.LaunchOptionsKey: Any]?)
+        -> Bool {
+        MainActor.assumeIsolated { Notifier.shared.listen() }
+        return true
+    }
+
+    func application(_ application: UIApplication,
                      didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         MainActor.assumeIsolated { Notifier.shared.received(token: deviceToken) }
     }
