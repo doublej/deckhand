@@ -22,6 +22,7 @@ struct ManagerView: View {
     /// It must never become permanent — a label that stayed would be a title bar.
     @State private var named = false
     @FocusState private var typing: Bool
+    @Environment(\.scenePhase) private var phase
 
     private var desk: ManagerDesk { model.manager }
     private var accent: Color { Palette.accent(recording: recorder.isRecording) }
@@ -42,7 +43,14 @@ struct ManagerView: View {
         .task(id: [desk.open, desk.working]) { await poll() }
         .onChange(of: desk.open) { _, now in
             named = now
-            if !now { typing = false }
+            if !now {
+                typing = false
+                Task { await model.leaveManager() }
+            }
+        }
+        // Leaving the app is leaving the panel, and it is the case notifications exist for.
+        .onChange(of: phase) { _, now in
+            if now != .active, desk.open { Task { await model.leaveManager() } }
         }
     }
 

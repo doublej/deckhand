@@ -74,6 +74,14 @@ def seen() -> None:
     _seen = time.monotonic()
 
 
+def away() -> None:
+    """The phone said it left the panel. Without this, a reply written in the seconds after the
+    person put the phone away still counted as watched and was never pushed — measured: the first
+    closed-app test sent nothing at all."""
+    global _seen
+    _seen = 0.0
+
+
 def watched() -> bool:
     """Whether somebody has the panel open, judged by how recently it polled."""
     return time.monotonic() - _seen < WATCHED

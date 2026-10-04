@@ -223,6 +223,12 @@ extension AppModel {
         await askManager(words)
     }
 
+    /// Tell the Mac the panel is off screen. Best effort: a phone that never says so is noticed
+    /// anyway once its polls stop, only later.
+    func leaveManager() async {
+        try? await settings.client()?.leaveManager()
+    }
+
     /// Start over: the Mac drops the entries and the thread behind them, both together.
     func clearManager() async {
         guard let client = settings.client() else { return }

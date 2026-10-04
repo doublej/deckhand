@@ -35,6 +35,12 @@ public extension DeckhandClient {
         return try decode(try await send(req, body: try multipart(boundary: boundary, clip: clip)))
     }
 
+    /// The panel went off screen, so the Mac pushes what the manager says from now on rather than
+    /// waiting out the seconds it would otherwise take to notice the polls stopped.
+    func leaveManager() async throws {
+        _ = try await send(request(.post, "manager/away"))
+    }
+
     /// Start over. The entries go and so does the thread behind them — both, always.
     @discardableResult
     func clearManager() async throws -> ManagerFeed {

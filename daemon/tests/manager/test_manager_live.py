@@ -43,6 +43,15 @@ def test_a_message_is_pushed_only_when_nobody_has_the_panel_open(claude_home, mo
     assert [e["text"] for e in talk.entries()] == ["deckhand: tests pass"] * 2
 
 
+def test_leaving_the_panel_counts_at_once_not_ten_seconds_later(claude_home, token):
+    c = TestClient(app)
+    c.headers["x-deckhand-token"] = token
+    c.get("/manager")
+    assert agent.watched()
+    assert c.post("/manager/away").status_code == 204
+    assert not agent.watched()
+
+
 def test_a_notification_needs_the_phones_own_token(claude_home):
     assert push.told("hello") == "the phone has not allowed notifications yet"
 

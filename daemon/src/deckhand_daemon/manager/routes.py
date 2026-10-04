@@ -49,6 +49,12 @@ def read_manager(
     }
 
 
+@router.post("/manager/away", status_code=204)
+def leave_manager() -> None:
+    """The panel went off screen. Everything the manager says from here is pushed."""
+    agent.away()
+
+
 @router.post("/manager/say", status_code=201)
 def say_to_manager(text: str = Body(embed=True)) -> dict:
     """Say something to the manager. Answers with the entry, not with the reply."""
