@@ -11,8 +11,8 @@ import SwiftUI
 /// session, answer a slip, or edit a filter chain. Those are the person's, and they are here.
 ///
 /// The rail surface, because it is reached from the rail and it is a list of things happening on
-/// the Mac. The conversation is `TurnCard`s — the same card the session transcript uses, for the
-/// same reason — and everything the manager *did* is a line rather than a card.
+/// the Mac. The conversation is bubbles, the person's trailing and the manager's leading — see
+/// `ManagerBubble` — and everything the manager *did* is a line rather than a bubble.
 struct ManagerView: View {
     @Bindable var model: AppModel
     @State private var recorder = Recorder()
@@ -52,8 +52,8 @@ struct ManagerView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: Spacing.extraSmall) {
                     if desk.entries.isEmpty { opening }
-                    ForEach(Array(desk.entries.enumerated()), id: \.element.id) { index, entry in
-                        ManagerLine(entry: entry, showsRole: shows(index))
+                    ForEach(desk.entries) { entry in
+                        ManagerLine(entry: entry)
                             // On the wrapper rather than on the card: an act draws no card, and
                             // a scroll-to that lands on one would silently do nothing.
                             .id(entry.id)
@@ -61,9 +61,7 @@ struct ManagerView: View {
                     // Drawn ahead of the Mac: the words are on screen the moment they are sent,
                     // dimmed until the Mac has written them down.
                     ForEach(Array(desk.pending.enumerated()), id: \.offset) { _, words in
-                        TurnCard(turn: Turn(role: "user", text: words, timestamp: ""),
-                                 showsRole: desk.entries.last?.role != .person)
-                            .opacity(0.55)
+                        ManagerBubble(text: words, mine: true).opacity(0.55)
                     }
                     if desk.hearing {
                         Text("Hearing…")
@@ -74,10 +72,7 @@ struct ManagerView: View {
                     // The sentence being written, as far as it has got. Replaced by its entry
                     // when the block is done, on the same poll.
                     if !desk.partial.isEmpty {
-                        TurnCard(turn: Turn(role: "assistant", text: desk.partial, timestamp: ""),
-                                 showsRole: desk.entries.last?.role != .manager,
-                                 theirWord: "MANAGER")
-                            .id("partial")
+                        ManagerBubble(text: desk.partial, mine: false).id("partial")
                     }
                     if desk.working {
                         ActiveLine(doing: desk.doing.isEmpty ? nil
@@ -227,11 +222,6 @@ struct ManagerView: View {
                 try? await Task.sleep(for: .seconds(1))
                 named = false
             }
-    }
-
-    private func shows(_ index: Int) -> Bool {
-        guard index > 0 else { return true }
-        return desk.entries[index - 1].role != desk.entries[index].role
     }
 
     private func send() { send(desk.draft) }

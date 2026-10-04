@@ -3,26 +3,22 @@ import SwiftUI
 
 /// One line of the manager's conversation.
 ///
-/// Two shapes and the reason for both. What was *said* — by the person or by the manager — is a
-/// `TurnCard`, the same card the session transcript draws, because it is the same thing: a round
-/// of a conversation, in markdown, from one of two speakers. What was *done* is not a card at
-/// all. It is a line under the words, the way a tool trace sits under a message, because a card
+/// Two shapes and the reason for both. What was *said* is a bubble, the person's on the trailing
+/// side and the manager's on the leading one, the way every chat on this phone reads: the panel is
+/// a conversation with one other party, and who said what is the first thing a glance needs. A
+/// session's transcript keeps its column of `TurnCard`s — that is a record to read down, this is
+/// a thread to reply in. What was *done* is not a bubble at all. It is a line under the words, the way a tool trace sits under a message, because a card
 /// promises something to read and "said to deckhand: run the tests" is something to glance at.
 struct ManagerLine: View {
     let entry: ManagerEntry
-    /// False when the line before this one was the same kind. Only the cards use it; a run of
-    /// four acts reads as four acts without a heading on each.
-    let showsRole: Bool
     @Environment(\.accent) private var accent
 
     var body: some View {
         switch entry.role {
         case .person:
-            TurnCard(turn: Turn(role: "user", text: entry.text, timestamp: ""),
-                     showsRole: showsRole)
+            ManagerBubble(text: entry.text, mine: true)
         case .manager:
-            TurnCard(turn: Turn(role: "assistant", text: entry.text, timestamp: ""),
-                     showsRole: showsRole, theirWord: "MANAGER")
+            ManagerBubble(text: entry.text, mine: false)
         case .act:
             note(entry.text, word: "DID", tint: Palette.textTertiary)
         case .command:
@@ -48,5 +44,43 @@ struct ManagerLine: View {
         .padding(.horizontal, Spacing.extraSmall)
         .accessibilityElement()
         .accessibilityLabel("\(word): \(text)")
+    }
+}
+
+/// Something said, on its own side of the panel.
+///
+/// One paragraph hugs its words, the way a chat bubble does; anything longer is the manager's
+/// list of sessions or a fenced block, which needs the full document renderer and so the width
+/// it fills. Either way the far side keeps a margin, so the two speakers never share a column.
+struct ManagerBubble: View {
+    let text: String
+    let mine: Bool
+    @Environment(\.accent) private var accent
+
+    var body: some View {
+        HStack(spacing: 0) {
+            if mine { Spacer(minLength: Spacing.extraLarge + Spacing.medium) }
+            words
+                .padding(.horizontal, Spacing.small)
+                .padding(.vertical, Spacing.extraSmall)
+                .background(
+                    RoundedRectangle(cornerRadius: Radius.medium, style: .continuous)
+                        .fill(mine ? accent.opacity(0.22) : Palette.surfacePrimary)
+                )
+            if !mine { Spacer(minLength: Spacing.extraLarge + Spacing.medium) }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(mine ? "You" : "Manager"): \(text)")
+    }
+
+    @ViewBuilder private var words: some View {
+        if !text.contains("\n"), let inline = try? AttributedString(markdown: text) {
+            Text(inline)
+                .font(Typography.prose)
+                .foregroundStyle(Palette.textPrimary)
+                .textSelection(.enabled)
+        } else {
+            Markdown(text).textSelection(.enabled)
+        }
     }
 }
