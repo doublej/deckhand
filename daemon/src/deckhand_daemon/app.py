@@ -7,7 +7,7 @@ import secrets
 from contextlib import asynccontextmanager
 from typing import Annotated
 
-from fastapi import Body, Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Body, Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 
 from . import (
@@ -42,7 +42,7 @@ from .reading import routes as reading_routes
 from .settings import routes as settings_routes
 
 
-def require_token(x_deckhand_token: str = Header(default="")) -> None:
+def require_token(request: Request, x_deckhand_token: str = Header(default="")) -> None:
     # `compare_digest` rather than `!=`: this Mac's token is now also every hand's token, so it
     # is compared far more often and by more processes than it was, and a comparison that
     # returns early leaks where it stopped. The cost is nothing and the property is free.
@@ -50,8 +50,8 @@ def require_token(x_deckhand_token: str = Header(default="")) -> None:
         raise HTTPException(status_code=401, detail="bad token")
     # The one place every authenticated request passes, so the phone's last-heard-from stamp
     # costs an assignment and needs no route of its own. Only a request that got *past* the
-    # token counts: a wrong token is not this phone.
-    presence.seen()
+    # token counts: a wrong token is not this phone, and nor is the loopback — see `seen`.
+    presence.seen(request)
 
 
 @asynccontextmanager
@@ -91,6 +91,7 @@ app.include_router(link_routes.router, dependencies=[Depends(require_token)])
 app.include_router(manager_routes.router, dependencies=[Depends(require_token)])
 app.include_router(order_routes.router, dependencies=[Depends(require_token)])
 app.include_router(reading_routes.router, dependencies=[Depends(require_token)])
+app.include_router(presence.router, dependencies=[Depends(require_token)])
 app.include_router(project_routes.router, dependencies=[Depends(require_token)])
 app.include_router(settings_routes.router, dependencies=[Depends(require_token)])
 app.include_router(saying.router, dependencies=[Depends(require_token)])
@@ -108,8 +109,11 @@ def health() -> dict:
         "iterm": sessions.iterm_status(), "codex": sessions.codex.answered(),
         # Who has this Mac. Unauthenticated like the rest of /health, and deliberately so: it
         # says whether a person is at the keyboard, never what they are doing.
-        "presence": presence.state(),
+        "presence": (person := presence.state()),
+        # utt's cover reads this, the one route with no token; null keeps it down.
+        "cover": presence.cover(person["where"]),
     }
+
 
 
 # Two clients polling every few seconds would bury everything else in the log, so a listing

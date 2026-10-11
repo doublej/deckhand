@@ -1,10 +1,17 @@
-"""Who has the Mac, and the one reading that must never be wrong by accident."""
+"""Where the person is, and the one reading that must never be wrong by accident."""
 
 from __future__ import annotations
 
 import time
 
 from deckhand_daemon import presence
+
+
+def asked_from(host):
+    return type("Request", (), {"client": type("Client", (), {"host": host})()})()
+
+
+PHONE = asked_from("192.168.1.40")
 
 
 def test_nanoseconds_are_parsed_as_seconds(monkeypatch):
@@ -15,41 +22,46 @@ def test_nanoseconds_are_parsed_as_seconds(monkeypatch):
     assert presence.idle_seconds() == 977.192805916
 
 
-def test_a_mac_that_will_not_say_reads_as_the_person_being_there(monkeypatch):
+def test_a_mac_that_will_not_say_reads_as_the_person_being_at_it():
     """The safe answer is the one a caller acts on by keeping its hands off the keyboard."""
-    monkeypatch.setattr(presence, "idle_seconds", lambda: None)
-    assert presence.owner() == "person"
+    assert presence._where(None, False) == "laptop"
 
 
-def test_a_touched_mac_belongs_to_the_person_however_awake_the_phone_is(monkeypatch):
-    monkeypatch.setattr(presence, "idle_seconds", lambda: 3.0)
-    monkeypatch.setattr(presence, "locked", lambda: False)
-    presence.seen()
-    assert presence.owner() == "person"
+def test_a_touched_mac_is_the_laptop_however_awake_the_phone_is():
+    presence.seen(PHONE)
+    assert presence._where(3.0, False) == "laptop"
 
 
-def test_an_idle_mac_with_a_live_phone_belongs_to_deckhand(monkeypatch):
-    monkeypatch.setattr(presence, "idle_seconds", lambda: presence.IDLE_AFTER + 1)
-    monkeypatch.setattr(presence, "locked", lambda: False)
-    presence.seen()
-    assert presence.owner() == "deckhand"
+def test_an_idle_mac_is_the_phone_whether_or_not_the_phone_has_spoken(monkeypatch):
+    """Two states: an idle Mac and a silent phone is still `phone`, the only other place."""
+    monkeypatch.setattr(presence, "_phone_seen", None)
+    assert presence._where(presence.IDLE_AFTER + 1, False) == "phone"
 
 
-def test_an_idle_mac_and_a_silent_phone_belong_to_nobody(monkeypatch):
-    """The third state is the point: nobody to reach is not the same as somebody on a phone."""
-    monkeypatch.setattr(presence, "idle_seconds", lambda: presence.IDLE_AFTER + 1)
-    monkeypatch.setattr(presence, "locked", lambda: False)
-    monkeypatch.setattr(presence, "_phone_seen", time.time() - presence.PHONE_RECENT - 1)
-    assert presence.owner() == "nobody"
-
-
-def test_a_locked_screen_is_never_the_person(monkeypatch):
+def test_a_locked_screen_is_never_the_laptop():
     """Locked means gone, whatever the idle clock says — the clock can be seconds old because
     locking the screen is itself an input event."""
-    monkeypatch.setattr(presence, "idle_seconds", lambda: 1.0)
-    monkeypatch.setattr(presence, "locked", lambda: True)
-    presence.seen()
-    assert presence.owner() == "deckhand"
+    assert presence._where(1.0, True) == "phone"
+
+
+def test_the_cover_needs_the_phone_in_use_not_just_an_idle_mac(monkeypatch):
+    """An untouched Mac is also someone watching a film on it."""
+    monkeypatch.setattr(presence, "_phone_seen", time.time() - presence.PHONE_RECENT - 1)
+    assert presence.cover("phone") is None
+    presence.seen(PHONE)
+    assert presence.cover("phone")["title"]
+    assert presence.cover("laptop") is None
+
+
+def test_only_the_phone_stamps_the_phone_as_seen(monkeypatch):
+    """A session's own `deckhand` command arrives over the loopback, and asking must not raise
+    the cover it is asking about."""
+    monkeypatch.setattr(presence, "_phone_seen", None)
+    presence.seen(asked_from("127.0.0.1"))
+    presence.seen(asked_from("::1"))
+    assert presence._phone_seen is None
+    presence.seen(PHONE)
+    assert presence._phone_seen is not None
 
 
 def test_each_reading_is_taken_once_for_one_answer(monkeypatch):
@@ -59,7 +71,20 @@ def test_each_reading_is_taken_once_for_one_answer(monkeypatch):
     runs: list[str] = []
     monkeypatch.setattr(presence, "idle_seconds", lambda: runs.append("idle") or 1.0)
     monkeypatch.setattr(presence, "locked", lambda: bool(runs.append("locked")) and False)
-    presence.seen()
     answer = presence.state()
     assert runs == ["idle", "locked"]
-    assert answer["owner"] == "person" and answer["locked"] is False
+    assert answer["where"] == "laptop" and answer["locked"] is False
+
+
+def test_presence_is_a_route_and_the_cover_rides_on_health(token, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from deckhand_daemon.app import app
+
+    monkeypatch.setattr(presence, "idle_seconds", lambda: 1.0)
+    monkeypatch.setattr(presence, "locked", lambda: False)
+    asked = TestClient(app)
+    assert asked.get("/presence").status_code == 401
+    asked.headers["x-deckhand-token"] = token
+    assert asked.get("/presence").json()["where"] == "laptop"
+    assert asked.get("/health").json()["cover"] is None

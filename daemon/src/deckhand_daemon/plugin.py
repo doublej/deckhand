@@ -113,6 +113,10 @@ def manifest() -> dict[str, Any]:
         # named, and launchd's stdout and stderr are its siblings in that folder: a crash
         # before logging starts lands in those, and revealing puts all three on screen.
         "daemon": {"label": DAEMON_LABEL, "log": str(LOG_FILE)},
+        # utt polls this and draws a sign over the screens while `cover` in the answer is set:
+        # the Mac is being driven from the phone. utt rather than us, because a cover that this
+        # process drew would outlive it on a crash — utt takes it down when nothing answers.
+        "cover": {"url": f"http://127.0.0.1:{config.PORT}/health"},
         # Every action is reachable from the menu bar or none is, so each one here has to be
         # safe to press by accident. There was a "Stop listening" button; it ran `launchctl
         # bootout`, which unloads the job — and utt's Restart is `kickstart`, which cannot
@@ -128,7 +132,9 @@ def manifest() -> dict[str, Any]:
              "options": list(ROUTE_OPTIONS), "value": DEFAULTS["route"],
              "detail": "Typed into the terminal they arrive as you speaking, which needs the "
                        "session to be visible in a window. Sent as a message they always "
-                       "arrive, but marked as coming from somewhere other than you."},
+                       "arrive, but marked as coming from somewhere other than you. "
+                       "Whichever works sends a message while you are at this Mac, so "
+                       "nothing types under your hands."},
             {"key": "deliver", "kind": "bool", "label": "Put the words into the session",
              "value": DEFAULTS["deliver"],
              "detail": "Off, what you say is still written down and shown on your phone, but "

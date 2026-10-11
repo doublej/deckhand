@@ -1,19 +1,21 @@
-"""Whether a person is at this Mac, and therefore who owns it right now.
+"""Whether the person is at this Mac or on the phone: `laptop` or `phone`, nothing in between.
 
 The fact this module produces is not decoration. `deliver.py` says the sharp version of it in
 its own first paragraph: on the keyboard route **the daemon is holding JJ's keyboard for him**.
 That is exactly right when nobody is at the keyboard and wrong when somebody is, because two
-things typing into one pane interleave and neither notices. Today `auto` takes the keyboard
-whenever the session has a pane — a test of whether a *window* exists, never of whether a
+things typing into one pane interleave and neither notices. `auto` used to take the keyboard
+whenever the session had a pane — a test of whether a *window* exists, never of whether a
 *person* does.
 
 `docs/ownership.md` argues the whole design out. This is the half the daemon needs: the fact.
-Nothing here draws anything, and nothing here changes a route — wiring it into `deliver` changes
-how a person's words arrive, which is an authority decision and JJ's to make.
+Nothing here draws anything: utt draws the cover, off `cover()` on `/health`. `deliver` reads
+`where()` for one decision — `auto` stops typing into a pane the person is sitting at — and JJ
+made that call on 2026-10-11, because it changes how a person's words arrive.
 
-Three states rather than two, because the third is the one worth having. Idle at the Mac with
-the phone in hand is a person who can be reached; idle at the Mac and silent on the phone is a
-person who cannot. Only the second means a Lock Screen card is the best anyone can do.
+Two states, by JJ's choice (2026-10-11): there was a third, `nobody`, for an idle Mac and a
+silent phone, and it answered no question a caller actually asks. Where to reach the person has
+two answers, the pane or the phone. Whether the phone is in use survives only as the cover's
+gate, where a wrong answer would put a sign over someone's film.
 """
 
 from __future__ import annotations
@@ -21,25 +23,36 @@ from __future__ import annotations
 import subprocess
 import time
 
+from fastapi import APIRouter
+
 #: No keyboard or mouse for this long and the Mac counts as unattended. Deliberately asymmetric
 #: with the way back: any input at all sets `HIDIdleTime` to zero, so the person takes the Mac
 #: back the instant they touch it, with nothing to wait through. Two minutes is slow enough that
 #: reading the screen does not hand the machine away.
 IDLE_AFTER = 120.0
-#: The phone counts as here if the Mac has heard from it this recently. It says *reachable*, not
+#: The phone counts as in use if the Mac has heard from it this recently. It says *reachable*, not
 #: *present* — a phone polling from a desk looks exactly like a phone in a hand, and this cannot
-#: tell them apart. Nothing should be built on it that a wrong answer would make unsafe.
+#: tell them apart. Only the cover reads it, and a wrong answer there is a sign, not a lock.
 PHONE_RECENT = 300.0
 TIMEOUT = 2.0
 
 _phone_seen: float | None = None
 
+router = APIRouter()
 
-def seen() -> None:
+
+def seen(request) -> None:
     """The phone just made an authenticated request. Called from the token guard, so it costs
-    one assignment on a path every request already takes and needs no route of its own."""
+    one assignment on a path every request already takes and needs no route of its own.
+
+    The loopback is never the phone: it is a session's own `deckhand` command or MCP server, and
+    an agent asking where the person is must not put utt's cover up by asking. The phone reaches
+    this Mac over the LAN or through the NAS.
+    ponytail: a hand on another machine is not loopback either; give it its own stamp if one
+    ever starts calling this Mac with the token."""
     global _phone_seen
-    _phone_seen = time.time()
+    if request.client is None or request.client.host not in ("127.0.0.1", "::1", "localhost"):
+        _phone_seen = time.time()
 
 
 def idle_seconds() -> float | None:
@@ -76,30 +89,37 @@ def locked() -> bool:
     return "CGSSessionScreenIsLocked" in out
 
 
-def owner() -> str:
-    """`person`, `deckhand` or `nobody`.
+def where() -> str:
+    """`laptop` or `phone`: where a person reaching for this Mac would be found right now.
 
-    Unknown idleness reads as `person`: this is the answer a caller would act on by keeping its
+    Unknown idleness reads as `laptop`: this is the answer a caller would act on by keeping its
     hands off the keyboard, and a Mac that will not say whether anyone is at it is not one to
     start typing into.
     """
-    return _owner_of(idle_seconds(), locked())
+    return _where(idle_seconds(), locked())
 
 
-def _owner_of(idle: float | None, screen_locked: bool) -> str:
+def _where(idle: float | None, screen_locked: bool) -> str:
     """The same answer, out of two facts already in hand. Separate so `state` can read each of
     them exactly once — see there for what that was costing."""
-    if idle is None:
-        return "person"
-    if idle < IDLE_AFTER and not screen_locked:
-        return "person"
-    if _phone_seen is not None and time.time() - _phone_seen < PHONE_RECENT:
-        return "deckhand"
-    return "nobody"
+    if idle is None or (idle < IDLE_AFTER and not screen_locked):
+        return "laptop"
+    return "phone"
+
+
+def cover(place: str) -> dict | None:
+    """What utt's cover says, or None to keep it down. Up only when the phone is actually being
+    used: an untouched Mac alone is also someone watching a film on it, and a sign over that
+    is the false positive `docs/ownership.md` says must never happen."""
+    if place != "phone" or _phone_seen is None or time.time() - _phone_seen > PHONE_RECENT:
+        return None
+    return {"title": "Deckhand has this Mac",
+            "detail": "It is being driven from the phone. Touch anything to take it back."}
 
 
 def state() -> dict:
-    """What `/health` carries, so the phone can say who has the Mac without guessing.
+    """What `/health` and `/presence` carry, so the phone and every session can say where the
+    person is without guessing.
 
     **Each fact is read once.** This used to call `owner()` beside `idle_seconds()` and
     `locked()`, so one `/health` spawned `ioreg` three or four times over for two answers.
@@ -110,7 +130,13 @@ def state() -> dict:
     """
     idle = idle_seconds()
     screen_locked = locked()
-    return {"owner": _owner_of(idle, screen_locked),
+    return {"where": _where(idle, screen_locked),
             "idle": round(idle, 1) if idle is not None else None,
             "locked": screen_locked,
             "phone": round(time.time() - _phone_seen, 1) if _phone_seen else None}
+
+
+@router.get("/presence")
+def where_the_person_is() -> dict:
+    """`where` is `laptop` or `phone`: which of the two a session should reach the person on."""
+    return state()

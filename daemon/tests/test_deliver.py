@@ -372,3 +372,18 @@ def test_a_control_byte_in_the_words_is_never_typed(inbox, claude_home, monkeypa
     assert deliver.deliver(session, "run \x1b\x07the \x15tests", route="keyboard")[0] == "keyboard"
 
     assert typed[:2] == [deliver.CLEAR_LINE, "run the tests"]
+
+
+def test_auto_keeps_off_a_keyboard_the_person_is_at(inbox, claude_home, monkeypatch):
+    """Two things typing into one pane interleave. A slash command still types: down the socket
+    it would arrive as words."""
+    typed: list[list[str]] = []
+    monkeypatch.setattr(deliver.subprocess, "run",
+                        lambda argv, **_: typed.append(argv) or subprocess.CompletedProcess(argv, 0))
+    monkeypatch.setattr(deliver.presence, "where", lambda: "laptop")
+    session = session_for(inbox.getsockname())
+    session.pane = a_pane()
+    assert deliver.deliver(session, "run the tests") == ("socket", None)
+    assert typed == []
+    assert deliver.deliver(session, "/compact")[0] == "keyboard"
+    assert deliver.deliver(session, "run the tests", route="keyboard")[0] == "keyboard"

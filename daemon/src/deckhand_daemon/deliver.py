@@ -25,6 +25,7 @@ import sys
 import time
 import uuid
 
+from . import presence
 from .fleet import here, remote
 from .log import log
 from .reading.transcripts import transcript_path
@@ -151,8 +152,8 @@ def deliver(session: Session, text: str, route: str = "auto") -> tuple[str | Non
 
     The route is the person's choice, because the two are not interchangeable. The keyboard
     carries their authority and needs a pane; the socket always arrives but is stamped as coming
-    from another agent. `auto` takes the keyboard when there is a pane and the socket when there
-    is not.
+    from another agent. `auto` takes the keyboard when there is a pane and nobody at the laptop,
+    and the socket otherwise.
     """
     # One line, and nothing in it that is not a character. A control byte left in the words
     # would be read as a keypress of its own once they are typed — an ESC in a prompt cancels
@@ -173,6 +174,11 @@ def deliver(session: Session, text: str, route: str = "auto") -> tuple[str | Non
     if message.startswith("/") and (route == "socket" or not session.pane):
         return None, (f"{message.split()[0]} is a slash command and only works typed into a "
                       f"pane; {session.name} would receive it as words")
+    # `auto` keeps off a keyboard the person is sitting at: two things typing into one pane
+    # interleave and neither notices. A slash command still types, because the socket would
+    # turn it into words, and the person asked for the one thing only the pane can do.
+    if route == "auto" and not message.startswith("/") and presence.where() == "laptop":
+        route = "socket"
     if route != "socket" and session.pane:
         failed = _type_into_pane(session.pane.iterm_session_id, message, session.session_id)
         if failed is None:

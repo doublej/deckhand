@@ -29,7 +29,7 @@ filters/        # what happens to a prompt between the phone and the session
 projects/       # the folders on this Mac, and starting a session in one of them
 prompts/        # every prompt this daemon sends a model, and nothing else
 manager/       # the manager: its conversation, its facade of tools, its run, its routes
-mcp/            # the six tools a session inside this Mac gets, over stdio — a separate process
+mcp/            # the seven tools a session inside this Mac gets, over stdio and as `deckhand`
 briefings.py    # where briefings are kept, and the one worker that keeps them current
 summarize.py    # what happened since you last spoke, via the Claude Agent SDK
 tasks.py        # the person's list of asks, and the only three tools that may change it
@@ -39,6 +39,7 @@ artifacts.py    # slips: what a session left for the phone to answer
 transcribe.py   # utt turns a clip into text, through its jobs folder
 plugin.py       # Deckhand's page inside utt: the manifest, its settings, its buttons
 beacon.py       # saying on the LAN where this Mac answers, so the phone need not be told
+presence.py     # `laptop` or `phone`: idle time and the lock flag, and utt's cover
 push/           # the Lock Screen: `sending.py` is APNs, `__init__.py` is what is worth a card
 ```
 
@@ -134,7 +135,8 @@ HTTP, then atlas's scan cache, first to answer wins. `starting.py` opens the ter
 ## Delivery: two routes, and the difference is authority
 
 The route is the person's choice, in Settings, carried as `POST /sessions/{id}/audio?route=`:
-`auto` (keyboard when there is a pane, socket when there is not), `keyboard`, or `socket`.
+`auto` (keyboard when there is a pane and nobody at the laptop, socket otherwise — a slash
+command still types), `keyboard`, or `socket`.
 `keyboard` never silently falls back to the socket — choosing it is choosing whose authority
 the words carry, so it fails and says why instead. The receipt names the route that took it
 (`delivered_by`).

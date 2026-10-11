@@ -21,6 +21,16 @@ def keep_the_real_log_clean(tmp_path, monkeypatch):
     monkeypatch.setattr(log_module.log, "handlers", [handler])
 
 
+@pytest.fixture(autouse=True)
+def the_person_is_on_the_phone(monkeypatch):
+    """`auto` keeps off a keyboard the person is at, and that is read off this machine's real
+    idle clock — so a suite run while someone types would deliver differently from one run while
+    they wait. Pinned to the phone, where every test written before presence expects to be."""
+    from deckhand_daemon import presence
+
+    monkeypatch.setattr(presence, "where", lambda: "phone")
+
+
 @pytest.fixture
 def no_hands(monkeypatch):
     """No other machine answers. Every route that merges the fleet asks all of them at once, and

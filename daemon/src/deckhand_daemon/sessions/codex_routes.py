@@ -53,7 +53,7 @@ async def answer_for_codex(request: Request, call_next) -> Response:
     session = await asyncio.to_thread(_codex_session, session_id)
     if session is None:
         return await call_next(request)
-    presence.seen()
+    presence.seen(request)
     return await asyncio.to_thread(_answer, wanted, suffix, session, request.query_params)
 
 
