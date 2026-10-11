@@ -83,6 +83,7 @@ these routes look first — or flat in `.deckhand/artifacts/` when it belongs to
 | `POST /sessions/{id}/name` `{name}` | `{renamed, was, carried_filters}` | Types Claude Code's own `/rename` into the pane, so a busy session only runs it when its turn ends and the listing catches up late. The filter chain is carried across because it is filed by name. |
 | `POST /sessions/{id}/queue/clear` | `{cleared: n}` | Draws a line under an inbox holding prompts nothing will read. It never touches the transcript. |
 | `POST /live/token` `{token, kind}` | `{registered: kind}` | The phone's own push tokens. Nothing an agent has. |
+| `GET /presence` | `{where, idle, locked, phone}` | `where` is `laptop` or `phone` and is the only field to act on. It moves the moment the person sits down or walks off, so ask before each question rather than once. Asking it from this Mac never counts as the phone being in use. |
 
 ## Filters and settings, read-only
 

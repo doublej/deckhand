@@ -1,11 +1,11 @@
-"""The six tools a session gets so it can reach the person holding the phone.
+"""The seven tools a session gets so it can reach the person, wherever they are.
 
 The skill said all of this in prose first, and the prose is still the better half: a slip is a
 file an agent writes in its own folder, and knowing that is worth more than any tool. These exist
 because a tool is present whether or not the model thought to look, and the failure they answer is
 a session that reached a decision needing the person and made it alone.
 
-**Four of the six are the daemon's own routes.** Nothing here reimplements one. `/say` carries the
+**Five of the seven are the daemon's own routes.** Nothing here reimplements one. `/say` carries the
 session's filter chain, its orders and the delivery record; `/notify` carries the folder's right to
 refuse being interrupted. Calling the functions underneath those routes would quietly drop all of
 it, which is the shape of bug that looks like it works.
@@ -21,6 +21,10 @@ route is an agent claiming to be the person. None of this is a fence — the age
 the token is a readable file — it is there so an agent does not *drift* into speaking as the
 person because that route was the convenient one. `docs/agent-surface.md` says which token would
 make these refusals real, and it does not exist yet.
+
+**`presence` comes first.** It says `laptop` or `phone`. At the laptop the person is reading
+this conversation, so ask in it; on the phone, ask there. Every tool here is also a `deckhand`
+shell command (`mcp/cli.py`, `deckhand prime`), so a session without these tools loses nothing.
 """
 
 from __future__ import annotations
@@ -64,13 +68,30 @@ async def _script(name: str, *args: str) -> tuple[bool, str]:
     return done.returncode == 0, (done.stdout or done.stderr).strip()
 
 
+NO_SESSION = ("this is not running inside a Claude Code session, so there is no folder to write "
+              "a slip in and no session to speak as")
+
+
 def _folder() -> tuple[dict, str] | tuple[None, str]:
     """This session's record and its folder, or a sentence saying there is no session above."""
     held = here.mine()
     if held is None:
-        return None, ("this is not running inside a Claude Code session, so there is no folder "
-                      "to write a slip in and no session to speak as")
+        return None, NO_SESSION
     return held, held.get("cwd", "")
+
+
+def _nobody(why: str) -> dict:
+    return {"error": why, "code": "NO_SESSION"}
+
+
+def _match(wanted: str, live: list[dict]) -> dict | None:
+    """By id or name exactly, else by the one id it begins or the one name it is part of —
+    `say utt` should not need the whole of `utt-review`. Two candidates is no match."""
+    for exact in (s for s in live if wanted in (s.get("session_id"), s.get("name"))):
+        return exact
+    near = [s for s in live if (s.get("session_id") or "").startswith(wanted)
+            or wanted.lower() in (s.get("name") or "").lower()]
+    return near[0] if len(near) == 1 else None
 
 
 @server.tool(annotations=READ_ONLY)
@@ -78,7 +99,7 @@ async def whoami() -> dict:
     """Which session this is: its id, its name, the folder it is working in."""
     held, why = _folder()
     if held is None:
-        return {"error": why}
+        return _nobody(why)
     return {"session": held["sessionId"], "name": held.get("name", ""),
             "folder": held.get("cwd", ""), "status": held.get("status", "")}
 
@@ -97,9 +118,10 @@ async def ask_on_phone(question: str, kind: str = "confirm", options: list[str] 
     """
     held, why = _folder()
     if held is None:
-        return {"error": why}
+        return _nobody(why)
     if kind not in ("confirm", "pick", "text", "aloud"):
-        return {"error": f"{kind!r} is not a kind of slip — confirm, pick, text or aloud"}
+        return {"error": f"{kind!r} is not a kind of slip — confirm, pick, text or aloud",
+                "code": "BAD_KIND"}
     args = ["--kind", kind, "--title", question, "--dir", why, "--session", held["sessionId"]]
     if note:
         args += ["--note", note]
@@ -109,7 +131,7 @@ async def ask_on_phone(question: str, kind: str = "confirm", options: list[str] 
         args += ["--question", asked]
     worked, said = await _script("slip.py", *args)
     if not worked:
-        return {"error": said}
+        return {"error": said, "code": "REFUSED"}
     return {"id": Path(said).stem, "title": question, "waiting": True, "page": said}
 
 
@@ -120,7 +142,7 @@ async def read_answer(id: str, wait_seconds: float = 0.0) -> dict:
     session the moment an answer lands."""
     held, why = _folder()
     if held is None:
-        return {"error": why}
+        return _nobody(why)
     waited = max(0.0, min(float(wait_seconds), MAX_WAIT))
     worked, said = await _script("answer.py", id, "--wait", str(waited), "--dir", why,
                                  "--session", held["sessionId"])
@@ -130,6 +152,15 @@ async def read_answer(id: str, wait_seconds: float = 0.0) -> dict:
         return {"answered": True, "value": json.loads(said)}
     except json.JSONDecodeError:
         return {"answered": True, "value": said}
+
+
+@server.tool(annotations=READ_ONLY)
+async def presence() -> dict:
+    """Where the person is right now. `where` is `laptop` — at this Mac, reading this
+    conversation, so ask here — or `phone`: away from it, so `ask_on_phone`, or
+    `call_for_attention` for something they must see. Ask again before each question; it moves
+    the moment they sit down or walk off."""
+    return await here.reach("GET", "/presence")
 
 
 @server.tool(annotations=WRITES)
@@ -142,7 +173,7 @@ async def call_for_attention(line: str) -> dict:
     """
     held, why = _folder()
     if held is None:
-        return {"error": why}
+        return _nobody(why)
     return await here.reach("POST", f"/sessions/{held['sessionId']}/notify", json={"line": line})
 
 
@@ -173,18 +204,19 @@ async def say_to_session(session: str, text: str) -> dict:
     if "error" in listed:
         return listed
     live = listed.get("sessions", [])
-    match = next((s for s in live if session in (s.get("session_id"), s.get("name"))), None)
+    match = _match(session, live)
     if match is None:
-        return {"went": False, "why": f"no live session called {session!r} — "
-                                      f"there is {', '.join(s.get('name', '?') for s in live)}"}
+        return {"went": False, "code": "NO_SUCH_SESSION",
+                "why": f"no one live session called {session!r} — "
+                       f"there is {', '.join(s.get('name', '?') for s in live)}"}
     if match.get("provider") == "codex":
-        return {"went": False, "why": f"{match.get('name')} is a Codex thread: its only way in "
+        return {"went": False, "code": "CODEX_THREAD", "why": f"{match.get('name')} is a Codex thread: its only way in "
                                       f"carries the person's own authority, so no agent speaks "
                                       f"into it"}
     answered = await here.reach("POST", f"/sessions/{match['session_id']}/say",
                                 params={"route": "socket"}, json={"text": text})
     if "error" in answered:
-        return {"went": False, "why": answered["error"]}
+        return {"went": False, "code": answered["code"], "why": answered["error"]}
     stopped = answered.get("stopped_by")
     return {"went": bool(answered.get("delivered")), "by": answered.get("delivered_by"),
             "why": answered.get("delivery_error")

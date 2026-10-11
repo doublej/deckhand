@@ -377,7 +377,7 @@ install-skill:
     ln -sfn {{ justfile_directory() }}/skills/deckhand ~/.claude/skills/deckhand
     @head -2 ~/.claude/skills/deckhand/SKILL.md | tail -1
 
-# Give every session on this Mac the six tools as well as the skill. User scope, the same reason:
+# Give every session on this Mac the seven tools as well as the skill. User scope, the same reason:
 # a session started from the phone is an ordinary `claude` in an ordinary shell, so one entry in
 # ~/.claude.json reaches every one of them and the daemon injects nothing.
 
@@ -391,3 +391,9 @@ install-mcp:
 [group('ops')]
 uninstall-mcp:
     claude mcp remove --scope user deckhand
+
+# `deckhand` on PATH: the same seven tools, for a shell. Editable, so it follows this checkout.
+[group('ops')]
+install-cli:
+    uv tool install --force --editable {{ justfile_directory() }}/daemon
+    @deckhand prime | head -2

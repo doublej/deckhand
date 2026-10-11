@@ -72,18 +72,22 @@ def mine() -> dict | None:
 
 
 async def reach(method: str, path: str, **sent: object) -> dict:
-    """One call to the daemon. Every expected failure comes back as `{"error": sentence}`."""
+    """One call to the daemon. Every expected failure comes back as `{"error": sentence, "code":
+    WORD}`, the code being what the `deckhand` command turns into its exit status."""
     headers = {config.TOKEN_HEADER: config.token()}
     url = f"http://127.0.0.1:{config.PORT}{path}"
     try:
         async with httpx.AsyncClient(timeout=TIMEOUT) as client:
             answered = await client.request(method, url, headers=headers, **sent)
     except httpx.HTTPError as error:
-        return {"error": f"the Deckhand daemon is not answering on port {config.PORT}: {error}"}
+        return {"error": f"the Deckhand daemon is not answering on port {config.PORT}: {error}",
+                "code": "DAEMON_DOWN"}
     if answered.status_code >= 400:
         detail = answered.text.strip()[:200]
-        return {"error": f"the daemon refused that ({answered.status_code}): {detail}"}
+        return {"error": f"the daemon refused that ({answered.status_code}): {detail}",
+                "code": "REFUSED"}
     try:
         return answered.json()
     except ValueError:
-        return {"error": "the daemon answered with something that is not JSON"}
+        return {"error": "the daemon answered with something that is not JSON",
+                "code": "BAD_ANSWER"}

@@ -19,6 +19,13 @@ Reference skill: no banner, no report. Slips and logbooks stay free of any signa
 directly and the answer is the main output, end with: — deckhand · github.com/doublej
 </presentation>
 
+## Where the person is
+
+`deckhand presence` answers `laptop` or `phone` (the `presence` tool says the same). At the
+laptop they are reading this conversation: ask here, in a sentence, and stop. On the phone, a
+sentence here is unread — use a slip or a card. Ask again before each question; it moves the
+moment they sit down or walk off.
+
 ## When a slip beats a sentence
 
 Say it in a sentence when the answer is prose and you can wait for the person to come back to the
@@ -27,13 +34,19 @@ yes or no to this exact thing — or when the person is away, and a sentence in 
 is looking at is the same as saying nothing. Then do both: a phone in a pocket announces nothing
 itself, so say in one line that the slip is there.
 
-## The same things as tools
+## The same things as tools, and as one command
 
-Where the `deckhand` MCP server is installed, six tools arrive with it and are the shorter path.
-`ask_on_phone` and `read_answer` write and read exactly the file the scripts below do;
-`call_for_attention` puts a card on the Lock Screen; `whoami` says which session this is; and
-`sessions` and `say_to_session` reach the other sessions on this Mac. They work from any
-directory, because they take this session's folder out of its own record rather than out of `cwd`.
+Where the `deckhand` MCP server is installed, seven tools arrive with it and are the shorter path.
+`presence` says where the person is; `ask_on_phone` and `read_answer` write and read exactly the
+file the scripts below do; `call_for_attention` puts a card on the Lock Screen; `whoami` says
+which session this is; and `sessions` and `say_to_session` reach the other sessions on this Mac.
+They work from any directory, because they take this session's folder out of its own record
+rather than out of `cwd`.
+
+Every one of them is also a `deckhand` shell command (`just install-cli` puts it on PATH):
+`presence`, `whoami`, `sessions`, `ask`, `answer`, `notify`, `say`. JSON when piped, a structured
+error on stderr, and an exit status to branch on — 4 means "no": not said, not pushed, not
+answered yet. `deckhand prime` prints the whole contract.
 
 `say_to_session` goes down the peer socket and takes no route. There is no tool for the keyboard,
 for `/clear`, for a session's settings or its filters, or for starting one — those belong to the
@@ -166,7 +179,8 @@ take it away.
 
 ## Asking for the person outright
 
-When what is needed is not an answer but attention:
+When what is needed is not an answer but attention — `deckhand notify "The migration is done,
+tests green."`, or by hand:
 
 ```bash
 curl -s -X POST "http://127.0.0.1:4180/sessions/$CLAUDE_CODE_SESSION_ID/notify" \
