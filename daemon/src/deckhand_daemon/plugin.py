@@ -22,12 +22,19 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from . import __version__, config, deliver
+from . import __version__, config, deliver, presence
 from .log import LOG_FILE, log
 
 ID = "deckhand"
 DAEMON_LABEL = "com.jurrejan.deckhand"
 POLL = 1.0
+#: Polls between two readings of where the person is, for the line in utt's menu. Each reading
+#: is two `ioreg` walks of the whole IO registry, so not every poll — five seconds late is fine
+#: for a line the person reads by opening a menu.
+PRESENCE_EVERY = 5
+#: The menu's words for `presence.where()`. It sorts status lines by key and labels them, so this
+#: reads "Presence: on the phone".
+PLACES = {"laptop": "at the laptop", "phone": "on the phone"}
 SUPPORT = Path.home() / "Library" / "Application Support" / "dev.jurrejan.utt"
 # utt 1.2 renamed this folder from `plugins` to `extensions`, and the one that exists is
 # the one the *installed* utt makes at launch — not the one its source says. Naming either
@@ -162,12 +169,24 @@ def install() -> None:
 async def watch() -> None:
     """Poll for a changed setting or a pressed button. Once a second is what the guide asks for
     and what a person notices; utt's writes are atomic, so a poll cannot read half a file."""
+    tick = 0
     while True:
         await asyncio.sleep(POLL)
+        tick += 1
         try:
             await asyncio.to_thread(_poll)
+            if tick % PRESENCE_EVERY == 1:
+                await asyncio.to_thread(show_presence)
         except OSError as error:  # a plugin page must never take the daemon down with it
             log.warning("utt plugin poll failed: %s", error)
+
+
+def show_presence() -> None:
+    """Where the person is, as a line in utt's menu and at the top of the page. Written only
+    when it moves, because utt rereads the file on every change."""
+    place = PLACES[presence.where()]
+    if _status.get("presence") != place:
+        status(presence=place)
 
 
 def status(**fields: object) -> None:

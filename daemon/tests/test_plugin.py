@@ -120,3 +120,16 @@ def _values(page, revision: int, values: dict) -> None:
     (page / "deckhand.values.json").write_text(
         json.dumps({"revision": revision, "values": whole})
     )
+
+
+def test_the_menu_says_where_the_person_is_and_writes_only_when_it_moves(page, monkeypatch):
+    writes: list[dict] = []
+    monkeypatch.setattr(plugin, "_status", {})
+    monkeypatch.setattr(plugin, "_write", lambda path, body: writes.append(dict(body)))
+    monkeypatch.setattr(plugin.presence, "where", lambda: "phone")
+    plugin.show_presence()
+    plugin.show_presence()
+    assert [w["presence"] for w in writes] == ["on the phone"]
+    monkeypatch.setattr(plugin.presence, "where", lambda: "laptop")
+    plugin.show_presence()
+    assert writes[-1]["presence"] == "at the laptop"
