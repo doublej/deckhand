@@ -37,6 +37,9 @@ PHONE_RECENT = 300.0
 TIMEOUT = 2.0
 
 _phone_seen: float | None = None
+#: When the person last touched the app — not when it last polled. The app says so itself,
+#: through `POST /presence/phone`, because a poll from a phone on a desk is not a person.
+_phone_touched: float | None = None
 
 router = APIRouter()
 
@@ -96,22 +99,36 @@ def where() -> str:
     hands off the keyboard, and a Mac that will not say whether anyone is at it is not one to
     start typing into.
     """
-    return _where(idle_seconds(), locked())
+    return _where(idle_seconds(), locked(), _since(_phone_touched))
 
 
-def _where(idle: float | None, screen_locked: bool) -> str:
-    """The same answer, out of two facts already in hand. Separate so `state` can read each of
-    them exactly once — see there for what that was costing."""
-    if idle is None or (idle < IDLE_AFTER and not screen_locked):
+def _since(stamp: float | None) -> float | None:
+    return time.time() - stamp if stamp is not None else None
+
+
+def _where(idle: float | None, screen_locked: bool, touched: float | None = None) -> str:
+    """The same answer, out of facts already in hand. Separate so `state` can read each of
+    them exactly once — see there for what that was costing.
+
+    Whichever was touched last wins: the phone the moment the app is used, the laptop the moment
+    a key is pressed. With neither, two minutes untouched hands the Mac to the phone."""
+    if screen_locked:
+        return "phone"
+    if idle is None:
         return "laptop"
-    return "phone"
+    if touched is not None and touched < idle:
+        return "phone"
+    return "laptop" if idle < IDLE_AFTER else "phone"
 
 
-def cover(place: str) -> dict | None:
-    """What utt's cover says, or None to keep it down. Up only when the phone is actually being
-    used: an untouched Mac alone is also someone watching a film on it, and a sign over that
-    is the false positive `docs/ownership.md` says must never happen."""
-    if place != "phone" or _phone_seen is None or time.time() - _phone_seen > PHONE_RECENT:
+def cover(now: dict) -> dict | None:
+    """What utt's cover says, or None to keep it down, out of one `state()`. Up only when the
+    Mac has sat untouched for `IDLE_AFTER` and the phone is actually being used: an untouched Mac
+    alone is also someone watching a film on it, and a phone picked up for a second at the desk
+    is not a reason to sign over the screen — both are the false positive `docs/ownership.md`
+    says must never happen."""
+    away = now["locked"] or (now["idle"] is not None and now["idle"] >= IDLE_AFTER)
+    if now["where"] != "phone" or not away or now["phone"] is None or now["phone"] > PHONE_RECENT:
         return None
     return {"title": "Deckhand has this Mac",
             "detail": "It is being driven from the phone. Touch anything to take it back."}
@@ -130,13 +147,24 @@ def state() -> dict:
     """
     idle = idle_seconds()
     screen_locked = locked()
-    return {"where": _where(idle, screen_locked),
+    touched = _since(_phone_touched)
+    seen_ago = _since(_phone_seen)
+    return {"where": _where(idle, screen_locked, touched),
             "idle": round(idle, 1) if idle is not None else None,
             "locked": screen_locked,
-            "phone": round(time.time() - _phone_seen, 1) if _phone_seen else None}
+            "phone": round(seen_ago, 1) if seen_ago is not None else None,
+            "touched": round(touched, 1) if touched is not None else None}
 
 
 @router.get("/presence")
 def where_the_person_is() -> dict:
     """`where` is `laptop` or `phone`: which of the two a session should reach the person on."""
     return state()
+
+
+@router.post("/presence/phone", status_code=204)
+def phone_in_hand() -> None:
+    """The person just touched the app. It says so at most every ten seconds and on coming to
+    the front, and from then until a key is pressed at the Mac, `where` is `phone`."""
+    global _phone_touched
+    _phone_touched = time.time()

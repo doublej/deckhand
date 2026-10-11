@@ -22,6 +22,7 @@ struct DeckhandApp: App {
                     // enough that reading it costs nothing. It only ever drops clips that were
                     // actually said — see `ClipArchive.sweep`.
                     model.archive.sweep()
+                    Touches.shared.begin { try? await model.settings.client()?.markPhoneInUse() }
                     live.begin { hex, kind, session in
                         try await model.settings.client()?
                             .register(pushToken: hex, kind: kind, session: session)
@@ -81,5 +82,54 @@ struct RootView: View {
         // seam is here because drawing one needs a web view and `Markdown` lives in DeckhandKit,
         // which has no UIKit in it on purpose.
         .diagrams { AnyView(MermaidBlock(source: $0)) }
+    }
+}
+
+/// Tells the Mac the person is using the phone: on coming to the front, and on any touch at most
+/// every `every` seconds. The Mac compares that with its own last keypress, so whichever was
+/// touched last is where sessions reach the person.
+///
+/// Seen through a recogniser on each window that declines every touch it is shown. Declining is
+/// the point: it is asked about all of them, sheets included, and can never take one away from
+/// the view it was meant for.
+@MainActor
+final class Touches: NSObject, UIGestureRecognizerDelegate {
+    static let shared = Touches()
+    /// A stale stamp only delays the phone winning; a keypress at the Mac takes it back at once.
+    private static let every: TimeInterval = 10
+    private var last = Date.distantPast
+    private var watched = Set<ObjectIdentifier>()
+    private var tell: (@MainActor () async -> Void)?
+
+    func begin(tell: @escaping @MainActor () async -> Void) {
+        self.tell = tell
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(cameToFront),
+            name: UIApplication.didBecomeActiveNotification, object: nil)
+        cameToFront()
+    }
+
+    @objc private func cameToFront() {
+        for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
+            for window in scene.windows where watched.insert(ObjectIdentifier(window)).inserted {
+                let seeing = UITapGestureRecognizer()
+                seeing.cancelsTouchesInView = false
+                seeing.delegate = self
+                window.addGestureRecognizer(seeing)
+            }
+        }
+        last = .distantPast
+        touched()
+    }
+
+    private func touched() {
+        guard let tell, Date.now.timeIntervalSince(last) >= Self.every else { return }
+        last = .now
+        Task { await tell() }
+    }
+
+    func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        touched()
+        return false
     }
 }

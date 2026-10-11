@@ -111,7 +111,7 @@ def health() -> dict:
         # says whether a person is at the keyboard, never what they are doing.
         "presence": (person := presence.state()),
         # utt's cover reads this, the one route with no token; null keeps it down.
-        "cover": presence.cover(person["where"]),
+        "cover": presence.cover(person),
     }
 
 

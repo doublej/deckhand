@@ -147,8 +147,9 @@ the session. `?deliver=false` transcribes without sending, for the review card, 
   from sender to receiver, decaying over the same window the phone asked for
 - `GET /briefings` — every live session's last briefing at once, off disk, for a cold start
 - `GET /presence` — `where`: `laptop` or `phone`, which of the two a session should reach the
-  person on. `/health` carries it too, beside `cover`, the sign utt draws over the screens while
-  the Mac is driven from the phone
+  person on — whichever was touched last, or `phone` after two minutes untouched. `POST
+  /presence/phone` is the app saying it was touched. `/health` carries it too, beside `cover`,
+  the sign utt draws over the screens while the Mac is driven from the phone
 - `GET /sessions/{id}/commands` — the slash commands and skills that session could be handed
 - `GET /sessions/{id}/context` — every CLAUDE.md a session in that folder is loaded with, as a
   tree with the connectors already drawn, and what it costs

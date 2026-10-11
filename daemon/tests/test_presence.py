@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import time
-
 from deckhand_daemon import presence
 
 
@@ -44,13 +42,24 @@ def test_a_locked_screen_is_never_the_laptop():
     assert presence._where(1.0, True) == "phone"
 
 
-def test_the_cover_needs_the_phone_in_use_not_just_an_idle_mac(monkeypatch):
-    """An untouched Mac is also someone watching a film on it."""
-    monkeypatch.setattr(presence, "_phone_seen", time.time() - presence.PHONE_RECENT - 1)
-    assert presence.cover("phone") is None
-    presence.seen(PHONE)
-    assert presence.cover("phone")["title"]
-    assert presence.cover("laptop") is None
+def test_a_touched_phone_wins_until_a_key_is_pressed_at_the_mac():
+    """Whichever was touched last: the app ten seconds ago beats a Mac idle for thirty, and one
+    keypress at the Mac takes it back."""
+    assert presence._where(30.0, False, touched=10.0) == "phone"
+    assert presence._where(2.0, False, touched=10.0) == "laptop"
+    assert presence._where(None, False, touched=1.0) == "laptop"
+
+
+def test_the_cover_needs_an_untouched_mac_and_a_phone_in_use():
+    """An untouched Mac alone is also someone watching a film on it, and a phone picked up for a
+    second at the desk is no reason to sign over the screen."""
+    away = {"where": "phone", "idle": presence.IDLE_AFTER + 1, "locked": False, "phone": 3.0}
+    assert presence.cover(away)["title"]
+    assert presence.cover(away | {"phone": presence.PHONE_RECENT + 1}) is None
+    assert presence.cover(away | {"phone": None}) is None
+    assert presence.cover(away | {"idle": 20.0}) is None
+    assert presence.cover(away | {"idle": 20.0, "locked": True})["title"]
+    assert presence.cover(away | {"where": "laptop"}) is None
 
 
 def test_only_the_phone_stamps_the_phone_as_seen(monkeypatch):
@@ -87,4 +96,20 @@ def test_presence_is_a_route_and_the_cover_rides_on_health(token, monkeypatch):
     assert asked.get("/presence").status_code == 401
     asked.headers["x-deckhand-token"] = token
     assert asked.get("/presence").json()["where"] == "laptop"
+    assert asked.get("/health").json()["cover"] is None
+
+
+def test_the_app_saying_it_was_touched_makes_it_the_phone(token, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from deckhand_daemon.app import app
+
+    monkeypatch.setattr(presence, "idle_seconds", lambda: 30.0)
+    monkeypatch.setattr(presence, "locked", lambda: False)
+    monkeypatch.setattr(presence, "_phone_touched", None)
+    asked = TestClient(app)
+    asked.headers["x-deckhand-token"] = token
+    assert asked.get("/presence").json()["where"] == "laptop"
+    assert asked.post("/presence/phone").status_code == 204
+    assert asked.get("/presence").json()["where"] == "phone"
     assert asked.get("/health").json()["cover"] is None

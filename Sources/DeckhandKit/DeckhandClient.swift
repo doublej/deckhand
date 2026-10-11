@@ -16,6 +16,11 @@ public struct DeckhandClient: Sendable {
         try await get("health")
     }
 
+    /// The person touched the app: `phone` to every session until a key is pressed at the Mac.
+    public func markPhoneInUse() async throws {
+        _ = try await send(request(.post, "presence/phone"))
+    }
+
     /// The live sessions, and what the listing says about the Mac itself — see `Listing`.
     public func sessions() async throws -> Listing {
         try await get("sessions")
