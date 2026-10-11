@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 import pytest
 
 from deckhand_daemon import sessions
+from deckhand_daemon.reading import transcripts
 
 
 def test_only_running_sessions_are_listed(claude_home):
@@ -147,6 +148,23 @@ def _transcript(home, session_id, *entries):
     path = home / "projects" / "-Users-jj-dev" / f"{session_id}.jsonl"
     path.write_text("\n".join(json.dumps(e) for e in entries) + "\n")
     return path
+
+
+def test_a_session_under_another_config_dir_is_listed_and_read(claude_home):
+    """`CLAUDE_CONFIG_DIR=~/.claude-pimpelmees` puts the record and the transcript there and
+    nowhere in `~/.claude`. A sibling without `sessions/` is not a config dir and is not read."""
+    other = claude_home.parent / f"{claude_home.name}-pimpelmees"
+    (other / "sessions").mkdir(parents=True)
+    (other / "projects" / "-Users-jj-dev").mkdir(parents=True)
+    (claude_home.parent / f"{claude_home.name}-monitor").mkdir()
+    record = claude_home / "sessions" / "4243.json"
+    (other / "sessions" / "4243.json").write_text(record.read_text())
+    record.unlink()
+    listed = {s.name: s for s in sessions.live_sessions()}
+    assert set(listed) == {"warm-okapi", "cold-otter"}
+    sid = listed["cold-otter"].session_id
+    path = _transcript(other, sid, _said("end_turn"))
+    assert transcripts.transcript_path(sid) == path
 
 
 def _said(stop_reason, when="2026-09-11T12:32:51.000Z"):

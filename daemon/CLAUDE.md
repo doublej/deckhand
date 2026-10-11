@@ -57,6 +57,14 @@ cwd, name, and a live busy/idle status. Those files outlive the process, so a re
 counts when `ps` still shows that pid. `ps` gives the tty, `it2 session list --json` maps
 tty → iTerm pane. No hooks, no polling of iTerm's title.
 
+**`~/.claude` is not the only config dir.** A session started with
+`CLAUDE_CONFIG_DIR=~/.claude-pimpelmees` writes its record, its key file and its transcript there
+and nothing under `~/.claude`, so it was simply never listed. `config.claude_homes` is the home plus
+every sibling `<home>-*` holding a `sessions/` folder (`~/.claude-monitor` has none and is not one),
+and the listing, the peer key, the transcript lookup and the MCP's own record all read every one.
+Settings, the trust record and the week cache still come from `~/.claude` alone: the pimpelmees dir
+symlinks its `settings.json` back there.
+
 Sessions with no iTerm pane are hidden — unless iTerm answers nothing at all, in which case
 every live session is listed so the app still works without the iTerm Python API. `/health`
 and `/sessions` both carry an `iterm` field saying whether pane data is trustworthy.

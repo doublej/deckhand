@@ -17,7 +17,8 @@ context.py      # the CLAUDE.md tree a session in a folder is loaded with, befor
 ## Where the file is, and how much of it is read
 
 - Transcript folder names are lossy (`/` and `_` both become `-`), so the JSONL is found by
-  globbing `~/.claude/projects/*/<sessionId>.jsonl`, never by rebuilding the path.
+  globbing `~/.claude/projects/*/<sessionId>.jsonl`, never by rebuilding the path — and the same
+  glob under every other config dir `config.claude_homes` finds (`~/.claude-pimpelmees`).
 - Transcripts run to megabytes: only the last 512 KB is read, and the first line of that chunk
   is dropped as a fragment. Context fullness reads a 256 KB tail, because it is asked for every
   session on every listing.

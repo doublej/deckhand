@@ -15,6 +15,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from .. import config
 from .entries import absorbed, text_of, wrote_of
 
 # A session deep in a tool run can push its last words far back, so widen until turns appear.
@@ -75,10 +76,6 @@ class Turn:
         return asdict(self)
 
 
-def projects_dir() -> Path:
-    return Path(os.environ.get("DECKHAND_CLAUDE_HOME", Path.home() / ".claude")) / "projects"
-
-
 #: session id -> the file it was last found in. Finding one means asking every project folder
 #: on this Mac whether it holds that name — 335 folders here, 8102 transcripts, 3.5 ms a call —
 #: and nearly every read route makes one per session, twice over on a listing. Measured at 8
@@ -93,20 +90,23 @@ def projects_dir() -> Path:
 # ponytail: cleared wholesale at the cap rather than evicted one at a time; a session id is
 # ~90 bytes and the daemon restarts often. Make it an LRU if that ever stops being true.
 #:
-#: Keyed by the folder as well as the id, because `projects_dir` reads an environment variable:
+#: Keyed by the folders as well as the id, because `config.claude_homes` reads an environment variable:
 #: two roots with the same id in them are two different files and must not answer for each other.
-_found: dict[tuple[Path, str], Path] = {}
+_found: dict[tuple[tuple[Path, ...], str], Path] = {}
 REMEMBERED = 512
 
 
 def transcript_path(session_id: str) -> Path | None:
     if not re.fullmatch(r"[A-Za-z0-9_-]{6,64}", session_id):
         return None
-    key = (projects_dir(), session_id)
+    roots = tuple(home / "projects" for home in config.claude_homes())
+    key = (roots, session_id)
     if (kept := _found.get(key)) is not None and kept.exists():
         return kept
     matches = sorted(
-        key[0].glob(f"*/{session_id}.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True
+        (p for root in roots for p in root.glob(f"*/{session_id}.jsonl")),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
     )
     _found.pop(key, None)
     if not matches:

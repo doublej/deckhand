@@ -23,7 +23,6 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-from pathlib import Path
 
 import httpx
 
@@ -35,16 +34,15 @@ ANCESTORS = 8
 TIMEOUT = 20.0
 
 
-def sessions_dir() -> Path:
-    return Path(os.environ.get("DECKHAND_CLAUDE_HOME", Path.home() / ".claude")) / "sessions"
-
-
 def _record(pid: int) -> dict | None:
-    try:
-        held = json.loads((sessions_dir() / f"{pid}.json").read_text())
-    except (OSError, json.JSONDecodeError):
-        return None
-    return held if isinstance(held, dict) and held.get("sessionId") else None
+    """The record `pid` wrote, in whichever config dir it was started under."""
+    for home in config.claude_homes():
+        try:
+            held = json.loads((home / "sessions" / f"{pid}.json").read_text())
+        except (OSError, json.JSONDecodeError):
+            continue
+        return held if isinstance(held, dict) and held.get("sessionId") else None
+    return None
 
 
 def _parent(pid: int) -> int | None:

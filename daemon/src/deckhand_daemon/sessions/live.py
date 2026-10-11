@@ -29,7 +29,7 @@ import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from .. import fleet
+from .. import config, fleet
 from ..log import log
 from ..reading.transcripts import turn_ended
 from . import codex, panes
@@ -204,9 +204,10 @@ def _records() -> list[dict]:
 
     Read before `ps` rather than alongside it, because the pids in them are what `ps` is asked
     about. An unreadable file is skipped: Claude Code writes these while the daemon reads them.
+    Every config dir is read, not just `~/.claude`: see `config.claude_homes`.
     """
     found: list[dict] = []
-    for path in sessions_dir().glob("*.json"):
+    for path in (p for home in config.claude_homes() for p in (home / "sessions").glob("*.json")):
         try:
             rec = json.loads(path.read_text())
         except (json.JSONDecodeError, OSError):

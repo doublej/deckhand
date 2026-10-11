@@ -74,6 +74,21 @@ def token() -> str:
     return fresh
 
 
+def claude_homes() -> list[Path]:
+    """Every Claude Code config dir on this Mac, `~/.claude` first.
+
+    A session started with `CLAUDE_CONFIG_DIR=~/.claude-pimpelmees` writes its record and its
+    transcript under that dir and nowhere in `~/.claude`, so a daemon reading only the one was
+    blind to it. The others are found as siblings named `<home>-*` holding a `sessions/` folder:
+    that is the convention here, and the `sessions/` test keeps out `~/.claude-monitor` and the
+    like, which are not config dirs at all. DECKHAND_CLAUDE_HOME moves the whole family, which
+    is what keeps a test's tmp root from picking up this Mac's real sessions.
+    """
+    home = Path(os.environ.get("DECKHAND_CLAUDE_HOME", Path.home() / ".claude"))
+    others = sorted(p for p in home.parent.glob(f"{home.name}-*") if (p / "sessions").is_dir())
+    return [home, *others]
+
+
 def base_url() -> str:
     """The URL to type into the app. .local name over an IP: it survives DHCP."""
     return f"http://{socket.gethostname()}:{PORT}"

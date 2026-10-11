@@ -25,11 +25,11 @@ import sys
 import time
 import uuid
 
-from . import presence
+from . import config, presence
 from .fleet import here, remote
 from .log import log
 from .reading.transcripts import transcript_path
-from .sessions import Session, codex, sessions_dir
+from .sessions import Session, codex
 
 TIMEOUT = 5.0
 TYPE_TIMEOUT = 15
@@ -378,9 +378,12 @@ def _peer_token(pid: int) -> str | None:
     """The session's peerToken, out of the key file it writes beside its record.
 
     One key per pid, so the glob is enough. Deriving the name instead would mean hashing the
-    socket path exactly the way Claude Code canonicalises it, for a value already on disk.
+    socket path exactly the way Claude Code canonicalises it, for a value already on disk. The
+    key sits beside the record, so in whichever config dir that session was started under.
     """
-    for key in sessions_dir().glob(f"{pid}.*.key"):
+    for key in (
+        k for home in config.claude_homes() for k in (home / "sessions").glob(f"{pid}.*.key")
+    ):
         try:
             return json.loads(key.read_text()).get("peerToken")
         except (OSError, json.JSONDecodeError):

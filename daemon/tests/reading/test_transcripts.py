@@ -368,7 +368,7 @@ def test_a_remembered_transcript_is_not_answered_with_once_it_is_gone(claude_hom
 
 
 def test_two_roots_with_the_same_id_are_two_different_files(claude_home, monkeypatch, tmp_path):
-    """`projects_dir` reads an environment variable, so the id alone is not the key."""
+    """`config.claude_homes` reads an environment variable, so the id alone is not the key."""
     mine = write_transcript(claude_home, [user("mine")])
     assert transcripts.transcript_path(SID) == mine
     other = tmp_path / "elsewhere"
@@ -388,7 +388,7 @@ def test_the_folder_walk_happens_once_per_session(claude_home, monkeypatch):
 
     def counted(self, pattern):
         nonlocal walks
-        walks += 1
+        walks += pattern.endswith(".jsonl")  # not `config.claude_homes` listing the home dir
         return real(self, pattern)
 
     monkeypatch.setattr(type(claude_home), "glob", counted)
