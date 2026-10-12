@@ -104,7 +104,8 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   `sameTouch`. Only `SessionFoot` passes `onReach`: a sessions row spends its tap on opening the
   session and its swipe on starting it, and a deck column spends its own, so neither is handed a
   third meaning on the same touch. That press opens a `confirmationDialog` — Photos, Clipboard,
-  Clips, in that order, so the one that was here before is the one nearest the thumb — and it must
+  Type, Clips, in that order, so the one that was here before is the one nearest the thumb. Type
+  opens the review card's `Editor` empty and Done lays the words in the card, never sends — and it must
   stay a dialog: a `.contextMenu` installs a long press of its own and would take the touch from
   the tap under it, which is this same bug for the third time. Nothing says any of it at rest.
 - **A gesture on a list row has to share the touch.** The sessions row has three jobs on one

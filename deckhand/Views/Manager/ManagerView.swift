@@ -211,6 +211,9 @@ struct ManagerView: View {
                          // Held for reading under the same switch as a session's clip: a
                          // mishearing here is an instruction to every session, not one.
                          confirms: model.preferences.confirms)
+                    // Its own name: the panel sits beside every session page, and a second
+                    // `talk-mark` is what a test asking for the session's own mark finds first.
+                    .accessibilityIdentifier("manager-talk-mark")
             }
         )
     }

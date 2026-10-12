@@ -21,8 +21,10 @@ struct SessionFoot: View {
     /// gesture is on, and the archive is about every clip rather than about this session.
     @State private var browsing = false
     /// Whether the press that is not talking has been made. It went straight to the archive; there
-    /// are three things behind it now, so what it opens is the list of them.
+    /// are four things behind it now, so what it opens is the list of them.
     @State private var reaching = false
+    /// Whether the editor is open on nothing, for words typed rather than said.
+    @State private var typing = false
     @State private var picking = false
     @State private var picked: [PhotosPickerItem] = []
 
@@ -36,6 +38,16 @@ struct SessionFoot: View {
         .sheet(item: $marking) { SnapView(model: model, session: $0.session, snap: $0.snap) }
         .sheet(isPresented: $browsing) { ArchiveSheet(model: model) }
         .confirmationDialog("", isPresented: $reaching, titleVisibility: .hidden) { reach }
+        // The review card's own editor, opened empty. Done lays the words in the card rather than
+        // sending them, so typed words take the one way out spoken ones do: read, then Send.
+        .sheet(isPresented: $typing) {
+            Editor(words: "", target: session.name, say: dictation) { typed in
+                typing = false
+                if !typed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    model.append(typed, to: session)
+                }
+            }
+        }
         .photosPicker(isPresented: $picking,
                       selection: $picked,
                       maxSelectionCount: nil,
@@ -45,7 +57,7 @@ struct SessionFoot: View {
         .onChange(of: picked) { _, items in pin(items) }
     }
 
-    /// The three things the press that is not talking can do, the nearest thumb last.
+    /// The four things the press that is not talking can do, the nearest thumb last.
     ///
     /// A `.confirmationDialog` and deliberately **not** a `.contextMenu`: a context menu installs
     /// a long press of its own, and a long press applied over this control takes the touch from
@@ -56,13 +68,23 @@ struct SessionFoot: View {
     /// entry is the one a thumb coming off the mark meets first — and it is the one that was here
     /// before, which should not cost a reach as well as a press. The two picture words are the
     /// review card's own, so the two ways to the same two verbs are recognisably the same thing.
+    /// Type sits between them and Clips: it is words rather than a picture, and Clips keeps its place.
     ///
     /// Nothing says any of this at rest. The mark says nothing at rest, and this is discovered by
     /// holding it exactly as the archive already was.
     @ViewBuilder private var reach: some View {
         Button("Photos") { picking = true }
         Button("Clipboard") { model.attachFromClipboard(to: session) }
+        Button("Type") { typing = true }
         Button("Clips") { browsing = true }
+    }
+
+    /// Speaking into the editor, for the card's Edit and for Type alike: the page's recorder, and a
+    /// clip that is only ever turned into words.
+    private var dictation: Dictation {
+        Dictation(recorder: recorder,
+                  mode: model.preferences.talkMode,
+                  words: { await model.dictated($0, for: session) })
     }
 
     /// The picker hands back items, not bytes, and the bytes come over a moment later. One at a
@@ -199,9 +221,7 @@ struct SessionFoot: View {
                               }),
                 // And again for the editor behind Edit, which is a field rather than the card:
                 // the same recorder, a clip that is only ever turned into words.
-                say: Dictation(recorder: recorder,
-                               mode: model.preferences.talkMode,
-                               words: { await model.dictated($0, for: session) }),
+                say: dictation,
                 // The names this session answers to, for the front of the words. Fetched when
                 // the picker opens rather than held here: two hundred of them, and most cards
                 // never ask. None for Codex: the Mac has no slash commands to offer one.

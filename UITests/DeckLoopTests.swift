@@ -144,7 +144,7 @@ final class DeckLoopTests: XCTestCase {
         XCTAssertTrue(talk.waitForExistence(timeout: 15), "the talk button never appeared")
         talk.tap()
 
-        for word in ["Photos", "Clipboard", "Clips"] {
+        for word in ["Photos", "Clipboard", "Type", "Clips"] {
             XCTAssertTrue(app.buttons[word].waitForExistence(timeout: 5), "no \(word) in the menu")
         }
         add(screenshot(app, named: "reach-menu"))
@@ -158,6 +158,25 @@ final class DeckLoopTests: XCTestCase {
         let opened = picker.waitForExistence(timeout: 10)
         add(screenshot(app, named: "photo-picker"))
         XCTAssertTrue(opened, "Photos opened nothing — the picker needs a host of its own")
+    }
+
+    /// Type opens the editor empty with the keyboard already up — a field you have to tap
+    /// before you can type in it is the one thing a menu entry called Type must not be.
+    func testTypeOpensTheEditorWithTheKeyboardUp() throws {
+        let app = try launch()
+        let firstSession = app.descendants(matching: .any).matching(identifier: "session-row").firstMatch
+        XCTAssertTrue(firstSession.waitForExistence(timeout: 20), "the deck stayed empty")
+        firstSession.tap()
+        let talk = app.descendants(matching: .any).matching(identifier: "talk-mark").firstMatch
+        XCTAssertTrue(talk.waitForExistence(timeout: 15), "the talk button never appeared")
+        talk.tap()
+        XCTAssertTrue(app.buttons["Type"].waitForExistence(timeout: 5), "no Type in the menu")
+        app.buttons["Type"].tap()
+
+        XCTAssertTrue(app.textViews.firstMatch.waitForExistence(timeout: 5), "Type opened no editor")
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5), "the keyboard did not come up")
+        add(screenshot(app, named: "type-editor"))
+        app.buttons["Cancel"].tap()
     }
 
     /// The same menu from the other mode, where it is a long press rather than a tap.
