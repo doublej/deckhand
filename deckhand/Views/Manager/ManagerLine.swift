@@ -75,9 +75,12 @@ struct ManagerBubble: View {
 
     @ViewBuilder private var words: some View {
         if !text.contains("\n"), let inline = try? AttributedString(markdown: text) {
+            // The 6 `Markdown` sets a paragraph at, so a one-paragraph reply and a longer one
+            // read at the same line height side by side.
             Text(inline)
                 .font(Typography.prose)
                 .foregroundStyle(Palette.textPrimary)
+                .lineSpacing(6)
                 .textSelection(.enabled)
         } else {
             Markdown(text).textSelection(.enabled)
