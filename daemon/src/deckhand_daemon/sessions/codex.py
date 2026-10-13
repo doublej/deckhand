@@ -36,6 +36,7 @@ from __future__ import annotations
 import json
 import os
 import queue
+import socket
 import threading
 import time
 from pathlib import Path
@@ -155,6 +156,10 @@ def request(method: str, params: dict | None = None, timeout: float = WAIT) -> d
 def _linked() -> _Link:
     """The open link, made and introduced when there is none."""
     global _link
+    # Windows' Python has no `AF_UNIX`, and `unix_connect` says so with an AttributeError — not an
+    # OSError, so nothing caught it and Fractal's hand answered every listing 500 for weeks.
+    if not hasattr(socket, "AF_UNIX"):
+        raise Unreachable("this Python has no unix sockets to reach the app server on")
     with _linking:
         if _link is None or _link.closed:
             fresh = _Link(unix_connect(

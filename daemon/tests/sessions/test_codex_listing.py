@@ -6,6 +6,7 @@ import tempfile
 import threading
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 from websockets.sync.server import unix_serve
@@ -88,6 +89,13 @@ def test_a_dead_app_server_costs_one_attempt_and_never_the_claude_rows(claude_ho
     monkeypatch.setattr(codex, "_asked", (time.monotonic() - codex.RETRY_AFTER - 1, False))
     sessions.live_sessions()
     assert len(attempts) == 2
+
+
+def test_a_python_without_unix_sockets_still_lists_its_claude_rows(claude_home, monkeypatch):
+    # Windows' socket module has no AF_UNIX: Fractal's hand answered every listing 500 over it.
+    monkeypatch.setattr(codex, "socket", SimpleNamespace())
+    assert [s.name for s in sessions.live_sessions()] == ["warm-okapi", "cold-otter"]
+    assert TestClient(app).get("/health").json()["codex"] is False
 
 
 def test_the_link_speaks_websocket_says_initialized_without_an_id_and_skips_the_chatter(
