@@ -139,8 +139,8 @@ the daemon, because neither needs to.
 
 **Built on 2026-09-10, ahead of that evidence and on JJ's say-so** — the point of the surface was
 always that a session could work the app rather than only read about it. It lives in
-`daemon/src/deckhand_daemon/mcp/`, is installed once with `just install-mcp`, and is the seven
-tools below with the refusals below. Two of them do not touch the daemon at all: `ask_on_phone`
+`daemon/src/deckhand_daemon/mcp/`, is installed once with `just install-mcp`, and is the twelve
+tools in [`docs/commands.md`](commands.md) with the refusals below. Two of them do not touch the daemon at all: `ask_on_phone`
 and `read_answer` run the skill's own scripts, so the tool and the shell command write the same
 file. The rest of this section is what was designed and is what shipped; phase 3's agent token
 still does not exist, so every refusal here remains a default rather than a guarantee.
@@ -237,11 +237,18 @@ postscript.
   up from the socket, and it is worse because it is quiet.
 - **No `POST /projects/session`.** Starting a session is starting a process on a launch line
   nobody approved, in a folder whose trust dialog was answered for a person, not for an agent.
+  `start_session` is the one exception: `POST /space/sessions` starts one beside the caller,
+  through the same listing and trust gates as the phone, and it stands in the caller's group.
 - **No `/file` and no widening of `/sessions/{id}/files`.** The listing is the permission,
   re-derived per request. An agent has `Read` and does not need a second path to the disk.
 - **`call_for_attention` inherits the folder's refusal** rather than routing around it. `called`
   is the one trigger a session raises for itself and therefore the one a folder may refuse
   outright; the refusal comes back as `{pushed: false, why}` and the agent is expected to say so.
+- **Planes, yes; sessions, no.** `open_plane`/`close_plane` move furniture in the headset
+  (`docs/space.md`). A session is never a kept plane, so nothing here closes one — that stays
+  `/control exit`, the person's press.
+- **The refusals are one table**, `mcp/refused.py`, rendered into the server's instructions,
+  `deckhand prime`, `docs/commands.md`, and a `PERSON_ONLY` answer per verb.
 
 **None of these is a fence, and the plan should not pretend otherwise.** The agent keeps `Bash`,
 the pairing token is a readable file, and anything a tool declines `curl` still performs. What

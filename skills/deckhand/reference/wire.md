@@ -83,7 +83,7 @@ these routes look first — or flat in `.deckhand/artifacts/` when it belongs to
 | `POST /sessions/{id}/name` `{name}` | `{renamed, was, carried_filters}` | Types Claude Code's own `/rename` into the pane, so a busy session only runs it when its turn ends and the listing catches up late. The filter chain is carried across because it is filed by name. |
 | `POST /sessions/{id}/queue/clear` | `{cleared: n}` | Draws a line under an inbox holding prompts nothing will read. It never touches the transcript. |
 | `POST /live/token` `{token, kind}` | `{registered: kind}` | The phone's own push tokens. Nothing an agent has. |
-| `GET /presence` | `{where, idle, locked, phone}` | `where` is `laptop` or `phone` and is the only field to act on. It moves the moment the person sits down or walks off, so ask before each question rather than once. Asking it from this Mac never counts as the phone being in use. |
+| `GET /presence` | `{where, idle, locked, phone}` | `where` is `laptop`, `phone` or `headset` and is the only field to act on. It moves the moment the person sits down or walks off, so ask before each question rather than once. Asking it from this Mac never counts as the phone being in use. |
 
 ## Filters and settings, read-only
 
@@ -98,6 +98,15 @@ these routes look first — or flat in `.deckhand/artifacts/` when it belongs to
   merged. Per key, not per object: `null` on the wire means "no opinion, follow global".
 - `GET /projects` → `{projects, source}` — every folder on this Mac a session could start in,
   each with `live` (session count) and `trusted` inline.
+
+## The headset's space
+
+| Route | Answers | The trap |
+|---|---|---|
+| `GET /space` | `{rev, planes, poses}` | Sessions are not in `planes`; they come from `/sessions`. |
+| `POST /space/planes` `{kind, url?, window?, title?, near?}` | `Plane`, 201 | localhost becomes the LAN address, which only answers if the server binds 0.0.0.0 — prefer `https://<slug>.atlas.local.jurrejan.com`. `near` must be listed (404). |
+| `DELETE /space/planes/{id}?by=NAME` | 204 | Planes only; no session closes this way. Pass your own session name: without it the daemon takes it as the person and tells the plane's session it was taken away. |
+| `GET /windows` | `[{id, app, title, w, h}]` | 503 with the reason when deckhand-windows is down. Window planes are view-only. |
 
 ## What this refuses, and why it is a default rather than a fence
 

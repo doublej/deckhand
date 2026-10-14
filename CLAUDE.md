@@ -46,7 +46,8 @@ load-bearing: it never types into a pane. See [docs/manager.md](docs/manager.md)
 | `daemon/` | The Mac half: sessions, projects, transcripts, delivery, briefings, utt, APNs. |
 | `daemon/…/fleet/` | The rest of the network: atlas's registry, the ssh links, the hands, the merge. |
 | `daemon/…/manager/` | The manager: its conversation, its facade of tools, its run, its routes. |
-| `daemon/…/mcp/` | The seven tools an agent *inside* a session gets: over stdio (`just install-mcp`) and as the `deckhand` command (`just install-cli`). |
+| `daemon/…/space/` | The headset's space, and the pass-through to deckhand-windows. |
+| `daemon/…/mcp/` | The twelve tools an agent *inside* a session gets: over stdio (`just install-mcp`) and as the `deckhand` command (`just install-cli`). |
 | `skills/deckhand/` | The same surface as prose and two scripts, for a session with no tools. |
 | `Sources/DeckhandKit/` | Models, HTTP client, pure logic, design layer — everything `just test` can reach. |
 | `Sources/IconMaker/` | Draws the app icon from the same grid as the in-app mark (`just icon`). |
@@ -149,8 +150,9 @@ the session. `?deliver=false` transcribes without sending, for the review card, 
   directed edges whose two ends are both on the listing. The rail draws them as light running
   from sender to receiver, decaying over the same window the phone asked for
 - `GET /briefings` — every live session's last briefing at once, off disk, for a cold start
-- `GET /presence` — `where`: `laptop` or `phone`, which of the two a session should reach the
-  person on — whichever was touched last, or `phone` after two minutes untouched. `POST
+- `GET /presence` — `where`: `laptop`, `phone` or `headset`, which a session should reach the
+  person on — `headset` while the Quest app's `POST /presence/headset` beat is under 30 s old,
+  else whichever was touched last, or `phone` after two minutes untouched. `POST
   /presence/phone` is the app saying it was touched. `/health` carries it too, beside `cover`,
   the sign utt draws over the screens while the Mac is driven from the phone
 - `GET /sessions/{id}/commands` — the slash commands and skills that session could be handed
@@ -178,6 +180,11 @@ the session. `?deliver=false` transcribes without sending, for the review card, 
 - `GET /alerts?since=` — every card the Mac raised for a session, by cursor, for the Mac app,
   which APNs cannot reach. `GET /manager?watching=false` is a poll with no panel on screen, and
   leaves the phone's pushes on
+- `GET /space`, `POST /space/planes`, `DELETE /space/planes/{id}?by=`, `PUT /space/poses/{key}` —
+  the headset's space: open web and window planes, near which session, and every plane's pose;
+  `rev` rises on each change. A session is told when the person puts a plane beside it or takes
+  one away; no `by` is the person. `GET /windows`, `/windows/{id}/frame|stream` pass through to
+  deckhand-windows on :4181, 503 when it is down ([docs/space.md](docs/space.md))
 
 `/health` is the only unauthenticated route; everything else needs the `x-deckhand-token` header.
 Off the home network that surface is `https://deckhand.jurrejan.com` — the NAS Caddy, checking
@@ -206,6 +213,8 @@ pane); `/health` carries `codex`, whether the app server answered the last listi
 
 - [GLOSSARY.md](GLOSSARY.md) — the project's vocabulary
 - [agent.md](agent.md) — verify loop, auto-fix commands, boundaries
+- [docs/commands.md](docs/commands.md) — every HTTP route, MCP tool and `deckhand` command,
+  generated from the code (`just commands-doc`)
 - [docs/artifacts.md](docs/artifacts.md) — what a slip is, what it may contain, and the bridge
 - `just install-cli` — put `deckhand` on PATH; `deckhand prime` is its whole contract
 - [docs/prompt-review.md](docs/prompt-review.md) — the standing prompt audit and its rollout order

@@ -9,7 +9,7 @@ logs to `~/Library/Logs/Deckhand/deckhand.log`.
 
 State lives in `~/Library/Application Support/Deckhand/` — `token`, `audio/<sessionId>/`,
 `images/<sessionId>/`, `tasks/<sessionId>.json`, `briefings/<sessionId>.json`,
-`queue/<sessionId>.json`, `timings.jsonl`, `nudged.json`.
+`queue/<sessionId>.json`, `timings.jsonl`, `nudged.json`, `space.json`.
 
 ## Mental model
 
@@ -29,7 +29,8 @@ filters/        # what happens to a prompt between the phone and the session
 projects/       # the folders on this Mac, and starting a session in one of them
 prompts/        # every prompt this daemon sends a model, and nothing else
 manager/       # the manager: its conversation, its facade of tools, its run, its routes
-mcp/            # the seven tools a session inside this Mac gets, over stdio and as `deckhand`
+mcp/            # the twelve tools a session inside this Mac gets, over stdio and as `deckhand`
+space/          # the headset's space: planes, poses, /windows passed through to :4181
 briefings.py    # where briefings are kept, and the one worker that keeps them current
 summarize.py    # what happened since you last spoke, via the Claude Agent SDK
 tasks.py        # the person's list of asks, and the only three tools that may change it
@@ -39,7 +40,7 @@ artifacts.py    # slips: what a session left for the phone to answer
 transcribe.py   # utt turns a clip into text, through its jobs folder
 plugin.py       # Deckhand's page inside utt: the manifest, its settings, its buttons
 beacon.py       # saying on the LAN where this Mac answers, so the phone need not be told
-presence.py     # `laptop` or `phone`: idle time and the lock flag, and utt's cover
+presence.py     # `laptop`, `phone` or `headset`: idle, the lock flag, the headset's beat, utt's cover
 push/           # the Lock Screen: `sending.py` is APNs, `__init__.py` is what is worth a card
 ```
 
@@ -557,6 +558,8 @@ is still worth keeping for the hop it saves.
 ## Verification
 
 `just daemon-lint` (ruff) and `just daemon-test` (pytest), both inside `just check`.
+`docs/commands.md` is generated (`just commands-doc`);
+`tests/mcp/test_commands_doc.py` fails when it drifts.
 `just daemon` runs it in the foreground and prints its address and pairing token.
 `.quality.json` caps a Python file at 400 lines and a directory at 16 files.
 

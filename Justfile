@@ -116,6 +116,16 @@ unpublish-release:
 logs:
     tail -f ~/Library/Logs/Deckhand/deckhand.log
 
+# Let the daemon read iTerm's colours: connects once as `deckhand`; answer iTerm's dialog at the Mac.
+[group('develop')]
+iterm-styles:
+    uv run --directory daemon python -m deckhand_daemon.space.iterm
+
+# Regenerate docs/commands.md's tables from the routes, the MCP tools and the deckhand command.
+[group('develop')]
+commands-doc:
+    uv run --directory daemon python tools/commands_doc.py
+
 # Redraw the app icon from the mark's own geometry.
 [group('develop')]
 icon:

@@ -14,6 +14,8 @@ crafting.md     # the prompt-crafting filter's agent
 idle-check.md   # what a session that has gone quiet is asked
 manager.md      # the manager: its voice, its authority, its twelve tool descriptions
 manager-away.md # put in front of what is said when the run is read off the Lock Screen
+space-given.md  # told to a session the person put a page or window beside
+space-taken.md  # told to a session the person took one away from: closed, handed on, moved off
 ```
 
 ## Invariants
