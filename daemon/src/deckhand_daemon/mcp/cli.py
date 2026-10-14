@@ -260,7 +260,8 @@ def prime(detected: dict[str, Any]) -> str:
 3. `deckhand start [FOLDER]` — another session beside you; then `deckhand say <its name> "…"`
    to give it the work.
 4. `deckhand close <id prefix>` — take a page or window away again.
-When the person puts a page beside you, a message from the daemon says so.
+When the person puts a page beside you, or takes one away, a message from the daemon says so;
+`close` from here is closed as you, and nobody is told.
 
 ## Output contract
 - stdout is data: JSON when piped or with `--json`, aligned text on a terminal. `presence`

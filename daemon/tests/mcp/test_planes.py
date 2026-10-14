@@ -75,6 +75,22 @@ def test_closing_takes_an_open_plane_by_a_unique_prefix_and_only_that(daemon):
     assert [(m, p) for m, p, _ in seen if m == "DELETE"] == [("DELETE", "/space/planes/ab12cd")]
 
 
+def test_an_agent_closes_a_plane_as_itself_and_a_terminal_as_the_person(monkeypatch):
+    """`by` is what keeps the session the plane stood beside from being told the person did it."""
+    sent = []
+
+    async def reach(method, path, **kw):
+        sent.append((method, kw.get("params")))
+        return OPEN if path == "/space" else {}
+
+    monkeypatch.setattr(server.here, "reach", reach)
+    monkeypatch.setattr(server.here, "mine", lambda: {"sessionId": "s1", "name": ""})
+    run(server.close_plane("ab12"))
+    monkeypatch.setattr(server.here, "mine", lambda: None)
+    run(server.close_plane("ab12"))
+    assert [params for method, params in sent if method == "DELETE"] == [{"by": "s1"}, {}]
+
+
 def test_space_leaves_the_poses_out_unless_asked(monkeypatch, daemon):
     _, answers = daemon
     answers["/space"] = OPEN

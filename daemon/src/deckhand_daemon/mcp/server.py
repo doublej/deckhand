@@ -256,8 +256,13 @@ async def open_plane(url: str | None = None, window: int | None = None,
     if title:
         sent["title"] = title
     if held := here.mine():
-        sent |= {"near": held["sessionId"], "by": held.get("name") or None}
+        sent |= {"near": held["sessionId"], "by": _by(held)}
     return await here.reach("POST", "/space/planes", json=sent)
+
+
+def _by(held: dict) -> str:
+    """Who an agent's plane says did it. Never empty: no `by` is the person, to the daemon."""
+    return held.get("name") or held["sessionId"]
 
 
 @server.tool(annotations=READ_ONLY)
@@ -319,7 +324,8 @@ async def start_session(folder: str | None = None, provider: str = "claude") -> 
 async def close_plane(id: str) -> dict:
     """Close a plane in the person's headset, by the id `open_plane` or `space` gave — a unique
     prefix of it is enough. Only a web page or a Mac window: an agent can never close a session,
-    and nothing here names one."""
+    and nothing here names one. Closed as you, so the session it stood beside is not told the
+    person took it away."""
     whole = await here.reach("GET", "/space")
     if "error" in whole:
         return whole
@@ -329,7 +335,10 @@ async def close_plane(id: str) -> dict:
         listed = ", ".join(f"{p['id'][:8]} {p['title']}" for p in planes) or "none open"
         which = "more than one plane starts" if found else "no plane starts"
         return {"error": f"{which} with {id!r} — open: {listed}", "code": "NO_SUCH_PLANE"}
-    answered = await here.reach("DELETE", f"/space/planes/{quote(found[0]['id'], safe='')}")
+    # No session above is the person at a terminal, and the daemon treats no `by` as the person.
+    by = {"by": _by(held)} if (held := here.mine()) else {}
+    answered = await here.reach("DELETE", f"/space/planes/{quote(found[0]['id'], safe='')}",
+                                params=by)
     return answered if "error" in answered else {"closed": found[0]["id"]}
 
 

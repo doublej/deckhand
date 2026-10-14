@@ -46,17 +46,17 @@ def add(plane: dict) -> tuple[dict, bool]:
     return plane, False
 
 
-def drop(plane_id: str) -> bool:
-    """Close one plane and forget where it was. Whether there was one by that id."""
+def drop(plane_id: str) -> dict | None:
+    """Close one plane and forget where it was. The plane it was, or None when there is none."""
     with _lock:
         kept = space()
-        left = [p for p in kept["planes"] if p["id"] != plane_id]
-        if len(left) == len(kept["planes"]):
-            return False
-        kept["planes"] = left
+        plane = next((p for p in kept["planes"] if p["id"] == plane_id), None)
+        if plane is None:
+            return None
+        kept["planes"].remove(plane)
         kept["poses"].pop(f"plane:{plane_id}", None)
         _write(kept)
-    return True
+    return plane
 
 
 def given(plane_id: str, near: str | None) -> dict | None:
