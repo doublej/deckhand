@@ -1,0 +1,72 @@
+# The space
+
+> What is open in the headset beside the sessions, and where — kept on the Mac so an agent can add to it
+
+## What this is
+
+`deckhand-xr` (`~/dev/multi-stack/deckhand-xr`) puts every live session around the person in a
+Quest 3 as a **plane**; looking at one and speaking sends the words to it. Web pages and Mac
+windows sit beside them as planes too. The **space** is all of that: which extra planes are open,
+and the **pose** of every plane, sessions included.
+
+The headset could have kept it. The daemon keeps it instead, for one reason: a session that has
+just started a dev server should be able to put the page next to itself without the person
+fetching it. That is `open_plane`, and the store exists so that tool has somewhere to write.
+
+The code is `daemon/src/deckhand_daemon/space/`. The contract it answers is
+`deckhand-xr/CLAUDE.md`, under *The wire this app relies on*; its vocabulary — space, plane,
+focus, near, pose — is that file's.
+
+## The wire
+
+Every route needs `x-deckhand-token`.
+
+- `GET /space` → `{rev, planes: [Plane], poses: {key: Pose}}`. `rev` rises on every change, so
+  the headset polls and redraws only when it moved.
+- `POST /space/planes` `{kind, url?, window?, title?, near?, by?}` → `Plane`, 201.
+  `kind: web` needs an http(s) `url`; `kind: window` needs an integer `window` the helper lists.
+  `near`, when given, must be a listed session, or 404. A `localhost`, `127.0.0.1`, `0.0.0.0` or
+  `::1` host becomes this Mac's LAN address, port kept. `title` defaults to the url's host or the
+  window's own title.
+- `DELETE /space/planes/{id}` → 204, and the plane's pose goes with it. 404 for no such plane.
+- `PUT /space/poses/{key}` `{x, y, z, yaw}` → 204. Keys are `session:<id>`, `plane:<id>`,
+  `manager`, `projects`, `launcher`. Every number finite, and no further than 20 m from the floor
+  origin. A `plane:` key for a plane that is not open is a 404.
+- `GET /windows` → `[{id, app, title, w, h}]`, `GET /windows/{id}/frame` one JPEG,
+  `GET /windows/{id}/stream?fps=` MJPEG. Passed through to `deckhand-windows` on
+  `127.0.0.1:4181`, the Swift helper in `deckhand-xr/windows/`; a 503 with the reason when it is
+  not running.
+
+`Plane = {id, kind, url, window, title, near, by, at}`. `Pose = {x, y, z, yaw}` — metres in the
+floor-origin space, yaw in radians. State is `space.json` in the data dir, written whole through
+`os.replace`.
+
+- **The stream is relayed, never buffered.** It has no end. When the headset goes, the relay
+  closes its side to the helper — in a background task, because Starlette cancels the stream on a
+  disconnect and an await inside that cancelled scope would be cancelled too. Verified against a
+  real uvicorn: the helper sees the connection drop.
+- **localhost is rewritten, not refused.** A session writes `http://localhost:5173` because it is
+  true where the session runs. In the headset it is true of the headset. The rewrite helps only a
+  server bound to `0.0.0.0`, which is why the tools tell the agent to prefer the project's atlas
+  dev hostname, `https://<slug>.atlas.local.jurrejan.com`, and say why.
+
+## Why an agent may open and close planes, and never sessions
+
+`open_plane`, `close_plane`, `space` and `mac_windows` are in the MCP server and the `deckhand`
+command. Every refusal in `docs/agent-surface.md` stands unchanged — no `/control`, no keyboard
+route, no `PUT /settings` or `/filters`, no `POST /projects/session` — because none of this
+touches them.
+
+A plane is furniture. Opening one starts no process and speaks to nobody; closing one stops
+nothing. What the person says *at* a web or window plane still goes to its `near` session through
+that session's own routes, so the filter chain, the orders and the delivery record apply exactly
+as they do from the phone. The worst an agent can do here is clutter the room.
+
+A session is not furniture. Closing one is `/control exit`, pressed by the person on that
+session's own plane, and an agent has no way to it: a session's plane comes from the listing and
+is never kept in the space, so `DELETE /space/planes/{id}` has nothing to name it by. Like every
+other refusal on the agent surface, this is absence rather than a fence, and the agent token in
+`docs/agent-surface.md` is still what would make it real.
+
+A Mac window plane is view-only. Input into a background Mac window is the hard part on macOS
+and is not attempted.
