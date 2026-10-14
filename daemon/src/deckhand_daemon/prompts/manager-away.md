@@ -1,6 +1,6 @@
 ---
 name: manager-away
-description: Added to the manager's system prompt for a run nobody has the panel open for.
+description: Put in front of what is said to the manager when nobody has the panel open.
 ---
 
 <medium>

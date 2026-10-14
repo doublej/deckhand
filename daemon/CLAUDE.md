@@ -358,12 +358,14 @@ whole of it is `docs/manager.md`; three things are worth having here.
   `POST /manager/say` answers the moment the words are written down, `manager.agent.watch()`
   answers into the same file, and `GET /manager?since=` brings back what is new. Same shape as
   `briefings`, same reason: a run takes seconds and an HTTP client waits twenty.
-- **One `query()` per turn, carrying `resume=`, never a live `ClaudeSDKClient`.** This daemon is
-  restarted often enough that a long-lived subprocess would be the first thing to break, and the
-  SDK session id lives in the conversation file so a restart taken mid-sentence keeps the thread.
-  A resume that fails is retried once *without* one and the panel is told — otherwise a pruned
-  SDK transcript leaves a manager that answers every message with the same error, permanently,
-  with no way back from the phone.
+- **One `ClaudeSDKClient`, held open for the daemon's life, so it is a session like any other.**
+  Claude Code lists it as `deckhand-manager` with an inbox socket, so other sessions find it with
+  `ListAgents` and `SendMessage` it; it answers them with `SendMessage`, its one built-in tool. It
+  was one `query()` per turn once, alive for seconds and so never findable. It must run
+  `bypassPermissions`: a session that prompts holds every message from one that bypasses
+  (`peer_message_hold`, `mode-mismatch`), and every session on this Mac bypasses. A restart
+  reopens it with `resume=` the id kept in the conversation file; a resume that never answers is
+  dropped once and the panel is told, otherwise a pruned SDK transcript leaves a dead manager.
 - **The refusals are enforced by absence, not by a check.** `say_to_session` has no route
   parameter; there is no tool for stop, compact, clear, rename, answering a slip or writing a
   filter chain, and `set_switch` does not offer `route`. The manager is a Claude session, so its

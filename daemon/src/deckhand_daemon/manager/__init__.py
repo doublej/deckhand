@@ -8,7 +8,7 @@ a small facade of tools over this daemon's own modules.
 talk.py     # the conversation on disk: numbered entries, and the SDK thread behind them
 tools.py    # what the manager may read, and how a session is named to it
 doing.py    # what it may change, the three things it may not touch, and the tool server
-agent.py    # the run itself: one query per thing said, resumed rather than held open
+agent.py    # the run itself: one session held open, so other sessions can message it
 routes.py   # the four endpoints under /manager
 ```
 

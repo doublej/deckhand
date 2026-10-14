@@ -17,7 +17,7 @@ phone                     daemon
                                                           │
                               manager/agent.watch()  ◀────┘
                                      │
-                                     ├─ query(resume=…) with twelve tools
+                                     ├─ client.query(…), held open, twelve tools
                                      ├─ each text block  ──▶ talk.say("manager", …)
                                      └─ each acting tool ──▶ talk.say("act", …)
 ```
@@ -30,12 +30,13 @@ a numbered list on disk and the phone asks for everything after the id it holds.
 away for an hour catches up in one call. It is the same answer `briefings` reached, for the same
 reason, and it is why nothing is lost to a daemon restart.
 
-**One run per thing said, resumed rather than held open.** Nothing keeps a `ClaudeSDKClient`
-alive. Each turn is a `query()` carrying `resume=` the last run's SDK session id, which lives in
-the conversation file beside the entries. This daemon is restarted often enough that a long-lived
-subprocess would be the thing that broke first. A resume that fails is retried once *without*
-one and the panel is told the thread was lost — otherwise a pruned SDK transcript would leave a
-manager that answered every message with the same error and no way back from the phone.
+**Held open, so it is a session like any other.** One `ClaudeSDKClient` lives as long as the
+daemon, so Claude Code lists it as `deckhand-manager` with an inbox socket and any session can
+`SendMessage` it; it answers with `SendMessage` back, and the turn shows in the panel without
+buzzing the phone. It was one `query()` per thing said once, alive for seconds and so never
+findable. A restart reopens it with `resume=` the SDK session id kept in the conversation file. A
+resume that never answers is dropped once and the panel is told — otherwise a pruned SDK
+transcript would leave a manager that could never reopen and no way back from the phone.
 
 **The phone never waits for a model.** `POST /manager/say` answers the moment the words are
 written down. The panel draws them at once and polls at one second while `working` is true.
