@@ -32,7 +32,7 @@ from pathlib import Path
 from .. import config, fleet
 from ..log import log
 from ..reading.transcripts import turn_ended
-from . import codex, panes
+from . import codex, panes, project
 from .panes import Pane
 
 
@@ -62,6 +62,7 @@ class Session:
         d = asdict(self)
         d.pop("socket_path")
         d["folder"] = Path(self.cwd).name
+        d["project"] = project.of(self.cwd)
         return d
 
 

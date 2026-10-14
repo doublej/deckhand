@@ -41,6 +41,9 @@ Every route needs `x-deckhand-token`.
   the window and drives the **real** cursor and keyboard, so a click lands in a browser exactly as
   one made at the Mac. The daemon then touches `/presence/phone`, because the event it just caused
   reads as a key pressed at the laptop and would otherwise hand `where` back to it.
+- Every `/sessions` row carries `project: {key, color, parent}` — the repo the session is in and
+  the colours JJ's statusline gives it (`sessions/project.py`, cross-checked against the script).
+  The headset tints a terminal with `color` and groups one project's terminals by default.
 - `GET /sessions/{id}/screen` → `{lines, at}`: the pane as it stands, via `it2 session read`
   (~0.13 s, shared across polls for 0.5 s). It is what the headset's terminal plane shows — the
   prompt box and a pending permission question are on the screen and in no transcript. No pane
