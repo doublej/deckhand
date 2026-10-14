@@ -31,10 +31,12 @@ item. `AppActivation` is utt's, copied with its measurements.
 - **A regular app, not `LSUIElement`.** It has a Dock icon and its own Cmd-Tab entry, and
   opening it again (Dock, Cmd-Tab, Spotlight) shows the window through
   `applicationShouldHandleReopen`. The window never opens at launch, because it starts at login.
-- **A session the manager names is a `deckhand://sessions/<id>` link**, `CardLink`'s shape.
-  `list_sessions` hands the manager each name already linked and its prompt says to copy them;
-  the panel's `openURL` sends a click to `POST /sessions/{id}/focus`, which brings that session's
-  iTerm window and tab forward. The manager still never types into a pane — the person clicks.
+- **A session the manager names is a `deckhand://sessions/<id>` link**, `CardLink`'s shape, put
+  in on this side by `ManagerLinks`: a name the manager wrote in bold or as code that is one of
+  this Mac's live sessions. Asked in its prompt to write the links itself, it wrote bold anyway —
+  so the link is not the model's to remember. The panel's `openURL` sends a click to
+  `POST /sessions/{id}/focus`, which brings that session's iTerm window and tab forward. The
+  manager still never types into a pane — the person clicks.
 - **No talk mark.** utt dictates into any field on this Mac, this one included.
 
 ## Verification

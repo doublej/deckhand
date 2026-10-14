@@ -24,6 +24,8 @@ final class Desk {
     var draft = ""
     var failure: String?
     var opensAtLogin = SMAppService.mainApp.status == .enabled
+    /// This Mac's live sessions, name to id, for linking the names in the manager's replies.
+    private var sessions: [String: String] = [:]
     /// Handed over by the menu bar icon, the one view alive from launch. See `MenuLabel`.
     var showWindow: (() -> Void)?
 
@@ -62,7 +64,13 @@ final class Desk {
             return
         }
         do {
-            let fresh = absorb(try await client.manager(since: cursor, watching: watching))
+            let feed = try await client.manager(since: cursor, watching: watching)
+            // Only when the manager said something: a listing costs the daemon an iTerm lookup.
+            if !feed.entries.isEmpty {
+                let live = try await client.sessions().sessions
+                sessions = Dictionary(live.map { ($0.name, $0.sessionId) }) { first, _ in first }
+            }
+            let fresh = absorb(feed)
             if !watching {
                 fresh.filter { $0.role == .manager }.forEach(notifier.show)
             }
@@ -71,6 +79,15 @@ final class Desk {
         } catch {
             failure = Self.reason(error)
         }
+    }
+
+    /// What a panel draws for an entry: the manager's own words with every live session it named
+    /// made into a link — see `ManagerLinks`.
+    func linked(_ entry: ManagerEntry) -> ManagerEntry {
+        guard entry.role == .manager else { return entry }
+        return ManagerEntry(id: entry.id, role: entry.role,
+                            text: ManagerLinks.linked(entry.text, sessions: sessions),
+                            saidAt: entry.saidAt, command: entry.command)
     }
 
     /// A panel came into view or left it. The last one leaving tells the daemon at once, so a

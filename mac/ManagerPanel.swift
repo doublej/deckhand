@@ -85,7 +85,7 @@ struct ManagerPanel: View {
         ScrollViewReader { scroller in
             ScrollView {
                 VStack(alignment: .leading, spacing: Spacing.extraSmall) {
-                    ForEach(desk.entries) { ManagerLine(entry: $0) }
+                    ForEach(desk.entries) { ManagerLine(entry: desk.linked($0)) }
                     ForEach(desk.pending, id: \.self) { ManagerBubble(text: $0, mine: true).opacity(0.6) }
                     if !desk.partial.isEmpty { ManagerBubble(text: desk.partial, mine: false) }
                     if desk.working { workingLine }
