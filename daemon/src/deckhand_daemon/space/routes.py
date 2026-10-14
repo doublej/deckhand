@@ -23,10 +23,11 @@ from fastapi import APIRouter, Body, HTTPException, Response
 
 from .. import config, saying
 from ..bindings.stored import now
-from . import stored, windows
+from . import screen, stored, windows
 
 router = APIRouter(tags=["space"])
 router.include_router(windows.router)
+router.include_router(screen.router)
 
 #: A host that means "this machine" to whoever wrote it — and the headset is another machine.
 LOOPBACK = {"localhost", "127.0.0.1", "0.0.0.0", "::1"}

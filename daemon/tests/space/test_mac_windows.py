@@ -37,6 +37,15 @@ class Helper(BaseHTTPRequestHandler):
             # The real helper's shape, which the relay must not wrap a second time.
             self._send(404, "application/json", json.dumps({"detail": "no window 9"}).encode())
 
+    def do_POST(self):
+        sent = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        Helper.asked.append((self.path, sent))
+        if self.path == "/windows/7/input":
+            self.send_response(204)
+            self.end_headers()
+        else:
+            self._send(404, "application/json", json.dumps({"detail": "no window 9"}).encode())
+
     def _send(self, code, kind, body):
         self.send_response(code)
         self.send_header("Content-Type", kind)
@@ -93,3 +102,20 @@ def test_the_stream_is_relayed_as_it_came_with_its_fps(client, head, helper):
         assert streamed.headers["content-type"].startswith("multipart/x-mixed-replace")
         assert b"".join(streamed.iter_raw()) == STREAM
     assert Helper.asked == ["/windows/7/stream?fps=5"]
+
+
+def test_input_reaches_the_helper_and_the_headset_touches_last(client, head, helper, monkeypatch):
+    from deckhand_daemon import presence
+
+    monkeypatch.setattr(presence, "_phone_touched", None)
+    click = {"type": "down", "x": 0.5, "y": 0.25, "button": "left"}
+    assert client.post("/windows/7/input", json=click, headers=head).status_code == 204
+    assert Helper.asked == [("/windows/7/input", click)]
+    assert presence._phone_touched is not None
+    missing = client.post("/windows/9/input", json=click, headers=head)
+    assert missing.status_code == 404 and missing.json()["detail"] == "no window 9"
+
+
+def test_input_without_the_helper_is_a_503(client, head, nobody):
+    sent = {"type": "up", "x": 0, "y": 0}
+    assert client.post("/windows/7/input", json=sent, headers=head).status_code == 503

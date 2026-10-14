@@ -13,11 +13,14 @@ helper knows to stop capturing.
 from __future__ import annotations
 
 import json
+from typing import Annotated
 
 import httpx
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, Body, HTTPException, Response
 from fastapi.responses import StreamingResponse
 from starlette.background import BackgroundTask
+
+from .. import presence
 
 HELPER = "http://127.0.0.1:4181"
 TIMEOUT = 5.0
@@ -70,6 +73,25 @@ async def list_windows() -> list[dict]:
 async def window_frame(window_id: int) -> Response:
     answered = await _get(f"/windows/{window_id}/frame")
     return Response(answered.content, media_type="image/jpeg")
+
+
+@router.post("/windows/{window_id}/input", status_code=204)
+async def window_input(window_id: int, sent: Annotated[dict, Body()]) -> None:
+    """A click, drag, scroll or keystroke for that window, as the real cursor and keyboard.
+
+    Headset only, and on purpose not an agent tool: this is the person's own hand on the Mac,
+    the keyboard route's authority, and an agent driving it would be speaking as them.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+            answered = await client.post(f"{HELPER}/windows/{window_id}/input", json=sent)
+    except httpx.HTTPError as error:
+        raise _down(error) from error
+    if answered.status_code >= 400:
+        raise _refused(answered, answered.content)
+    # The event the helper just posted reads as a key pressed at the Mac, which would hand
+    # `where` to the laptop while the person is in the headset — so the headset touches last.
+    presence.phone_in_hand()
 
 
 @router.get("/windows/{window_id}/stream")

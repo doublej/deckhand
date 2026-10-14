@@ -36,6 +36,14 @@ Every route needs `x-deckhand-token`.
   `GET /windows/{id}/stream?fps=` MJPEG. Passed through to `deckhand-windows` on
   `127.0.0.1:4181`, the Swift helper in `deckhand-xr/windows/`; a 503 with the reason when it is
   not running.
+- `POST /windows/{id}/input` `{type: down|move|up|scroll|text|key, …}` → 204. The helper raises
+  the window and drives the **real** cursor and keyboard, so a click lands in a browser exactly as
+  one made at the Mac. The daemon then touches `/presence/phone`, because the event it just caused
+  reads as a key pressed at the laptop and would otherwise hand `where` back to it.
+- `GET /sessions/{id}/screen` → `{lines, at}`: the pane as it stands, via `it2 session read`
+  (~0.13 s, shared across polls for 0.5 s). It is what the headset's terminal plane shows — the
+  prompt box and a pending permission question are on the screen and in no transcript. No pane
+  is a 409, as `/focus` answers.
 
 `Plane = {id, kind, url, window, title, near, by, at}`. `Pose = {x, y, z, yaw}` — metres in the
 floor-origin space, yaw in radians. State is `space.json` in the data dir, written whole through
@@ -68,5 +76,6 @@ is never kept in the space, so `DELETE /space/planes/{id}` has nothing to name i
 other refusal on the agent surface, this is absence rather than a fence, and the agent token in
 `docs/agent-surface.md` is still what would make it real.
 
-A Mac window plane is view-only. Input into a background Mac window is the hard part on macOS
-and is not attempted.
+Input into a Mac window is the person's hand and is **not** an agent tool. It drives the real
+cursor and keyboard, the keyboard route's authority, so an agent with it would be the person by
+another name. The headset sends it; the MCP server and the `deckhand` command do not have it.
