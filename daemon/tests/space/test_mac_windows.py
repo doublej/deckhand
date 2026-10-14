@@ -34,7 +34,8 @@ class Helper(BaseHTTPRequestHandler):
         elif self.path.startswith("/windows/7/stream"):
             self._send(200, f"multipart/x-mixed-replace; boundary={BOUNDARY}", STREAM)
         else:
-            self._send(404, "text/plain", b"no window 9")
+            # The real helper's shape, which the relay must not wrap a second time.
+            self._send(404, "application/json", json.dumps({"detail": "no window 9"}).encode())
 
     def _send(self, code, kind, body):
         self.send_response(code)

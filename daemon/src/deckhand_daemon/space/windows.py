@@ -12,6 +12,8 @@ helper knows to stop capturing.
 
 from __future__ import annotations
 
+import json
+
 import httpx
 from fastapi import APIRouter, HTTPException, Response
 from fastapi.responses import StreamingResponse
@@ -32,7 +34,11 @@ def _down(error: Exception) -> HTTPException:
 
 
 def _refused(answered: httpx.Response, body: bytes) -> HTTPException:
-    said = body.decode(errors="replace").strip()[:200]
+    # The helper's errors are `{"detail": …}` already; passing the body on whole wraps it twice.
+    if answered.headers.get("content-type", "").startswith("application/json"):
+        said = str(json.loads(body).get("detail", ""))[:200]
+    else:
+        said = body.decode(errors="replace").strip()[:200]
     return HTTPException(
         status_code=answered.status_code,
         detail=said or f"deckhand-windows answered {answered.status_code}",
