@@ -45,6 +45,8 @@ def test_xterm_colours():
 def test_a_subfolder_is_its_repos_project(tmp_path):
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
     (tmp_path / "sub").mkdir()
-    project._root.cache_clear()
+    project.root.cache_clear()
     assert project.of(str(tmp_path / "sub"))["key"] == project.of(str(tmp_path))["key"]
     assert project.of(str(tmp_path))["color"].startswith("#")
+    named = project.of(str(tmp_path))
+    assert named["group"] == f"proj-{project.cksum(named['key']):08x}"

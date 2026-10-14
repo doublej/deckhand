@@ -1,7 +1,9 @@
 """The space over the wire: what is open in the headset, opening and closing it, and where it is.
 
 A plane is furniture, not a session. Opening one starts nothing and closing one stops nothing,
-which is why an agent may do both (`docs/space.md`). A session's own plane is never kept here — it
+which is why an agent may do both (`docs/space.md`). Starting a session beside another is the one
+door here that makes a session, and it is `POST /projects/session` with both its gates plus a place
+to stand: JJ asked for agents to bring sessions into the space (2026-10-14). A session's own plane is never kept here — it
 comes from the listing — so `DELETE /space/planes/{id}` structurally cannot close a session.
 
 Bodies are taken as plain objects and checked by hand, as `bindings/routes.py` does, so anything
@@ -24,7 +26,10 @@ from fastapi import APIRouter, Body, HTTPException, Response
 
 from .. import config, saying
 from ..bindings.stored import now
-from . import screen, stored, theme, windows
+from ..projects import catalog
+from ..projects import routes as projects
+from ..sessions import live_sessions, project
+from . import around, screen, stored, theme, windows
 
 router = APIRouter(tags=["space"])
 router.include_router(windows.router)
@@ -63,21 +68,66 @@ async def open_plane(sent: Annotated[dict, Body()]) -> dict:
     else:
         raise HTTPException(status_code=400, detail="kind must be web or window")
     near = _text(sent, "near") or None
-    if near:
-        # The same lookup every session route makes: a 404 for a session not listed, and a
-        # cleared conversation answered by the one that replaced it in the same pane.
-        near = (await saying.live_session(near)).session_id
+    # The same lookup every session route makes: a 404 for a session not listed, and a cleared
+    # conversation answered by the one that replaced it in the same pane.
+    session = await saying.live_session(near) if near else None
     plane = {
         "id": uuid.uuid4().hex,
         "kind": kind,
         "url": url,
         "window": window,
         "title": title,
-        "near": near,
+        "near": session.session_id if session else None,
         "by": _text(sent, "by") or None,
         "at": now(),
     }
-    return await asyncio.to_thread(stored.add, plane)
+    await asyncio.to_thread(stored.add, plane)
+    # No `by` is the person, in the headset: an agent's plane names the agent and is its own news.
+    if session and plane["by"] is None:
+        await asyncio.to_thread(around.tell, session, plane)
+    return plane
+
+
+@router.put("/space/planes/{plane_id}/near", status_code=204)
+async def give_plane(plane_id: str, sent: Annotated[dict, Body()]) -> Response:
+    """The person moved a page or window to another session's side, or to nobody's (`near`
+    null). The headset's to call; the session it now belongs to is told."""
+    near = _text(sent, "near") or None
+    session = await saying.live_session(near) if near else None
+    was = await asyncio.to_thread(stored.given, plane_id, session.session_id if session else None)
+    if was is None:
+        raise HTTPException(status_code=404, detail="no plane with that id")
+    if session and was["near"] != session.session_id:
+        await asyncio.to_thread(around.tell, session, was | {"near": session.session_id})
+    return Response(status_code=204)
+
+
+@router.get("/sessions/{session_id}/space")
+async def session_space(session_id: str) -> dict:
+    """Where this session stands in the headset and what stands with it (`space/around.py`)."""
+    session = await saying.live_session(session_id)
+    rows = [s.to_json() for s in await asyncio.to_thread(live_sessions)]
+    return around.around(await asyncio.to_thread(stored.space), rows, session.session_id)
+
+
+@router.post("/space/sessions", status_code=201)
+async def start_beside(sent: Annotated[dict, Body()]) -> dict:
+    """Start a session in `path` that stands beside the session `near` in the headset, in its
+    group, until it is moved. The listing and the trust record gate it exactly as they gate
+    `POST /projects/session`, which does the starting; a folder inside a listed repo is taken as
+    that repo, since a session's own folder is the one an agent knows."""
+    near, path = _text(sent, "near"), _text(sent, "path")
+    if not near or not path:
+        raise HTTPException(status_code=400, detail="near and path are both needed")
+    by = (await saying.live_session(near)).session_id
+    listed = {p.path for p in (await asyncio.to_thread(catalog))[0]}
+    if path not in listed:
+        path = await asyncio.to_thread(project.root, path)
+    started = await projects.start_project_session(
+        path=path, provider=_text(sent, "provider") or "claude"
+    )
+    await asyncio.to_thread(stored.started, started["session"]["session_id"], by)
+    return started["session"]
 
 
 @router.delete("/space/planes/{plane_id}", status_code=204)

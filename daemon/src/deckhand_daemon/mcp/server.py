@@ -1,11 +1,11 @@
-"""The eleven tools a session gets so it can reach the person, wherever they are.
+"""The twelve tools a session gets so it can reach the person, wherever they are.
 
 The skill said all of this in prose first, and the prose is still the better half: a slip is a
 file an agent writes in its own folder, and knowing that is worth more than any tool. These exist
 because a tool is present whether or not the model thought to look, and the failure they answer is
 a session that reached a decision needing the person and made it alone.
 
-**Nine of the eleven are the daemon's own routes.** Nothing here reimplements one. `/say` carries the
+**Ten of the twelve are the daemon's own routes.** Nothing here reimplements one. `/say` carries the
 session's filter chain, its orders and the delivery record; `/notify` carries the folder's right to
 refuse being interrupted. Calling the functions underneath those routes would quietly drop all of
 it, which is the shape of bug that looks like it works.
@@ -15,19 +15,22 @@ from there, exactly as `docs/artifacts.md` chose — so `ask_on_phone` and `read
 skill's own `slip.py` and `answer.py` rather than talking to the daemon. One copy of that logic,
 and the tool and the shell command an agent might type produce the same file.
 
-**What it refuses, and how.** By absence: there is no route argument, no `/control`, no `PUT`, no
-`POST /projects/session`. `say_to_session` is socket-only, because an agent choosing the keyboard
+**What it refuses, and how.** By absence: there is no route argument, no `/control`, no `PUT`, and
+no way to close a session. `say_to_session` is socket-only, because an agent choosing the keyboard
 route is an agent claiming to be the person. None of this is a fence — the agent keeps `Bash` and
 the token is a readable file — it is there so an agent does not *drift* into speaking as the
 person because that route was the convenient one. `docs/agent-surface.md` says which token would
 make these refusals real, and it does not exist yet.
 
-**Four of them are the headset's space** (`docs/space.md`): `open_plane` puts a web page or a Mac
-window beside this session, `close_plane` takes one away, `space` and `mac_windows` look. A plane
-is furniture, so opening and closing one is allowed. A session is never a plane the space keeps,
-so `close_plane` has nothing to name one by — closing a session stays the person's own press.
+**Five of them are the headset's space** (`docs/space.md`): `open_plane` puts a web page or a Mac
+window beside this session, `close_plane` takes one away, `space` and `mac_windows` look, and
+`start_session` brings another session in beside this one. A plane is furniture, so opening and
+closing one is allowed. Starting a session is allowed because JJ asked for it (2026-10-14), and
+only in a folder the listing names and Claude Code trusts — the gates the phone's own start has.
+A session is never a plane the space keeps, so `close_plane` has nothing to name one by — closing
+a session stays the person's own press.
 
-**`presence` comes first.** It says `laptop` or `phone`. At the laptop the person is reading
+**`presence` comes first.** It says `laptop`, `headset` or `phone`. At the laptop the person is reading
 this conversation, so ask in it; on the phone, ask there. Every tool here is also a `deckhand`
 shell command (`mcp/cli.py`, `deckhand prime`), so a session without these tools loses nothing.
 """
@@ -257,9 +260,28 @@ async def open_plane(url: str | None = None, window: int | None = None,
 
 @server.tool(annotations=READ_ONLY)
 async def space() -> dict:
-    """What is open in the person's headset besides the sessions — each plane's id, kind, url or
-    window, title, the session it is `near` and who opened it — and where every plane is."""
-    return await here.reach("GET", "/space")
+    """Where you are in the person's headset and what is around you. `around_you` is your pose,
+    your group, and every session, page and window `beside` you — in your group or opened near
+    you. The rest is the whole space: every plane's id, kind, url or window, title, the session it
+    is `near` and who opened it (`by` null is the person), and where every plane is."""
+    whole = await here.reach("GET", "/space")
+    if "error" in whole or not (held := here.mine()):
+        return whole
+    return {"around_you": await here.reach("GET", f"/sessions/{held['sessionId']}/space"), **whole}
+
+
+@server.tool(annotations=WRITES)
+async def start_session(folder: str | None = None, provider: str = "claude") -> dict:
+    """Start another Claude Code session, standing beside you in the person's headset in your
+    group — to hand it part of the work, or to show the person something running. `folder`
+    defaults to your own; it must be a project the Mac lists and Claude Code already trusts, or
+    the answer says why not. It starts with no task: tell it what to do with `say_to_session`,
+    which reaches it as an agent. You cannot close it afterwards — that is the person's."""
+    held = here.mine()
+    if not held:
+        return _nobody("a session starts beside the session asking, and none is above this process")
+    return await here.reach("POST", "/space/sessions", json={
+        "near": held["sessionId"], "path": folder or held.get("cwd", ""), "provider": provider})
 
 
 @server.tool(annotations=WRITES)

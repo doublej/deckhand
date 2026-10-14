@@ -1,4 +1,4 @@
-"""`space.json`, in the data dir: `{"rev", "planes": [Plane], "poses": {key: Pose}}`.
+"""`space.json`, in the data dir: `{"rev", "planes": [Plane], "poses": {key: Pose}, "beside"?}`.
 
 `rev` rises on every change, so the headset can poll `GET /space` and redraw only when it moved.
 Read whole and written whole through `os.replace`, like `bindings/stored.py`, so a crash mid-write
@@ -6,6 +6,10 @@ leaves the last good file. Every change is read, modify, write under one lock, o
 opened in the same instant would each be written over the other.
 
 A plane's pose goes with it: closing a plane drops `plane:<id>` from `poses`.
+
+`beside` is `{session id: session id}`, written only once an agent has started a session: the one
+it started, and the one that started it. The headset stands a session with no pose of its own
+beside that one, in its group.
 """
 
 from __future__ import annotations
@@ -47,6 +51,27 @@ def drop(plane_id: str) -> bool:
         kept["poses"].pop(f"plane:{plane_id}", None)
         _write(kept)
     return True
+
+
+def given(plane_id: str, near: str | None) -> dict | None:
+    """Hand a plane to another session: the plane as it was before, or None when there is none."""
+    with _lock:
+        kept = space()
+        plane = next((p for p in kept["planes"] if p["id"] == plane_id), None)
+        if plane is None:
+            return None
+        was = dict(plane)
+        plane["near"] = near
+        _write(kept)
+    return was
+
+
+def started(session_id: str, by: str) -> None:
+    """`session_id` was started by the session `by` and stands beside it until it is moved."""
+    with _lock:
+        kept = space()
+        kept.setdefault("beside", {})[session_id] = by
+        _write(kept)
 
 
 def has_plane(plane_id: str) -> bool:

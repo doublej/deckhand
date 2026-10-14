@@ -46,9 +46,24 @@ Every route needs `x-deckhand-token`.
   For delivery it is not `laptop`, so `auto` still types; for an agent asking, it is the laptop's
   answer — the person reads the conversation on a pane. JJ's statusline goes to one short line on
   it.
-- Every `/sessions` row carries `project: {key, color, parent}` — the repo the session is in and
-  the colours JJ's statusline gives it (`sessions/project.py`, cross-checked against the script).
-  The headset tints a terminal with `color` and groups one project's terminals by default.
+- Every `/sessions` row carries `project: {key, color, parent, group}` — the repo the session is
+  in, the colours JJ's statusline gives it (`sessions/project.py`, cross-checked against the
+  script), and the group id its terminals share by default. The headset tints a terminal with
+  `color` and groups a project's terminals under `group` while two or more are live and none has
+  a kept pose — named here so the daemon can say who is in a group the headset never wrote down.
+- `GET /sessions/{id}/space` → `{pose, group, beside}`: where that session stands, its group by
+  the headset's rule, and every session, page and window in that group or opened `near` it
+  (`space/around.py`). What the `space` tool hands an agent as `around_you`.
+- `POST /space/sessions` `{near, path, provider?}` → 201 with the session: start one in `path`
+  standing beside `near`, in its group. `POST /projects/session` does the starting, so the
+  listing and the trust record gate it unchanged; a subfolder of a listed repo is taken as the
+  repo. `space.json` keeps `beside: {new id: near id}`, and the headset stands a session with no
+  pose of its own beside the one named there.
+- `PUT /space/planes/{id}/near` `{near}` → 204: the headset handing a page or window to another
+  session, or to nobody (`null`). A page the person opens with `near` set, or hands over this
+  way, is **told** to that session down its socket (`prompts/space-given.md`), because what he
+  says looking at it now goes there; a plane an agent opened beside itself carries its `by` and
+  is not news to it.
 - `GET /sessions/{id}/screen` → `{lines, at, styled, runs?}`: the pane as it stands, shared
   across polls for 0.5 s. It is what the headset's terminal plane shows — the prompt box and a
   pending permission question are on the screen and in no transcript. No pane is a 409, as
@@ -87,12 +102,18 @@ by snapping one plane against another, and this only keeps the answer. State is 
   server bound to `0.0.0.0`, which is why the tools tell the agent to prefer the project's atlas
   dev hostname, `https://<slug>.atlas.local.jurrejan.com`, and say why.
 
-## Why an agent may open and close planes, and never sessions
+## Why an agent may open planes and start sessions, and never close a session
 
-`open_plane`, `close_plane`, `space` and `mac_windows` are in the MCP server and the `deckhand`
-command. Every refusal in `docs/agent-surface.md` stands unchanged — no `/control`, no keyboard
-route, no `PUT /settings` or `/filters`, no `POST /projects/session` — because none of this
-touches them.
+`open_plane`, `close_plane`, `space`, `mac_windows` and `start_session` are in the MCP server and
+the `deckhand` command. Every other refusal in `docs/agent-surface.md` stands — no `/control`, no
+keyboard route, no `PUT /settings` or `/filters`.
+
+`start_session` was a refusal until JJ asked (2026-10-14) for agents to bring sessions into the
+space: to hand part of the work to another session, or to show him something running beside the
+terminal he is talking to. It goes through `POST /space/sessions`, which is `POST /projects/session`
+with a place to stand, so a session can only start in a folder the listing names and Claude Code
+already trusts. It starts with no task; the agent briefs it with `say_to_session`, which arrives
+as an agent and carries none of the person's authority.
 
 A plane is furniture. Opening one starts no process and speaks to nobody; closing one stops
 nothing. What the person says *at* a web or window plane still goes to its `near` session through

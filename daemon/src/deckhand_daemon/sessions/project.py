@@ -40,7 +40,7 @@ STANDARD = (
 
 
 @lru_cache(maxsize=512)
-def _root(cwd: str) -> str:
+def root(cwd: str) -> str:
     """The repo root, or the folder itself — a subfolder of a project is not another project."""
     out = subprocess.run(
         ["git", "-C", cwd, "rev-parse", "--show-toplevel"],
@@ -92,7 +92,15 @@ def xterm(index: int) -> str:
 
 
 def of(cwd: str) -> dict:
-    """`{key, color, parent}` for the project `cwd` is in: its name and the statusline's colours."""
-    name = key(_root(cwd)) if cwd else ""
-    slot = cksum(name) % len(DIR_PALETTE)
-    return {"key": name, "color": xterm(DIR_PALETTE[slot]), "parent": xterm(PAR_PALETTE[slot])}
+    """`{key, color, parent, group}` for the project `cwd` is in: its name, the statusline's
+    colours, and the id its terminals share as a group in the headset until the person moves one —
+    named here, so the daemon can say who is in a group the headset never wrote down."""
+    name = key(root(cwd)) if cwd else ""
+    crc = cksum(name)
+    slot = crc % len(DIR_PALETTE)
+    return {
+        "key": name,
+        "color": xterm(DIR_PALETTE[slot]),
+        "parent": xterm(PAR_PALETTE[slot]),
+        "group": f"proj-{crc:08x}",
+    }

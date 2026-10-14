@@ -1,4 +1,4 @@
-"""`deckhand` — the MCP server's eleven tools as one shell command.
+"""`deckhand` — the MCP server's twelve tools as one shell command.
 
 **One surface, three doors.** The daemon's routes are the API; `server.py` turns nine of them and
 the skill's two slip scripts into tools; this file calls *those same functions*, so the command
@@ -79,7 +79,9 @@ COMMANDS: list[dict[str, str]] = [
      "does": "put a web page, or a Mac window by id, beside this session in the person's "
              "headset; the URL must be reachable from the headset on the LAN"},
     {"name": "space", "tool": "space", "args": "",
-     "does": "what is open in the headset beside the sessions, and where each plane is"},
+     "does": "where this session is in the headset, what is beside it, and the whole space"},
+    {"name": "start", "tool": "start_session", "args": "[FOLDER] [--provider claude|codex]",
+     "does": "start a session beside this one in the headset; brief it with `say`"},
     {"name": "close", "tool": "close_plane", "args": "ID",
      "does": "close a plane by its id — a page or a window, never a session"},
     {"name": "windows", "tool": "mac_windows", "args": "",
@@ -121,6 +123,8 @@ def build_parser() -> Parser:
     sub.choices["open"].add_argument("--window", type=int, help="an id from `deckhand windows`")
     sub.choices["open"].add_argument("--title")
     sub.choices["close"].add_argument("id")
+    sub.choices["start"].add_argument("folder", nargs="?", help="a listed project; default here")
+    sub.choices["start"].add_argument("--provider", default="claude")
     for each in sub.choices.values():
         each.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     return parser
@@ -155,6 +159,8 @@ async def _call(a: argparse.Namespace) -> dict[str, Any]:
             return await server.close_plane(a.id)
         case "windows":
             return await server.mac_windows()
+        case "start":
+            return await server.start_session(a.folder, provider=a.provider)
     raise AssertionError(a.command)
 
 
