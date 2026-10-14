@@ -1,3 +1,6 @@
+#if os(macOS)
+import AppKit
+#endif
 import DeckhandKit
 import SwiftUI
 
@@ -60,7 +63,7 @@ struct ManagerBubble: View {
     var body: some View {
         HStack(spacing: 0) {
             if mine { Spacer(minLength: Spacing.extraLarge + Spacing.medium) }
-            words
+            selectable
                 .padding(.horizontal, Spacing.small)
                 .padding(.vertical, Spacing.extraSmall)
                 .background(
@@ -81,9 +84,25 @@ struct ManagerBubble: View {
                 .font(Typography.prose)
                 .foregroundStyle(Palette.textPrimary)
                 .lineSpacing(6)
-                .textSelection(.enabled)
         } else {
-            Markdown(text).textSelection(.enabled)
+            Markdown(text)
         }
+    }
+
+    /// On the phone a reply is selectable. On the Mac it is copied with a right click instead:
+    /// selectable text there draws an I-beam over every character, links included, which hides
+    /// the pointing hand `Links.text` asks for — and a session name you cannot tell is a link is
+    /// one nobody clicks.
+    @ViewBuilder private var selectable: some View {
+        #if os(macOS)
+        words.contextMenu {
+            Button("Copy") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(text, forType: .string)
+            }
+        }
+        #else
+        words.textSelection(.enabled)
+        #endif
     }
 }
