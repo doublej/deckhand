@@ -40,6 +40,7 @@ from .projects import routes as project_routes
 from .reading import asked, commands, context, readable, transcripts
 from .reading import routes as reading_routes
 from .settings import routes as settings_routes
+from .space import routes as space_routes
 
 
 def require_token(request: Request, x_deckhand_token: str = Header(default="")) -> None:
@@ -95,6 +96,7 @@ app.include_router(presence.router, dependencies=[Depends(require_token)])
 app.include_router(push.router, dependencies=[Depends(require_token)])
 app.include_router(project_routes.router, dependencies=[Depends(require_token)])
 app.include_router(settings_routes.router, dependencies=[Depends(require_token)])
+app.include_router(space_routes.router, dependencies=[Depends(require_token)])
 app.include_router(saying.router, dependencies=[Depends(require_token)])
 
 
