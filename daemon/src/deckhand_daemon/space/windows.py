@@ -13,10 +13,10 @@ helper knows to stop capturing.
 from __future__ import annotations
 
 import json
-from typing import Annotated
+from typing import Annotated, Literal
 
 import httpx
-from fastapi import APIRouter, Body, HTTPException, Response
+from fastapi import APIRouter, Body, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
 from starlette.background import BackgroundTask
 
@@ -94,13 +94,14 @@ async def window_input(window_id: int, sent: Annotated[dict, Body()]) -> None:
     presence.phone_in_hand()
 
 
-@router.get("/windows/{window_id}/stream")
-async def window_stream(window_id: int, fps: float | None = None) -> StreamingResponse:
+@router.get("/windows/{window_id}/{kind}")
+async def window_stream(window_id: int, kind: Literal["stream", "hevc"], request: Request):
+    """`stream` is MJPEG, `hevc` the same window as HEVC access units off the Mac's hardware
+    encoder. The query (`fps`, `max`, `q`, …) is the helper's to read and goes through whole —
+    picking out `fps` alone is how the headset's `max` was once dropped on the floor here."""
     client = httpx.AsyncClient(timeout=httpx.Timeout(TIMEOUT, read=None))
     asked = client.build_request(
-        "GET",
-        f"{HELPER}/windows/{window_id}/stream",
-        params={} if fps is None else {"fps": f"{fps:g}"},
+        "GET", f"{HELPER}/windows/{window_id}/{kind}", params=request.query_params
     )
     try:
         upstream = await client.send(asked, stream=True)
@@ -121,6 +122,6 @@ async def window_stream(window_id: int, fps: float | None = None) -> StreamingRe
     # The background task runs after that scope has ended, on a finished stream or a gone client.
     return StreamingResponse(
         upstream.aiter_raw(),
-        media_type=upstream.headers.get("content-type", "multipart/x-mixed-replace"),
+        media_type=upstream.headers.get("content-type", "application/octet-stream"),
         background=BackgroundTask(close),
     )

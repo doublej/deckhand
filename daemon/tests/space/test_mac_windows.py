@@ -14,6 +14,7 @@ from deckhand_daemon.space import windows
 
 LISTED = [{"id": 7, "app": "Safari", "title": "Docs", "w": 800, "h": 600}]
 JPEG = b"\xff\xd8\xff\xe0fake\xff\xd9"
+HEVC = b"\x00\x00\x00\x01\x40\x01fake-vps"
 BOUNDARY = "frame"
 STREAM = b"".join(
     f"--{BOUNDARY}\r\nContent-Type: image/jpeg\r\n\r\n".encode() + JPEG + b"\r\n" for _ in range(3)
@@ -31,6 +32,8 @@ class Helper(BaseHTTPRequestHandler):
             self._send(200, "application/json", json.dumps(LISTED).encode())
         elif self.path == "/windows/7/frame":
             self._send(200, "image/jpeg", JPEG)
+        elif self.path.startswith("/windows/7/hevc"):
+            self._send(200, "application/octet-stream", HEVC)
         elif self.path.startswith("/windows/7/stream"):
             self._send(200, f"multipart/x-mixed-replace; boundary={BOUNDARY}", STREAM)
         else:
@@ -119,3 +122,17 @@ def test_input_reaches_the_helper_and_the_headset_touches_last(client, head, hel
 def test_input_without_the_helper_is_a_503(client, head, nobody):
     sent = {"type": "up", "x": 0, "y": 0}
     assert client.post("/windows/7/input", json=sent, headers=head).status_code == 503
+
+
+def test_the_whole_query_goes_through_and_hevc_is_relayed_too(client, head, helper):
+    asked = {"fps": 20, "max": 2880, "q": 0.9}
+    with client.stream("GET", "/windows/7/stream", params=asked, headers=head) as streamed:
+        assert b"".join(streamed.iter_raw()) == STREAM
+    with client.stream("GET", "/windows/7/hevc", params=asked, headers=head) as streamed:
+        assert streamed.headers["content-type"] == "application/octet-stream"
+        assert b"".join(streamed.iter_raw()) == HEVC
+    assert Helper.asked == [
+        "/windows/7/stream?fps=20&max=2880&q=0.9",
+        "/windows/7/hevc?fps=20&max=2880&q=0.9",
+    ]
+    assert client.get("/windows/7/gif", headers=head).status_code == 422
