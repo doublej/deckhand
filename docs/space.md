@@ -44,10 +44,28 @@ Every route needs `x-deckhand-token`.
 - Every `/sessions` row carries `project: {key, color, parent}` — the repo the session is in and
   the colours JJ's statusline gives it (`sessions/project.py`, cross-checked against the script).
   The headset tints a terminal with `color` and groups one project's terminals by default.
-- `GET /sessions/{id}/screen` → `{lines, at}`: the pane as it stands, via `it2 session read`
-  (~0.13 s, shared across polls for 0.5 s). It is what the headset's terminal plane shows — the
-  prompt box and a pending permission question are on the screen and in no transcript. No pane
-  is a 409, as `/focus` answers.
+- `GET /sessions/{id}/screen` → `{lines, at, styled, runs?}`: the pane as it stands, shared
+  across polls for 0.5 s. It is what the headset's terminal plane shows — the prompt box and a
+  pending permission question are on the screen and in no transcript. No pane is a 409, as
+  `/focus` answers. `lines` is plain text either way. `styled: true` adds `runs`, one list per
+  line of `{t, fg?, bg?, b?, f?, i?, u?, v?}` — text, colours as `#rrggbb`, bold, faint, italic,
+  underline, inverse — adjacent cells of one style made one run. A default colour is left out;
+  ANSI 0–15 come through the pane's profile (bold 0–7 drawn bright when it says so), 16–255 the
+  xterm table, 24-bit as is. A double-width character is one run character, its placeholder
+  cell dropped. `styled: false` is `it2 session read` (~0.13 s), which is all there is until
+  iTerm's API is approved, and for a minute after it fails.
+- `GET /terminal/theme?session=` → `{font: {family, size}, fg, bg, bold, cursor, selection,
+  ansi: [16], lineSpacing, charSpacing, brightBold}`: what iTerm draws the pane with, colours as
+  `#rrggbb` (null when the profile has none), the font as its PostScript name. With `session`
+  and the API approved it is that pane's own profile; otherwise the default profile out of
+  iTerm's preferences, ` (Light)` or ` (Dark)` colours by the Mac's appearance when the profile
+  keeps both. Shared for 10 s.
+
+**Approving the API is JJ's step, once, at the Mac.** iTerm asks by name whether a new client
+may connect, with a dialog on the screen, and every API call waits until it is answered — so the
+daemon never connects on its own. `just iterm-styles` connects as `deckhand` from a terminal, JJ
+answers the dialog, and it writes `iterm-approved` in the data dir; the daemon reads that marker
+on every call and needs no restart. Delete the marker to go back to plain text.
 
 `Plane = {id, kind, url, window, title, near, by, at}`. `Pose = {x, y, z, yaw, pitch?, roll?, scale?, group?}` — metres in
 the floor-origin space, angles in radians, scale 0.25–4. Planes whose poses share a `group` are one project to the

@@ -8,7 +8,9 @@ headset so that an agent inside a session can add to it: `open_plane` is the rea
 
 `stored.py` is the one document, `space.json`. `routes.py` is the wire for it, and `windows.py`
 the pass-through to `deckhand-windows`, the helper that lists this Mac's windows and streams one.
-`docs/space.md` is the long version.
+`screen.py` reads a session's pane for its terminal plane — with iTerm's own cell styles through
+`iterm.py` and `styled.py` once that API is approved — and `theme.py` says what iTerm draws it
+with. `docs/space.md` is the long version.
 
 The same import shape as `bindings/`: `routes` is never imported here, because `app.py` is the
 only thing that decides when FastAPI and the rest of the daemon get pulled in.

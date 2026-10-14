@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Default Bookmark Guid</key>
+	<string>SECOND</string>
+	<key>New Bookmarks</key>
+	<array>
+		<dict>
+			<key>Guid</key>
+			<string>FIRST</string>
+			<key>Normal Font</key>
+			<string>Menlo-Regular 11</string>
+		</dict>
+		<dict>
+			<key>Guid</key>
+			<string>SECOND</string>
+			<key>Normal Font</key>
+			<string>JetBrainsMonoNF-Regular 18</string>
+			<key>Vertical Spacing</key>
+			<real>1.2</real>
+			<key>Horizontal Spacing</key>
+			<real>1</real>
+			<key>Use Bright Bold</key>
+			<false/>
+			<key>Use Separate Colors for Light and Dark Mode</key>
+			<true/>
+			<key>Foreground Color</key>
+			<dict>
+				<key>Red Component</key>
+				<real>0.5</real>
+				<key>Green Component</key>
+				<real>0.5</real>
+				<key>Blue Component</key>
+				<real>0.5</real>
+			</dict>
+			<key>Foreground Color (Light)</key>
+			<dict>
+				<key>Color Space</key>
+				<string>sRGB</string>
+				<key>Red Component</key>
+				<real>0</real>
+				<key>Green Component</key>
+				<real>0</real>
+				<key>Blue Component</key>
+				<real>0</real>
+			</dict>
+			<key>Foreground Color (Dark)</key>
+			<dict>
+				<key>Color Space</key>
+				<string>sRGB</string>
+				<key>Red Component</key>
+				<real>0.75294117647058822</real>
+				<key>Green Component</key>
+				<real>0.792156862745098</real>
+				<key>Blue Component</key>
+				<real>0.96078431372549022</real>
+			</dict>
+			<key>Background Color</key>
+			<dict>
+				<key>Red Component</key>
+				<real>0.10196078431372549</real>
+				<key>Green Component</key>
+				<real>0.10588235294117647</real>
+				<key>Blue Component</key>
+				<real>0.14901960784313725</real>
+			</dict>
+			<key>Ansi 1 Color (Dark)</key>
+			<dict>
+				<key>Red Component</key>
+				<real>0.73333333333333328</real>
+				<key>Green Component</key>
+				<real>0</real>
+				<key>Blue Component</key>
+				<real>0</real>
+			</dict>
+			<key>Ansi 1 Color (Light)</key>
+			<dict>
+				<key>Red Component</key>
+				<real>1</real>
+				<key>Green Component</key>
+				<real>0</real>
+				<key>Blue Component</key>
+				<real>0</real>
+			</dict>
+		</dict>
+	</array>
+</dict>
+</plist>
