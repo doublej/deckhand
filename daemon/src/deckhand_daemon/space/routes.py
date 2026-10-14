@@ -35,6 +35,7 @@ LOOPBACK = {"localhost", "127.0.0.1", "0.0.0.0", "::1"}
 #: The fixed planes, which are neither a session nor a kept plane.
 FIXED = {"manager", "projects", "launcher"}
 GROUP = re.compile(r"[A-Za-z0-9_-]{1,64}")
+MIN_SCALE, MAX_SCALE = 0.25, 4.0
 #: Further from the floor origin than this is a pose gone wrong, not a room.
 REACH = 20.0
 
@@ -98,6 +99,18 @@ async def place(key: str, sent: Annotated[dict, Body()]) -> Response:
     pose = {name: _number(sent, name) for name in ("x", "y", "z", "yaw")}
     if math.hypot(pose["x"], pose["y"], pose["z"]) > REACH:
         raise HTTPException(status_code=400, detail=f"a pose is within {REACH:g} m of the origin")
+    # Held in the hand a plane tilts, rolls and grows too; all three are optional so a pose that
+    # only ever turned about the vertical stays four numbers.
+    for name, low, high in (
+        ("pitch", -math.pi, math.pi),
+        ("roll", -math.pi, math.pi),
+        ("scale", MIN_SCALE, MAX_SCALE),
+    ):
+        if sent.get(name) is not None:
+            value = _number(sent, name)
+            if not low <= value <= high:
+                raise HTTPException(status_code=400, detail=f"{name} is {low:g} to {high:g}")
+            pose[name] = value
     # Planes sharing a `group` move as one and are one project, whatever mix of sessions, pages
     # and windows the person put together. The headset decides who is in one; this only keeps it.
     if (group := sent.get("group")) is not None:

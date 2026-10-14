@@ -206,3 +206,13 @@ def test_a_pose_keeps_its_group_and_refuses_a_bad_one(client, head):
     for bad in ("", "a b", "x" * 65, 3):
         sent = {**pose, "group": bad}
         assert client.put("/space/poses/launcher", json=sent, headers=head).status_code == 400
+
+
+def test_a_pose_keeps_tilt_roll_and_scale_within_bounds(client, head):
+    pose = {"x": 1, "y": 1.5, "z": 1, "yaw": 0.5, "pitch": -0.3, "roll": 0.1, "scale": 1.5}
+    assert client.put("/space/poses/manager", json=pose, headers=head).status_code == 204
+    kept = client.get("/space", headers=head).json()["poses"]["manager"]
+    assert (kept["pitch"], kept["roll"], kept["scale"]) == (-0.3, 0.1, 1.5)
+    for bad in ({"pitch": 4}, {"roll": -4}, {"scale": 0.1}, {"scale": 5}, {"scale": "big"}):
+        sent = {**pose, **bad}
+        assert client.put("/space/poses/manager", json=sent, headers=head).status_code == 400

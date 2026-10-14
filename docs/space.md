@@ -45,8 +45,8 @@ Every route needs `x-deckhand-token`.
   prompt box and a pending permission question are on the screen and in no transcript. No pane
   is a 409, as `/focus` answers.
 
-`Plane = {id, kind, url, window, title, near, by, at}`. `Pose = {x, y, z, yaw, group?}` — metres in
-the floor-origin space, yaw in radians. Planes whose poses share a `group` are one project to the
+`Plane = {id, kind, url, window, title, near, by, at}`. `Pose = {x, y, z, yaw, pitch?, roll?, scale?, group?}` — metres in
+the floor-origin space, angles in radians, scale 0.25–4. Planes whose poses share a `group` are one project to the
 person — any mix of sessions, pages and windows — and move as one; the headset decides who joins,
 by snapping one plane against another, and this only keeps the answer. State is `space.json` in the data dir, written whole through
 `os.replace`.
