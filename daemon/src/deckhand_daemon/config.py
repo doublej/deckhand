@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import secrets
+import shutil
 import socket
 import sys
 from pathlib import Path
@@ -87,6 +88,17 @@ def claude_homes() -> list[Path]:
     home = Path(os.environ.get("DECKHAND_CLAUDE_HOME", Path.home() / ".claude"))
     others = sorted(p for p in home.parent.glob(f"{home.name}-*") if (p / "sessions").is_dir())
     return [home, *others]
+
+
+def claude_cli() -> str | None:
+    """The `claude` on PATH, for the Agent SDK to run instead of the copy bundled inside it.
+
+    `opus` and `haiku` mean whatever is newest to the Claude Code that reads them, and the bundled
+    copy is only as new as the SDK release. Measured 2026-10-14: the SDK's own 2.1.259 read them
+    as Opus 5 and Haiku 4.5, the installed 2.1.299 as Opus 5.5 and Haiku 5.5. The installed one
+    updates itself. Nothing on PATH leaves the SDK on its own copy.
+    """
+    return shutil.which("claude")
 
 
 def base_url() -> str:

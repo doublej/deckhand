@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 
 from . import prompts, sessions, tasks
+from .config import claude_cli
 from .log import log
 from .settings import wants
 
@@ -142,8 +143,10 @@ async def _run(activity: str, session_id: str) -> tuple[str | None, str | None, 
         # Enough turns to work through a list and then write: one call per change, and a dozen
         # changes at once only happens on a session nobody has looked at all day.
         max_turns=MAX_TURNS,
-        # Haiku 4.5 has no effort control, so `thinking` in briefing.md is the only lever.
+        # `thinking` in briefing.md is the only depth lever set here.
         thinking={"type": BRIEFING.settings["thinking"]},
+        # The installed Claude Code, so the `haiku` alias is the newest Haiku there is.
+        cli_path=claude_cli(),
         # No setting sources: loading the user's config would start every MCP server the
         # person has configured, which took longer than the whole summary is worth.
         setting_sources=[],

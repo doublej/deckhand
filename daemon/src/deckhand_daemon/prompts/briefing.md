@@ -1,8 +1,10 @@
 ---
 name: briefing
 description: What a session did while you were away, in a briefing a phone can show.
-model: claude-haiku-4-5-20251001
-# Haiku 4.5 takes no effort setting, so this is the only depth lever a briefing has.
+# The newest Haiku, always. An alias, so it moves with the installed Claude Code the SDK is
+# pointed at (`config.claude_cli`) and never needs editing here.
+model: haiku
+# The only depth lever set for a briefing.
 thinking: disabled
 # One call per change, and a dozen at once only on a session nobody has looked at all day.
 max_turns: 16

@@ -36,10 +36,10 @@ from ..log import log
 #: What `claude --model` takes. Aliases rather than ids: the CLI resolves them to whatever is
 #: current, which is the right answer for a flag a person set once and forgot about.
 SESSION_MODELS = ("opus", "sonnet", "haiku")
-#: What the summariser may run on. Full ids, because the Agent SDK takes an id and an alias here
-#: would be a silent no-op. Empty means "whatever `prompts/briefing.md` says", which is the only
-#: answer that keeps working when that file is edited.
-SUMMARY_MODELS = ("claude-haiku-4-5-20251001", "claude-sonnet-5", "claude-opus-5")
+#: What the summariser may run on. Aliases too, read as each family's newest by the installed
+#: Claude Code the SDK runs (`config.claude_cli`). Empty means "whatever `prompts/briefing.md`
+#: says", which is the only answer that keeps working when that file is edited.
+SUMMARY_MODELS = ("haiku", "sonnet", "opus")
 
 
 @dataclass(slots=True, frozen=True)

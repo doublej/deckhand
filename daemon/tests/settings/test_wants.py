@@ -49,9 +49,9 @@ def test_a_folder_with_no_opinion_is_not_kept_as_one(claude_home):
 def test_a_model_this_mac_does_not_offer_is_refused(claude_home):
     """It would become a `--model` flag on a real launch line, or an id the SDK rejects — both
     of them failing a long way from the screen that set it."""
-    written = wants.save({"session_model": "gpt-9", "summary_model": "claude-opus-5"})
+    written = wants.save({"session_model": "gpt-9", "summary_model": "opus"})
     assert written["session_model"] == ""
-    assert written["summary_model"] == "claude-opus-5"
+    assert written["summary_model"] == "opus"
     # The empty string is an answer: it means "the default", and it survives.
     assert wants.save({"summary_model": ""})["summary_model"] == ""
 

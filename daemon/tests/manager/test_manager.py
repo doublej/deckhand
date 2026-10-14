@@ -76,7 +76,7 @@ def test_switches_take_the_words_a_model_actually_writes(claude_home):
     assert doing._value("chase", "yes") is True
     assert doing._value("chase", "OFF") is False
     assert doing._value("chase", "maybe") is None
-    assert doing._value("summary_model", " claude-sonnet-5 ") == "claude-sonnet-5"
+    assert doing._value("summary_model", " sonnet ") == "sonnet"
 
 
 def test_naming_a_session_that_is_not_running_says_which_are(claude_home):

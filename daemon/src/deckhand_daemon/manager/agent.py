@@ -26,7 +26,7 @@ import asyncio
 import time
 
 from .. import prompts, push
-from ..config import data_dir
+from ..config import claude_cli, data_dir
 from ..log import log
 from . import doing, talk
 
@@ -187,6 +187,8 @@ async def _run(text: str, resume: str) -> tuple[bool, str | None]:
         permission_mode="bypassPermissions",
         max_turns=MAX_TURNS,
         thinking={"type": MANAGER.settings["thinking"]},
+        # The installed Claude Code, so the `opus` alias is the newest Opus there is.
+        cli_path=claude_cli(),
         # A stable folder that is not a repo: it is where the SDK files this conversation's own
         # transcript, and `resume` finds it by that key. The daemon's own working directory is
         # whatever launchd started it in, which is not something to hang a thread off.
