@@ -33,14 +33,18 @@ AUDIO_SUFFIXES = (".m4a", ".wav", ".caf", ".mp3", ".aac")
 @router.get("/manager")
 def read_manager(
     since: int = Query(default=0, ge=0, description="the last entry id this phone has seen"),
+    watching: bool = Query(default=True, description="false for a poll with no panel on screen"),
 ) -> dict:
     """What has been said, after the id the phone already has, and whether more is coming.
 
     `partial` and `doing` are the run in flight as far as it has got, so the panel can draw the
     sentence being written and the tool being called rather than a dot until a block is done.
-    Asking is also what tells the daemon the panel is open — see `agent.watched`.
+    Asking is also what tells the daemon the panel is open — see `agent.watched` — unless the
+    asker says it is not looking. The Mac app polls from the menu bar to notice replies, and a
+    poll that counted as watching would stop every push to the phone.
     """
-    agent.seen()
+    if watching:
+        agent.seen()
     return {
         "entries": talk.entries(since),
         "newest": talk.newest(),

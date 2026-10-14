@@ -1,9 +1,12 @@
 import re
+from collections import deque
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 
 from deckhand_daemon import briefings, push, sessions
+from deckhand_daemon.app import app
 
 # Held before the fixture below replaces them, so one test can still reach the real things.
 REAL_SHOW = push.show
@@ -15,6 +18,7 @@ def blank(monkeypatch, tmp_path):
     monkeypatch.setattr(push, "_slips", {})
     monkeypatch.setattr(push, "_open", {})
     monkeypatch.setattr(push, "_said", {})
+    monkeypatch.setattr(push, "_alerts", deque(maxlen=50))
     monkeypatch.setattr(push.sending, "_raised", {})
     monkeypatch.setenv("DECKHAND_DATA_DIR", str(tmp_path))
     monkeypatch.setattr(push, "_last_line", lambda sid: "shall I run the tests?")
@@ -144,6 +148,24 @@ def test_calling_for_you_says_so_in_the_log(monkeypatch, blank, caplog):
     assert [c.kind for c in blank] == [push.ASKING]
     assert blank[0].line == "the migration needs a decision"
     assert "called for you" in caplog.text, "every other trigger logs; this one never did"
+
+
+def test_every_card_is_kept_for_the_mac_app_to_read_by_cursor(blank, token):
+    """The Mac app has no push token. It reads the same cards off `GET /alerts`, after the id it
+    already has, so a folder set quiet is quiet there too without a second switch."""
+    one = live(("one", "idle"))[0]
+    push.called(one, "the migration needs a decision")
+    push.called(one, "and the tests")
+    client = TestClient(app)
+    client.headers["x-deckhand-token"] = token
+    first = client.get("/alerts").json()
+    assert [a["line"] for a in first["alerts"]] == ["the migration needs a decision",
+                                                    "and the tests"]
+    assert (first["alerts"][0]["session"], first["alerts"][0]["kind"]) == ("one", push.ASKING)
+    later = client.get(f"/alerts?since={first['alerts'][0]['id']}").json()
+    assert [a["line"] for a in later["alerts"]] == ["and the tests"]
+    assert later["newest"] == first["newest"] == first["alerts"][-1]["id"]
+    assert TestClient(app).get("/alerts").status_code == 401
 
 
 # --- what may make a noise, and what may raise a card --------------------------------------

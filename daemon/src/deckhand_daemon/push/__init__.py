@@ -17,7 +17,12 @@ raised: it is model-written and lags by a sweep or two, so it must not be what m
 from __future__ import annotations
 
 import asyncio
+import itertools
 import time
+from collections import deque
+from dataclasses import asdict
+
+from fastapi import APIRouter, Query
 
 from .. import artifacts, briefings, config, sessions, tasks
 from ..log import log
@@ -25,8 +30,8 @@ from ..reading import transcripts
 from ..settings import wants
 from .sending import ASKING, FINISHED, NOTHING, Card, end, remember, shortened, show, told
 
-__all__ = ["ASKING", "FINISHED", "Card", "called", "end", "remember", "spoke_to", "sweep",
-           "told", "watch"]
+__all__ = ["ASKING", "FINISHED", "Card", "called", "end", "remember", "router", "spoke_to",
+           "sweep", "told", "watch"]
 
 POLL = 5.0
 #: Slips waiting per session last sweep. A *new* one is the event; one sitting there all
@@ -37,6 +42,29 @@ _open: dict[str, int] = {}
 #: What an agent asked to be told, where one asked. Beats anything read out of a transcript,
 #: because an agent that used its own words meant them.
 _said: dict[str, str] = {}
+#: Every card announced lately, for a surface APNs cannot reach: the Mac app polls `GET /alerts`
+#: and shows each as a notification. The same decision the Lock Screen gets, read a second way,
+#: so a folder set quiet is quiet on both.
+#: ponytail: in memory and capped, so a restart forgets them; a file if a missed one ever matters.
+_alerts: deque[dict] = deque(maxlen=50)
+_ids = itertools.count(1)
+
+router = APIRouter(tags=["alerts"])
+
+
+@router.get("/alerts")
+def alerts(
+    since: int = Query(default=0, ge=0, description="the last alert id this asker has seen"),
+) -> dict:
+    """Every card announced after the id the asker has, and the newest id there is.
+
+    The manager's cursor, for the same reason: a poll that brings nothing back still says what to
+    ask with next. Ids start again at 1 when the daemon does, so `newest` below the asker's own
+    cursor is the daemon saying it restarted.
+    """
+    kept = list(_alerts)
+    return {"alerts": [alert for alert in kept if alert["id"] > since],
+            "newest": kept[-1]["id"] if kept else 0}
 
 
 async def watch() -> None:
@@ -134,6 +162,7 @@ def spoke_to(session_id: str) -> None:
 def announce(session, kind: str) -> None:
     card = Card(session=session.session_id, name=session.name, kind=kind,
                 line=_line(session.session_id, kind), when=time.time())
+    _alerts.append({"id": next(_ids), **asdict(card)})
     # The session's own machine rather than the one answering the phone. They are the same
     # thing on a one-machine network and different the moment they are not, and the card saying
     # "m2" over a session running on Ubuntu is the card lying about the only thing it adds.

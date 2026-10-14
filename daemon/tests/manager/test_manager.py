@@ -103,5 +103,15 @@ def test_reading_the_panel_answers_after_the_cursor(claude_home, token):
     assert body["working"] is False
 
 
+def test_a_poll_from_behind_a_closed_panel_does_not_count_as_watching(claude_home, token):
+    """The Mac app polls from its menu bar to notice replies. Counted, it would stop every push
+    to the phone for as long as the Mac was on."""
+    agent.away()
+    client(token).get("/manager?watching=false")
+    assert not agent.watched()
+    client(token).get("/manager")
+    assert agent.watched()
+
+
 def test_the_panel_needs_the_token_like_everything_else(claude_home):
     assert TestClient(app).get("/manager").status_code == 401
