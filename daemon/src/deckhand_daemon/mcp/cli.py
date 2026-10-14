@@ -1,6 +1,6 @@
-"""`deckhand` — the MCP server's seven tools as one shell command.
+"""`deckhand` — the MCP server's eleven tools as one shell command.
 
-**One surface, three doors.** The daemon's routes are the API; `server.py` turns five of them and
+**One surface, three doors.** The daemon's routes are the API; `server.py` turns nine of them and
 the skill's two slip scripts into tools; this file calls *those same functions*, so the command
 and the tool cannot drift — `test_cli.py` fails the day a tool exists without a command. Nothing
 here reaches the daemon or writes a slip on its own.
@@ -23,7 +23,8 @@ from .. import __version__
 from . import server
 
 PURPOSE = ("Reach the person — in this conversation when they are at the laptop, on their phone "
-           "when they are not — and speak to the other Claude sessions on this Mac.")
+           "when they are not — speak to the other Claude sessions on this Mac, and put a page "
+           "or a Mac window beside this session in their headset.")
 
 #: Exit status per category. 4 is not an error: it is a question answered "no" — not said, not
 #: pushed, not answered yet — which a loop must be able to tell from a crash.
@@ -38,6 +39,8 @@ ERRORS: dict[str, tuple[str, bool, str]] = {
     "REFUSED": ("upstream", False, "the daemon's own words are in `message`"),
     "BAD_ANSWER": ("internal", True, "read the daemon's log: `just logs` in the deckhand repo"),
     "BAD_KIND": ("user_error", False, "--kind is one of confirm, pick, text, aloud"),
+    "BAD_PLANE": ("user_error", False, ("a URL or --window ID, not both and not neither; "
+                  "`deckhand windows` lists the ids")),
     "NO_SUCH_SESSION": ("user_error", False, ("`deckhand sessions` lists the names; a unique id "
                         "prefix or part of a name is enough")),
     "CODEX_THREAD": ("user_error", False, ("a Codex thread only takes the person's own words; "
@@ -72,6 +75,15 @@ COMMANDS: list[dict[str, str]] = [
      "does": "a Lock Screen card asking for the person; exit 4 when the folder refuses"},
     {"name": "say", "tool": "say_to_session", "args": "SESSION TEXT|-",
      "does": "message another session down its inbox, as an agent; exit 4 when it was not said"},
+    {"name": "open", "tool": "open_plane", "args": "[URL] [--window ID] [--title TEXT]",
+     "does": "put a web page, or a Mac window by id, beside this session in the person's "
+             "headset; the URL must be reachable from the headset on the LAN"},
+    {"name": "space", "tool": "space", "args": "",
+     "does": "what is open in the headset beside the sessions, and where each plane is"},
+    {"name": "close", "tool": "close_plane", "args": "ID",
+     "does": "close a plane by its id — a page or a window, never a session"},
+    {"name": "windows", "tool": "mac_windows", "args": "",
+     "does": "this Mac's windows, with the ids `open --window` takes"},
 ]
 
 SESSION_FIELDS = ("session", "name", "folder", "status", "waiting")
@@ -105,6 +117,10 @@ def build_parser() -> Parser:
     sub.choices["notify"].add_argument("line", help="what to say, or - to read it from stdin")
     sub.choices["say"].add_argument("session", help="name, id, unique id prefix or part of a name")
     sub.choices["say"].add_argument("text", help="what to say, or - to read it from stdin")
+    sub.choices["open"].add_argument("url", nargs="?", help="http(s), reachable from the headset")
+    sub.choices["open"].add_argument("--window", type=int, help="an id from `deckhand windows`")
+    sub.choices["open"].add_argument("--title")
+    sub.choices["close"].add_argument("id")
     for each in sub.choices.values():
         each.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     return parser
@@ -131,6 +147,14 @@ async def _call(a: argparse.Namespace) -> dict[str, Any]:
             return await server.call_for_attention(_text(a.line))
         case "say":
             return await server.say_to_session(a.session, _text(a.text))
+        case "open":
+            return await server.open_plane(a.url, window=a.window, title=a.title)
+        case "space":
+            return await server.space()
+        case "close":
+            return await server.close_plane(a.id)
+        case "windows":
+            return await server.mac_windows()
     raise AssertionError(a.command)
 
 
@@ -236,6 +260,10 @@ def prime(detected: dict[str, Any]) -> str:
 - `notify` is for a finished long job or a stuck session, never for progress.
 - `presence` moves the moment the person sits down or walks off: ask it again before each
   question, never cache it.
+- `open` puts a plane in the person's headset, another machine on the LAN: prefer
+  `https://<slug>.atlas.local.jurrejan.com`. localhost becomes this Mac's LAN address, which only
+  answers if the server binds 0.0.0.0. A Mac window plane is view-only. `close` takes a plane,
+  never a session: closing a session is the person's own press.
 
 ## Detected
 {found} · next: `deckhand presence`

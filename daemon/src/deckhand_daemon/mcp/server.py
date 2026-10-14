@@ -1,11 +1,11 @@
-"""The seven tools a session gets so it can reach the person, wherever they are.
+"""The eleven tools a session gets so it can reach the person, wherever they are.
 
 The skill said all of this in prose first, and the prose is still the better half: a slip is a
 file an agent writes in its own folder, and knowing that is worth more than any tool. These exist
 because a tool is present whether or not the model thought to look, and the failure they answer is
 a session that reached a decision needing the person and made it alone.
 
-**Five of the seven are the daemon's own routes.** Nothing here reimplements one. `/say` carries the
+**Nine of the eleven are the daemon's own routes.** Nothing here reimplements one. `/say` carries the
 session's filter chain, its orders and the delivery record; `/notify` carries the folder's right to
 refuse being interrupted. Calling the functions underneath those routes would quietly drop all of
 it, which is the shape of bug that looks like it works.
@@ -22,6 +22,11 @@ the token is a readable file — it is there so an agent does not *drift* into s
 person because that route was the convenient one. `docs/agent-surface.md` says which token would
 make these refusals real, and it does not exist yet.
 
+**Four of them are the headset's space** (`docs/space.md`): `open_plane` puts a web page or a Mac
+window beside this session, `close_plane` takes one away, `space` and `mac_windows` look. A plane
+is furniture, so opening and closing one is allowed. A session is never a plane the space keeps,
+so `close_plane` has nothing to name one by — closing a session stays the person's own press.
+
 **`presence` comes first.** It says `laptop` or `phone`. At the laptop the person is reading
 this conversation, so ask in it; on the phone, ask there. Every tool here is also a `deckhand`
 shell command (`mcp/cli.py`, `deckhand prime`), so a session without these tools loses nothing.
@@ -34,6 +39,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import quote
 
 from mcp.server.mcpserver import MCPServer
 from mcp.types import ToolAnnotations
@@ -221,6 +227,54 @@ async def say_to_session(session: str, text: str) -> dict:
     return {"went": bool(answered.get("delivered")), "by": answered.get("delivered_by"),
             "why": answered.get("delivery_error")
             or (f"the {stopped} filter stopped it" if stopped else None)}
+
+
+@server.tool(annotations=WRITES)
+async def open_plane(url: str | None = None, window: int | None = None,
+                     title: str | None = None) -> dict:
+    """Open a web page, or one of this Mac's windows, as a plane beside this session in the
+    person's headset. Give exactly one: `url`, or `window` — an id from `mac_windows`.
+
+    The headset is another machine on the LAN, so the URL has to be reachable from there. Prefer
+    the project's atlas dev hostname, `https://<slug>.atlas.local.jurrejan.com`. A localhost URL
+    is rewritten to this Mac's LAN address, which only works if the server binds 0.0.0.0. A Mac
+    window plane is view-only: the person sees it and cannot click into it.
+
+    What the person says while looking at the plane comes to this session. Returns the plane; its
+    `id` is what `close_plane` takes.
+    """
+    if (url is None) == (window is None):
+        return {"error": "give exactly one of url or window", "code": "BAD_PLANE"}
+    sent: dict = {"kind": "web", "url": url} if url is not None else {"kind": "window",
+                                                                        "window": window}
+    if title:
+        sent["title"] = title
+    if held := here.mine():
+        sent |= {"near": held["sessionId"], "by": held.get("name") or None}
+    return await here.reach("POST", "/space/planes", json=sent)
+
+
+@server.tool(annotations=READ_ONLY)
+async def space() -> dict:
+    """What is open in the person's headset besides the sessions — each plane's id, kind, url or
+    window, title, the session it is `near` and who opened it — and where every plane is."""
+    return await here.reach("GET", "/space")
+
+
+@server.tool(annotations=WRITES)
+async def close_plane(id: str) -> dict:
+    """Close a plane in the person's headset, by the id `open_plane` or `space` gave. Only a web
+    page or a Mac window: an agent can never close a session, and nothing here names one."""
+    answered = await here.reach("DELETE", f"/space/planes/{quote(id, safe='')}")
+    return answered if "error" in answered else {"closed": id}
+
+
+@server.tool(annotations=READ_ONLY)
+async def mac_windows() -> dict:
+    """This Mac's windows, each with the `id` `open_plane` takes, its app, title and size. Says
+    why when the window helper is not running."""
+    answered = await here.reach("GET", "/windows")
+    return {"windows": answered} if isinstance(answered, list) else answered
 
 
 def main() -> None:

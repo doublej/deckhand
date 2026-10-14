@@ -69,9 +69,9 @@ def mine() -> dict | None:
     return None
 
 
-async def reach(method: str, path: str, **sent: object) -> dict:
+async def reach(method: str, path: str, **sent: object) -> dict | list:
     """One call to the daemon. Every expected failure comes back as `{"error": sentence, "code":
-    WORD}`, the code being what the `deckhand` command turns into its exit status."""
+    WORD}`, the code being what the `deckhand` command turns into its exit status. A 204 is `{}`."""
     headers = {config.TOKEN_HEADER: config.token()}
     url = f"http://127.0.0.1:{config.PORT}{path}"
     try:
@@ -84,6 +84,8 @@ async def reach(method: str, path: str, **sent: object) -> dict:
         detail = answered.text.strip()[:200]
         return {"error": f"the daemon refused that ({answered.status_code}): {detail}",
                 "code": "REFUSED"}
+    if answered.status_code == 204:
+        return {}
     try:
         return answered.json()
     except ValueError:

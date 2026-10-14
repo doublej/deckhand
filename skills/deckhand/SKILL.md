@@ -36,15 +36,19 @@ itself, so say in one line that the slip is there.
 
 ## The same things as tools, and as one command
 
-Where the `deckhand` MCP server is installed, seven tools arrive with it and are the shorter path.
+Where the `deckhand` MCP server is installed, eleven tools arrive with it and are the shorter path.
 `presence` says where the person is; `ask_on_phone` and `read_answer` write and read exactly the
 file the scripts below do; `call_for_attention` puts a card on the Lock Screen; `whoami` says
 which session this is; and `sessions` and `say_to_session` reach the other sessions on this Mac.
+`open_plane` puts a web page or a Mac window beside this session in the person's headset, and
+`close_plane`, `space` and `mac_windows` go with it — a URL there must be reachable from the
+headset, so prefer `https://<slug>.atlas.local.jurrejan.com` over localhost.
 They work from any directory, because they take this session's folder out of its own record
 rather than out of `cwd`.
 
 Every one of them is also a `deckhand` shell command (`just install-cli` puts it on PATH):
-`presence`, `whoami`, `sessions`, `ask`, `answer`, `notify`, `say`. JSON when piped, a structured
+`presence`, `whoami`, `sessions`, `ask`, `answer`, `notify`, `say`, `open`, `space`, `close`,
+`windows`. JSON when piped, a structured
 error on stderr, and an exit status to branch on — 4 means "no": not said, not pushed, not
 answered yet. `deckhand prime` prints the whole contract.
 
