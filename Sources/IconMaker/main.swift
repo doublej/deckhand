@@ -9,10 +9,17 @@ import UniformTypeIdentifiers
 ///
 /// The grid is deliberately visible: unlit cells at 0.24 of a step, lit at 0.34, which is what
 /// makes the anchor read as a glyph on a dot matrix rather than as pixel art of an anchor.
+///
+/// `--mac` draws the Mac app's icon from the same mark. iOS masks an icon itself; macOS does not,
+/// so there the rounded square and the margin around it are drawn in: Apple's grid, an 824-point
+/// body on a 1024 canvas, transparent outside it.
+/// ponytail: circular corners, not Apple's continuous ones; draw the squircle if the difference shows.
+let mac = CommandLine.arguments.contains("--mac")
 let side = 1024
+let body = mac ? 824.0 : CGFloat(side)
 // The grid, as a share of the icon. An app icon is masked to a squircle, so the
 // shape wants more of the canvas than the same mark does on a tile inside the app.
-let grid = CGFloat(side) * 0.74
+let grid = body * 0.74
 let origin = (CGFloat(side) - grid) / 2
 
 // Copied from Palette so the executable does not need SwiftUI's Color at all.
@@ -32,11 +39,21 @@ guard let context = CGContext(
     // channel at all (ITMS-90717), even one whose every pixel is already opaque. The ground
     // fill below covers the canvas, so nothing is lost -- the unlit dots still blend against
     // it, because source alpha governs the blend whether or not the destination keeps one.
-    bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+    // The Mac's icon is the exception: its corners are transparent, and it never goes to App
+    // Store Connect as an iOS icon does.
+    bitmapInfo: (mac ? CGImageAlphaInfo.premultipliedLast : .noneSkipLast).rawValue
 ) else { fatalError("could not make a bitmap to draw into") }
 
 context.setFillColor(ground)
-context.fill(CGRect(x: 0, y: 0, width: side, height: side))
+if mac {
+    let inset = (CGFloat(side) - body) / 2
+    let square = CGRect(x: inset, y: inset, width: body, height: body)
+    context.addPath(CGPath(roundedRect: square, cornerWidth: body * 0.225, cornerHeight: body * 0.225,
+                           transform: nil))
+    context.fillPath()
+} else {
+    context.fill(CGRect(x: 0, y: 0, width: side, height: side))
+}
 
 let space = CGColorSpaceCreateDeviceRGB()
 let core = CGGradient(
@@ -64,7 +81,7 @@ for index in 0..<36 {
     context.restoreGState()
 }
 
-let out = URL(fileURLWithPath: CommandLine.arguments.dropFirst().first ?? "icon.png")
+let out = URL(fileURLWithPath: CommandLine.arguments.dropFirst().first { $0 != "--mac" } ?? "icon.png")
 guard let image = context.makeImage(),
       let sink = CGImageDestinationCreateWithURL(out as CFURL, UTType.png.identifier as CFString, 1, nil)
 else { fatalError("could not encode \(out.path)") }

@@ -37,6 +37,13 @@ item. `AppActivation` is utt's, copied with its measurements.
   so the link is not the model's to remember. The panel's `openURL` sends a click to
   `POST /sessions/{id}/focus`, which brings that session's iTerm window and tab forward. The
   manager still never types into a pane — the person clicks.
+- **A link gets a pointing hand only because `Links.text` asks for one.** A link inside a `Text`
+  is a run of characters, not a view, so macOS never sets a cursor for it. `Links.text` marks the
+  link runs, notes where the renderer drew them, and asks for `.pointerStyle(.link)` over those
+  rects; the phone gets a plain `Text` from the same call.
+- **The icon is drawn, not exported.** `just icon` runs IconMaker twice: the phone's full-bleed
+  square, and `--mac`, the same anchor inside an 824 rounded square on a transparent 1024, which
+  `sips` cuts into the ten sizes `Assets.xcassets` lists.
 - **No talk mark.** utt dictates into any field on this Mac, this one included.
 
 ## Verification

@@ -120,6 +120,8 @@ logs:
 [group('develop')]
 icon:
     swift run IconMaker deckhand/Assets.xcassets/AppIcon.appiconset/icon.png
+    swift run IconMaker --mac mac/Assets.xcassets/AppIcon.appiconset/icon_512x512@2x.png
+    cd mac/Assets.xcassets/AppIcon.appiconset && for s in 16 32 128 256 512; do sips -z $s $s icon_512x512@2x.png --out icon_${s}x${s}.png >/dev/null; [[ $s == 512 ]] || sips -z $((s * 2)) $((s * 2)) icon_512x512@2x.png --out icon_${s}x${s}@2x.png >/dev/null; done
 
 # The pairing token the app needs.
 [group('develop')]
