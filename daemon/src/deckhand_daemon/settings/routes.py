@@ -18,6 +18,7 @@ router = APIRouter(tags=["settings"])
 
 @router.get("/settings")
 def read() -> dict:
+    """What this Mac has been set to do, globally and per folder."""
     return wants.document()
 
 

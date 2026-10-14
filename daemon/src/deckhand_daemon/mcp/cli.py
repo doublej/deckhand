@@ -181,16 +181,21 @@ async def _call(a: argparse.Namespace) -> dict[str, Any]:
     raise AssertionError(a.command)
 
 
+#: The commands whose answer can be a "no": command → (the field that says yes, its code, and
+#: what to say when the tool gave no reason).
+NO: dict[str, tuple[str, str, str]] = {
+    "say": ("went", "NOT_DELIVERED", "it was not said"),
+    "notify": ("pushed", "NOT_PUSHED", "it was not pushed"),
+    "answer": ("answered", "PENDING", "no answer yet"),
+}
+
+
 def failure(command: str, answer: dict[str, Any]) -> tuple[str, str] | None:
     """(code, message) when the answer is a failure or a "no", else None."""
     if "error" in answer:
         return answer.get("code", "REFUSED"), answer["error"]
-    if command == "say" and not answer.get("went"):
-        return answer.get("code", "NOT_DELIVERED"), answer.get("why") or "it was not said"
-    if command == "notify" and not answer.get("pushed"):
-        return "NOT_PUSHED", answer.get("why") or "it was not pushed"
-    if command == "answer" and not answer.get("answered"):
-        return "PENDING", answer.get("why") or "no answer yet"
+    if command in NO and not answer.get((said := NO[command])[0]):
+        return answer.get("code", said[1]), answer.get("why") or said[2]
     return None
 
 
