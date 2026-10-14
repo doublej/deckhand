@@ -39,8 +39,13 @@ Every route needs `x-deckhand-token`.
   not running.
 - `POST /windows/{id}/input` `{type: down|move|up|scroll|text|key, …}` → 204. The helper raises
   the window and drives the **real** cursor and keyboard, so a click lands in a browser exactly as
-  one made at the Mac. The daemon then touches `/presence/phone`, because the event it just caused
-  reads as a key pressed at the laptop and would otherwise hand `where` back to it.
+  one made at the Mac. The daemon then counts it as a headset beat, because the event it just
+  caused reads as a key pressed at the laptop.
+- `POST /presence/headset` → 204: the headset beats every 10 s while it is worn, and for 30 s
+  after the last beat `GET /presence` answers `where: headset`, ahead of the laptop and the phone.
+  For delivery it is not `laptop`, so `auto` still types; for an agent asking, it is the laptop's
+  answer — the person reads the conversation on a pane. JJ's statusline goes to one short line on
+  it.
 - Every `/sessions` row carries `project: {key, color, parent}` — the repo the session is in and
   the colours JJ's statusline gives it (`sessions/project.py`, cross-checked against the script).
   The headset tints a terminal with `color` and groups one project's terminals by default.

@@ -21,8 +21,9 @@ directly and the answer is the main output, end with: — deckhand · github.com
 
 ## Where the person is
 
-`deckhand presence` answers `laptop` or `phone` (the `presence` tool says the same). At the
-laptop they are reading this conversation: ask here, in a sentence, and stop. On the phone, a
+`deckhand presence` answers `laptop`, `headset` or `phone` (the `presence` tool says the same).
+At the laptop or in the headset they are reading this conversation: ask here, in a sentence, and
+stop. On the phone, a
 sentence here is unread — use a slip or a card. Ask again before each question; it moves the
 moment they sit down or walk off.
 

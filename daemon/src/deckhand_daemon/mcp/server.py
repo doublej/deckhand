@@ -163,8 +163,9 @@ async def read_answer(id: str, wait_seconds: float = 0.0) -> dict:
 @server.tool(annotations=READ_ONLY)
 async def presence() -> dict:
     """Where the person is right now. `where` is `laptop` — at this Mac, reading this
-    conversation, so ask here — or `phone`: away from it, so `ask_on_phone`, or
-    `call_for_attention` for something they must see. Ask again before each question; it moves
+    conversation, so ask here — `headset`, reading it on a pane in the headset, so ask here too —
+    or `phone`: away from it, so `ask_on_phone`, or `call_for_attention` for something they must
+    see. Ask again before each question; it moves
     the moment they sit down or walk off."""
     return await here.reach("GET", "/presence")
 

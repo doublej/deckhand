@@ -89,9 +89,9 @@ async def window_input(window_id: int, sent: Annotated[dict, Body()]) -> None:
         raise _down(error) from error
     if answered.status_code >= 400:
         raise _refused(answered, answered.content)
-    # The event the helper just posted reads as a key pressed at the Mac, which would hand
-    # `where` to the laptop while the person is in the headset — so the headset touches last.
-    presence.phone_in_hand()
+    # The event the helper just posted reads as a key pressed at the Mac; a beat keeps `where`
+    # on the headset even if this click is the first sign of it.
+    presence.headset_on()
 
 
 @router.get("/windows/{window_id}/{kind}")

@@ -34,7 +34,7 @@ POLL = 1.0
 PRESENCE_EVERY = 5
 #: The menu's words for `presence.where()`. It sorts status lines by key and labels them, so this
 #: reads "Presence: on the phone".
-PLACES = {"laptop": "at the laptop", "phone": "on the phone"}
+PLACES = {"laptop": "at the laptop", "phone": "on the phone", "headset": "in the headset"}
 SUPPORT = Path.home() / "Library" / "Application Support" / "dev.jurrejan.utt"
 # utt 1.2 renamed this folder from `plugins` to `extensions`, and the one that exists is
 # the one the *installed* utt makes at launch — not the one its source says. Naming either

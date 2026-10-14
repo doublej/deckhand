@@ -113,3 +113,28 @@ def test_the_app_saying_it_was_touched_makes_it_the_phone(token, monkeypatch):
     assert asked.post("/presence/phone").status_code == 204
     assert asked.get("/presence").json()["where"] == "phone"
     assert asked.get("/health").json()["cover"] is None
+
+
+def test_a_beating_headset_is_the_person_until_it_stops():
+    """Worn is present: a fresh beat wins over a Mac its own window planes keep pressing keys on,
+    and over a locked screen; three missed beats and it is the old answer again."""
+    assert presence._where(1.0, False, headset=5.0) == "headset"
+    assert presence._where(1.0, True, touched=1.0, headset=5.0) == "headset"
+    assert presence._where(1.0, False, headset=presence.HEADSET_LIVE + 1) == "laptop"
+    assert presence._where(30.0, False, touched=10.0, headset=presence.HEADSET_LIVE + 1) == "phone"
+
+
+def test_the_headset_beats_through_its_own_route(token, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from deckhand_daemon.app import app
+
+    monkeypatch.setattr(presence, "idle_seconds", lambda: 1.0)
+    monkeypatch.setattr(presence, "locked", lambda: False)
+    monkeypatch.setattr(presence, "_headset_beat", None)
+    asked = TestClient(app)
+    asked.headers["x-deckhand-token"] = token
+    assert asked.get("/presence").json()["where"] == "laptop"
+    assert asked.post("/presence/headset").status_code == 204
+    assert asked.get("/presence").json()["where"] == "headset"
+    assert asked.get("/health").json()["cover"] is None

@@ -1,4 +1,4 @@
-"""Whether the person is at this Mac or on the phone: `laptop` or `phone`, nothing in between.
+"""Whether the person is at this Mac, on the phone or in the headset: `laptop`, `phone` or `headset`.
 
 The fact this module produces is not decoration. `deliver.py` says the sharp version of it in
 its own first paragraph: on the keyboard route **the daemon is holding JJ's keyboard for him**.
@@ -16,6 +16,12 @@ Two states, by JJ's choice (2026-10-11): there was a third, `nobody`, for an idl
 silent phone, and it answered no question a caller actually asks. Where to reach the person has
 two answers, the pane or the phone. Whether the phone is in use survives only as the cover's
 gate, where a wrong answer would put a sign over someone's film.
+
+`headset` came third (2026-10-14), because JJ reads the panes in the headset and wanted every
+statusline small while he does. Unlike the phone it is not "touched last": the headset says so
+every ten seconds while it is worn, so a fresh beat *is* the person, and it wins over a Mac whose
+keyboard the window planes are pressing for him. For anything that types, it is the phone: not
+`laptop`, so `auto` still takes the keyboard.
 """
 
 from __future__ import annotations
@@ -34,12 +40,16 @@ IDLE_AFTER = 120.0
 #: *present* — a phone polling from a desk looks exactly like a phone in a hand, and this cannot
 #: tell them apart. Only the cover reads it, and a wrong answer there is a sign, not a lock.
 PHONE_RECENT = 300.0
+#: The headset beats every ten seconds while it is on a head and stops the moment it comes off,
+#: so three missed beats and it is not being worn.
+HEADSET_LIVE = 30.0
 TIMEOUT = 2.0
 
 _phone_seen: float | None = None
 #: When the person last touched the app — not when it last polled. The app says so itself,
 #: through `POST /presence/phone`, because a poll from a phone on a desk is not a person.
 _phone_touched: float | None = None
+_headset_beat: float | None = None
 
 router = APIRouter()
 
@@ -93,25 +103,29 @@ def locked() -> bool:
 
 
 def where() -> str:
-    """`laptop` or `phone`: where a person reaching for this Mac would be found right now.
+    """`laptop`, `phone` or `headset`: where a person reaching for this Mac would be found right now.
 
     Unknown idleness reads as `laptop`: this is the answer a caller would act on by keeping its
     hands off the keyboard, and a Mac that will not say whether anyone is at it is not one to
     start typing into.
     """
-    return _where(idle_seconds(), locked(), _since(_phone_touched))
+    return _where(idle_seconds(), locked(), _since(_phone_touched), _since(_headset_beat))
 
 
 def _since(stamp: float | None) -> float | None:
     return time.time() - stamp if stamp is not None else None
 
 
-def _where(idle: float | None, screen_locked: bool, touched: float | None = None) -> str:
+def _where(idle: float | None, screen_locked: bool, touched: float | None = None,
+           headset: float | None = None) -> str:
     """The same answer, out of facts already in hand. Separate so `state` can read each of
     them exactly once — see there for what that was costing.
 
     Whichever was touched last wins: the phone the moment the app is used, the laptop the moment
-    a key is pressed. With neither, two minutes untouched hands the Mac to the phone."""
+    a key is pressed. With neither, two minutes untouched hands the Mac to the phone. A headset
+    still beating is ahead of all of it."""
+    if headset is not None and headset < HEADSET_LIVE:
+        return "headset"
     if screen_locked:
         return "phone"
     if idle is None:
@@ -149,16 +163,18 @@ def state() -> dict:
     screen_locked = locked()
     touched = _since(_phone_touched)
     seen_ago = _since(_phone_seen)
-    return {"where": _where(idle, screen_locked, touched),
+    beat = _since(_headset_beat)
+    return {"where": _where(idle, screen_locked, touched, beat),
             "idle": round(idle, 1) if idle is not None else None,
             "locked": screen_locked,
             "phone": round(seen_ago, 1) if seen_ago is not None else None,
-            "touched": round(touched, 1) if touched is not None else None}
+            "touched": round(touched, 1) if touched is not None else None,
+            "headset": round(beat, 1) if beat is not None else None}
 
 
 @router.get("/presence")
 def where_the_person_is() -> dict:
-    """`where` is `laptop` or `phone`: which of the two a session should reach the person on."""
+    """`where` is `laptop`, `phone` or `headset`: where a session should reach the person."""
     return state()
 
 
@@ -168,3 +184,11 @@ def phone_in_hand() -> None:
     the front, and from then until a key is pressed at the Mac, `where` is `phone`."""
     global _phone_touched
     _phone_touched = time.time()
+
+
+@router.post("/presence/headset", status_code=204)
+def headset_on() -> None:
+    """The headset is being worn: it beats every ten seconds while it is, and for `HEADSET_LIVE`
+    after the last beat `where` is `headset`."""
+    global _headset_beat
+    _headset_beat = time.time()

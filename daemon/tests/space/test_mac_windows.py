@@ -110,11 +110,11 @@ def test_the_stream_is_relayed_as_it_came_with_its_fps(client, head, helper):
 def test_input_reaches_the_helper_and_the_headset_touches_last(client, head, helper, monkeypatch):
     from deckhand_daemon import presence
 
-    monkeypatch.setattr(presence, "_phone_touched", None)
+    monkeypatch.setattr(presence, "_headset_beat", None)
     click = {"type": "down", "x": 0.5, "y": 0.25, "button": "left"}
     assert client.post("/windows/7/input", json=click, headers=head).status_code == 204
     assert Helper.asked == [("/windows/7/input", click)]
-    assert presence._phone_touched is not None
+    assert presence._headset_beat is not None
     missing = client.post("/windows/9/input", json=click, headers=head)
     assert missing.status_code == 404 and missing.json()["detail"] == "no window 9"
 

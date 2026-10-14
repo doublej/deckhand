@@ -58,7 +58,7 @@ ERRORS: dict[str, tuple[str, bool, str]] = {
 #: command is, which is what keeps the two doors the same size.
 COMMANDS: list[dict[str, str]] = [
     {"name": "presence", "tool": "presence", "args": "[--json]",
-     "does": "where the person is: `laptop` or `phone`, one word; --json adds idle seconds, "
+     "does": "where the person is: `laptop`, `headset` or `phone`, one word; --json adds idle seconds, "
              "screen lock and when the phone was last heard from"},
     {"name": "whoami", "tool": "whoami", "args": "", "does": "this session's id, name and folder"},
     {"name": "sessions", "tool": "sessions", "args": "[--fields name,status] [--limit 50]",
@@ -228,8 +228,8 @@ def prime(detected: dict[str, Any]) -> str:
 {PURPOSE}
 
 ## Start here
-1. `deckhand presence` — `laptop`: the person is reading this conversation, ask here and stop.
-   `phone`: go on.
+1. `deckhand presence` — `laptop` or `headset`: the person is reading this conversation, ask here
+   and stop. `phone`: go on.
 2. `deckhand ask "Ship it?" --option Ship --option Wait` — prints the slip id.
 3. `deckhand answer <id>` — exit 4 until they answer. The daemon also messages this session the
    moment an answer lands, so there is no need to poll.
