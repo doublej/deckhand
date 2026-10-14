@@ -32,9 +32,11 @@ Every route needs `x-deckhand-token`.
 - `PUT /space/poses/{key}` `{x, y, z, yaw}` → 204. Keys are `session:<id>`, `plane:<id>`,
   `manager`, `projects`, `launcher`. Every number finite, and no further than 20 m from the floor
   origin. A `plane:` key for a plane that is not open is a 404.
-- `GET /windows` → `[{id, app, title, w, h}]`, `GET /windows/{id}/frame` one JPEG,
+- `GET /windows` → `[{id, app, title, w, h, cropped}]`, `GET /windows/{id}/frame` one JPEG,
   `GET /windows/{id}/stream?fps=&max=&q=` MJPEG, `GET /windows/{id}/hevc?…` the same window as HEVC
-  off the Mac's hardware encoder (the query goes through whole). Passed through to `deckhand-windows` on
+  off the Mac's hardware encoder (the query goes through whole, on all three). A browser window
+  is its page alone: the helper crops to the AXWebArea, so `w`/`h` are the page's, `cropped` says
+  so, input maps into the page, and `?whole=1` is the uncropped window for debugging. Passed through to `deckhand-windows` on
   `127.0.0.1:4181`, the Swift helper in `deckhand-xr/windows/`; a 503 with the reason when it is
   not running.
 - `POST /windows/{id}/input` `{type: down|move|up|scroll|text|key, …}` → 204. The helper raises

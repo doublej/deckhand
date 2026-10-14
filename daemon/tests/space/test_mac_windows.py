@@ -30,7 +30,7 @@ class Helper(BaseHTTPRequestHandler):
         Helper.asked.append(self.path)
         if self.path == "/windows":
             self._send(200, "application/json", json.dumps(LISTED).encode())
-        elif self.path == "/windows/7/frame":
+        elif self.path.startswith("/windows/7/frame"):
             self._send(200, "image/jpeg", JPEG)
         elif self.path.startswith("/windows/7/hevc"):
             self._send(200, "application/octet-stream", HEVC)
@@ -98,6 +98,8 @@ def test_the_list_and_a_frame_pass_straight_through(client, head, helper):
     assert frame.content == JPEG and frame.headers["content-type"] == "image/jpeg"
     missing = client.get("/windows/9/frame", headers=head)
     assert missing.status_code == 404 and missing.json()["detail"] == "no window 9"
+    client.get("/windows/7/frame?whole=1", headers=head)
+    assert Helper.asked[-1] == "/windows/7/frame?whole=1"
 
 
 def test_the_stream_is_relayed_as_it_came_with_its_fps(client, head, helper):

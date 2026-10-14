@@ -48,10 +48,10 @@ def _refused(answered: httpx.Response, body: bytes) -> HTTPException:
     )
 
 
-async def _get(path: str) -> httpx.Response:
+async def _get(path: str, params=None) -> httpx.Response:
     try:
         async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-            answered = await client.get(f"{HELPER}{path}")
+            answered = await client.get(f"{HELPER}{path}", params=params)
     except httpx.HTTPError as error:
         raise _down(error) from error
     if answered.status_code >= 400:
@@ -70,8 +70,9 @@ async def list_windows() -> list[dict]:
 
 
 @router.get("/windows/{window_id}/frame")
-async def window_frame(window_id: int) -> Response:
-    answered = await _get(f"/windows/{window_id}/frame")
+async def window_frame(window_id: int, request: Request) -> Response:
+    """One JPEG. The query (`whole=1`, …) is the helper's, as on the streams."""
+    answered = await _get(f"/windows/{window_id}/frame", request.query_params)
     return Response(answered.content, media_type="image/jpeg")
 
 
