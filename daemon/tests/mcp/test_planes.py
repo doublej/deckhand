@@ -32,10 +32,18 @@ def test_a_plane_opened_from_a_session_is_near_it(monkeypatch, daemon):
     run(server.open_plane(url="http://localhost:5173/", title="Shop"))
     run(server.open_plane(window=7))
     assert seen == [
-        ("POST", "/space/planes", {"kind": "web", "url": "http://localhost:5173/",
-                                   "title": "Shop", "near": "s1", "by": "deckhand"}),
-        ("POST", "/space/planes", {"kind": "window", "window": 7, "near": "s1",
-                                   "by": "deckhand"}),
+        (
+            "POST",
+            "/space/planes",
+            {
+                "kind": "web",
+                "url": "http://localhost:5173/",
+                "title": "Shop",
+                "near": "s1",
+                "by": "deckhand",
+            },
+        ),
+        ("POST", "/space/planes", {"kind": "window", "window": 7, "near": "s1", "by": "deckhand"}),
     ]
 
 
@@ -58,7 +66,9 @@ def test_closing_takes_a_plane_id_and_only_that(daemon):
     assert run(server.close_plane("ab12")) == {"closed": "ab12"}
     run(server.close_plane("../../sessions/x"))
     assert [path for _, path, _ in seen] == [
-        "/space/planes/ab12", "/space/planes/..%2F..%2Fsessions%2Fx"]
+        "/space/planes/ab12",
+        "/space/planes/..%2F..%2Fsessions%2Fx",
+    ]
     assert {method for method, _, _ in seen} == {"DELETE"}
 
 
