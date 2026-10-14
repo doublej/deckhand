@@ -35,8 +35,9 @@ load-bearing: it never types into a pane. See [docs/manager.md](docs/manager.md)
   and the design layer so they are testable on the Mac; the app target comes from XcodeGen.
 - **Lock Screen** — a Live Activity, driven from the Mac over APNs. Bundle id
   `dev.jurrejan.deckhand`, explicit because push cannot be enabled on a wildcard App ID.
-- **Mac-side UI** — Deckhand's page inside utt (`plugin.py`), plus utt's menu bar. There was a
-  menu bar app; the plugin page replaced every reason it existed.
+- **Mac-side UI** — Deckhand's page inside utt (`plugin.py`), plus utt's menu bar, for running
+  the daemon. A first menu bar app did only that and was deleted. The Mac app (`mac/`) is the
+  manager and the Lock Screen's cards, for the person at the Mac.
 
 ## Architecture map
 
@@ -50,6 +51,7 @@ load-bearing: it never types into a pane. See [docs/manager.md](docs/manager.md)
 | `Sources/DeckhandKit/` | Models, HTTP client, pure logic, design layer — everything `just test` can reach. |
 | `Sources/IconMaker/` | Draws the app icon from the same grid as the in-app mark (`just icon`). |
 | `deckhand/` | The iOS app target: `Model`, the recorders, and `Views/`. |
+| `mac/` | The Mac app: the manager in the menu bar and a window, the cards as notifications. |
 | `widgets/` | `DeckhandWidgets` — the Live Activity. |
 | `Tests/`, `UITests/` | Swift tests on the Mac; UI tests drive the simulator against a live daemon. |
 | `launchd/` | The agent plist, symlinked into `~/Library/LaunchAgents`. |
@@ -61,6 +63,7 @@ Before editing in one of these, read its CLAUDE.md — the invariants there were
 and none of them is visible in the code.
 
 - `daemon/CLAUDE.md` — the daemon as a whole, delivery routes, utt, the plugin page, APNs
+- `mac/CLAUDE.md` — the Mac app, what its polls tell the daemon, and the session links
 - `daemon/src/deckhand_daemon/reading/CLAUDE.md` — transcripts, the inbox lane, context fullness
 - `daemon/src/deckhand_daemon/filters/CLAUDE.md` — the prompt chain
 - `daemon/src/deckhand_daemon/prompts/CLAUDE.md` — every prompt sent a model
@@ -172,6 +175,9 @@ the session. `?deliver=false` transcribes without sending, for the review card, 
   whether a run is still in flight. `POST /manager/say` and `POST /manager/audio` speak to it and
   answer with the entry rather than the reply; `POST /manager/clear` drops the conversation and
   the SDK thread behind it, both together
+- `GET /alerts?since=` — every card the Mac raised for a session, by cursor, for the Mac app,
+  which APNs cannot reach. `GET /manager?watching=false` is a poll with no panel on screen, and
+  leaves the phone's pushes on
 
 `/health` is the only unauthenticated route; everything else needs the `x-deckhand-token` header.
 Off the home network that surface is `https://deckhand.jurrejan.com` — the NAS Caddy, checking
@@ -191,6 +197,7 @@ pane); `/health` carries `codex`, whether the app server answered the last listi
 - `just ui-test` — additionally drives the simulator against a daemon started with `just daemon`
 - `just daemon` — run the daemon in the foreground; prints its address and pairing token
 - `just token` — print the token again
+- `just mac` — build the Mac app into `~/Applications` and start it
 - `just sim` / `just device` — build, install and launch, already paired
 - `just install-agent` / `just uninstall-agent` — run it at login, or stop doing that
 - `just sync-apns` — materialise the APNs key out of 1Password for launchd

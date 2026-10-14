@@ -3,6 +3,7 @@ options:
   bundleIdPrefix: dev.jurrejan
   deploymentTarget:
     iOS: "18.0"
+    macOS: "15.0"
   createIntermediateGroups: true
 packages:
   DeckhandKit:
@@ -107,6 +108,38 @@ targets:
         SWIFT_VERSION: "6.2"
         TARGETED_DEVICE_FAMILY: "1"
         SKIP_INSTALL: YES
+  # The manager and the Lock Screen's cards, for the person at the Mac — see `mac/App.swift`.
+  DeckhandMac:
+    type: application
+    platform: macOS
+    sources:
+      - path: mac
+        excludes:
+          - "**/CLAUDE.md"
+      # The phone's own conversation lines, compiled into both binaries — the `CardAction.swift`
+      # arrangement: two small files with no UIKit in them, so no third module for them either.
+      - deckhand/Views/Manager/ManagerLine.swift
+      - deckhand/Views/Manager/ManagerStarters.swift
+    dependencies:
+      - package: DeckhandKit
+        product: DeckhandKit
+    info:
+      path: mac/Info.plist
+      properties:
+        CFBundleName: Deckhand
+        CFBundleDisplayName: Deckhand
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+    settings:
+      base:
+        PRODUCT_NAME: Deckhand
+        PRODUCT_BUNDLE_IDENTIFIER: dev.jurrejan.deckhand.mac
+        DEVELOPMENT_TEAM: KA6433FU8U
+        CODE_SIGN_STYLE: Automatic
+        SWIFT_VERSION: "6.2"
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
   DeckhandUITests:
     type: bundle.ui-testing
     platform: iOS
@@ -133,3 +166,9 @@ schemes:
       config: Debug
       targets:
         - DeckhandUITests
+  DeckhandMac:
+    build:
+      targets:
+        DeckhandMac: all
+    run:
+      config: Debug

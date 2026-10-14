@@ -154,6 +154,18 @@ device: generate
     xcrun devicectl device process launch --device '{{ phone }}' dev.jurrejan.deckhand \
         -- -deckhand.host m2-2.local -deckhand.token "$(just token)"
 
+# The manager and the session cards for the person at the Mac (`mac/App.swift`). It asks to send
+# notifications on its first run. Stopped by path, not `pkill -x Deckhand`, which would also take
+# the simulator's copy of the phone app.
+
+# Build the Mac app, put it in ~/Applications and start it.
+[group('develop')]
+mac: generate
+    xcodebuild -project Deckhand.xcodeproj -scheme DeckhandMac -configuration Release -derivedDataPath .build/mac -allowProvisioningUpdates build
+    pkill -f 'Deckhand.app/Contents/MacOS/Deckhand' || true
+    ditto .build/mac/Build/Products/Release/Deckhand.app ~/Applications/Deckhand.app
+    open ~/Applications/Deckhand.app
+
 [group('quality')]
 lint:
     swiftlint lint --strict
@@ -274,6 +286,7 @@ check:
 build: generate
     swift build
     xcodebuild {{ project }} -destination 'platform=iOS Simulator,name={{ sim }}' -configuration Debug build
+    xcodebuild -project Deckhand.xcodeproj -scheme DeckhandMac -configuration Debug -derivedDataPath .build/mac build
 
 [group('build')]
 build-release:
