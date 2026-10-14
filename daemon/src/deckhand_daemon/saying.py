@@ -35,6 +35,14 @@ IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".heic", ".gif", ".webp"}
 
 
 def session_or_404(session_id: str) -> sessions.Session:
+    if found := found_session(session_id):
+        return found
+    raise HTTPException(status_code=404, detail="no live session with that id")
+
+
+def found_session(session_id: str) -> sessions.Session | None:
+    """The live session by that id, by the session it was cleared into, or on another machine —
+    or None, for a caller to whom a session that has gone is news rather than a 404."""
     # ponytail: every lookup re-lists sessions (one `it2` call, ~0.5 s). Cache it if the
     # phone ever polls harder than every few seconds.
     live = sessions.live_sessions()
@@ -55,9 +63,7 @@ def session_or_404(session_id: str) -> sessions.Session:
     # a session found this way — it comes back with `pane=None`, which is the same refusal a
     # local pane-less session already gets — but `say`, a clip and a slip's answer all work,
     # because the pipeline runs here and only the last step happens over there.
-    if elsewhere := fleet.session(session_id):
-        return elsewhere
-    raise HTTPException(status_code=404, detail="no live session with that id")
+    return fleet.session(session_id)
 
 
 async def live_session(session_id: str) -> sessions.Session:

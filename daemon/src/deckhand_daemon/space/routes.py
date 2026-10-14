@@ -26,6 +26,7 @@ from fastapi import APIRouter, Body, HTTPException, Response
 
 from .. import config, saying
 from ..bindings.stored import now
+from ..log import log
 from ..projects import catalog
 from ..projects import routes as projects
 from ..sessions import live_sessions, project
@@ -48,11 +49,17 @@ REACH = 20.0
 
 @router.get("/space")
 async def get_space() -> dict:
+    """`{rev, planes, poses}`: every page and window open in the headset, and every kept pose.
+    `rev` rises on every change, so a poller redraws only when it moved."""
     return await asyncio.to_thread(stored.space)
 
 
 @router.post("/space/planes", status_code=201)
 async def open_plane(sent: Annotated[dict, Body()], response: Response) -> dict:
+    """`{kind: web|window, url?, window?, title?, near?, by?}` → the plane. `near` is a listed
+    session or a 404; a loopback url becomes this Mac's LAN address. The same page already open
+    beside the same session comes back with `reused: true` and a 200. No `by` is the person, and
+    `near` is told."""
     kind = sent.get("kind")
     title = _text(sent, "title")
     if kind == "web":
@@ -93,16 +100,33 @@ async def open_plane(sent: Annotated[dict, Body()], response: Response) -> dict:
 
 @router.put("/space/planes/{plane_id}/near", status_code=204)
 async def give_plane(plane_id: str, sent: Annotated[dict, Body()]) -> Response:
-    """The person moved a page or window to another session's side, or to nobody's (`near`
-    null). The headset's to call; the session it now belongs to is told."""
+    """`{near}`: the person moved a page or window to another session's side, or to nobody's
+    (`near` null). The headset's to call; the session it now belongs to is told, and so is the one
+    it left."""
     near = _text(sent, "near") or None
     session = await saying.live_session(near) if near else None
-    was = await asyncio.to_thread(stored.given, plane_id, session.session_id if session else None)
+    given_to = session.session_id if session else None
+    was = await asyncio.to_thread(stored.given, plane_id, given_to)
     if was is None:
         raise HTTPException(status_code=404, detail="no plane with that id")
-    if session and was["near"] != session.session_id:
-        await asyncio.to_thread(around.tell, session, was | {"near": session.session_id})
+    if was["near"] == given_to:
+        return Response(status_code=204)
+    if session:
+        await asyncio.to_thread(around.tell, session, was | {"near": given_to})
+    await _taken(was, "handed" if session else "loose", session.name if session else "")
     return Response(status_code=204)
+
+
+async def _taken(plane: dict, how: str, to: str = "") -> None:
+    """Tell the session `plane` stood beside that the person took it away. A session that has gone
+    since is logged and skipped: the plane has moved either way."""
+    if not plane["near"]:
+        return
+    session = await asyncio.to_thread(saying.found_session, plane["near"])
+    if session is None:
+        log.info("plane %s left %s, which is gone: nobody to tell", plane["id"], plane["near"][:8])
+        return
+    await asyncio.to_thread(around.taken, session, plane, how, to)
 
 
 @router.get("/sessions/{session_id}/space")
@@ -136,14 +160,22 @@ async def start_beside(sent: Annotated[dict, Body()]) -> dict:
 
 
 @router.delete("/space/planes/{plane_id}", status_code=204)
-async def close_plane(plane_id: str) -> Response:
-    if not await asyncio.to_thread(stored.drop, plane_id):
+async def close_plane(plane_id: str, by: str = "") -> Response:
+    """Close a page or window; its pose goes with it. No `by` is the person, and the session it
+    stood beside is told. An agent passes its own name as `by`, as it does opening one, and nobody
+    is told: what an agent closed is its own news. Never a session — none is kept here."""
+    was = await asyncio.to_thread(stored.drop, plane_id)
+    if was is None:
         raise HTTPException(status_code=404, detail="no plane with that id")
+    if not by.strip():
+        await _taken(was, "closed")
     return Response(status_code=204)
 
 
 @router.put("/space/poses/{key}", status_code=204)
 async def place(key: str, sent: Annotated[dict, Body()]) -> Response:
+    """`{x, y, z, yaw, pitch?, roll?, scale?, group?, minimized?}` for `session:<id>`,
+    `plane:<id>`, `manager`, `projects` or `launcher`. The headset's to call."""
     kind, _, rest = key.partition(":")
     if not (key in FIXED or (kind in ("session", "plane") and rest)):
         raise HTTPException(

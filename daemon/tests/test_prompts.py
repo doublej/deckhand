@@ -4,7 +4,7 @@ import pytest
 
 from deckhand_daemon import prompts
 
-SHIPPED = ("briefing", "crafting", "idle-check")
+SHIPPED = ("briefing", "crafting", "idle-check", "space-given", "space-taken")
 
 
 @pytest.mark.parametrize("name", SHIPPED)

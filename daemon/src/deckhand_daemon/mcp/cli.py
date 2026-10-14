@@ -17,10 +17,14 @@ import asyncio
 import json
 import logging
 import sys
+from pathlib import Path
 from typing import Any, NoReturn
 
 from .. import __version__
-from . import server
+from . import refused, server
+
+#: Every route, tool and command in one page, generated from the code (`daemon/tools/commands_doc.py`).
+DOC = Path(__file__).resolve().parents[4] / "docs" / "commands.md"
 
 PURPOSE = ("Reach the person — in this conversation when they are at the laptop or in the "
            "headset, on their phone when they are not — speak to the other Claude sessions on "
@@ -56,6 +60,9 @@ ERRORS: dict[str, tuple[str, bool, str]] = {
                       "`deckhand space` shows them whole")),
     "NOT_STARTABLE": ("user_error", False, ("`message` says why and lists folders a session can "
                       "start in, nearest first; pass one to `deckhand start`")),
+    "PERSON_ONLY": ("user_error", False, ("refused on purpose, not missing: it is the person's "
+                    "own. Ask them — `deckhand presence` says where — rather than going around "
+                    "it with curl")),
     "USAGE": ("usage", False, "`deckhand prime` lists every command and its arguments"),
 }
 
@@ -94,7 +101,7 @@ COMMANDS: list[dict[str, str]] = [
      "does": "this Mac's windows, with the ids `open --window` takes"},
 ]
 
-SESSION_FIELDS = ("session", "name", "folder", "status", "waiting")
+SESSION_FIELDS = ("session", "name", "folder", "status", "waiting", "provider")
 
 
 class Parser(argparse.ArgumentParser):
@@ -106,7 +113,10 @@ class Parser(argparse.ArgumentParser):
 
 
 def build_parser() -> Parser:
-    parser = Parser(prog="deckhand", description=PURPOSE)
+    parser = Parser(prog="deckhand", description=PURPOSE, epilog=(
+        "Not here on purpose, the person's own: "
+        f"{', '.join(refused.BY_VERB)}. `deckhand prime` says why; {DOC} has every route, "
+        "tool and command."))
     parser.add_argument("--json", action="store_true", help="JSON even on a terminal")
     sub = parser.add_subparsers(dest="command", parser_class=Parser)
     sub.add_parser("prime", help="the whole contract, as Markdown (--json for the model)")
@@ -131,7 +141,7 @@ def build_parser() -> Parser:
     sub.choices["close"].add_argument("id")
     sub.choices["space"].add_argument("--full", action="store_true")
     sub.choices["start"].add_argument("folder", nargs="?", help="a listed project; default here")
-    sub.choices["start"].add_argument("--provider", default="claude")
+    sub.choices["start"].add_argument("--provider", default="claude", choices=("claude", "codex"))
     for each in sub.choices.values():
         each.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     return parser
@@ -171,16 +181,21 @@ async def _call(a: argparse.Namespace) -> dict[str, Any]:
     raise AssertionError(a.command)
 
 
+#: The commands whose answer can be a "no": command → (the field that says yes, its code, and
+#: what to say when the tool gave no reason).
+NO: dict[str, tuple[str, str, str]] = {
+    "say": ("went", "NOT_DELIVERED", "it was not said"),
+    "notify": ("pushed", "NOT_PUSHED", "it was not pushed"),
+    "answer": ("answered", "PENDING", "no answer yet"),
+}
+
+
 def failure(command: str, answer: dict[str, Any]) -> tuple[str, str] | None:
     """(code, message) when the answer is a failure or a "no", else None."""
     if "error" in answer:
         return answer.get("code", "REFUSED"), answer["error"]
-    if command == "say" and not answer.get("went"):
-        return answer.get("code", "NOT_DELIVERED"), answer.get("why") or "it was not said"
-    if command == "notify" and not answer.get("pushed"):
-        return "NOT_PUSHED", answer.get("why") or "it was not pushed"
-    if command == "answer" and not answer.get("answered"):
-        return "PENDING", answer.get("why") or "no answer yet"
+    if command in NO and not answer.get((said := NO[command])[0]):
+        return answer.get("code", said[1]), answer.get("why") or said[2]
     return None
 
 
@@ -260,7 +275,8 @@ def prime(detected: dict[str, Any]) -> str:
 3. `deckhand start [FOLDER]` — another session beside you; then `deckhand say <its name> "…"`
    to give it the work.
 4. `deckhand close <id prefix>` — take a page or window away again.
-When the person puts a page beside you, a message from the daemon says so.
+When the person puts a page beside you, or takes one away, a message from the daemon says so;
+`close` from here is closed as you, and nobody is told.
 
 ## Output contract
 - stdout is data: JSON when piped or with `--json`, aligned text on a terminal. `presence`
@@ -290,6 +306,14 @@ When the person puts a page beside you, a message from the daemon says so.
   Claude Code already trusts. It begins with no task, and nothing here can close it: start one
   when the work needs a second pair of hands, not to look busy.
 
+## Not here on purpose
+The person's own, so stop looking: `deckhand <verb>` for any of these answers `PERSON_ONLY` and
+why. `curl` would still do it, which is why the reason is written down.
+{refused.markdown()}
+
+## Reference
+`{DOC}` — every HTTP route, MCP tool and command, generated from the code.
+
 ## Detected
 {found} · next: `deckhand presence`
 """
@@ -298,6 +322,12 @@ When the person puts a page beside you, a message from the daemon says so.
 def main(argv: list[str] | None = None) -> None:
     # The `mcp` package logs every request httpx makes at INFO; stderr is for failures here.
     logging.getLogger("httpx").setLevel(logging.WARNING)
+    argv = sys.argv[1:] if argv is None else argv
+    # Before argparse, whose "invalid choice" would send an agent looking for the right spelling.
+    verb = next((word for word in argv if not word.startswith("-")), "")
+    if why := refused.BY_VERB.get(verb):
+        _fail("PERSON_ONLY", f"there is no `deckhand {verb}`, on purpose: {why}",
+              machine="--json" in argv or not sys.stdout.isatty())
     a = build_parser().parse_args(argv)
     machine = a.json or not sys.stdout.isatty()
     if a.command is None:
@@ -310,6 +340,7 @@ def main(argv: list[str] | None = None) -> None:
                               "commands": COMMANDS, "exit": EXIT,
                               "errors": {c: {"category": e[0], "retryable": e[1], "hint": e[2]}
                                          for c, e in ERRORS.items()},
+                              "refused": refused.REFUSED, "doc": str(DOC),
                               "detected": detected}))
         else:
             print(prime(detected), end="")

@@ -5,18 +5,18 @@ file an agent writes in its own folder, and knowing that is worth more than any 
 because a tool is present whether or not the model thought to look, and the failure they answer is
 a session that reached a decision needing the person and made it alone.
 
-**Ten of the twelve are the daemon's own routes.** Nothing here reimplements one. `/say` carries the
-session's filter chain, its orders and the delivery record; `/notify` carries the folder's right to
-refuse being interrupted. Calling the functions underneath those routes would quietly drop all of
-it, which is the shape of bug that looks like it works.
+**Nine of the twelve are the daemon's own routes.** Nothing here reimplements one. `/say` carries
+the session's filter chain, its orders and the delivery record; `/notify` carries the folder's
+right to refuse being interrupted. Calling the functions underneath those routes would quietly
+drop all of it, which is the shape of bug that looks like it works.
 
-**Two of them are not routes at all.** A slip is written in the session's own `cwd` and read back
+**Three of them are not routes at all.** `whoami` reads this session's own record. A slip is written in the session's own `cwd` and read back
 from there, exactly as `docs/artifacts.md` chose — so `ask_on_phone` and `read_answer` run the
 skill's own `slip.py` and `answer.py` rather than talking to the daemon. One copy of that logic,
 and the tool and the shell command an agent might type produce the same file.
 
 **What it refuses, and how.** By absence: there is no route argument, no `/control`, no `PUT`, and
-no way to close a session. `say_to_session` is socket-only, because an agent choosing the keyboard
+no way to close a session — the whole list, with a reason each, closes these instructions. `say_to_session` is socket-only, because an agent choosing the keyboard
 route is an agent claiming to be the person. None of this is a fence — the agent keeps `Bash` and
 the token is a readable file — it is there so an agent does not *drift* into speaking as the
 person because that route was the convenient one. `docs/agent-surface.md` says which token would
@@ -43,12 +43,13 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import Literal
 from urllib.parse import quote
 
 from mcp.server.mcpserver import MCPServer
 from mcp.types import ToolAnnotations
 
-from . import here
+from . import here, refused
 
 # The skill's own scripts, from this repo rather than from `~/.claude/skills/deckhand` — the same
 # files either way, since that is a symlink, and this way a checkout that has not been installed
@@ -62,7 +63,9 @@ MAX_WAIT = 600.0
 READ_ONLY = ToolAnnotations(read_only_hint=True, open_world_hint=False)
 WRITES = ToolAnnotations(open_world_hint=False)
 
-server = MCPServer(name="deckhand", instructions=__doc__)
+server = MCPServer(name="deckhand", instructions=(
+    f"{__doc__}\n**Not here on purpose — the person's own, so stop looking:**\n"
+    f"{refused.markdown()}\n"))
 
 
 async def _script(name: str, *args: str) -> tuple[bool, str]:
@@ -115,7 +118,9 @@ async def whoami() -> dict:
 
 
 @server.tool(annotations=WRITES)
-async def ask_on_phone(question: str, kind: str = "confirm", options: list[str] | None = None,
+async def ask_on_phone(question: str,
+                       kind: Literal["confirm", "pick", "text", "aloud"] = "confirm",
+                       options: list[str] | None = None,
                        note: str = "", questions: list[str] | None = None) -> dict:
     """Ask the person a question on their phone. Returns the slip's id, to read the answer by.
 
@@ -190,14 +195,16 @@ async def call_for_attention(line: str) -> dict:
 
 @server.tool(annotations=READ_ONLY)
 async def sessions() -> dict:
-    """Every Claude Code session live on this Mac: its name, folder, whether it is busy, and how
-    many slips it has left waiting for the person."""
+    """Every Claude Code session live on this Mac: its name, folder, whether it is busy, how
+    many slips it has left waiting for the person, and its `provider` — a `codex` thread is
+    listed but takes no agent's words, so `say_to_session` refuses it."""
     answered = await here.reach("GET", "/sessions")
     if "error" in answered:
         return answered
     return {"sessions": [
         {"session": s.get("session_id"), "name": s.get("name"), "folder": s.get("cwd"),
-         "status": s.get("status"), "waiting": s.get("artifacts_waiting", 0)}
+         "status": s.get("status"), "waiting": s.get("artifacts_waiting", 0),
+         "provider": s.get("provider", "claude")}
         for s in answered.get("sessions", [])
     ]}
 
@@ -256,8 +263,13 @@ async def open_plane(url: str | None = None, window: int | None = None,
     if title:
         sent["title"] = title
     if held := here.mine():
-        sent |= {"near": held["sessionId"], "by": held.get("name") or None}
+        sent |= {"near": held["sessionId"], "by": _by(held)}
     return await here.reach("POST", "/space/planes", json=sent)
+
+
+def _by(held: dict) -> str:
+    """Who an agent's plane says did it. Never empty: no `by` is the person, to the daemon."""
+    return held.get("name") or held["sessionId"]
 
 
 @server.tool(annotations=READ_ONLY)
@@ -297,7 +309,8 @@ async def _startable(near: str) -> str:
 
 
 @server.tool(annotations=WRITES)
-async def start_session(folder: str | None = None, provider: str = "claude") -> dict:
+async def start_session(folder: str | None = None,
+                        provider: Literal["claude", "codex"] = "claude") -> dict:
     """Start another Claude Code session, standing beside you in the person's headset in your
     group — to hand it part of the work, or to show the person something running. `folder`
     defaults to your own; it must be a project the Mac lists and Claude Code already trusts, or
@@ -319,7 +332,8 @@ async def start_session(folder: str | None = None, provider: str = "claude") -> 
 async def close_plane(id: str) -> dict:
     """Close a plane in the person's headset, by the id `open_plane` or `space` gave — a unique
     prefix of it is enough. Only a web page or a Mac window: an agent can never close a session,
-    and nothing here names one."""
+    and nothing here names one. Closed as you, so the session it stood beside is not told the
+    person took it away."""
     whole = await here.reach("GET", "/space")
     if "error" in whole:
         return whole
@@ -329,7 +343,10 @@ async def close_plane(id: str) -> dict:
         listed = ", ".join(f"{p['id'][:8]} {p['title']}" for p in planes) or "none open"
         which = "more than one plane starts" if found else "no plane starts"
         return {"error": f"{which} with {id!r} — open: {listed}", "code": "NO_SUCH_PLANE"}
-    answered = await here.reach("DELETE", f"/space/planes/{quote(found[0]['id'], safe='')}")
+    # No session above is the person at a terminal, and the daemon treats no `by` as the person.
+    by = {"by": _by(held)} if (held := here.mine()) else {}
+    answered = await here.reach("DELETE", f"/space/planes/{quote(found[0]['id'], safe='')}",
+                                params=by)
     return answered if "error" in answered else {"closed": found[0]["id"]}
 
 

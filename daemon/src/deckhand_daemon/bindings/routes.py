@@ -40,6 +40,7 @@ async def match_bindings(url: str) -> dict:
 
 @router.get("/bindings")
 async def list_bindings() -> dict:
+    """Every web page pinned to a project folder, as an origin plus an optional path prefix."""
     return {"bindings": await asyncio.to_thread(stored.bindings)}
 
 
@@ -53,6 +54,7 @@ async def add_binding(sent: Annotated[dict, Body()]) -> dict:
 
 @router.delete("/bindings")
 async def remove_binding(pattern: str, path: str) -> dict:
+    """Unpin one page from one folder, by the pattern and path it was pinned with: `{removed}`."""
     pattern = _normalised(pattern, "pattern")
     return {"removed": await asyncio.to_thread(stored.unbind, pattern, path)}
 
@@ -93,6 +95,7 @@ async def add_feedback(sent: Annotated[dict, Body()]) -> dict:
 
 @router.get("/feedback")
 async def list_feedback(path: str) -> dict:
+    """What was said about spots on that folder's pages, oldest first: `{entries}`."""
     folder = await _listed(path)
     return {"entries": await asyncio.to_thread(stored.feedback, folder)}
 

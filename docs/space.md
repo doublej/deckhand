@@ -28,7 +28,10 @@ Every route needs `x-deckhand-token`.
   `near`, when given, must be a listed session, or 404. A `localhost`, `127.0.0.1`, `0.0.0.0` or
   `::1` host becomes this Mac's LAN address, port kept. `title` defaults to the url's host or the
   window's own title.
-- `DELETE /space/planes/{id}` → 204, and the plane's pose goes with it. 404 for no such plane.
+- `DELETE /space/planes/{id}?by=` → 204, and the plane's pose goes with it. 404 for no such plane.
+  No `by` is the person, and the session the plane stood beside is told it is gone
+  (`prompts/space-taken.md`); `close_plane` and `deckhand close` pass the calling session's name,
+  so an agent closing a page is not reported as the person closing it.
 - `PUT /space/poses/{key}` `{x, y, z, yaw}` → 204. Keys are `session:<id>`, `plane:<id>`,
   `manager`, `projects`, `launcher`. Every number finite, and no further than 20 m from the floor
   origin. A `plane:` key for a plane that is not open is a 404.
@@ -65,7 +68,9 @@ Every route needs `x-deckhand-token`.
   session, or to nobody (`null`). A page the person opens with `near` set, or hands over this
   way, is **told** to that session down its socket (`prompts/space-given.md`), because what he
   says looking at it now goes there; a plane an agent opened beside itself carries its `by` and
-  is not news to it.
+  is not news to it. The session it **leaves** is told too (`prompts/space-taken.md`) — handed
+  on, or moved to nobody — because what he says there no longer reaches it. A session that has
+  gone since is logged and skipped; the plane moves either way.
 - `GET /sessions/{id}/screen` → `{lines, at, styled, runs?}`: the pane as it stands, shared
   across polls for 0.5 s. It is what the headset's terminal plane shows — the prompt box and a
   pending permission question are on the screen and in no transcript. No pane is a 409, as

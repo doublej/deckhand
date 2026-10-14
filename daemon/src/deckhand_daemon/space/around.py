@@ -8,8 +8,9 @@ is in its kept pose's group, else in its `near` session's.
 
 `tell` is the other direction. A page or window the *person* hands a session — opened with that
 session as `near`, or moved to it — is something the session should know is there, because what
-he says looking at it now comes to it. Said down the socket, as the idle check is: it is the
-daemon speaking, not him.
+he says looking at it now comes to it. `taken` is its other half: the session a page stood beside
+is told when he closes it or moves it away, because what he says there no longer comes to it.
+Both go down the socket, as the idle check does: it is the daemon speaking, not him.
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from .. import deliver, prompts, sessions
 from ..log import log
 
 GIVEN = prompts.load("space-given")
+TAKEN = prompts.load("space-taken")
 
 
 def _session_groups(kept: dict, rows: list[dict]) -> dict[str, str | None]:
@@ -53,11 +55,25 @@ def around(kept: dict, rows: list[dict], session_id: str) -> dict:
 
 
 def tell(session: sessions.Session, plane: dict) -> None:
-    """Say to `session` that the person put `plane` beside it. A session that cannot be reached
-    still has the plane; the failure is logged, never raised into the request that opened it."""
-    what = (f"the page {plane['title']} ({plane['url']})" if plane["kind"] == "web"
+    """Say to `session` that the person put `plane` beside it."""
+    _say(session, plane, GIVEN, GIVEN.filled(what=_what(plane), id=plane["id"]))
+
+
+def taken(session: sessions.Session, plane: dict, how: str, to: str = "") -> None:
+    """Say to `session` that the person took `plane` away from beside it. `how` is one of the
+    prompt's own: `closed`, `handed` — to the session named `to` — or `loose`."""
+    how = TAKEN.settings["how"][how].replace("{name}", to)
+    _say(session, plane, TAKEN, TAKEN.filled(what=_what(plane), id=plane["id"], how=how))
+
+
+def _what(plane: dict) -> str:
+    return (f"the page {plane['title']} ({plane['url']})" if plane["kind"] == "web"
             else f"the Mac window {plane['title']}")
-    _, error = deliver.deliver(session, GIVEN.filled(what=what, id=plane["id"]),
-                               route=GIVEN.settings["route"])
+
+
+def _say(session: sessions.Session, plane: dict, prompt: prompts.Prompt, text: str) -> None:
+    """Down the route the prompt names. A session that cannot be reached is logged, never raised
+    into the request that moved the plane: the plane has moved either way."""
+    _, error = deliver.deliver(session, text, route=prompt.settings["route"])
     if error:
         log.warning("could not tell %s about plane %s: %s", session.name, plane["id"], error)

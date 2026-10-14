@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from deckhand_daemon.mcp import cli, server
+from deckhand_daemon.mcp import cli, refused, server
 
 
 def test_every_tool_is_a_command_and_every_command_a_tool():
@@ -93,6 +93,39 @@ def test_prime_is_markdown_and_names_every_command(monkeypatch, capsys):
     assert all(f"`deckhand {c['name']}" in out for c in cli.COMMANDS)
     cli.main(["prime", "--json"])
     assert json.loads(capsys.readouterr().out)["detected"]["where"] == "laptop"
+
+
+@pytest.mark.parametrize("argv", [["clear"], ["--json", "rename"], ["input", "7"]])
+def test_a_refused_verb_says_whose_it_is_instead_of_how_to_spell_it(argv, capsys):
+    with pytest.raises(SystemExit) as ended:
+        cli.main(argv)
+    assert ended.value.code == 1
+    said = json.loads(capsys.readouterr().err)["error"]
+    assert said["code"] == "PERSON_ONLY" and said["retryable"] is False
+    assert "POST /" in said["message"]  # names the route, so nobody has to go and find it
+
+
+def test_every_refusal_is_named_where_an_agent_looks_and_none_shadows_a_command(monkeypatch,
+                                                                                capsys):
+    assert not set(refused.BY_VERB) & ({c["name"] for c in cli.COMMANDS} | {"prime"})
+    routes = [row["route"] for row in refused.REFUSED]
+    assert all(route in server.server.instructions for route in routes)
+
+    async def status():
+        return {"where": "laptop"}
+
+    monkeypatch.setattr(cli, "status", status)
+    cli.main(["prime"])
+    out = capsys.readouterr().out
+    assert all(route in out for route in routes) and str(cli.DOC) in out
+    cli.main(["prime", "--json"])
+    assert json.loads(capsys.readouterr().out)["refused"] == refused.REFUSED
+
+
+def test_start_takes_only_a_provider_there_is(capsys):
+    with pytest.raises(SystemExit) as ended:
+        cli.main(["start", "--provider", "gemini"])
+    assert ended.value.code == 2
 
 
 def test_a_session_is_found_by_part_of_its_name_but_never_by_a_guess():

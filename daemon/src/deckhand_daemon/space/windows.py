@@ -66,6 +66,8 @@ async def listed() -> list[dict]:
 
 @router.get("/windows")
 async def list_windows() -> list[dict]:
+    """`[{id, app, title, w, h, cropped}]`: this Mac's windows, as `deckhand-windows` lists them.
+    A 503 with the reason when that helper is not running."""
     return await listed()
 
 

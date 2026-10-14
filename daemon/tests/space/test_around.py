@@ -54,16 +54,71 @@ def test_a_page_the_person_opens_near_a_session_is_told_to_it(client, head, told
     assert len(told) == 1  # an agent's own page is not news to it
 
 
-def test_handing_a_page_to_another_session_tells_that_one_once(client, head, told):
+@pytest.fixture
+def lost(monkeypatch):
+    heard: list[tuple] = []
+    monkeypatch.setattr(around, "taken", lambda session, plane, how, to="": heard.append(
+        (session.session_id, plane["id"], how, to)))
+    return heard
+
+
+def test_handing_a_page_to_another_session_tells_that_one_once(client, head, told, lost):
     plane = client.post("/space/planes", json={"kind": "web", "url": "https://a.com"},
                         headers=head).json()
     given = f"/space/planes/{plane['id']}/near"
     assert client.put(given, json={"near": OTHER}, headers=head).status_code == 204
     assert client.put(given, json={"near": OTHER}, headers=head).status_code == 204
     assert told == [(OTHER, plane["id"])]
+    assert lost == []  # it stood beside nobody before
     assert client.get("/space", headers=head).json()["planes"][0]["near"] == OTHER
     assert client.put(given, json={"near": None}, headers=head).status_code == 204
     assert client.put("/space/planes/nope/near", json={}, headers=head).status_code == 404
+
+
+def test_the_session_a_page_leaves_is_told_where_it_went(client, head, told, lost):
+    plane = client.post("/space/planes", json={"kind": "web", "url": "https://a.com", "near": LIVE},
+                        headers=head).json()
+    given = f"/space/planes/{plane['id']}/near"
+    client.put(given, json={"near": OTHER}, headers=head)
+    assert lost == [(LIVE, plane["id"], "handed", "cold-otter")]
+    client.put(given, json={"near": None}, headers=head)
+    client.put(given, json={"near": None}, headers=head)  # nowhere to nowhere: nothing to tell
+    assert lost[1:] == [(OTHER, plane["id"], "loose", "")]
+
+
+def test_closing_a_page_tells_its_session_unless_an_agent_closed_it(client, head, told, lost):
+    def opened(url: str, near: str | None = LIVE) -> str:
+        return client.post("/space/planes", json={"kind": "web", "url": url, "near": near},
+                           headers=head).json()["id"]
+
+    mine, its, nobodys = opened("https://a.com"), opened("https://b.com"), opened("https://c", None)
+    assert client.delete(f"/space/planes/{mine}", headers=head).status_code == 204
+    assert lost == [(LIVE, mine, "closed", "")]
+    closed = client.delete(f"/space/planes/{its}", params={"by": "warm-okapi"}, headers=head)
+    assert closed.status_code == 204
+    assert client.delete(f"/space/planes/{nobodys}", headers=head).status_code == 204
+    assert len(lost) == 1
+    assert client.delete(f"/space/planes/{mine}", headers=head).status_code == 404
+
+
+def test_a_page_beside_a_session_that_has_gone_is_closed_without_telling_anyone(client, head,
+                                                                                lost):
+    plane, _ = stored.add(_plane("p1", near="gone-1111"))
+    assert client.delete(f"/space/planes/{plane['id']}", headers=head).status_code == 204
+    assert lost == [] and stored.space()["planes"] == []
+
+
+def test_taken_goes_down_the_socket_and_says_what_became_of_it(monkeypatch):
+    sent: list[tuple[str, str]] = []
+    monkeypatch.setattr(around.deliver, "deliver",
+                        lambda session, text, route: sent.append((text, route)) or (None, "gone"))
+    session = type("S", (), {"name": "warm-okapi"})()
+    around.taken(session, _plane("p1"), "handed", "cold-otter")  # a failure is logged, not raised
+    around.taken(session, _plane("p2"), "closed")
+    (handed, route), (closed, _) = sent
+    assert route == "socket" and "a.com (https://a.com)" in handed and "p1" in handed
+    assert "handed it to the session cold-otter" in handed and "he closed it" in closed
+    assert "{" not in handed + closed
 
 
 def test_a_session_sees_its_group_over_the_wire(client, head):
