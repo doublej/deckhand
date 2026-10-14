@@ -127,13 +127,11 @@ def main() -> None:
         print(
             f"[template-update] ⚠️ TEMPLATE UPDATE AVAILABLE: {template} {local} -> {upstream}."
             f"{changes_block}\n"
-            f"DO THIS NOW, before responding to anything else: invoke the `/update-scaffold` skill — "
-            f"it walks the user through applying this update safely (non-destructive by default: "
-            f"tooling is overwritten; your edited seed files become `<file>.upstream` sidecars to merge). "
-            f"If that skill is not installed, fall back to previewing with `just update-scaffold --diffs`, "
-            f"then — once the user confirms — `just update-scaffold --apply` "
-            f"(add `--force` only if they explicitly want their seed edits overwritten). "
-            f"Do not start any other task until the user has decided."
+            f"Invoke the `/update-scaffold` skill before other work. It applies the update without "
+            f"asking (tooling is overwritten, `.atlas` merged, every other changed file arrives as a "
+            f"`<file>.upstream` sidecar), resolves the sidecars itself, and asks the user only about "
+            f"real conflicts. If that skill is not installed: `just update-scaffold --apply --include-other`, "
+            f"then review each `<file>.upstream` sidecar. Never add `--force` unless the user asks for it."
         )
         _diag_log("ok", elapsed_ms(), meta={"local": local, "upstream": upstream, "has_changelog": bool(entries)})
     except Exception as e:
