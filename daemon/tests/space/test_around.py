@@ -88,6 +88,8 @@ def test_a_session_started_beside_another_stands_beside_it(client, head, monkeyp
     assert asked == ["/Users/jj/dev/web/shop"]  # a subfolder is taken as its repo
     assert stored.space()["beside"] == {"new-one": LIVE}
     assert client.post("/space/sessions", json={"path": "/x"}, headers=head).status_code == 400
+    relative = client.post("/space/sessions", json={"near": LIVE, "path": "shop"}, headers=head)
+    assert relative.status_code == 400
     gone = client.post("/space/sessions", json={"near": "no-such", "path": "/x"}, headers=head)
     assert gone.status_code == 404
 

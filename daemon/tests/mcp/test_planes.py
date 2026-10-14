@@ -90,12 +90,19 @@ def test_a_folder_no_session_can_start_in_lists_the_ones_that_can(monkeypatch, d
     monkeypatch.setattr(server.here, "mine", lambda: {"sessionId": "s1", "cwd": "/dev/web/shop/x"})
     answers["/space/sessions"] = {"error": "the daemon refused that (400): not listed",
                                   "code": "REFUSED", "status": 400}
-    answers["/projects"] = {"projects": [{"path": "/dev/other", "trusted": True},
+    answers["/projects"] = {"projects": [{"path": "C:\\dev\\fractal", "trusted": True},
+                                         {"path": "/dev/other", "trusted": True},
                                          {"path": "/dev/web/shop", "trusted": True},
                                          {"path": "/dev/web/new", "trusted": False}]}
     refused = run(server.start_session())
     assert refused["code"] == "NOT_STARTABLE"
-    assert refused["error"].endswith("startable: /dev/web/shop, /dev/other")
+    assert "startable: /dev/web/shop, /dev/other, C:" in refused["error"]
+    run(server.start_session("../y"))
+    assert seen_path(daemon) == "/dev/web/shop/y"  # relative to the session's own folder
+
+
+def seen_path(daemon) -> str:
+    return next(sent["path"] for _, path, sent in reversed(daemon[0]) if path == "/space/sessions")
 
 
 def test_mac_windows_wraps_the_list_and_passes_a_refusal_through(daemon):

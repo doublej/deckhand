@@ -286,7 +286,12 @@ async def _startable(near: str) -> str:
     if "error" in listed:
         return ""
     paths = [p["path"] for p in listed.get("projects", []) if p.get("trusted")]
-    paths.sort(key=lambda p: (-len(os.path.commonpath([p, near or "/"])), p))
+    # Leading folders in common, counted by hand: another machine's folders (`C:\dev\…` on
+    # Fractal) are not POSIX paths, and `os.path.commonpath` raises on them.
+    def shared(path: str) -> int:
+        return next((i for i, (a, b) in enumerate(zip(path.split("/"), near.split("/"))) if a != b),
+                    min(path.count("/"), near.count("/")) + 1)
+    paths.sort(key=lambda p: (-shared(p), p))
     more = f" (+{len(paths) - STARTABLE_SHOWN} more)" if len(paths) > STARTABLE_SHOWN else ""
     return " — startable: " + ", ".join(paths[:STARTABLE_SHOWN]) + more if paths else ""
 
@@ -301,7 +306,8 @@ async def start_session(folder: str | None = None, provider: str = "claude") -> 
     held = here.mine()
     if not held:
         return _nobody("a session starts beside the session asking, and none is above this process")
-    path = folder or held.get("cwd", "")
+    # Relative to this session's folder, never to wherever this process was started.
+    path = os.path.normpath(os.path.join(held.get("cwd", ""), folder or "."))
     started = await here.reach("POST", "/space/sessions", json={
         "near": held["sessionId"], "path": path, "provider": provider})
     if started.get("status") in (400, 409):

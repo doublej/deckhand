@@ -122,6 +122,8 @@ async def start_beside(sent: Annotated[dict, Body()]) -> dict:
     near, path = _text(sent, "near"), _text(sent, "path")
     if not near or not path:
         raise HTTPException(status_code=400, detail="near and path are both needed")
+    if not path.startswith("/"):
+        raise HTTPException(status_code=400, detail="path must be absolute")
     by = (await saying.live_session(near)).session_id
     listed = {p.path for p in (await asyncio.to_thread(catalog))[0]}
     if path not in listed:
