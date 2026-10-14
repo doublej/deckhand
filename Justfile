@@ -128,11 +128,6 @@ icon:
 token:
     @cat ~/Library/Application\ Support/Deckhand/token
 
-# Let the daemon read iTerm's colours: connects once as `deckhand`; answer iTerm's dialog at the Mac.
-[group('develop')]
-iterm-styles:
-    uv run --directory daemon python -m deckhand_daemon.space.iterm
-
 # How far a clip survives being sped up and silence-trimmed (`--report` re-reads the last run).
 [group('develop')]
 audio-bench *args:
