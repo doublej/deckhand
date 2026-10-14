@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -245,7 +246,8 @@ async def open_plane(url: str | None = None, window: int | None = None,
     window plane is view-only: the person sees it and cannot click into it.
 
     What the person says while looking at the plane comes to this session. Returns the plane; its
-    `id` is what `close_plane` takes.
+    `id` is what `close_plane` takes. Opening what is already open beside you hands back that
+    plane with `reused: true` rather than a second copy, so a retry is safe.
     """
     if (url is None) == (window is None):
         return {"error": "give exactly one of url or window", "code": "BAD_PLANE"}
@@ -259,15 +261,34 @@ async def open_plane(url: str | None = None, window: int | None = None,
 
 
 @server.tool(annotations=READ_ONLY)
-async def space() -> dict:
+async def space(full: bool = False) -> dict:
     """Where you are in the person's headset and what is around you. `around_you` is your pose,
     your group, and every session, page and window `beside` you — in your group or opened near
-    you. The rest is the whole space: every plane's id, kind, url or window, title, the session it
-    is `near` and who opened it (`by` null is the person), and where every plane is."""
+    you. `planes` is every page and window open: id, kind, url or window, title, the session it is
+    `near` and who opened it (`by` null is the person). `full` adds every kept pose, which is
+    room coordinates and rarely what you need."""
     whole = await here.reach("GET", "/space")
-    if "error" in whole or not (held := here.mine()):
+    if "error" in whole:
         return whole
-    return {"around_you": await here.reach("GET", f"/sessions/{held['sessionId']}/space"), **whole}
+    seen = {"planes": whole["planes"]} | ({"poses": whole["poses"], "rev": whole["rev"]} if full else {})
+    if held := here.mine():
+        seen = {"around_you": await here.reach("GET", f"/sessions/{held['sessionId']}/space")} | seen
+    return seen
+
+
+#: How many startable folders a refusal lists — enough to pick from, never the whole Mac.
+STARTABLE_SHOWN = 10
+
+
+async def _startable(near: str) -> str:
+    """The folders a session can be started in, the ones closest to `near` first."""
+    listed = await here.reach("GET", "/projects")
+    if "error" in listed:
+        return ""
+    paths = [p["path"] for p in listed.get("projects", []) if p.get("trusted")]
+    paths.sort(key=lambda p: (-len(os.path.commonpath([p, near or "/"])), p))
+    more = f" (+{len(paths) - STARTABLE_SHOWN} more)" if len(paths) > STARTABLE_SHOWN else ""
+    return " — startable: " + ", ".join(paths[:STARTABLE_SHOWN]) + more if paths else ""
 
 
 @server.tool(annotations=WRITES)
@@ -280,16 +301,30 @@ async def start_session(folder: str | None = None, provider: str = "claude") -> 
     held = here.mine()
     if not held:
         return _nobody("a session starts beside the session asking, and none is above this process")
-    return await here.reach("POST", "/space/sessions", json={
-        "near": held["sessionId"], "path": folder or held.get("cwd", ""), "provider": provider})
+    path = folder or held.get("cwd", "")
+    started = await here.reach("POST", "/space/sessions", json={
+        "near": held["sessionId"], "path": path, "provider": provider})
+    if started.get("status") in (400, 409):
+        return {"error": started["error"] + await _startable(path), "code": "NOT_STARTABLE"}
+    return started
 
 
 @server.tool(annotations=WRITES)
 async def close_plane(id: str) -> dict:
-    """Close a plane in the person's headset, by the id `open_plane` or `space` gave. Only a web
-    page or a Mac window: an agent can never close a session, and nothing here names one."""
-    answered = await here.reach("DELETE", f"/space/planes/{quote(id, safe='')}")
-    return answered if "error" in answered else {"closed": id}
+    """Close a plane in the person's headset, by the id `open_plane` or `space` gave — a unique
+    prefix of it is enough. Only a web page or a Mac window: an agent can never close a session,
+    and nothing here names one."""
+    whole = await here.reach("GET", "/space")
+    if "error" in whole:
+        return whole
+    planes = whole["planes"]
+    found = [p for p in planes if p["id"].startswith(id)] if id else []
+    if len(found) != 1:
+        listed = ", ".join(f"{p['id'][:8]} {p['title']}" for p in planes) or "none open"
+        which = "more than one plane starts" if found else "no plane starts"
+        return {"error": f"{which} with {id!r} — open: {listed}", "code": "NO_SUCH_PLANE"}
+    answered = await here.reach("DELETE", f"/space/planes/{quote(found[0]['id'], safe='')}")
+    return answered if "error" in answered else {"closed": found[0]["id"]}
 
 
 @server.tool(annotations=READ_ONLY)

@@ -32,12 +32,18 @@ def space() -> dict:
         return {"rev": 0, "planes": [], "poses": {}}
 
 
-def add(plane: dict) -> dict:
+def add(plane: dict) -> tuple[dict, bool]:
+    """Keep `plane`, or hand back the one already open beside the same session showing the same
+    page or window — and whether it was that one. A retried open is then the same plane."""
     with _lock:
         kept = space()
+        for open_ in kept["planes"]:
+            if plane.get("near") and all(open_.get(k) == plane.get(k)
+                                         for k in ("near", "kind", "url", "window")):
+                return open_, True
         kept["planes"].append(plane)
         _write(kept)
-    return plane
+    return plane, False
 
 
 def drop(plane_id: str) -> bool:

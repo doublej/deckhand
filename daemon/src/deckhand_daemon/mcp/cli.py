@@ -22,9 +22,10 @@ from typing import Any, NoReturn
 from .. import __version__
 from . import server
 
-PURPOSE = ("Reach the person — in this conversation when they are at the laptop, on their phone "
-           "when they are not — speak to the other Claude sessions on this Mac, and put a page "
-           "or a Mac window beside this session in their headset.")
+PURPOSE = ("Reach the person — in this conversation when they are at the laptop or in the "
+           "headset, on their phone when they are not — speak to the other Claude sessions on "
+           "this Mac, and in their headset see what stands beside this session, put a page or a "
+           "Mac window there, or start another session there.")
 
 #: Exit status per category. 4 is not an error: it is a question answered "no" — not said, not
 #: pushed, not answered yet — which a loop must be able to tell from a crash.
@@ -51,6 +52,10 @@ ERRORS: dict[str, tuple[str, bool, str]] = {
                    "interruptions — say it in the conversation instead")),
     "PENDING": ("negative", True, ("no answer yet; the daemon messages this session when one "
                 "lands, or block on it: `deckhand answer <id> --wait 300`")),
+    "NO_SUCH_PLANE": ("user_error", False, ("`message` lists the planes open, by id prefix; "
+                      "`deckhand space` shows them whole")),
+    "NOT_STARTABLE": ("user_error", False, ("`message` says why and lists folders a session can "
+                      "start in, nearest first; pass one to `deckhand start`")),
     "USAGE": ("usage", False, "`deckhand prime` lists every command and its arguments"),
 }
 
@@ -78,12 +83,13 @@ COMMANDS: list[dict[str, str]] = [
     {"name": "open", "tool": "open_plane", "args": "[URL] [--window ID] [--title TEXT]",
      "does": "put a web page, or a Mac window by id, beside this session in the person's "
              "headset; the URL must be reachable from the headset on the LAN"},
-    {"name": "space", "tool": "space", "args": "",
-     "does": "where this session is in the headset, what is beside it, and the whole space"},
+    {"name": "space", "tool": "space", "args": "[--full]",
+     "does": "where this session is in the headset, what is beside it, and every page and window "
+             "open; --full adds every kept pose"},
     {"name": "start", "tool": "start_session", "args": "[FOLDER] [--provider claude|codex]",
      "does": "start a session beside this one in the headset; brief it with `say`"},
-    {"name": "close", "tool": "close_plane", "args": "ID",
-     "does": "close a plane by its id — a page or a window, never a session"},
+    {"name": "close", "tool": "close_plane", "args": "ID|PREFIX",
+     "does": "close a plane by its id or a unique prefix — a page or a window, never a session"},
     {"name": "windows", "tool": "mac_windows", "args": "",
      "does": "this Mac's windows, with the ids `open --window` takes"},
 ]
@@ -123,6 +129,7 @@ def build_parser() -> Parser:
     sub.choices["open"].add_argument("--window", type=int, help="an id from `deckhand windows`")
     sub.choices["open"].add_argument("--title")
     sub.choices["close"].add_argument("id")
+    sub.choices["space"].add_argument("--full", action="store_true")
     sub.choices["start"].add_argument("folder", nargs="?", help="a listed project; default here")
     sub.choices["start"].add_argument("--provider", default="claude")
     for each in sub.choices.values():
@@ -154,7 +161,7 @@ async def _call(a: argparse.Namespace) -> dict[str, Any]:
         case "open":
             return await server.open_plane(a.url, window=a.window, title=a.title)
         case "space":
-            return await server.space()
+            return await server.space(full=a.full)
         case "close":
             return await server.close_plane(a.id)
         case "windows":
@@ -246,6 +253,15 @@ def prime(detected: dict[str, Any]) -> str:
 - `deckhand prime [--json]` — this contract
 {commands}
 
+## In the headset
+1. `deckhand space` — `around_you`: your group and what stands beside you.
+2. `deckhand open http://<slug>.atlas.local.jurrejan.com/` — a page beside you, in your group;
+   opening it again hands back the same plane (`reused: true`).
+3. `deckhand start [FOLDER]` — another session beside you; then `deckhand say <its name> "…"`
+   to give it the work.
+4. `deckhand close <id prefix>` — take a page or window away again.
+When the person puts a page beside you, a message from the daemon says so.
+
 ## Output contract
 - stdout is data: JSON when piped or with `--json`, aligned text on a terminal. `presence`
   prints one bare word either way unless `--json`.
@@ -270,6 +286,9 @@ def prime(detected: dict[str, Any]) -> str:
   `https://<slug>.atlas.local.jurrejan.com`. localhost becomes this Mac's LAN address, which only
   answers if the server binds 0.0.0.0. A Mac window plane is view-only. `close` takes a plane,
   never a session: closing a session is the person's own press.
+- `start` runs a new Claude Code session, only in a folder the project list names and
+  Claude Code already trusts. It begins with no task, and nothing here can close it: start one
+  when the work needs a second pair of hands, not to look busy.
 
 ## Detected
 {found} · next: `deckhand presence`

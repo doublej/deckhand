@@ -61,15 +61,41 @@ def test_one_of_url_or_window_and_never_both(daemon, given):
     assert seen == []
 
 
-def test_closing_takes_a_plane_id_and_only_that(daemon):
-    seen, _ = daemon
-    assert run(server.close_plane("ab12")) == {"closed": "ab12"}
-    run(server.close_plane("../../sessions/x"))
-    assert [path for _, path, _ in seen] == [
-        "/space/planes/ab12",
-        "/space/planes/..%2F..%2Fsessions%2Fx",
-    ]
-    assert {method for method, _, _ in seen} == {"DELETE"}
+OPEN = {"rev": 2, "planes": [{"id": "ab12cd", "title": "a.com"}, {"id": "ab99ef", "title": "b.com"}],
+        "poses": {"plane:ab12cd": {}}}
+
+
+def test_closing_takes_an_open_plane_by_a_unique_prefix_and_only_that(daemon):
+    seen, answers = daemon
+    answers["/space"] = OPEN
+    assert run(server.close_plane("ab12")) == {"closed": "ab12cd"}
+    for wanted in ("ab", "zz", "../../sessions/x", ""):
+        refused = run(server.close_plane(wanted))
+        assert refused["code"] == "NO_SUCH_PLANE" and "ab12cd"[:8] in refused["error"]
+    assert [(m, p) for m, p, _ in seen if m == "DELETE"] == [("DELETE", "/space/planes/ab12cd")]
+
+
+def test_space_leaves_the_poses_out_unless_asked(monkeypatch, daemon):
+    _, answers = daemon
+    answers["/space"] = OPEN
+    answers["/sessions/s1/space"] = {"group": "g", "beside": []}
+    monkeypatch.setattr(server.here, "mine", lambda: {"sessionId": "s1"})
+    seen = run(server.space())
+    assert list(seen) == ["around_you", "planes"] and seen["around_you"]["group"] == "g"
+    assert run(server.space(full=True))["poses"] == OPEN["poses"]
+
+
+def test_a_folder_no_session_can_start_in_lists_the_ones_that_can(monkeypatch, daemon):
+    _, answers = daemon
+    monkeypatch.setattr(server.here, "mine", lambda: {"sessionId": "s1", "cwd": "/dev/web/shop/x"})
+    answers["/space/sessions"] = {"error": "the daemon refused that (400): not listed",
+                                  "code": "REFUSED", "status": 400}
+    answers["/projects"] = {"projects": [{"path": "/dev/other", "trusted": True},
+                                         {"path": "/dev/web/shop", "trusted": True},
+                                         {"path": "/dev/web/new", "trusted": False}]}
+    refused = run(server.start_session())
+    assert refused["code"] == "NOT_STARTABLE"
+    assert refused["error"].endswith("startable: /dev/web/shop, /dev/other")
 
 
 def test_mac_windows_wraps_the_list_and_passes_a_refusal_through(daemon):
@@ -86,6 +112,14 @@ def test_a_204_from_the_daemon_is_an_empty_answer(tmp_path, monkeypatch):
             self.send_response(204)
             self.end_headers()
 
+        def do_GET(self):
+            said = json.dumps({"detail": "no plane with that id"}).encode()
+            self.send_response(404)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(said)))
+            self.end_headers()
+            self.wfile.write(said)
+
         def log_message(self, *args):
             pass
 
@@ -95,6 +129,8 @@ def test_a_204_from_the_daemon_is_an_empty_answer(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "PORT", served.server_port)
     try:
         assert run(here.reach("DELETE", "/space/planes/ab12")) == {}
+        refused = run(here.reach("GET", "/refused"))
+        assert refused["error"].endswith("(404): no plane with that id") and refused["status"] == 404
     finally:
         served.shutdown()
         served.server_close()
@@ -109,9 +145,9 @@ def test_open_with_nothing_to_open_is_a_user_error(capsys):
 
 def test_the_commands_reach_the_same_tools(daemon, capsys):
     seen, answers = daemon
-    answers["/space"] = {"rev": 2, "planes": [], "poses": {}}
-    cli.main(["space"])
+    answers["/space"] = OPEN
+    cli.main(["space", "--full"])
     assert json.loads(capsys.readouterr().out)["rev"] == 2
     cli.main(["close", "ab12"])
-    assert json.loads(capsys.readouterr().out) == {"closed": "ab12"}
-    assert seen[-1][:2] == ("DELETE", "/space/planes/ab12")
+    assert json.loads(capsys.readouterr().out) == {"closed": "ab12cd"}
+    assert seen[-1][:2] == ("DELETE", "/space/planes/ab12cd")

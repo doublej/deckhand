@@ -178,7 +178,7 @@ def test_a_pose_that_is_not_a_place_in_the_room_is_refused(client, head, body):
 
 
 def test_the_store_is_one_file_written_whole(claude_home):
-    plane = stored.add({"id": "p1", "kind": "web"})
+    plane, _ = stored.add({"id": "p1", "kind": "web"})
     stored.place("plane:p1", {"x": 0.0, "y": 0.0, "z": 0.0, "yaw": 0.0})
     stored.place("manager", {"x": 1.0, "y": 0.0, "z": 0.0, "yaw": 0.0})
     assert stored.drop("p1") and not stored.drop("p1")

@@ -69,6 +69,16 @@ def mine() -> dict | None:
     return None
 
 
+def _said(answered: httpx.Response) -> str:
+    """The daemon's own sentence: FastAPI's `detail`, not the JSON it is wrapped in."""
+    try:
+        body = answered.json()
+    except ValueError:
+        body = None
+    said = body.get("detail") if isinstance(body, dict) else None
+    return (str(said) if said else answered.text.strip())[:200]
+
+
 async def reach(method: str, path: str, **sent: object) -> dict | list:
     """One call to the daemon. Every expected failure comes back as `{"error": sentence, "code":
     WORD}`, the code being what the `deckhand` command turns into its exit status. A 204 is `{}`."""
@@ -81,9 +91,8 @@ async def reach(method: str, path: str, **sent: object) -> dict | list:
         return {"error": f"the Deckhand daemon is not answering on port {config.PORT}: {error}",
                 "code": "DAEMON_DOWN"}
     if answered.status_code >= 400:
-        detail = answered.text.strip()[:200]
-        return {"error": f"the daemon refused that ({answered.status_code}): {detail}",
-                "code": "REFUSED"}
+        return {"error": f"the daemon refused that ({answered.status_code}): {_said(answered)}",
+                "code": "REFUSED", "status": answered.status_code}
     if answered.status_code == 204:
         return {}
     try:

@@ -89,9 +89,11 @@ daemon never connects on its own. `just iterm-styles` connects as `deckhand` fro
 answers the dialog, and it writes `iterm-approved` in the data dir; the daemon reads that marker
 on every call and needs no restart. Delete the marker to go back to plain text.
 
-`Plane = {id, kind, url, window, title, near, by, at}`. `Pose = {x, y, z, yaw, pitch?, roll?, scale?, group?}` — metres in
+`Plane = {id, kind, url, window, title, near, by, at}`. `Pose = {x, y, z, yaw, pitch?, roll?, scale?, group?, minimized?}` — metres in
 the floor-origin space, angles in radians, scale 0.25–4. Planes whose poses share a `group` are one project to the
-person — any mix of sessions, pages and windows — and move as one; the headset decides who joins,
+person — any mix of sessions, pages and windows — and move as one. `minimized` is `true` for a plane
+put down on its own and `"group"` for one put down with its whole group, so restoring the group
+lifts only those; the headset decides who joins,
 by snapping one plane against another, and this only keeps the answer. State is `space.json` in the data dir, written whole through
 `os.replace`.
 

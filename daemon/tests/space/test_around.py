@@ -100,3 +100,28 @@ def test_telling_goes_down_the_socket_and_names_the_page(monkeypatch):
     around.tell(session, _plane("p1"))
     text, route = sent[0]
     assert route == "socket" and "a.com (https://a.com)" in text and "p1" in text
+
+
+def test_opening_what_is_already_beside_a_session_hands_back_that_plane(client, head, told):
+    sent = {"kind": "web", "url": "https://a.com", "near": LIVE, "by": "warm-okapi"}
+    first = client.post("/space/planes", json=sent, headers=head)
+    again = client.post("/space/planes", json=sent, headers=head)
+    assert first.status_code == 201 and again.status_code == 200
+    assert again.json() == first.json() | {"reused": True}
+    assert len(client.get("/space", headers=head).json()["planes"]) == 1
+    elsewhere = client.post("/space/planes", json=sent | {"near": OTHER}, headers=head)
+    assert elsewhere.status_code == 201  # the same page beside another session is another plane
+
+
+def test_a_pose_keeps_minimized_only_while_it_is(client, head):
+    pose = {"x": 0, "y": 1, "z": 1, "yaw": 0}
+    assert client.put("/space/poses/manager", json=pose | {"minimized": True},
+                      headers=head).status_code == 204
+    assert client.get("/space", headers=head).json()["poses"]["manager"]["minimized"] is True
+    client.put("/space/poses/manager", json=pose | {"minimized": False}, headers=head)
+    assert "minimized" not in client.get("/space", headers=head).json()["poses"]["manager"]
+    client.put("/space/poses/manager", json=pose | {"minimized": "group"}, headers=head)
+    assert client.get("/space", headers=head).json()["poses"]["manager"]["minimized"] == "group"
+    for bad in ("yes", 1):
+        refused = client.put("/space/poses/manager", json=pose | {"minimized": bad}, headers=head)
+        assert refused.status_code == 400

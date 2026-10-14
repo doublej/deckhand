@@ -52,7 +52,7 @@ async def get_space() -> dict:
 
 
 @router.post("/space/planes", status_code=201)
-async def open_plane(sent: Annotated[dict, Body()]) -> dict:
+async def open_plane(sent: Annotated[dict, Body()], response: Response) -> dict:
     kind = sent.get("kind")
     title = _text(sent, "title")
     if kind == "web":
@@ -81,7 +81,10 @@ async def open_plane(sent: Annotated[dict, Body()]) -> dict:
         "by": _text(sent, "by") or None,
         "at": now(),
     }
-    await asyncio.to_thread(stored.add, plane)
+    plane, reused = await asyncio.to_thread(stored.add, plane)
+    if reused:
+        response.status_code = 200
+        return plane | {"reused": True}
     # No `by` is the person, in the headset: an agent's plane names the agent and is its own news.
     if session and plane["by"] is None:
         await asyncio.to_thread(around.tell, session, plane)
@@ -168,6 +171,13 @@ async def place(key: str, sent: Annotated[dict, Body()]) -> Response:
         if not isinstance(group, str) or not GROUP.fullmatch(group):
             raise HTTPException(status_code=400, detail="group is 1-64 of A-Z, a-z, 0-9, _ or -")
         pose["group"] = group
+    # A minimized plane is a chip where it stood: `true` on its own, `"group"` with its whole
+    # group, so restoring the group lifts only what the group put down. Kept across a relaunch.
+    if (minimized := sent.get("minimized")) is not None:
+        if not (isinstance(minimized, bool) or minimized == "group"):  # 1 == True in Python
+            raise HTTPException(status_code=400, detail='minimized is true, false or "group"')
+        if minimized:
+            pose["minimized"] = minimized
     await asyncio.to_thread(stored.place, key, pose)
     return Response(status_code=204)
 
