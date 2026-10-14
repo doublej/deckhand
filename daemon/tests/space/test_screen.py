@@ -10,7 +10,7 @@ import pytest
 from deckhand_daemon import saying
 from deckhand_daemon.space import screen
 
-READ = "⏺ done\n\n> next\n   \n\n"
+READ = "⏺ done\n\n> next\x00step\n   \n\n"
 
 
 @pytest.fixture
@@ -32,7 +32,7 @@ def pane(monkeypatch):
 
 def test_the_rows_come_back_without_the_blank_tail(client, head, pane):
     answered = client.get("/sessions/any/screen", headers=head).json()
-    assert answered["lines"] == ["⏺ done", "", "> next"]
+    assert answered["lines"] == ["⏺ done", "", "> next step"]
     assert pane == [["it2", "session", "read", "-s", "P1"]]
 
 

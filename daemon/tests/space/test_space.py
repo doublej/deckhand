@@ -194,3 +194,15 @@ def test_the_store_is_one_file_written_whole(claude_home):
     )
     assert plane["id"] == "p1"
     assert not list(config.data_dir().glob("*.part"))
+
+
+def test_a_pose_keeps_its_group_and_refuses_a_bad_one(client, head):
+    pose = {"x": 1, "y": 1.5, "z": 1, "yaw": 0.5}
+    grouped = client.put("/space/poses/manager", json={**pose, "group": "proj-1"}, headers=head)
+    assert grouped.status_code == 204
+    assert client.get("/space", headers=head).json()["poses"]["manager"]["group"] == "proj-1"
+    assert client.put("/space/poses/projects", json=pose, headers=head).status_code == 204
+    assert "group" not in client.get("/space", headers=head).json()["poses"]["projects"]
+    for bad in ("", "a b", "x" * 65, 3):
+        sent = {**pose, "group": bad}
+        assert client.put("/space/poses/launcher", json=sent, headers=head).status_code == 400

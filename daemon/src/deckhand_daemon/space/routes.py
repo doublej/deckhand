@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import math
+import re
 import uuid
 from typing import Annotated
 from urllib.parse import urlsplit, urlunsplit
@@ -33,6 +34,7 @@ router.include_router(screen.router)
 LOOPBACK = {"localhost", "127.0.0.1", "0.0.0.0", "::1"}
 #: The fixed planes, which are neither a session nor a kept plane.
 FIXED = {"manager", "projects", "launcher"}
+GROUP = re.compile(r"[A-Za-z0-9_-]{1,64}")
 #: Further from the floor origin than this is a pose gone wrong, not a room.
 REACH = 20.0
 
@@ -96,6 +98,12 @@ async def place(key: str, sent: Annotated[dict, Body()]) -> Response:
     pose = {name: _number(sent, name) for name in ("x", "y", "z", "yaw")}
     if math.hypot(pose["x"], pose["y"], pose["z"]) > REACH:
         raise HTTPException(status_code=400, detail=f"a pose is within {REACH:g} m of the origin")
+    # Planes sharing a `group` move as one and are one project, whatever mix of sessions, pages
+    # and windows the person put together. The headset decides who is in one; this only keeps it.
+    if (group := sent.get("group")) is not None:
+        if not isinstance(group, str) or not GROUP.fullmatch(group):
+            raise HTTPException(status_code=400, detail="group is 1-64 of A-Z, a-z, 0-9, _ or -")
+        pose["group"] = group
     await asyncio.to_thread(stored.place, key, pose)
     return Response(status_code=204)
 

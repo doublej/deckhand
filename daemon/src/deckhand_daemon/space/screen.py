@@ -27,8 +27,12 @@ _read: dict[str, tuple[float, list[str]]] = {}
 
 
 def visible(text: str) -> list[str]:
-    """The screen's rows with the blank tail of an unfilled pane dropped."""
-    rows = [row.rstrip() for row in text.splitlines()]
+    """The screen's rows with the blank tail of an unfilled pane dropped.
+
+    iTerm reports a cell nothing was ever written to as NUL, not a space — "Two caveats" came
+    back as "Two\x00caveats" and read as one word — so a NUL is a space here.
+    """
+    rows = [row.replace("\x00", " ").rstrip() for row in text.splitlines()]
     while rows and not rows[-1]:
         rows.pop()
     return rows
