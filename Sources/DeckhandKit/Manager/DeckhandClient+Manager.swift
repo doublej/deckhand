@@ -7,8 +7,11 @@ public extension DeckhandClient {
     ///
     /// The cursor is the whole protocol. A phone that was in a pocket for an hour catches up in
     /// one call, and a phone polling every second carries almost nothing back.
-    func manager(since: Int = 0) async throws -> ManagerFeed {
-        try await get("manager?since=\(since)")
+    ///
+    /// `watching: false` is a poll with no panel on screen — the Mac app noticing replies from
+    /// its menu bar. Every other poll tells the Mac the panel is open, which stops it pushing.
+    func manager(since: Int = 0, watching: Bool = true) async throws -> ManagerFeed {
+        try await get("manager?since=\(since)" + (watching ? "" : "&watching=false"))
     }
 
     /// Say something to the manager. Answers with the entry it was written as, not with the
