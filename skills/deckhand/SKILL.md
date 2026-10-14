@@ -37,25 +37,29 @@ itself, so say in one line that the slip is there.
 
 ## The same things as tools, and as one command
 
-Where the `deckhand` MCP server is installed, eleven tools arrive with it and are the shorter path.
+Where the `deckhand` MCP server is installed, twelve tools arrive with it and are the shorter path.
 `presence` says where the person is; `ask_on_phone` and `read_answer` write and read exactly the
 file the scripts below do; `call_for_attention` puts a card on the Lock Screen; `whoami` says
 which session this is; and `sessions` and `say_to_session` reach the other sessions on this Mac.
 `open_plane` puts a web page or a Mac window beside this session in the person's headset, and
 `close_plane`, `space` and `mac_windows` go with it — a URL there must be reachable from the
-headset, so prefer `https://<slug>.atlas.local.jurrejan.com` over localhost.
+headset, so prefer `https://<slug>.atlas.local.jurrejan.com` over localhost. `start_session`
+starts another session beside this one, in a folder the Mac lists and trusts; brief it with
+`say_to_session`.
 They work from any directory, because they take this session's folder out of its own record
 rather than out of `cwd`.
 
 Every one of them is also a `deckhand` shell command (`just install-cli` puts it on PATH):
 `presence`, `whoami`, `sessions`, `ask`, `answer`, `notify`, `say`, `open`, `space`, `close`,
-`windows`. JSON when piped, a structured
+`windows`, `start`. JSON when piped, a structured
 error on stderr, and an exit status to branch on — 4 means "no": not said, not pushed, not
 answered yet. `deckhand prime` prints the whole contract.
 
 `say_to_session` goes down the peer socket and takes no route. There is no tool for the keyboard,
-for `/clear`, for a session's settings or its filters, or for starting one — those belong to the
-person, and an agent choosing them is an agent claiming to be the person. `curl` still performs
+for stopping, compacting, clearing, closing or renaming a session, for answering a slip, for
+input into a Mac window, or for a session's settings, filters or orders — those belong to the
+person, and an agent choosing them is an agent claiming to be the person. `deckhand prime` lists
+each with its reason, and `deckhand <verb>` for one answers `PERSON_ONLY`. `curl` still performs
 what a tool declines, so treat that as a boundary rather than a fence.
 
 Nothing below needs the tools. With none present it all still works.
@@ -215,7 +219,8 @@ surface is exactly what that wrapper exists to constrain.
 - **Never `PUT /settings` or `PUT /sessions/{id}/filters`** — an agent that can rewrite a filter
   chain can remove the filter that would have stopped it, quietly.
 - **Never `POST /projects/session`** — a process on a launch line nobody approved, in a folder
-  whose trust dialog was answered for a person.
+  whose trust dialog was answered for a person. `start_session` (`POST /space/sessions`) is the
+  agent's door: the same two gates, and the new session stands beside the one that asked.
 
 **None of this is enforced today.** One shared token means the daemon cannot tell an agent from a
 phone, and anything refused here `curl` still performs. These are rules kept, not rules held to.
@@ -223,4 +228,6 @@ phone, and anything refused here `curl` still performs. These are rules kept, no
 ## More
 
 - `reference/wire.md` — every endpoint, its shape, and the trap in it
+- `docs/commands.md` in the deckhand repo (`deckhand prime` prints its path) — every route, tool
+  and command, generated from the code
 - `reference/traps.md` — prefilling, `delivered` vs said, the inbox, `null`, the CSP, the session id
