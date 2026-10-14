@@ -38,7 +38,7 @@ public struct Markdown: View {
         case .bullet(let depth, let text): bullet(depth, text)
         case .numbered(let number, let text): numbered(number, text)
         case .paragraph(let text):
-            Text(Inline.styled(text, at: bodySize))
+            Links.text(Inline.styled(text, at: bodySize))
                 .font(.system(size: bodySize))
                 .foregroundStyle(Palette.textPrimary)
                 // Roughly 1.45x the type size, the same ratio a briefing is set at. Text set
@@ -91,7 +91,7 @@ public struct Markdown: View {
     /// much larger than the gaps inside a section. The title of the document needs less of it —
     /// there is nothing above it to be separated from.
     private func heading(_ level: Int, _ text: String) -> some View {
-        Text(Inline.styled(text, at: headingSize(level)))
+        Links.text(Inline.styled(text, at: headingSize(level)))
             .font(.system(size: headingSize(level), weight: .semibold))
             .foregroundStyle(Palette.textPrimary)
             .padding(.top, level == 1 ? Spacing.extraSmall : Spacing.large)
@@ -110,7 +110,7 @@ public struct Markdown: View {
                 .fill(depth == 0 ? Palette.tint : Palette.textTertiary)
                 .frame(width: 4, height: 4)
                 .offset(y: -1)
-            Text(Inline.styled(text, at: bodySize))
+            Links.text(Inline.styled(text, at: bodySize))
                 .font(.system(size: bodySize))
                 .foregroundStyle(Palette.textPrimary)
                 .lineSpacing(5)
@@ -127,7 +127,7 @@ public struct Markdown: View {
             Text(number + ".")
                 .font(.system(size: bodySize - 0.5, design: .monospaced))
                 .foregroundStyle(Palette.tint)
-            Text(Inline.styled(text, at: bodySize))
+            Links.text(Inline.styled(text, at: bodySize))
                 .font(.system(size: bodySize))
                 .foregroundStyle(Palette.textPrimary)
                 .lineSpacing(5)

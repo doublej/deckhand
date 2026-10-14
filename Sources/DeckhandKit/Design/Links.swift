@@ -87,3 +87,71 @@ public enum Links {
         return trimmed.split(separator: ":").first.map(String.init) ?? trimmed
     }
 }
+
+// MARK: - the pointer over a link, on the Mac
+
+public extension Links {
+    /// `attributed` as a `Text` — and on the Mac, a pointing hand over its links.
+    ///
+    /// A link inside a `Text` is a run of characters, not a view, so AppKit never gets a cursor
+    /// rect for it: the pointer stays an arrow, or the I-beam on selectable text, right over
+    /// something that opens when clicked. So the link runs are marked as the text is built, the
+    /// renderer notes where it drew them, and hovering one of those rects asks for `.link`.
+    @ViewBuilder static func text(_ attributed: AttributedString) -> some View {
+        #if os(macOS)
+        Text(marking: attributed).modifier(LinkPointer())
+        #else
+        Text(attributed)
+        #endif
+    }
+}
+
+#if os(macOS)
+/// A run of a `Text` that is a link.
+private struct LinkRun: TextAttribute {}
+
+private extension Text {
+    init(marking attributed: AttributedString) {
+        self = attributed.runs.reduce(Text(verbatim: "")) { text, run in
+            let piece = Text(AttributedString(attributed[run.range]))
+            return text + (run.link == nil ? piece : piece.customAttribute(LinkRun()))
+        }
+    }
+}
+
+/// Where the links were last drawn. A class, because the renderer writes it while drawing and
+/// nothing should redraw because it changed.
+private final class LinkRects: @unchecked Sendable {
+    var rects: [CGRect] = []
+}
+
+private struct LinkRenderer: TextRenderer {
+    let drawn: LinkRects
+
+    func draw(layout: Text.Layout, in context: inout GraphicsContext) {
+        var rects: [CGRect] = []
+        for line in layout {
+            for run in line {
+                if run[LinkRun.self] != nil { rects.append(run.typographicBounds.rect) }
+                context.draw(run)
+            }
+        }
+        drawn.rects = rects
+    }
+}
+
+private struct LinkPointer: ViewModifier {
+    @State private var drawn = LinkRects()
+    @State private var over = false
+
+    func body(content: Content) -> some View {
+        content
+            .textRenderer(LinkRenderer(drawn: drawn))
+            .onContinuousHover { phase in
+                guard case .active(let spot) = phase else { return over = false }
+                over = drawn.rects.contains { $0.contains(spot) }
+            }
+            .pointerStyle(over ? .link : nil)
+    }
+}
+#endif
