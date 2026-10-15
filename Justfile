@@ -138,6 +138,21 @@ icon:
 token:
     @cat ~/Library/Application\ Support/Deckhand/token
 
+# A six-digit code a phone or headset trades for a token of its own; waits to say who paired.
+[group('develop')]
+pair:
+    @uv run --directory daemon python -m deckhand_daemon.pairing pair
+
+# Every device paired with a code, and when each was last heard from.
+[group('develop')]
+devices:
+    @uv run --directory daemon python -m deckhand_daemon.pairing devices
+
+# Take one device's token away; the others keep theirs.
+[group('develop')]
+forget id:
+    @uv run --directory daemon python -m deckhand_daemon.pairing forget {{ id }}
+
 # How far a clip survives being sped up and silence-trimmed (`--report` re-reads the last run).
 [group('develop')]
 audio-bench *args:
@@ -164,7 +179,7 @@ device: generate
     xcodebuild {{ project }} -destination 'generic/platform=iOS' -allowProvisioningUpdates -derivedDataPath .build/device build
     xcrun devicectl device install app --device '{{ phone }}' .build/device/Build/Products/Debug-iphoneos/Deckhand.app
     xcrun devicectl device process launch --device '{{ phone }}' dev.jurrejan.deckhand \
-        -- -deckhand.host m2-2.local -deckhand.token "$(just token)"
+        -- -deckhand.host "$(scutil --get LocalHostName).local" -deckhand.token "$(just token)"
 
 # The manager and the session cards for the person at the Mac (`mac/App.swift`). It asks to send
 # notifications on its first run. Stopped by path, not `pkill -x Deckhand`, which would also take
@@ -328,12 +343,96 @@ update-scaffold *ARGS:
     fi
     python3 "$repo/tools/update_scaffold.py" {{ ARGS }}
 
-# Run the daemon at login, on port 4180.
+# Writes this Mac's plist from the template (`rm` first: the old install was a symlink into a
+# checkout, and `>` would write through it). A job that is already loaded is left running, so a
+# second run never drops a phone mid-clip; `just restart-agent` picks up a changed plist.
+
+# Run the daemon at login, on port 4180, from this checkout.
 [group('ops')]
 install-agent:
-    ln -sf {{ justfile_directory() }}/launchd/com.jurrejan.deckhand.plist ~/Library/LaunchAgents/com.jurrejan.deckhand.plist
+    @[[ "$(git rev-parse --git-dir 2>/dev/null)" == "$(git rev-parse --git-common-dir 2>/dev/null)" ]] \
+        || { echo 'This is a worktree: launchd would run it after it is gone. Install from the main checkout.'; exit 1; }
+    @mkdir -p ~/Library/Logs/Deckhand ~/Library/LaunchAgents
+    rm -f ~/Library/LaunchAgents/com.jurrejan.deckhand.plist
+    sed -e "s|@HOME@|$HOME|g" -e "s|@REPO@|{{ justfile_directory() }}|g" \
+        launchd/com.jurrejan.deckhand.plist.in > ~/Library/LaunchAgents/com.jurrejan.deckhand.plist
+    @plutil -lint -s ~/Library/LaunchAgents/com.jurrejan.deckhand.plist
+    @launchctl print gui/$(id -u)/com.jurrejan.deckhand >/dev/null 2>&1 \
+        && echo 'already running; `just restart-agent` picks up a changed plist' \
+        || launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.jurrejan.deckhand.plist
+    @curl -sf --retry 20 --retry-delay 1 --retry-connrefused http://127.0.0.1:4180/health >/dev/null && echo 'daemon is up on :4180'
+
+# Stop the daemon and start it again from its plist, which `kickstart` would not re-read.
+[group('ops')]
+restart-agent:
+    launchctl bootout gui/$(id -u)/com.jurrejan.deckhand 2>/dev/null || true
+    while launchctl print gui/$(id -u)/com.jurrejan.deckhand >/dev/null 2>&1; do sleep 0.2; done
     launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.jurrejan.deckhand.plist
-    @curl -sf --retry 20 --retry-delay 1 --retry-connrefused http://127.0.0.1:4180/health && echo ' ← daemon is up'
+    @curl -sf --retry 20 --retry-delay 1 --retry-connrefused http://127.0.0.1:4180/health >/dev/null && echo 'daemon is up on :4180'
+
+# `web_url`/`remote_url` are where deckhand-web and the off-network edge answer, published on
+# /health so no client carries them; `web_dir`/`xr_dir` are the deckhand-web and deckhand-xr
+# checkouts, beside this one unless said (or DECKHAND_WEB_DIR / DECKHAND_XR_DIR).
+
+# Everything on a fresh Mac: the daemon, deckhand-web, deckhand-windows and their permissions.
+[group('setup')]
+setup web_url="" remote_url="" web_dir="" xr_dir="":
+    #!/usr/bin/env zsh
+    set -euo pipefail
+    command -v uv >/dev/null || { echo 'Needs uv first:  curl -LsSf https://astral.sh/uv/install.sh | sh'; exit 1; }
+    command -v claude >/dev/null || echo 'note: no `claude` on PATH. Deckhand lists Claude Code sessions, so there will be none yet.'
+    uv sync --directory daemon
+    data="$HOME/Library/Application Support/Deckhand"
+    mkdir -p "$data"
+    [[ -z "{{ web_url }}" ]] || print -r -- "{{ web_url }}" > "$data/web-url"
+    [[ -z "{{ remote_url }}" ]] || print -r -- "{{ remote_url }}" > "$data/remote-url"
+    just install-agent
+    beside="$(dirname {{ justfile_directory() }})"
+    web="${DECKHAND_WEB_DIR:-{{ web_dir }}}"; web="${web:-$beside/deckhand-web}"
+    if [[ -f "$web/Justfile" ]]; then
+        command -v bun >/dev/null || { echo 'deckhand-web needs bun:  curl -fsSL https://bun.sh/install | bash'; exit 1; }
+        [[ -d "$web/node_modules" ]] || (cd "$web" && bun install)
+        just --justfile "$web/Justfile" install-agent
+    else
+        echo "deckhand-web: none at $web, skipped. The headset's panels need it, the phone does not (web_dir=<folder>)."
+    fi
+    xr="${DECKHAND_XR_DIR:-{{ xr_dir }}}"; xr="${xr:-$beside/deckhand-xr}"
+    if [[ -f "$xr/windows/Justfile" ]]; then
+        command -v swift >/dev/null || { echo 'deckhand-windows needs Swift:  xcode-select --install'; exit 1; }
+        just --justfile "$xr/windows/Justfile" install-agent
+    else
+        echo "deckhand-windows: none at $xr/windows, skipped. Only the headset shows Mac windows (xr_dir=<folder>)."
+    fi
+    if [[ "$(defaults read com.googlecode.iterm2 EnableAPIServer 2>/dev/null)" != 1 ]]; then
+        echo
+        echo "One switch in iTerm2: Settings > General > Magic > Enable Python API."
+        echo "Deckhand finds which terminal each session is in through it, and types into it when you ask."
+    fi
+    echo
+    echo 'Done. Open Deckhand on your phone or headset; it finds this Mac by itself.'
+    echo 'Then pair it:  just pair  (or Pair a device, on Deckhand'"'"'s page in utt)'
+
+# The three login agents, the Mac app, the `deckhand` command, the MCP entry and the skill link.
+# The data folder stays, because it holds the token every paired device uses; the last line says
+# how to remove that too.
+
+# Take everything `just setup` put on this Mac off it again.
+[group('setup')]
+teardown:
+    #!/usr/bin/env zsh
+    set -uo pipefail
+    for label in com.jurrejan.deckhand com.jurrejan.deckhand-web com.jurrejan.deckhand-windows; do
+        launchctl bootout gui/$(id -u)/$label 2>/dev/null && echo "stopped $label"
+        rm -f ~/Library/LaunchAgents/$label.plist
+    done
+    pkill -f 'Applications/Deckhand.app/Contents/MacOS/Deckhand' 2>/dev/null || true
+    rm -rf ~/Applications/Deckhand.app
+    command -v claude >/dev/null && claude mcp remove --scope user deckhand 2>/dev/null && echo 'removed the deckhand MCP server'
+    [[ -L ~/.claude/skills/deckhand ]] && rm ~/.claude/skills/deckhand && echo 'removed the deckhand skill link'
+    uv tool uninstall deckhand-daemon 2>/dev/null && echo 'removed the deckhand command'
+    echo
+    echo "Kept: $HOME/Library/Application Support/Deckhand (token, settings, clips) and ~/Library/Logs/Deckhand*."
+    echo "To remove those too:  rm -rf ~/Library/Application\ Support/Deckhand ~/Library/Logs/Deckhand ~/Library/Logs/DeckhandWeb"
 
 # Put a hand on a remote machine: uv, the daemon's source, and its locked environment.
 # Nothing is registered as a service — a hand's whole life is the ssh link the daemon opens,

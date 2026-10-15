@@ -28,6 +28,9 @@ REFUSED: list[dict[str, str]] = [
                                                   "PUT /sessions/{id}/orders",
      "why": "what this Mac and a session are set to do is the person's; an agent that can "
             "rewrite a filter chain can remove the filter that would have stopped it"},
+    {"verbs": "pair devices forget", "route": "POST /pair/open, DELETE /devices/{id}",
+     "why": "pairing hands a device everything this Mac's token can do, so it is opened by the "
+            "person standing at the Mac (`just pair`), never on someone's behalf"},
     {"verbs": "manager", "route": "POST /manager/say",
      "why": "it speaks into the manager's conversation as the person. The manager is a session "
             "too: Claude Code's own SendMessage to `deckhand-manager` reaches it as an agent"},

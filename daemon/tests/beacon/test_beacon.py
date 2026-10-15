@@ -5,8 +5,16 @@ from __future__ import annotations
 import subprocess
 from urllib.parse import urlsplit
 
+import pytest
+
 from deckhand_daemon import __version__, beacon
-from deckhand_daemon.config import PORT, base_url, lan_address
+from deckhand_daemon.config import PORT, base_url, lan_address, machine_id
+
+
+@pytest.fixture(autouse=True)
+def a_data_dir_of_its_own(tmp_path, monkeypatch):
+    """`id=` is kept in the data folder; a test must never write one into this Mac's real one."""
+    monkeypatch.setenv("DECKHAND_DATA_DIR", str(tmp_path / "data"))
 
 
 def keys(argv: list[str]) -> dict[str, str]:
@@ -65,3 +73,11 @@ def test_a_machine_without_dns_sd_starts_anyway(monkeypatch) -> None:
     beacon.start()
     assert beacon._process is None
     beacon.stop()
+
+
+def test_the_mac_says_which_mac_it_is() -> None:
+    """The id a client re-finds its Mac by after the address moved — the one `/health` answers,
+    and the same one twice, or a client would take its own Mac for a stranger."""
+    said = keys(beacon.command())
+    assert said["id"] == machine_id() == keys(beacon.command())["id"]
+    assert len(said["id"]) == 12

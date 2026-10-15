@@ -7,10 +7,14 @@ public struct ServerSettings: Equatable, Sendable {
 
     public var host: String
     public var token: String
+    /// Which Mac this phone is paired with, as its `/health` said — kept so that when the address
+    /// stops answering, the browse can pick *that* Mac out rather than whichever answered first.
+    public var mac: String?
 
-    public init(host: String = ServerSettings.defaultHost, token: String = "") {
+    public init(host: String = ServerSettings.defaultHost, token: String = "", mac: String? = nil) {
         self.host = host
         self.token = token
+        self.mac = mac
     }
 
     /// Accepts `m2-2.local`, `192.168.178.180:4180`, or a full URL. Nil when unusable.
@@ -46,10 +50,14 @@ public struct ServerSettings: Equatable, Sendable {
     /// `answering` is three-valued on purpose. Nil is "not asked", which a check still in
     /// flight and a phone with no token yet both are, and neither of those is a failure — the
     /// same empty-versus-nil distinction `Looking` is built around, one screen along.
-    public static func adopts(_ current: String, answering: Bool?) -> Bool {
+    ///
+    /// A failing address is only moved to the Mac it was paired with: `kept` is that Mac's id and
+    /// `heard` the beacon's. A phone that never learned an id (an older Mac) keeps the old rule.
+    public static func adopts(_ current: String, answering: Bool?,
+                              kept: String? = nil, heard: String? = nil) -> Bool {
         let text = current.trimmingCharacters(in: .whitespacesAndNewlines)
         if text.isEmpty || text == defaultHost { return true }
-        return answering == false
+        return answering == false && (kept == nil || kept == heard)
     }
 
     public func client(urlSession: URLSession = .shared) -> DeckhandClient? {
@@ -61,16 +69,19 @@ public struct ServerSettings: Equatable, Sendable {
 
     private static let hostKey = "deckhand.host"
     private static let tokenKey = "deckhand.token"
+    private static let macKey = "deckhand.mac"
 
     public static func load(from defaults: UserDefaults = .standard) -> ServerSettings {
         ServerSettings(
             host: defaults.string(forKey: hostKey) ?? defaultHost,
-            token: defaults.string(forKey: tokenKey) ?? ""
+            token: defaults.string(forKey: tokenKey) ?? "",
+            mac: defaults.string(forKey: macKey)
         )
     }
 
     public func save(to defaults: UserDefaults = .standard) {
         defaults.set(host, forKey: Self.hostKey)
         defaults.set(token, forKey: Self.tokenKey)
+        defaults.set(mac, forKey: Self.macKey)
     }
 }

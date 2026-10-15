@@ -55,7 +55,7 @@ load-bearing: it never types into a pane. See [docs/manager.md](docs/manager.md)
 | `mac/` | The Mac app: the manager in the menu bar and a window, the cards as notifications. |
 | `widgets/` | `DeckhandWidgets` — the Live Activity. |
 | `Tests/`, `UITests/` | Swift tests on the Mac; UI tests drive the simulator against a live daemon. |
-| `launchd/` | The agent plist, symlinked into `~/Library/LaunchAgents`. |
+| `launchd/` | The agent plist's template, rendered into `~/Library/LaunchAgents` by `just install-agent`. |
 | `docs/`, `demos/` | Deep docs, and the artifact demo pages `just demo-check` validates. |
 
 ## Context boundaries
@@ -217,6 +217,8 @@ pane); `/health` carries `codex`, whether the app server answered the last listi
 - [agent.md](agent.md) — verify loop, auto-fix commands, boundaries
 - [docs/commands.md](docs/commands.md) — every HTTP route, MCP tool and `deckhand` command,
   generated from the code (`just commands-doc`)
+- [docs/install-and-pairing.md](docs/install-and-pairing.md) — `just setup`, `just teardown`, being
+  found after the Mac's address moves, and pairing by code
 - [docs/artifacts.md](docs/artifacts.md) — what a slip is, what it may contain, and the bridge
 - `just install-cli` — put `deckhand` on PATH; `deckhand prime` is its whole contract
 - [docs/prompt-review.md](docs/prompt-review.md) — the standing prompt audit and its rollout order

@@ -21,17 +21,21 @@ public struct Beacon: Equatable, Identifiable, Sendable {
     public let lan: String?
     /// The daemon's version, when it said one. Nil is an older daemon, not an error.
     public let version: String?
+    /// Which Mac this is (`id=`), the same id its `/health` answers with. Nil from an older Mac.
+    public let mac: String?
 
     public var id: String { host }
 
     /// Both addresses in the order they are worth trying, and never the same one twice.
     public var candidates: [String] { lan.map { [host, $0] } ?? [host] }
 
-    public init(name: String, host: String, lan: String? = nil, version: String? = nil) {
+    public init(name: String, host: String, lan: String? = nil, version: String? = nil,
+                mac: String? = nil) {
         self.name = name
         self.host = host
         self.lan = lan
         self.version = version
+        self.mac = mac
     }
 
     /// The one thing that has to be read right. A record with no usable address is not a beacon:
@@ -48,7 +52,8 @@ public struct Beacon: Equatable, Identifiable, Sendable {
         return Beacon(name: named.isEmpty ? host : named,
                       host: host,
                       lan: offered.dropFirst().first { $0 != host },
-                      version: txt["version"].flatMap { $0.isEmpty ? nil : $0 })
+                      version: txt["version"].flatMap { $0.isEmpty ? nil : $0 },
+                      mac: txt["id"].flatMap { $0.isEmpty ? nil : $0 })
     }
 
     private static func usable(_ text: String) -> String? {
