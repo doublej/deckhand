@@ -92,9 +92,10 @@ struct Beacons: View {
     }
 
     private func adopt(_ found: [Beacon]) {
-        guard !adopted, let first = found.first,
-              ServerSettings.adopts(model.settings.host, answering: model.connection.answering)
-        else { return }
-        take(first)
+        guard !adopted, let mac = found.first(where: {
+            ServerSettings.adopts(model.settings.host, answering: model.connection.answering,
+                                  kept: model.settings.mac, heard: $0.mac)
+        }) else { return }
+        take(mac)
     }
 }

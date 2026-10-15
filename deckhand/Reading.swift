@@ -203,4 +203,14 @@ extension AppModel {
         guard let client = settings.client() else { throw DeckhandError.unauthorized }
         return try await client.download(asset, in: session.sessionId)
     }
+
+    /// What a Mac that answered says about itself. Its id is kept, so that when this address
+    /// stops answering the browse moves the phone to this Mac and to no other.
+    func took(_ health: Health) {
+        self.health = health
+        if let id = health.id, settings.mac != id {
+            settings.mac = id
+            settings.save()
+        }
+    }
 }

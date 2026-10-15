@@ -89,9 +89,10 @@ final class AppModel {
     /// How much of the week's token window the Mac has spent. Nil until a listing says.
     var week: Week?
     var connection: Connection = .unpaired
-    /// The Mac's own address on the network, as the Mac reports it. What a session's `localhost`
-    /// means to anything that is not the Mac — this phone included.
-    var macAddress: String?
+    /// What the Mac last said about itself. `lan` is what a session's `localhost` means to
+    /// anything that is not the Mac — this phone included; `remote` is its off-network address.
+    var health: Health?
+    var macAddress: String? { health?.lan }
     var status: String?
     /// What you just said, per session, waiting for the real transcript to catch up. It reads
     /// as a turn in the conversation because that is what it is — the session simply has not
@@ -228,7 +229,7 @@ final class AppModel {
             week = listing.week
             absorb(listing.machines)
             connection = .connected(iterm: health.iterm ?? "ok")
-            macAddress = health.lan
+            took(health)
             logger.info("listed \(listing.sessions.count) sessions")
         } catch {
             connection = .failed(reason(error))
@@ -263,7 +264,7 @@ final class AppModel {
         do {
             let health = try await client.health()
             connection = .connected(iterm: health.iterm ?? "ok")
-            macAddress = health.lan
+            took(health)
             status = "\(health.name) \(health.version) at \(health.host)"
         } catch {
             connection = .failed(reason(error))

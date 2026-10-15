@@ -229,6 +229,8 @@ public struct Health: Codable, Hashable, Sendable {
     /// The Mac's own address on the network. What a session's `localhost` means, from a phone
     /// that is running none of the things the session is talking about. Absent from an older Mac.
     public var lan: String?
+    /// Which Mac this is, and its address off the home network. Both absent from an older Mac.
+    public var id: String?, remote: String?
     /// "ok", or why the Mac cannot see iTerm panes right now.
     public let iterm: String?
 }

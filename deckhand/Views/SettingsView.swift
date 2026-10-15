@@ -60,8 +60,8 @@ struct SettingsView: View {
     private var mac: some View {
         SettingsGroup("Mac") {
             SettingRow("Address",
-                       detail: "Where the daemon answers. `just daemon` prints it. "
-                       + "Off the home network: https://deckhand.jurrejan.com") {
+                       detail: "Where the daemon answers. `just daemon` prints it."
+                       + (model.health?.remote.map { " Off the home network: \($0)" } ?? "")) {
                 TextField("m2-2.local", text: $model.settings.host)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
