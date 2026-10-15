@@ -71,7 +71,8 @@ struct SettingsView: View {
                     .frame(maxWidth: 150)
             }
             Beacons(model: model)
-            SettingRow("Token", detail: "Deckhand's page in utt: Copy pairing code.") {
+            PairCode(model: model)
+            SettingRow("Token", detail: "Or the long code: Copy the long code, on Deckhand's page in utt.") {
                 TextField("token", text: $model.settings.token)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
