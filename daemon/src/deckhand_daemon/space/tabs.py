@@ -12,6 +12,8 @@ whichever one moved over to the other. When both moved, the headset wins.
   pose is dropped and it stands beside a session already in that group, so the headset puts it
   flush there. With nobody there yet, the first of them is the one the rest stand beside, and the
   headset names the group. Until the headset is on, nothing there moves, and nothing here waits.
+- **Names go one way, iTerm's into the headset** (`names` in `space.json`): only iTerm can rename a
+  group. A group made from the headset starts out named for its project, as the headset titles it.
 - **Only through the iTerm API connection** `iterm.py` holds, so only once that is approved. A
   tab holding two sessions follows the last one to move.
 """
@@ -94,25 +96,27 @@ def sync() -> None:
     """One pass: read both sides, carry what moved, write down where they now agree."""
     live = [s for s in sessions.live_sessions() if s.pane is not None and s.provider == "claude"]
     panes = {s.session_id: s.pane.iterm_session_id for s in live}
-    names = {s.session_id: project.of(s.cwd) for s in live}
+    projects = {s.session_id: project.of(s.cwd) for s in live}
     poses = stored.space()["poses"]
     groups = {sid: (poses.get(f"session:{sid}") or {}).get("group") for sid in panes}
-    tabs = iterm.call(lambda c: _tab_groups(c, panes))
-    if tabs is None:
+    read = iterm.call(lambda c: _tab_groups(c, panes))
+    if read is None:
         return
+    tabs, titles = read
     now = {sid: (groups[sid], tabs.get(sid)) for sid in panes}
     path = config.data_dir() / STATE
     last = _load(path)
     to_iterm, to_headset = decide(now, last)
     after = pull(now, to_headset)
     if to_iterm:
-        pushed = iterm.call(lambda c: _push(c, panes, groups, to_iterm, names))
-        tabs = tabs if pushed is None else pushed
+        pushed = iterm.call(lambda c: _push(c, panes, groups, to_iterm, projects))
+        tabs, titles = read if pushed is None else pushed
     if to_iterm or to_headset:
         log.info("tab groups: %d into iTerm, %d into the headset", len(to_iterm), len(to_headset))
     agreed = {sid: {"d": after.get(sid, d), "i": tabs.get(sid)} for sid, (d, _) in now.items()}
     if agreed != last:
         path.write_text(json.dumps(agreed, indent=2) + "\n")
+    stored.name({a["d"]: titles[a["i"]] for a in agreed.values() if a["d"] and a["i"] in titles})
 
 
 def _load(path: Path) -> dict[str, dict]:
@@ -122,22 +126,26 @@ def _load(path: Path) -> dict[str, dict]:
         return {}
 
 
-async def _tab_groups(connection: Any, panes: dict[str, str]) -> dict[str, str | None]:
-    """Session id → the id of the tab group its pane's tab is in, for every pane iTerm has."""
+async def _tab_groups(connection: Any, panes: dict[str, str]) -> tuple[dict, dict[str, str]]:
+    """Session id → the id of the tab group its pane's tab is in, for every pane iTerm has; and
+    each of those tab groups' names."""
     import iterm2
 
     app = await iterm2.App.async_construct(connection)
     found: dict[str, str | None] = {}
+    titles: dict[str, str] = {}
     for sid, pane in panes.items():
         session = app.get_session_by_id(pane)
         if session is not None and session.tab is not None:
             group = session.tab.tab_group
             found[sid] = group.group_id if group else None
-    return found
+            if group:
+                titles[group.group_id] = group.name
+    return found, titles
 
 
 async def _push(connection: Any, panes: dict[str, str], groups: dict[str, str | None],
-                to_iterm: dict[str, str | None], names: dict[str, dict]) -> dict[str, str | None]:
+                to_iterm: dict[str, str | None], projects: dict[str, dict]) -> tuple[dict, dict[str, str]]:
     """Moves iTerm's tab groups to match the headset's, then reads them back."""
     import iterm2
 
@@ -154,7 +162,7 @@ async def _push(connection: Any, panes: dict[str, str], groups: dict[str, str | 
         for sid in members:
             by_window.setdefault(tab_of[sid].window.window_id, []).append(sid)
         for window_id, here in by_window.items():
-            await _gather(app.get_window_by_id(window_id), here, tab_of, to_iterm, names[here[0]])
+            await _gather(app.get_window_by_id(window_id), here, tab_of, to_iterm, projects[here[0]])
     return await _tab_groups(connection, panes)
 
 

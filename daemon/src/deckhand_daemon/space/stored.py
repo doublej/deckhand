@@ -1,4 +1,5 @@
-"""`space.json`, in the data dir: `{"rev", "planes": [Plane], "poses": {key: Pose}, "beside"?}`.
+"""`space.json`, in the data dir: `{"rev", "planes": [Plane], "poses": {key: Pose}, "beside"?,
+"names"?}` — `names` is `{group: name}`, iTerm's names for the groups (`tabs.py`).
 
 `rev` rises on every change, so the headset can poll `GET /space` and redraw only when it moved.
 Read whole and written whole through `os.replace`, like `bindings/stored.py`, so a crash mid-write
@@ -97,6 +98,17 @@ def ungroup(session_id: str) -> None:
         pose = kept["poses"].get(f"session:{session_id}")
         if pose is None or pose.pop("group", None) is None:
             return
+        _write(kept)
+
+
+def name(names: dict[str, str]) -> None:
+    """Name groups — `{group: name}`, iTerm's names for them — when any of them changed."""
+    with _lock:
+        kept = space()
+        held = kept.setdefault("names", {})
+        if all(held.get(g) == n for g, n in names.items()):
+            return
+        held.update(names)
         _write(kept)
 
 

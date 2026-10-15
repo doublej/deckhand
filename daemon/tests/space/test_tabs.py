@@ -42,3 +42,12 @@ def test_leaving_a_tab_group_leaves_the_headset_group_where_it_stands(claude_hom
     stored.place("session:a", {"x": 0, "y": 1, "z": -1, "yaw": 0, "group": "g1"})
     assert tabs.pull({"a": ("g1", None)}, {"a": None}) == {"a": None}
     assert stored.space()["poses"]["session:a"] == {"x": 0, "y": 1, "z": -1, "yaw": 0}
+
+
+def test_a_name_is_written_only_when_it_changed(claude_home):
+    stored.name({"g1": "drieluiken"})
+    rev = stored.space()["rev"]
+    stored.name({"g1": "drieluiken"})
+    assert stored.space()["rev"] == rev
+    stored.name({"g1": "triptych"})
+    assert stored.space()["names"] == {"g1": "triptych"}
