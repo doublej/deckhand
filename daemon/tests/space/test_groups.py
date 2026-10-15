@@ -42,18 +42,26 @@ def test_a_headset_group_is_named_for_its_project_unless_a_member_has_a_name(mon
     projects = {s: {"key": "multi-stack/deckhand", "color": "#00afff"} for s in windows}
     now = {"a": ("g1", None), "b": ("g1", None), "c": (None, "drieluik"), "x": (None, "deckhand")}
     held = {"a": "g1", "b": "g1", "c": None, "x": None}
-    groups.push(now, windows, held, {"a": "g1", "b": "g1", "c": None}, {"@2": "#ff0000"}, projects, {})
+    groups.push(now, windows, held, {"a": "g1", "b": "g1", "c": None}, projects, {})
     assert calls == [("@3", "@group", None), ("@1", "@group", "deckhand 2"), ("@2", "@group", "deckhand 2")]
     calls.clear()
     now = {"a": ("g1", None), "b": ("g1", "drieluik")}
-    groups.push(now, windows, {"a": "g1", "b": "g1"}, {"a": "g1"}, {}, projects, {})
-    assert calls == [("@1", "@group", "drieluik"), ("@1", "@group_color", "#00afff"),
-                     ("@2", "@group_color", "#00afff")]
+    groups.push(now, windows, {"a": "g1", "b": "g1"}, {"a": "g1"}, projects, {})
+    assert calls == [("@1", "@group", "drieluik")]
+
+
+def test_a_tmux_group_the_headset_re_formed_keeps_its_tmux_name(monkeypatch):
+    calls = []
+    monkeypatch.setattr(groups, "_set", lambda w, o, v: calls.append((w, o, v)))
+    windows = {"a": "@1", "b": "@2"}
+    projects = {s: {"key": "swift/utt", "color": "#5fd7ff"} for s in windows}
+    now = {"a": ("g7", "tooling"), "b": ("g7", "tooling")}
+    groups.push(now, windows, {"a": "g7", "b": "g7"}, {"a": "g7", "b": "g7"}, projects, {})
+    assert calls == []
 
 
 def test_a_window_listing_reads_unset_as_none():
-    listing = "@1\tdrieluik\t#ff0000\n@2\t\t\n"
-    assert groups.parse(listing) == {"@1": ("drieluik", "#ff0000"), "@2": (None, None)}
+    assert groups.parse("@1\tdrieluik\n@2\t\n") == {"@1": "drieluik", "@2": None}
 
 
 def test_a_whole_group_renamed_in_tmux_moves_nothing_in_the_headset(claude_home):
@@ -83,6 +91,5 @@ def test_a_group_the_headset_already_named_keeps_that_name(monkeypatch):
     calls = []
     monkeypatch.setattr(groups, "_set", lambda w, o, v: calls.append((w, o, v)))
     projects = {"a": {"key": "web/theme", "color": "#00afff"}}
-    groups.push({"a": ("g1", None)}, {"a": "@1"}, {"a": "g1"}, {"a": "g1"}, {"@1": "#fff"}, projects,
-                {"g1": "drieluiken"})
+    groups.push({"a": ("g1", None)}, {"a": "@1"}, {"a": "g1"}, {"a": "g1"}, projects, {"g1": "drieluiken"})
     assert calls == [("@1", "@group", "drieluiken")]

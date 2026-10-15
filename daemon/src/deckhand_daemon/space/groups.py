@@ -9,8 +9,9 @@ so each pass compares both against what they were when they last agreed (`tmux-g
 wins.
 
 - **Into tmux** a group becomes one `@group` on every member's window: the name a member that did
-  not move already has, else the name the headset already shows it under, else its project's, with " 2" on it when another group has that one.
-  `@group_color` is the project's colour, written only where no member's window has one.
+  not move already has, else the one most of them have, else the name the headset already shows
+  it under, else its project's, with " 2" on it when another group has that one. `@group_color`
+  is never written here: iTerm picks it, and the agent outside writes it back.
 - **Into the headset** an `@group` is the same `beside` a started session uses: the session's
   pose is dropped and it stands beside a session already in that group, so the headset puts it
   flush there. With nobody there yet, the first of them is the one the rest stand beside. A
@@ -26,6 +27,7 @@ from __future__ import annotations
 import asyncio
 import json
 import subprocess
+from collections import Counter
 from pathlib import Path
 
 from .. import config, sessions
@@ -36,8 +38,8 @@ from . import stored
 POLL = 3.0
 STATE = "tmux-groups.json"
 TIMEOUT = 5
-#: One window per line: its id, its `@group` and its `@group_color`, either empty when unset.
-FORMAT = "#{window_id}\t#{@group}\t#{@group_color}"
+#: One window per line: its id and its `@group`, empty when unset.
+FORMAT = "#{window_id}\t#{@group}"
 
 Now = dict[str, tuple[str | None, str | None]]  # session id → (headset group, @group)
 
@@ -105,22 +107,23 @@ def pull(now: Now, to_headset: dict[str, str | None]) -> dict[str, str | None]:
 
 
 def push(now: Now, windows: dict[str, str], groups: dict[str, str | None], to_tmux: dict[str, str | None],
-         colors: dict[str, str], projects: dict[str, dict], names: dict[str, str]) -> None:
+         projects: dict[str, dict], names: dict[str, str]) -> None:
     """Moves tmux's `@group` to match the headset's groups."""
     for sid, d in to_tmux.items():
         if d is None and now[sid][1] is not None:
             _set(windows[sid], "@group", None)
     for d in sorted({d for d in to_tmux.values() if d is not None}):
         members = sorted(s for s, g in groups.items() if g == d and s in windows)
+        # The headset re-forms a group that came from tmux under an id of its own, so a group
+        # whose members already share an @group is that group, and keeps its name.
         stayed = [now[s][1] for s in members if s not in to_tmux and now[s][1]]
+        had = Counter(now[s][1] for s in members if now[s][1]).most_common(1)
         taken = {i for s, (_, i) in now.items() if i and s not in members}
-        name = stayed[0] if stayed else fresh(names.get(d) or projects[members[0]]["key"].rsplit("/", 1)[-1], taken)
-        color = next((c for s in members if (c := colors.get(windows[s]))), None)
+        name = (stayed[0] if stayed else had[0][0] if had
+                else fresh(names.get(d) or projects[members[0]]["key"].rsplit("/", 1)[-1], taken))
         for sid in members:
             if now[sid][1] != name:
                 _set(windows[sid], "@group", name)
-            if color is None:
-                _set(windows[sid], "@group_color", projects[sid]["color"])
 
 
 def fresh(base: str, taken: set[str]) -> str:
@@ -142,17 +145,16 @@ def sync() -> None:
         return
     poses = stored.space()["poses"]
     groups = {sid: (poses.get(f"session:{sid}") or {}).get("group") for sid in windows}
-    now = {sid: (groups[sid], read[w][0]) for sid, w in windows.items() if w in read}  # not found is not "left"
+    now = {sid: (groups[sid], read[w]) for sid, w in windows.items() if w in read}  # not found is not "left"
     path = config.data_dir() / STATE
     last = _load(path)
     to_tmux, to_headset = decide(now, last)
     after = pull(now, to_headset)
     if to_tmux:
         projects = {s.session_id: project.of(s.cwd) for s in live}
-        colors = {w: c for w, (_, c) in read.items() if c}
-        push(now, windows, groups, to_tmux, colors, projects, stored.space().get("names", {}))
+        push(now, windows, groups, to_tmux, projects, stored.space().get("names", {}))
         read = _windows() or read
-        now = {sid: (d, read.get(windows[sid], (i,))[0]) for sid, (d, i) in now.items()}
+        now = {sid: (d, read.get(windows[sid], i)) for sid, (d, i) in now.items()}
         log.info("tmux groups: %d into tmux, %d into the headset", len(to_tmux), len(to_headset))
     elif to_headset:
         log.info("tmux groups: %d into the headset", len(to_headset))
@@ -163,17 +165,17 @@ def sync() -> None:
     stored.name({a["d"]: a["i"] for a in agreed.values() if a["d"] and a["i"]})
 
 
-def parse(listing: str) -> dict[str, tuple[str | None, str | None]]:
-    """`FORMAT`'s lines as window id → (`@group`, `@group_color`), None where unset."""
-    found: dict[str, tuple[str | None, str | None]] = {}
+def parse(listing: str) -> dict[str, str | None]:
+    """`FORMAT`'s lines as window id → `@group`, None where unset."""
+    found: dict[str, str | None] = {}
     for line in listing.splitlines():
-        window, group, color = (line.split("\t", 2) + ["", ""])[:3]
+        window, _, group = line.partition("\t")
         if window:
-            found[window] = (group or None, color or None)
+            found[window] = group or None
     return found
 
 
-def _windows() -> dict[str, tuple[str | None, str | None]] | None:
+def _windows() -> dict[str, str | None] | None:
     """Every tmux window's group, or None when no tmux server answers."""
     out = subprocess.run(["tmux", "list-windows", "-a", "-F", FORMAT],
                          capture_output=True, text=True, timeout=TIMEOUT, check=False)
