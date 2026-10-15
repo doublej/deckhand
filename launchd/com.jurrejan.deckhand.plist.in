@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- A template. `just install-agent` fills in @HOME@ and @REPO@ (the checkout it ran from)
+         and writes this Mac's copy into ~/Library/LaunchAgents: launchd expands nothing itself,
+         so a plist that names a home is one person's plist. `env` finds uv on the PATH below,
+         Homebrew's first, which is the one the literal path used to name. -->
+    <key>Label</key>
+    <string>com.jurrejan.deckhand</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/env</string>
+        <string>uv</string>
+        <string>run</string>
+        <string>deckhand-daemon</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>@REPO@/daemon</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>@HOME@/Library/Logs/Deckhand/launchd.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>@HOME@/Library/Logs/Deckhand/launchd.err.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>HOME</key>
+        <string>@HOME@</string>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:@HOME@/.local/bin:@HOME@/.bun/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+    <!-- Not Background: that throttles CPU and I/O, and the iTerm lookup then blows its
+         timeout. This job answers a phone; it should be scheduled like it. -->
+    <key>ProcessType</key>
+    <string>Interactive</string>
+</dict>
+</plist>
