@@ -55,7 +55,7 @@ load-bearing: it never types into a pane. See [docs/manager.md](docs/manager.md)
 | `mac/` | The Mac app: the manager in the menu bar and a window, the cards as notifications. |
 | `widgets/` | `DeckhandWidgets` — the Live Activity. |
 | `Tests/`, `UITests/` | Swift tests on the Mac; UI tests drive the simulator against a live daemon. |
-| `launchd/` | The agent plist, symlinked into `~/Library/LaunchAgents`. |
+| `launchd/` | The agent plist's template, rendered into `~/Library/LaunchAgents` by `just install-agent`. |
 | `docs/`, `demos/` | Deep docs, and the artifact demo pages `just demo-check` validates. |
 
 ## Context boundaries
