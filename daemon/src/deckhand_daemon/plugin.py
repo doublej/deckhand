@@ -131,8 +131,12 @@ def manifest() -> dict[str, Any]:
         # would have taken Deckhand down until someone opened a terminal. Stopping it for
         # good is `just uninstall-agent`, which is where a one-way door belongs.
         "actions": [
-            {"key": "copyToken", "label": "Copy pairing code",
-             "detail": "Puts the code your phone asks for on the clipboard."},
+            {"key": "pairDevice", "label": "Pair a device",
+             "detail": "Shows a six-digit code here for five minutes. Type it on your phone or "
+                       "headset; it works once."},
+            {"key": "copyToken", "label": "Copy the long code",
+             "detail": "For a phone or browser that asks for the long code rather than six "
+                       "digits."},
         ],
         "settings": [
             {"key": "route", "kind": "choice", "label": "How your words arrive",
@@ -234,9 +238,16 @@ def _act(key: str) -> None:
     """utt writes the key and nothing else — what it means is ours to decide, which is the
     whole reason a manifest cannot name a command to run."""
     log.info("utt page: %s pressed", key)
+    if key == "pairDevice":
+        # Opened here rather than over HTTP: this process holds the window. The routes' helper
+        # writes the code into this page's status, which is where the person pressing is looking.
+        # Imported here because `pairing.routes` imports this module.
+        from .pairing import routes
+
+        routes.open_window()
     if key == "copyToken":
         subprocess.run(["/usr/bin/pbcopy"], input=config.token(), text=True, check=False)
-        status(lastAction="pairing code copied")
+        status(lastAction="token copied")
 
 
 def _write(path: Path, payload: dict) -> None:

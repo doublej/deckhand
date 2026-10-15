@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import secrets
 from contextlib import asynccontextmanager
 from typing import Annotated
 
@@ -21,6 +20,7 @@ from . import (
     filters,
     fleet,
     nudge,
+    pairing,
     plugin,
     presence,
     push,
@@ -36,6 +36,7 @@ from .log import log
 from .manager import agent as manager_agent
 from .manager import routes as manager_routes
 from .orders import routes as order_routes
+from .pairing import routes as pairing_routes
 from .projects import routes as project_routes
 from .reading import asked, commands, context, readable, transcripts
 from .reading import routes as reading_routes
@@ -44,10 +45,8 @@ from .space import routes as space_routes
 
 
 def require_token(request: Request, x_deckhand_token: str = Header(default="")) -> None:
-    # `compare_digest` rather than `!=`: this Mac's token is now also every hand's token, so it
-    # is compared far more often and by more processes than it was, and a comparison that
-    # returns early leaks where it stopped. The cost is nothing and the property is free.
-    if not secrets.compare_digest(x_deckhand_token, config.token()):
+    # This Mac's own token or a paired device's: `pairing.allows` is the one place that knows.
+    if not pairing.allows(x_deckhand_token):
         raise HTTPException(status_code=401, detail="bad token")
     # The one place every authenticated request passes, so the phone's last-heard-from stamp
     # costs an assignment and needs no route of its own. Only a request that got *past* the
@@ -98,6 +97,7 @@ app.include_router(project_routes.router, dependencies=[Depends(require_token)])
 app.include_router(settings_routes.router, dependencies=[Depends(require_token)])
 app.include_router(space_routes.router, dependencies=[Depends(require_token)])
 app.include_router(saying.router, dependencies=[Depends(require_token)])
+app.include_router(pairing_routes.router)  # its own checks: `POST /pair` has no token yet
 
 
 @app.get("/health")

@@ -23,6 +23,7 @@ import asyncio
 from fastapi import Request
 from fastapi.responses import JSONResponse, Response
 
+from .. import config, pairing
 from ..log import log
 from . import merge, registry, remote
 
@@ -66,7 +67,9 @@ async def forward_remote_reads(request: Request, call_next):
     is merely asleep is the worst of both.
     """
     found = owner_of(request.url.path)
-    if found is None:
+    # This runs before the route's own token check, and the hand is asked with this Mac's token,
+    # so a request with none must fall through to that check rather than be carried across.
+    if found is None or not pairing.allows(request.headers.get(config.TOKEN_HEADER, "")):
         return await call_next(request)
     machine, _ = found
     # In a thread, because `remote.forward` is synchronous and this runs on the event loop: a

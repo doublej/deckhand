@@ -138,6 +138,21 @@ icon:
 token:
     @cat ~/Library/Application\ Support/Deckhand/token
 
+# A six-digit code a phone or headset trades for a token of its own; waits to say who paired.
+[group('develop')]
+pair:
+    @uv run --directory daemon python -m deckhand_daemon.pairing pair
+
+# Every device paired with a code, and when each was last heard from.
+[group('develop')]
+devices:
+    @uv run --directory daemon python -m deckhand_daemon.pairing devices
+
+# Take one device's token away; the others keep theirs.
+[group('develop')]
+forget id:
+    @uv run --directory daemon python -m deckhand_daemon.pairing forget {{ id }}
+
 # How far a clip survives being sped up and silence-trimmed (`--report` re-reads the last run).
 [group('develop')]
 audio-bench *args:
@@ -395,7 +410,7 @@ setup web_url="" remote_url="" web_dir="" xr_dir="":
     fi
     echo
     echo 'Done. Open Deckhand on your phone or headset; it finds this Mac by itself.'
-    echo 'It asks for the pairing code once:  just token'
+    echo 'Then pair it:  just pair  (or Pair a device, on Deckhand'"'"'s page in utt)'
 
 # The three login agents, the Mac app, the `deckhand` command, the MCP entry and the skill link.
 # The data folder stays, because it holds the token every paired device uses; the last line says

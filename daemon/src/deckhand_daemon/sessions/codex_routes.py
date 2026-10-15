@@ -16,13 +16,12 @@ too — otherwise a Codex thread's history would be answered to anybody who aske
 from __future__ import annotations
 
 import asyncio
-import secrets
 
 from fastapi import Request
 from fastapi.responses import JSONResponse, Response
 from starlette.datastructures import QueryParams
 
-from .. import config, presence
+from .. import config, pairing, presence
 from . import codex, codex_turns
 from .live import Session, live_sessions
 
@@ -48,7 +47,7 @@ async def answer_for_codex(request: Request, call_next) -> Response:
     if not path.startswith("/sessions/") or (wanted not in REFUSED and wanted not in ANSWERED):
         return await call_next(request)
     # A wrong token falls through, and the route's own dependency refuses it as it always has.
-    if not secrets.compare_digest(request.headers.get("x-deckhand-token", ""), config.token()):
+    if not pairing.allows(request.headers.get(config.TOKEN_HEADER, "")):
         return await call_next(request)
     session = await asyncio.to_thread(_codex_session, session_id)
     if session is None:
