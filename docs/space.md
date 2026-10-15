@@ -33,7 +33,7 @@ Every route needs `x-deckhand-token`.
   (`prompts/space-taken.md`); `close_plane` and `deckhand close` pass the calling session's name,
   so an agent closing a page is not reported as the person closing it.
 - `PUT /space/poses/{key}` `{x, y, z, yaw}` → 204. Keys are `session:<id>`, `plane:<id>`,
-  `manager`, `projects`, `launcher`. Every number finite, and no further than 20 m from the floor
+  `manager`, `projects`, `launcher`, `monitor` and `camera` (below). Every number finite, and no further than 20 m from the floor
   origin. A `plane:` key for a plane that is not open is a 404.
 - `GET /windows` → `[{id, app, title, w, h, cropped}]`, `GET /windows/{id}/frame` one JPEG,
   `GET /windows/{id}/stream?fps=&max=&q=` MJPEG, `GET /windows/{id}/hevc?…` the same window as HEVC
@@ -110,6 +110,29 @@ by snapping one plane against another, and this only keeps the answer. State is 
   true where the session runs. In the headset it is true of the headset. The rewrite helps only a
   server bound to `0.0.0.0`, which is why the tools tell the agent to prefer the project's atlas
   dev hostname, `https://<slug>.atlas.local.jurrejan.com`, and say why.
+
+## The camera
+
+The headset can put a small camera in the space, aimed by hand, its field of view drawn as a
+wireframe. It sees the planes — terminals, pages, Mac windows, the bars, the dock — and nothing
+else: not the person, their hands or their room, which are not in the scene. Its picture goes to
+a **monitor**, a plane like any other (pose key `monitor`), and to the Mac. Where the camera
+stands is pose key `camera`:
+
+- `POST /camera/frames` — the body is one JPEG (`image/jpeg`), the newest frame; anything else is
+  a 400, over 2 MB a 413. Answers `{viewers}`, so the headset learns in the same breath whether
+  anyone still watches. It sends 1280 × 720 at quality 70, 12 a second, one per POST, one in
+  flight.
+- `GET /camera/stream` — `multipart/x-mixed-replace; boundary=frame`, the newest frame first and
+  then each new one; frames nobody fetched in time are skipped, never queued. Counts as a viewer
+  while it is connected.
+- `GET /camera` → `{live, viewers, at}`: whether a frame came in the last 2 s, how many streams
+  are open, and the newest frame's time (null before the first).
+
+**It streams only when asked.** The headset polls `GET /camera` every 2 s and posts frames only
+while its *Stream to Mac* switch is on — never kept across launches — or while a viewer is
+connected; it says so on the HUD, the camera and the monitor. Nothing is stored: the daemon holds
+the newest frame in memory and drops it with the process. The code is `daemon/…/space/camera.py`.
 
 ## Why an agent may open planes and start sessions, and never close a session
 

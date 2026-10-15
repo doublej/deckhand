@@ -30,7 +30,7 @@ projects/       # the folders on this Mac, and starting a session in one of them
 prompts/        # every prompt this daemon sends a model, and nothing else
 manager/       # the manager: its conversation, its facade of tools, its run, its routes
 mcp/            # the twelve tools a session inside this Mac gets, over stdio and as `deckhand`
-space/          # the headset's space: planes, poses, /windows passed through to :4181
+space/          # the headset's space: planes, poses, its camera, /windows passed through to :4181
 briefings.py    # where briefings are kept, and the one worker that keeps them current
 summarize.py    # what happened since you last spoke, via the Claude Agent SDK
 tasks.py        # the person's list of asks, and the only three tools that may change it

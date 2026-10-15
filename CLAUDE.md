@@ -185,6 +185,8 @@ the session. `?deliver=false` transcribes without sending, for the review card, 
   `rev` rises on each change. A session is told when the person puts a plane beside it or takes
   one away; no `by` is the person. `GET /windows`, `/windows/{id}/frame|stream` pass through to
   deckhand-windows on :4181, 503 when it is down ([docs/space.md](docs/space.md))
+- `POST /camera/frames`, `GET /camera/stream`, `GET /camera` — the headset's camera: one JPEG
+  per POST in, MJPEG out to whoever watches, and whether it is live
 
 `/health` is the only unauthenticated route; everything else needs the `x-deckhand-token` header.
 Off the home network that surface is `https://deckhand.jurrejan.com` — the NAS Caddy, checking
