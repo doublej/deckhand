@@ -30,7 +30,7 @@ REFUSED = {
     ("GET", "context"): "Codex does not load a CLAUDE.md tree; that view is Claude Code's",
     ("GET", "commands"): "Codex takes no slash commands or skills over its app server",
     ("POST", "queue/clear"): "a Codex thread has no inbox to draw a line under",
-    ("POST", "focus"): "a Codex thread has no iTerm pane to bring to the front",
+    ("POST", "focus"): "a Codex thread has no tmux pane to bring to the front",
     ("POST", "name"): "a Codex thread has no pane to type /rename into",
 }
 #: Answered here out of Codex's own reading, or with nothing where Codex has nothing to say.

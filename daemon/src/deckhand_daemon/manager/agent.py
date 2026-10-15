@@ -250,7 +250,7 @@ def _told(to: str, said: str) -> None:
     which is named back to the session listening on it."""
     path = to.removeprefix("uds:")
     name = next(
-        (s.name for s in sessions.live_sessions(iterm_only=False) if s.socket_path == path), to
+        (s.name for s in sessions.live_sessions(paned_only=False) if s.socket_path == path), to
     )
     talk.say("act", f"told {name}: {said}")
 

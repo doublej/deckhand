@@ -19,9 +19,8 @@ Two more absences worth naming, because both look like oversights and are not:
 
 - **No `/projects`.** Atlas already catalogues every machine's folders and the daemon reads that
   directly. A route here would be a second, staler answer to a question already answered.
-- **No `POST /projects/session`.** Starting a session is `it2` from end to end (`projects/
-  starting.py`), so it is pane work, and pane work is what a hand does not do. The phone lists a
-  remote machine's folders and opens them only on this Mac.
+- **No `POST /projects/session`.** The hub's route is where the gates and the settings are; a
+  hand only takes `start_here`, below, which is tmux and the trust check and nothing else.
 """
 
 from __future__ import annotations
@@ -90,12 +89,11 @@ def health() -> dict:
 def list_sessions() -> dict:
     """Every live session on this machine, already stamped with it.
 
-    `iterm_only=False` because there is no iTerm here at all. On the Mac that flag hides a
-    session whose pane could not be found among panes that *were* found — evidence something is
-    wrong. Here nothing is wrong: there are no panes anywhere, and every session is addressable
-    down its socket.
+    `paned_only=False` because a pane means nothing here. On the Mac that flag hides a session
+    tmux has no pane for among panes that *were* found. Here every session is addressable down
+    its socket and nothing else, so whether tmux holds it changes nothing.
     """
-    live = sessions.live_sessions(iterm_only=False)
+    live = sessions.live_sessions(paned_only=False)
     window = sessions.context_window()
     return {
         "sessions": [

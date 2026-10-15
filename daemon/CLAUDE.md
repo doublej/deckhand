@@ -55,8 +55,10 @@ one lane that *makes* a session rather than speaking to one.
 
 Claude Code writes `~/.claude/sessions/<pid>.json` for every running session — sessionId,
 cwd, name, and a live busy/idle status. Those files outlive the process, so a record only
-counts when `ps` still shows that pid. `ps` gives the tty, `it2 session list --json` maps
-tty → iTerm pane. No hooks, no polling of iTerm's title.
+counts when `ps` still shows that pid. `ps` gives the tty, `tmux list-panes -a` maps
+tty → tmux pane. No hooks, no polling of a terminal's title. tmux replaced iTerm here on
+2026-10-15: iTerm's 3.7 beta crashed on opening a tab, and with it every session's pane. The
+wire keeps iTerm's names (`iterm`, `pane.iterm_session_id`) because the installed apps decode them.
 
 **`~/.claude` is not the only config dir.** A session started with
 `CLAUDE_CONFIG_DIR=~/.claude-pimpelmees` writes its record, its key file and its transcript there
@@ -66,9 +68,9 @@ and the listing, the peer key, the transcript lookup and the MCP's own record al
 Settings, the trust record and the week cache still come from `~/.claude` alone: the pimpelmees dir
 symlinks its `settings.json` back there.
 
-Sessions with no iTerm pane are hidden — unless iTerm answers nothing at all, in which case
-every live session is listed so the app still works without the iTerm Python API. `/health`
-and `/sessions` both carry an `iterm` field saying whether pane data is trustworthy.
+Sessions with no tmux pane are hidden — unless tmux answers nothing at all (no server), in which
+case every live session is listed so the app still works. `/health` and `/sessions` both carry an
+`iterm` field saying whether pane data is trustworthy.
 
 - **A session id is the conversation, not the session.** `/clear` retires it and starts a new
   one under the *same* pid, pane, inbox socket and name — so nothing the phone can see changes,
@@ -78,10 +80,8 @@ and `/sessions` both carry an `iterm` field saying whether pane data is trustwor
   allowed to answer with a session other than the one asked for. Both maps drop a pid the
   moment it stops running, and that is not tidiness: pids are recycled, and an id left pointing
   at a dead one would resolve to whatever unrelated session got that number next.
-- The **first** connection from a new client makes iTerm2 ask for Python API approval. Until
-  someone clicks it, `it2` blocks: pane data is missing and `/sessions` costs the timeout.
-  It happened once when the launchd agent was first bootstrapped and has been approved since.
-  The pane map is cached for 3 s because one `it2` call costs ~0.5 s.
+- The pane map is cached for 3 s because the phone polls every few, and a failed lookup backs
+  off for a minute.
 - **What utt may do to a Deckhand clip is declared, not inherited.** The manifest names
   `skipsTextStages: ["formatting"]`. A prompt on its way into a coding session is not dictation
   into a text field — the capitals, the punctuation and the exact words are the payload — and
@@ -99,7 +99,8 @@ and `/sessions` both carry an `iterm` field saying whether pane data is trustwor
   reads the `<id>.disabled` marker (an empty file; its presence is the whole state, because a
   marker survives the extension rewriting its manifest at every start-up) and `transcribe` says
   so at once instead.
-- **The iTerm join under launchd was a throttling problem, not an approval one.** The plist
+- **The pane join under launchd was a throttling problem, not an approval one** (measured with
+  `it2`, before tmux). The plist
   said `ProcessType: Background`, which puts the job in launchd's slow lane for CPU and I/O,
   and a lookup that costs ~1 s from a terminal then blew a 4 s timeout every time. It reads
   `Interactive` now, the timeout is 12 s, and panes resolve under launchd. A failed lookup
@@ -113,18 +114,11 @@ and `/sessions` both carry an `iterm` field saying whether pane data is trustwor
 a project is a name and a folder, read from the person's own `projects.json`, then atlas over
 HTTP, then atlas's scan cache, first to answer wins. `starting.py` opens the terminal.
 
-- **`it2 tab new` makes a pane whose shell never reads input.** It exits 0, the pane comes back
-  from `it2 session list --json` with a tty and a live zsh on it, and a minute later it holds
-  nothing but blank lines. A tab is created relative to iTerm's *current* window and a daemon has
-  no window to be current in. `it2 window new` has no such ambiguity and prints `Created new
-  window: pty-…` — a handle, so the new session is looked up by `window_id` rather than guessed
-  at by diffing the session list either side of the call.
-- **Never script `it2 session close`.** It asks "Close tab #N?" as a **modal sheet**, which blocks
-  iTerm's entire Python API — every `it2` call on the Mac, this daemon's pane lookups included,
-  fails with "Not running inside iTerm2 or Python API not enabled" until somebody dismisses it.
-  Piping `yes` does not answer it. Recovering without restarting iTerm (which would take every
-  live session with it) is `osascript -e 'tell application "System Events" to tell process
-  "iTerm2" to click button "Cancel" of sheet 1 of window 1'`.
+- **A new session is a detached tmux window** (`tmux.open_window`), in the tmux session the
+  person is attached to, else the most recently used, named `deckhand-<name>` so the window list
+  shows which came from a phone. Detached, so the person's own view never jumps. No tmux server
+  at all makes a session of its own. Verified 2026-10-15 against a separate tmux server: the
+  receipt carries the new pane.
 - **Bare `claude` opens the session dashboard, not a session.** Measured on 2.1.266: it draws the
   "describe a task for a new session" launcher, writes no `~/.claude/sessions/<pid>.json`, and so
   never reaches the phone at all. `--name` starts an interactive session outright and is **not in
@@ -150,7 +144,7 @@ command still types), `keyboard`, or `socket`.
 the words carry, so it fails and says why instead. The receipt names the route that took it
 (`delivered_by`).
 
-- **The keyboard route.** `it2 session send` types the words into the session's pane and
+- **The keyboard route.** `tmux send-keys -l` types the words into the session's pane and
   presses return, so they arrive as a prompt from the person at the machine — which is what
   they are. Ctrl-U (a half-typed line in the prompt is not part of what was said), then the
   words, then the return — **each in a write of its own**. **Both keys are CSI-u escape
@@ -161,9 +155,11 @@ the words carry, so it fails and says why instead. The receipt names the route t
   but a session slow to drain its tty takes both in one read — measured against an inert pane, a
   reader stalled for six seconds got a single 122-byte read holding the words *and* the return —
   and at that size a bare return is typed rather than pressed, which is a prompt left sitting in
-  the box. An escape sequence is tokenised out of a read of any size.
+  the box. An escape sequence is tokenised out of a read of any size. `send-keys -l` hands those
+  bytes to the pane exactly as spelled — verified 2026-10-15 under tmux 3.5a: a 1263-byte prompt
+  in two bursts, confirmed by the transcript and answered, then `/exit` the same way.
 - **That spelling saves the keys and does nothing for the words.** A pane's tty hands Claude
-  Code at most **1022 bytes per read**, so one `it2 session send` longer than that arrives as two
+  Code at most **1022 bytes per read**, so one `send-keys` longer than that arrives as two
   reads a fraction of a millisecond apart — and Claude Code keeps only one of them. Measured on
   2026-09-13 against a live session, a 1212-character prompt: sent as one write with ctrl-U on
   its front, mangled **13 times in 52**, every failure arriving with its **first 1014 characters
@@ -174,8 +170,8 @@ the words carry, so it fails and says why instead. The receipt names the route t
   (`deliver.BURST`, counted in **bytes**, because a character must never be cut in half) is:
   0 in 36, including at 4000 characters. A tiny message cannot hit this; anything over roughly
   a thousand characters always did, which is most of a spoken paragraph.
-- **`it2` exiting 0 says the keys were accepted, never that the prompt was submitted.** A staged
-  message and a sent one look identical to `it2 session read` — but not to the session's own
+- **`send-keys` exiting 0 says the keys were accepted, never that the prompt was submitted.** A
+  staged message and a sent one look identical on the screen — but not to the session's own
   transcript, which is the log of what arrived: an idle session writes the prompt as a turn and a
   busy one writes a `queue-operation` for its inbox, and both land inside a second (measured over
   130 real sends: median 0.5 s, slowest 2.2 s). `deliver._arrived` watches the bytes appended to

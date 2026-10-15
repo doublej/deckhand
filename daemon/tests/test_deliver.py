@@ -65,14 +65,14 @@ def test_a_session_with_a_pane_is_typed_into(inbox, claude_home, monkeypatch):
     session.pane = a_pane()
     assert deliver.deliver(session, "  run  the tests  ") == ("keyboard", None)
     assert typed == [
-        ["it2", "session", "send", "-s", "PANE-1", deliver.CLEAR_LINE],
-        ["it2", "session", "send", "-s", "PANE-1", "run the tests"],
-        ["it2", "session", "send", "-s", "PANE-1", deliver.RETURN],
+        ["tmux", "send-keys", "-t", "PANE-1", "-l", deliver.CLEAR_LINE],
+        ["tmux", "send-keys", "-t", "PANE-1", "-l", "run the tests"],
+        ["tmux", "send-keys", "-t", "PANE-1", "-l", deliver.RETURN],
     ]
 
 
 def test_a_pane_that_will_not_take_it_falls_back_to_the_socket(inbox, claude_home, monkeypatch):
-    """iTerm is not always answering — under launchd it never is."""
+    """tmux is not always answering: a session outside it has no pane, and a server can be gone."""
     monkeypatch.setattr(
         deliver.subprocess,
         "run",
@@ -101,14 +101,14 @@ def test_the_keyboard_route_does_not_quietly_use_the_socket(inbox, claude_home, 
 def test_the_keyboard_route_says_so_when_there_is_no_pane(inbox, claude_home):
     taken, error = deliver.deliver(session_for(inbox.getsockname()), "hello", route="keyboard")
     assert taken is None
-    assert "no iTerm pane" in error
+    assert "not in a tmux pane" in error
 
 
 def test_the_socket_route_ignores_a_perfectly_good_pane(inbox, claude_home, monkeypatch):
     monkeypatch.setattr(
         deliver.subprocess,
         "run",
-        lambda *_a, **_k: pytest.fail("the socket route must not touch iTerm"),
+        lambda *_a, **_k: pytest.fail("the socket route must not touch tmux"),
     )
     session = session_for(inbox.getsockname())
     session.pane = a_pane()
@@ -193,10 +193,10 @@ def test_the_controls_are_keystrokes_in_the_pane(inbox, claude_home, monkeypatch
     assert deliver.control(session, "compact") is None
 
     assert typed == [
-        ["it2", "session", "send", "-s", "PANE-1", deliver.ESCAPE],
-        ["it2", "session", "send", "-s", "PANE-1", deliver.CLEAR_LINE],
-        ["it2", "session", "send", "-s", "PANE-1", "/compact"],
-        ["it2", "session", "send", "-s", "PANE-1", deliver.RETURN],
+        ["tmux", "send-keys", "-t", "PANE-1", "-l", deliver.ESCAPE],
+        ["tmux", "send-keys", "-t", "PANE-1", "-l", deliver.CLEAR_LINE],
+        ["tmux", "send-keys", "-t", "PANE-1", "-l", "/compact"],
+        ["tmux", "send-keys", "-t", "PANE-1", "-l", deliver.RETURN],
     ]
 
 
@@ -223,9 +223,9 @@ def test_exit_is_typed_and_returned_like_any_other_slash_command(inbox, claude_h
 
     assert deliver.control(session, "exit") is None
     assert typed == [
-        ["it2", "session", "send", "-s", "PANE-1", deliver.CLEAR_LINE],
-        ["it2", "session", "send", "-s", "PANE-1", "/exit"],
-        ["it2", "session", "send", "-s", "PANE-1", deliver.RETURN],
+        ["tmux", "send-keys", "-t", "PANE-1", "-l", deliver.CLEAR_LINE],
+        ["tmux", "send-keys", "-t", "PANE-1", "-l", "/exit"],
+        ["tmux", "send-keys", "-t", "PANE-1", "-l", deliver.RETURN],
     ]
 
 
@@ -265,7 +265,7 @@ def test_a_control_needs_a_pane_and_says_so(inbox, claude_home):
     session = session_for(inbox.getsockname())
     session.pane = None
 
-    assert "no iTerm pane" in (deliver.control(session, "cancel") or "")
+    assert "not in a tmux pane" in (deliver.control(session, "cancel") or "")
 
 
 def test_an_unknown_control_is_refused_rather_than_typed(inbox, claude_home, monkeypatch):
@@ -289,9 +289,9 @@ def test_a_rename_runs_claude_code_s_own_command(inbox, claude_home, monkeypatch
 
     assert deliver.rename(session, "  the   promo  edit \n") is None
     assert typed == [
-        ["it2", "session", "send", "-s", "PANE-1", deliver.CLEAR_LINE],
-        ["it2", "session", "send", "-s", "PANE-1", "/rename the promo edit"],
-        ["it2", "session", "send", "-s", "PANE-1", deliver.RETURN],
+        ["tmux", "send-keys", "-t", "PANE-1", "-l", deliver.CLEAR_LINE],
+        ["tmux", "send-keys", "-t", "PANE-1", "-l", "/rename the promo edit"],
+        ["tmux", "send-keys", "-t", "PANE-1", "-l", deliver.RETURN],
     ]
 
 
@@ -318,8 +318,8 @@ def test_an_empty_name_is_refused_rather_than_typed(inbox, claude_home, monkeypa
 KEYSTROKE = re.compile(r"\x1b\[[\d;]*u|[\x00-\x1f]")
 
 
-def recording_it2(monkeypatch) -> list[str]:
-    """Every burst `it2` was handed, in order, without a pane to type it into."""
+def recording_tmux(monkeypatch) -> list[str]:
+    """Every burst tmux was handed, in order, without a pane to type it into."""
     bursts: list[str] = []
 
     def run(argv, **_kwargs):
@@ -347,7 +347,7 @@ def test_a_long_prompt_with_pictures_submits_even_read_as_one_chunk(inbox, claud
     So the test is not whether the return was written; it is whether it still reads as a
     keypress when everything written lands together.
     """
-    typed = recording_it2(monkeypatch)
+    typed = recording_tmux(monkeypatch)
     session = session_for(inbox.getsockname())
     session.pane = a_pane()
     folder = "/Users/jurrejan/Library/Application Support/Deckhand/images/s-1"
@@ -365,7 +365,7 @@ def test_a_long_prompt_with_pictures_submits_even_read_as_one_chunk(inbox, claud
 
 def test_a_control_byte_in_the_words_is_never_typed(inbox, claude_home, monkeypatch):
     """An escape in a prompt would cancel the turn it was meant to start."""
-    typed = recording_it2(monkeypatch)
+    typed = recording_tmux(monkeypatch)
     session = session_for(inbox.getsockname())
     session.pane = a_pane()
 

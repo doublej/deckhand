@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from deckhand_daemon.projects import routes, sources, starting
+from deckhand_daemon.projects import routes, sources, starting, tmux
 
 
 @pytest.fixture
@@ -27,7 +27,7 @@ def test_an_untrusted_folder_is_refused_before_a_window_is_opened(trusted_home, 
     """The trust question can only be answered at the Mac, so opening a terminal to ask it from
     another room leaves a window stranded at a prompt nobody will ever see."""
     opened = []
-    monkeypatch.setattr(starting, "_run", lambda command: opened.append(command))
+    monkeypatch.setattr(tmux, "open_window", lambda *args: opened.append(args))
     folder = tmp_path / "cold"
     folder.mkdir()
     monkeypatch.setattr(starting, "trusted", set)
@@ -38,16 +38,29 @@ def test_an_untrusted_folder_is_refused_before_a_window_is_opened(trusted_home, 
 
 
 def test_a_folder_that_is_not_there_is_refused_too(trusted_home, monkeypatch):
-    monkeypatch.setattr(starting, "_run", lambda command: pytest.fail("should not run anything"))
+    monkeypatch.setattr(tmux, "open_window", lambda *args: pytest.fail("should not run anything"))
     session, error = starting.start("/Users/jj/dev/web/gone")
     assert session is None
     assert "not a folder" in error
 
 
+def test_a_trusted_folder_gets_a_tmux_window_running_claude(trusted_home, monkeypatch, tmp_path):
+    folder = tmp_path / "shop"
+    folder.mkdir()
+    opened = []
+    monkeypatch.setattr(starting, "trusted", lambda: {str(folder)})
+    monkeypatch.setattr(tmux, "open_window", lambda *args: opened.append(args) and False)
+    session, error = starting.start(str(folder))
+    assert (session, error) == (None, "tmux would not open a window there")
+    [(name, where, line)] = opened
+    assert (name, where) == ("shop", folder)
+    assert line.startswith("claude --name shop ") and line.endswith(" ".join(starting.FLAGS))
+
+
 def test_a_name_already_taken_is_numbered(claude_home):
     """A star, a hidden row and a filter chain are all filed under the name, so two live
     sessions called `shop` would share all three."""
-    running = starting.live_sessions(iterm_only=False)
+    running = starting.live_sessions(paned_only=False)
     assert [s.name for s in running] == ["warm-okapi", "cold-otter"]
     assert starting.free_name("shop", running) == "shop"
     assert starting.free_name("warm-okapi", running) == "warm-okapi-2"

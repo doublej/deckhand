@@ -43,7 +43,7 @@ def session_or_404(session_id: str) -> sessions.Session:
 def found_session(session_id: str) -> sessions.Session | None:
     """The live session by that id, by the session it was cleared into, or on another machine —
     or None, for a caller to whom a session that has gone is news rather than a 404."""
-    # ponytail: every lookup re-lists sessions (one `it2` call, ~0.5 s). Cache it if the
+    # ponytail: every lookup re-lists sessions (one `tmux` call). Cache it if the
     # phone ever polls harder than every few seconds.
     live = sessions.live_sessions()
     for s in live:

@@ -68,7 +68,7 @@ def clean(text: str) -> str:
 
     Newlines survive because the field is prose the person reads back on the phone; every other
     unprintable character goes, for the reason `deliver.clean_name` gives — this ends up typed
-    into a live iTerm pane, and an escape sequence pasted into the box would be keystrokes rather
+    into a live tmux pane, and an escape sequence pasted into the box would be keystrokes rather
     than words. `deliver` flattens the newlines again on the way out; it does not filter.
     """
     kept = "".join(c for c in text if c.isprintable() or c == "\n")

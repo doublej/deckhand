@@ -1,5 +1,4 @@
-"""`space.json`, in the data dir: `{"rev", "planes": [Plane], "poses": {key: Pose}, "beside"?,
-"names"?}` — `names` is `{group: name}`, iTerm's names for the groups (`tabs.py`).
+"""`space.json`, in the data dir: `{"rev", "planes": [Plane], "poses": {key: Pose}, "beside"?}`.
 
 `rev` rises on every change, so the headset can poll `GET /space` and redraw only when it moved.
 Read whole and written whole through `os.replace`, like `bindings/stored.py`, so a crash mid-write
@@ -78,37 +77,6 @@ def started(session_id: str, by: str) -> None:
     with _lock:
         kept = space()
         kept.setdefault("beside", {})[session_id] = by
-        _write(kept)
-
-
-def regroup(session_id: str, mate: str) -> None:
-    """Move `session_id` into `mate`'s group: its pose is dropped and it stands `beside` the mate,
-    so the headset puts it flush there, in that group — or in a new one with the mate."""
-    with _lock:
-        kept = space()
-        kept["poses"].pop(f"session:{session_id}", None)
-        kept.setdefault("beside", {})[session_id] = mate
-        _write(kept)
-
-
-def ungroup(session_id: str) -> None:
-    """Take `session_id` out of its group where it stands."""
-    with _lock:
-        kept = space()
-        pose = kept["poses"].get(f"session:{session_id}")
-        if pose is None or pose.pop("group", None) is None:
-            return
-        _write(kept)
-
-
-def name(names: dict[str, str]) -> None:
-    """Name groups — `{group: name}`, iTerm's names for them — when any of them changed."""
-    with _lock:
-        kept = space()
-        held = kept.setdefault("names", {})
-        if all(held.get(g) == n for g, n in names.items()):
-            return
-        held.update(names)
         _write(kept)
 
 

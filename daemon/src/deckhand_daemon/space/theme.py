@@ -1,9 +1,9 @@
-"""What iTerm draws a pane with — font, spacing and colours — so the headset can draw it the same.
+"""What the terminal draws a pane with — font, spacing and colours — so the headset can draw it
+the same.
 
 `/screen`'s runs carry a colour only where a cell asked for one; this says what the rest look
-like. Read from iTerm itself: a session's own profile over the API when that is approved
-(`iterm.py`), otherwise the default profile out of iTerm's preferences — `Default Bookmark Guid`
-names one entry of `New Bookmarks`. Both arrive as the same dicts, so one parser reads either.
+like. tmux has no palette of its own and runs inside iTerm on this Mac, so this is iTerm's default
+profile, out of its preferences — `Default Bookmark Guid` names one entry of `New Bookmarks`.
 
 A profile with `Use Separate Colors for Light and Dark Mode` keeps two sets under ` (Light)` and
 ` (Dark)` keys, and iTerm draws the one the Mac's appearance picks. Components go to hex as they
@@ -20,9 +20,6 @@ import time
 
 from fastapi import APIRouter
 
-from .. import saying
-from . import iterm
-
 FRESH = 10.0
 TIMEOUT = 3.0
 SEPARATE = "Use Separate Colors for Light and Dark Mode"
@@ -36,48 +33,30 @@ COLOURS = {
     "selection": "Selection Color",
 }
 ANSI = [f"Ansi {n} Color" for n in range(16)]
-#: Every key read off a profile over the API, each colour with both of its variants.
-KEYS = [
-    SEPARATE,
-    "Normal Font",
-    "Vertical Spacing",
-    "Horizontal Spacing",
-    "Use Bright Bold",
-    *(
-        f"{key}{variant}"
-        for key in [*COLOURS.values(), *ANSI]
-        for variant in ("", " (Light)", " (Dark)")
-    ),
-]
 
 router = APIRouter(tags=["space"])
-_kept: dict[str, tuple[float, dict]] = {}
+_kept: tuple[float, dict] | None = None
 
 
 @router.get("/terminal/theme")
-async def terminal_theme(session: str | None = None) -> dict:
+async def terminal_theme() -> dict:
     """`{font: {family, size}, fg, bg, bold, cursor, selection, ansi, lineSpacing, charSpacing,
-    brightBold}`. With `?session=` it is that session's own profile, once the API is approved."""
-    pane_id = None
-    if session:
-        found = await saying.live_session(session)
-        pane_id = found.pane.iterm_session_id if found.pane else None
-    return await asyncio.to_thread(theme, pane_id)
+    brightBold}`. Every pane draws the same, so a `?session=` the headset still sends changes
+    nothing."""
+    return await asyncio.to_thread(theme)
 
 
-def theme(pane_id: str | None) -> dict:
-    """The pane's theme, or the default profile's for None, shared for `FRESH` seconds."""
-    key = pane_id or ""
-    kept = _kept.get(key)
-    if kept and time.time() - kept[0] < FRESH:
-        return kept[1]
-    found = (pane_id and iterm.profile(pane_id, KEYS)) or default_profile()
-    _kept[key] = (time.time(), parse(found, dark()))
-    return _kept[key][1]
+def theme() -> dict:
+    """The default profile's theme, shared for `FRESH` seconds."""
+    global _kept
+    if _kept and time.time() - _kept[0] < FRESH:
+        return _kept[1]
+    _kept = (time.time(), parse(default_profile(), dark()))
+    return _kept[1]
 
 
 def parse(profile: dict, dark: bool) -> dict:
-    """One profile, as the plist or the API gives it, in the wire's terms."""
+    """One profile, as the plist gives it, in the wire's terms."""
     variant = (" (Dark)" if dark else " (Light)") if profile.get(SEPARATE) else ""
 
     def pick(key: str) -> str | None:

@@ -188,8 +188,8 @@ def _drain(link: Link) -> None:
     """Read the link's output for as long as it runs, keeping the last few lines.
 
     **A pipe nobody reads is a fuse.** ssh's stdout is a 64 KB pipe here (measured), and the hand
-    on the far side writes into it every time it logs — on Ubuntu, where there is no `it2`, that
-    is a `panes unavailable` warning per lookup: 53 lines in its busiest hour, about 4.5 KB, so a
+    on the far side writes into it every time it logs — on Ubuntu, back when panes were `it2`'s, that
+    was a `panes unavailable` warning per lookup: 53 lines in its busiest hour, about 4.5 KB, so a
     link that lives past roughly fourteen hours fills the buffer. Then ssh blocks on its own write
     and the forward stops carrying anything, which from this side is indistinguishable from a
     machine that went to sleep — every call to it costs `proxy.TIMEOUT` and the phone's listing

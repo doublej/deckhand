@@ -1,10 +1,10 @@
 """Puts a line of text into a running Claude Code session. Two ways, and the difference matters.
 
-**The keyboard.** `it2 session run` types the words into the session's iTerm pane and presses
+**The keyboard.** `tmux send-keys -l` types the words into the session's tmux pane and presses
 return. They arrive as a prompt from the person at the machine, because that is exactly what
 they are: the daemon is holding JJ's keyboard for him. Nothing frames them as second-hand, and
 a session can act on them with the authority it gives anything its user types. This needs a
-pane, which means iTerm has to be answering — under launchd it is not.
+pane, which means the session has to be running inside tmux.
 
 **The peer socket.** Every session also listens on a unix socket named in its own
 ~/.claude/sessions/<pid>.json (`messagingSocketPath`). Newline-delimited JSON: an optional auth
@@ -46,7 +46,7 @@ MSG_VERSION = 1
 # be wrong about.
 CLEAR_LINE = "\x1b[117;5u"  # ctrl-U: a half-typed line is not part of what was said
 RETURN = "\x1b[13u"
-# A pane's tty hands Claude Code at most 1022 bytes per read, so one `it2 session send` longer
+# A pane's tty hands Claude Code at most 1022 bytes per read, so one `send-keys` longer
 # than that arrives as two reads a fraction of a millisecond apart — and Claude Code keeps only
 # one of them often enough to matter. Measured against a live session on 2026-09-13, a
 # 1212-character message: sent as one write with the ctrl-U on its front, mangled 13 times in 52;
@@ -61,7 +61,7 @@ BURST = 1000
 # Measured over 130 real sends: median 0.5 s, slowest 2.2 s.
 SUBMITTED = 3.0
 POLL = 0.05
-REFUSED = "iTerm would not type into {name}"
+REFUSED = "tmux would not type into {name}"
 STAGED = "{name} took the words but not the return — they are sitting unsent in its box"
 # The receiver already wraps a socket message in its own "another Claude session sent this"
 # framing, so this only has to say who is actually speaking — and it has to be short, because
@@ -95,10 +95,10 @@ def control(session: Session, action: str) -> str | None:
     if bursts is None:
         return f"no such control {action!r}"
     if not session.pane:
-        return f"{session.name} has no iTerm pane — nothing to press keys in"
+        return f"{session.name} is not in a tmux pane — nothing to press keys in"
     for burst in bursts:
         if not _keystrokes(session.pane.iterm_session_id, burst):
-            return f"iTerm would not send {action} to {session.name}"
+            return f"tmux would not send {action} to {session.name}"
     log.info("sent %s to %s", action, session.name)
     return None
 
@@ -118,10 +118,10 @@ def rename(session: Session, name: str) -> str | None:
     if not wanted:
         return "a name cannot be empty"
     if not session.pane:
-        return f"{session.name} has no iTerm pane — nothing to type the rename into"
+        return f"{session.name} is not in a tmux pane — nothing to type the rename into"
     for burst in (CLEAR_LINE, f"/rename {wanted}", RETURN):
         if not _keystrokes(session.pane.iterm_session_id, burst):
-            return f"iTerm would not rename {session.name}"
+            return f"tmux would not rename {session.name}"
     log.info("renamed %s to %s", session.name, wanted)
     return None
 
@@ -191,7 +191,7 @@ def deliver(session: Session, text: str, route: str = "auto") -> tuple[str | Non
         if route == "keyboard" or failed == STAGED:
             return None, failed.format(name=session.name)
     if route == "keyboard":
-        return None, f"{session.name} has no iTerm pane to type into"
+        return None, f"{session.name} is not in a tmux pane to type into"
     # A session on another machine takes the same last step, one machine over. The guard is here
     # rather than in each caller because every one of them — `say`, a clip, a slip's answer, the
     # idle check, the manager — routes through this function, and a guard per caller would be
@@ -220,7 +220,7 @@ def _type_into_pane(pane_id: str, message: str, session_id: str) -> str | None:
     `BURST` says what a read costs one that gets it wrong.
 
     Then the question the log used to answer with a guess: did it go in. A staged message and a
-    sent one look the same to `it2 session read`, so this asks the session's own transcript
+    sent one look the same on the screen, so this asks the session's own transcript
     instead, which is the log of what arrived rather than of what was written at it.
     """
     watch = _watch(session_id)
@@ -287,7 +287,8 @@ def _arrived(session_id: str, watch: int, message: str, budget: float = SUBMITTE
 def _keystrokes(pane_id: str, burst: str) -> bool:
     try:
         done = subprocess.run(
-            ["it2", "session", "send", "-s", pane_id, burst],
+            # `-l`: every byte as it is, so the CSI-u keys reach the pane exactly as spelled.
+            ["tmux", "send-keys", "-t", pane_id, "-l", burst],
             capture_output=True,
             text=True,
             timeout=TYPE_TIMEOUT,
@@ -297,7 +298,7 @@ def _keystrokes(pane_id: str, burst: str) -> bool:
         log.warning("could not type into pane %s: %s", pane_id, error)
         return False
     if done.returncode != 0:
-        log.warning("it2 refused to type into %s: %s", pane_id, done.stderr.strip()[:120])
+        log.warning("tmux refused to type into %s: %s", pane_id, done.stderr.strip()[:120])
         return False
     return True
 

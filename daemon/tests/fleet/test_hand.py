@@ -85,7 +85,7 @@ def test_everything_else_needs_the_token(client):
 
 
 def test_sessions_are_listed_without_any_pane_data(client):
-    """`iterm_only=False`: on the Mac that flag hides a session whose pane is missing among panes
+    """`paned_only=False`: on the Mac that flag hides a session whose pane is missing among panes
     that were found. Here there are no panes anywhere and every session is still reachable."""
     r = client.get("/sessions", headers={config.TOKEN_HEADER: config.token()})
     assert r.status_code == 200

@@ -25,7 +25,7 @@ router = APIRouter(tags=["agents"])
 def _live_or_404(session_id: str) -> None:
     """The same refusal `/turns` makes, spelled here because this router is mounted on two apps
     that reach a session in two different ways."""
-    if not any(s.session_id == session_id for s in live_sessions(iterm_only=False)):
+    if not any(s.session_id == session_id for s in live_sessions(paned_only=False)):
         raise HTTPException(status_code=404, detail="no such live session")
 
 

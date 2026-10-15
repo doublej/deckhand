@@ -60,5 +60,5 @@ def test_a_folder_can_refuse_to_be_interrupted(claude_home):
     itself, so it is the one a folder may refuse outright."""
     from deckhand_daemon import push, sessions
     wants.save({"called": False})
-    session = next(s for s in sessions.live_sessions(iterm_only=False) if s.cwd == SHOP)
+    session = next(s for s in sessions.live_sessions(paned_only=False) if s.cwd == SHOP)
     assert push.called(session, "look at me") == "this folder is set not to be interrupted"

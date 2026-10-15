@@ -14,7 +14,6 @@ dependencies = [
     "pyyaml>=6.0.3",
     "mcp>=2.0.0",
     "websockets>=17.1",
-    "iterm2>=2.30",
 ]
 
 [project.scripts]

@@ -87,8 +87,8 @@ Full glossary: ./GLOSSARY.md
 
 - **The join that makes this work.** Claude Code writes `~/.claude/sessions/<pid>.json` for every
   running session — sessionId, cwd, name, live busy/idle status. Those files outlive the process,
-  so a record only counts when `ps` still shows that pid. `ps` gives the tty, `it2 session list
-  --json` maps tty → iTerm pane. No hooks, no polling of iTerm's title. Everything else in this
+  so a record only counts when `ps` still shows that pid. `ps` gives the tty, `tmux list-panes
+  -a` maps tty → tmux pane. No hooks, no polling of a terminal's title. Everything else in this
   repo hangs off that.
 - **The route is an authority choice, not a transport choice.** The keyboard route arrives as the
   person at the machine; the peer socket arrives labelled as another Claude session carrying none
@@ -192,7 +192,9 @@ the session. `?deliver=false` transcribes without sending, for the review card, 
 Off the home network that surface is `https://deckhand.jurrejan.com` — the NAS Caddy, checking
 the same header in front of the Mac so `/health` is not open to the internet either. See
 [daemon/CLAUDE.md](daemon/CLAUDE.md) under *Off the home network*.
-Both `/health` and `/sessions` carry an `iterm` field saying whether pane data is trustworthy.
+Both `/health` and `/sessions` carry an `iterm` field saying whether pane data is trustworthy —
+named for iTerm, which tmux replaced on 2026-10-15; the key, like `pane.iterm_session_id`, stays
+because the installed apps decode it.
 Every row carries `provider`, `claude` or `codex` (a Codex app-server thread: `pid` 0, no `tty`, no
 pane); `/health` carries `codex`, whether the app server answered the last listing; and
 `POST /projects/session` takes `provider` as well. See `daemon/CLAUDE.md` under *Codex threads*.

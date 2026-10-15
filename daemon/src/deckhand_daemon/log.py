@@ -65,7 +65,7 @@ def took(stages: dict[str, float], name: str) -> Iterator[None]:
     """Wall clock for one stage of a clip's journey, in milliseconds, into `stages`.
 
     Wall clock rather than CPU: every interesting stage here is spent waiting for something else
-    — an `it2` subprocess, a disk, utt. Insertion order is the order the stages ran, which is why
+    — a `tmux` subprocess, a disk, utt. Insertion order is the order the stages ran, which is why
     the response and the JSONL both hand the dict straight out rather than sorting it.
 
     Here rather than in a `timing.py` of its own: `daemon/src/deckhand_daemon/` sits on

@@ -1,28 +1,26 @@
-"""A screen row as iTerm draws it: runs of text that share one style, every colour already a hex.
+"""A screen row as tmux prints it with `capture-pane -e`: runs of text sharing one style, every
+colour already a hex.
 
-iTerm's API hands a row over as its text, how many code points each cell holds, and one style per
-cell, run-length encoded. The headset cannot know iTerm's palette, so a colour leaves here
-resolved: 0-15 through the profile's own ANSI colours, 16-255 through the xterm table, 24-bit as
-it is. A default colour is left out, and the theme (`theme.py`) says what default looks like.
+tmux hands a row over as text with SGR escapes wherever the style changes. The headset cannot
+know the terminal's palette, so a colour leaves here resolved: 0-15 through the profile's own ANSI
+colours, 16-255 through the xterm table, 24-bit as it is. A default colour is left out, and the
+theme (`theme.py`) says what default looks like. Any escape that is not SGR is dropped.
 
-Two things keep the columns where iTerm has them. A cell nothing was written to comes as NUL or
-as no code points at all, and is a space here either way. A double-width character is followed by
-a placeholder cell holding nothing, and that one is dropped: the headset's font draws the
-character two columns wide itself, and a space after it would push the rest of the row along.
+A double-width character comes out of tmux once, with no placeholder after it, which is what the
+headset wants: its font draws the character two columns wide itself.
 """
 
 from __future__ import annotations
 
-import unicodedata
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:  # the daemon loads iterm2 only once the API is approved (`iterm.py`)
-    from iterm2 import api_pb2
+import re
 
 #: The six levels of each channel in xterm's 6x6x6 colour cube, 16-231.
 CUBE = (0, 95, 135, 175, 215, 255)
-#: Whatever iTerm puts in a cell that holds no character.
-EMPTY = ("", "\x00")
+#: An SGR sequence (its parameters in group 1), or any other escape: OSC, another CSI, or two bytes.
+ESCAPE = re.compile(r"\x1b(?:\[([0-9;:]*)m|\][^\x07\x1b]*(?:\x07|\x1b\\)|\[[0-9;:?<=>]*[ -/]*[@-~]|.)")
+#: SGR flags: the code that sets one, and the codes that clear it.
+FLAGS = {1: "b", 2: "f", 3: "i", 4: "u", 7: "v"}
+CLEARS = {22: ("b", "f"), 23: ("i",), 24: ("u",), 27: ("v",)}
 
 
 def xterm(index: int, ansi: list[str]) -> str:
@@ -36,55 +34,30 @@ def xterm(index: int, ansi: list[str]) -> str:
     return _hex(grey, grey, grey)
 
 
-def colour(
-    style: api_pb2.CellStyle, side: str, ansi: list[str], bright: bool = False
-) -> str | None:
-    """`side` is `fg` or `bg`. None for the default colour, and for iTerm's alternates."""
-    if style.HasField(f"{side}Rgb"):
-        rgb = getattr(style, f"{side}Rgb")
-        return _hex(rgb.red, rgb.green, rgb.blue)
-    if style.HasField(f"{side}Standard"):
-        index = getattr(style, f"{side}Standard")
-        # iTerm's "Brighten bold text": bold in one of the first eight is drawn in its bright twin.
-        return xterm(index + 8 if bright and index < 8 else index, ansi)
-    return None
+def plain(row: str) -> str:
+    """The row's text with every escape taken out."""
+    return ESCAPE.sub("", row)
 
 
-def look(style: api_pb2.CellStyle, ansi: list[str], bright_bold: bool) -> dict:
-    """The wire's style keys for one cell, each only when it says something."""
-    found = {
-        "fg": colour(style, "fg", ansi, bright_bold and style.bold),
-        "bg": colour(style, "bg", ansi),
-        "b": style.bold,
-        "f": style.faint,
-        "i": style.italic,
-        "u": style.underline,
-        "v": style.inverse,
-    }
-    return {key: value for key, value in found.items() if value}
-
-
-def runs(row: api_pb2.LineContents, ansi: list[str], bright_bold: bool) -> list[dict]:
-    """`[{t, fg?, bg?, b?, f?, i?, u?, v?}]`, adjacent cells of one style made one run.
+def runs(row: str, ansi: list[str], bright_bold: bool) -> list[dict]:
+    """`[{t, fg?, bg?, b?, f?, i?, u?, v?}]`, adjacent text of one style made one run.
 
     A trailing stretch of blanks is dropped as `lines` drops it — unless it has a background, an
     underline or is inverted, because then it is something on the screen and not nothing.
     """
-    styles = [look(style, ansi, bright_bold) for style in row.style for _ in range(style.repeats)]
+    state: dict = {}
     found: list[dict] = []
-    before, last = "", None
-    for x, text in enumerate(cells(row)):
-        if text in EMPTY and _wide(before):
-            before = ""
-            continue
-        before = text
-        style = styles[x] if x < len(styles) else {}
-        text = text.replace("\x00", " ") or " "
-        if found and style == last:
-            found[-1]["t"] += text
-        else:
-            found.append({"t": text, **style})
-            last = style
+    at = 0
+    for match in ESCAPE.finditer(row + "\x1b[m"):  # a closing reset flushes the last stretch
+        if match.start() > at:
+            style = look(state, ansi, bright_bold)
+            if found and {k: v for k, v in found[-1].items() if k != "t"} == style:
+                found[-1]["t"] += row[at : match.start()]
+            else:
+                found.append({"t": row[at : match.start()], **style})
+        at = match.end()
+        if match.group(1) is not None:
+            state = sgr(state, match.group(1))
     while found and not {"bg", "u", "v"} & found[-1].keys():
         found[-1]["t"] = found[-1]["t"].rstrip()
         if found[-1]["t"]:
@@ -93,20 +66,67 @@ def runs(row: api_pb2.LineContents, ansi: list[str], bright_bold: bool) -> list[
     return found
 
 
-def cells(row: api_pb2.LineContents) -> list[str]:
-    """The row's text cut into what each cell holds: one code point, several, or none."""
-    found, at = [], 0
-    for group in row.code_points_per_cell:
-        for _ in range(group.repeats):
-            found.append(row.text[at : at + group.num_code_points])
-            at += group.num_code_points
+def sgr(state: dict, params: str) -> dict:
+    """The style after one SGR sequence. Colours are kept as `("i", index)` or `("rgb", hex)`
+    until `look` resolves them."""
+    state = dict(state)
+    codes = [int(p.split(":")[0] or 0) for p in params.split(";")] if params else [0]
+    colons = [p.split(":")[1:] for p in params.split(";")] if params else [[]]
+    n = 0
+    while n < len(codes):
+        code = codes[n]
+        if code == 0:
+            state = {}
+        elif code in FLAGS:
+            # `4:0` is underline off in the colon form tmux uses for curly and dotted.
+            if code == 4 and colons[n][:1] == ["0"]:
+                state.pop("u", None)
+            else:
+                state[FLAGS[code]] = True
+        elif code in CLEARS:
+            for key in CLEARS[code]:
+                state.pop(key, None)
+        elif 30 <= code <= 37 or 90 <= code <= 97:
+            state["fg"] = ("i", code - 30 if code < 90 else code - 82)
+        elif 40 <= code <= 47 or 100 <= code <= 107:
+            state["bg"] = ("i", code - 40 if code < 100 else code - 92)
+        elif code in (39, 49):
+            state.pop("fg" if code == 39 else "bg", None)
+        elif code in (38, 48, 58):
+            # Extended colour, `;5;n` or `;2;r;g;b`, or the same joined by colons. 58 is the
+            # underline's colour, read only so its numbers are not taken for codes of their own.
+            args = colons[n] or [str(c) for c in codes[n + 1 : n + 5]]
+            colour, used = _extended(args)
+            if colons[n] == []:
+                n += used
+            if colour is not None and code != 58:
+                state["fg" if code == 38 else "bg"] = colour
+        n += 1
+    return state
+
+
+def look(state: dict, ansi: list[str], bright_bold: bool) -> dict:
+    """The wire's style keys for one stretch, each only when it says something."""
+    found = {key: True for key in ("b", "f", "i", "u", "v") if state.get(key)}
+    for side in ("fg", "bg"):
+        kind, value = state.get(side, (None, None))
+        if kind == "i":
+            # iTerm's "Brighten bold text": bold in one of the first eight is drawn in its twin.
+            bright = side == "fg" and bright_bold and state.get("b") and value < 8
+            found[side] = xterm(value + 8 if bright else value, ansi)
+        elif kind == "rgb":
+            found[side] = value
     return found
 
 
-def _wide(text: str) -> bool:
-    """A cell whose character iTerm draws two columns wide: East Asian wide or full-width, or
-    asked for as an emoji. ponytail: Unicode's table, not iTerm's own width setting."""
-    return bool(text) and (unicodedata.east_asian_width(text[0]) in ("W", "F") or "\ufe0f" in text)
+def _extended(args: list[str]) -> tuple[tuple | None, int]:
+    """The colour `5;n` or `2;[space;]r;g;b` names, and how many parameters that took."""
+    numbers = [int(a) for a in args if a.isdigit()]
+    if numbers[:1] == [5] and len(numbers) > 1:
+        return ("i", numbers[1]), 2
+    if numbers[:1] == [2] and len(numbers) > 3:
+        return ("rgb", _hex(*numbers[-3:] if len(args) > 4 else numbers[1:4])), 4
+    return None, 0
 
 
 def _hex(red: int, green: int, blue: int) -> str:

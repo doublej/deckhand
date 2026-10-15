@@ -50,7 +50,7 @@ def session(session_id: str):
 
     **No `socket_path`, and that is right.** The socket is a path on the machine that owns it and
     means nothing here; `deliver.deliver` hands a remote session to its hand by id instead. A
-    `pane` of None is right for the same reason — there is no iTerm over there, so the keyboard
+    `pane` of None is right for the same reason — a pane id over there names nothing here, so the keyboard
     route refuses exactly as it does for a local session that has no pane.
     """
     from ..sessions import Session

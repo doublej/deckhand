@@ -57,7 +57,7 @@ def test_orders_are_one_sessions_own():
 
 
 def test_a_pasted_escape_sequence_is_not_keystrokes():
-    """These end up typed into a live iTerm pane. Newlines stay — the phone shows them back."""
+    """These end up typed into a live tmux pane. Newlines stay — the phone shows them back."""
     assert orders.save("s1", "keep it\n\x1b[31mshort\x07") == "keep it\n[31mshort"
 
 

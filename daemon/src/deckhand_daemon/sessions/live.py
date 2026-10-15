@@ -1,9 +1,9 @@
-"""Which Claude Code sessions are alive right now, and which iTerm pane each one sits in.
+"""Which Claude Code sessions are alive right now, and which tmux pane each one sits in.
 
 Claude Code writes ~/.claude/sessions/<pid>.json for every running session (sessionId, cwd,
 name, busy/idle). Those files outlive the process, so a record only counts once that pid is
-still the process that wrote it. `it2 session list --json` then maps the pid's tty to an iTerm
-pane, which is what makes a session addressable from the phone.
+still the process that wrote it. `tmux list-panes -a` then maps the pid's tty to a tmux pane,
+which is what makes a session addressable from the phone.
 
 **Two ways of asking whether a pid is still that session**, and the Windows one is the better
 of them. macOS and Linux ask `ps` and take any pid whose command line has `claude` in it, which
@@ -14,7 +14,7 @@ date string on macOS and clock ticks on Linux, two more formats to parse for a c
 not bitten in a year of running.
 
 The pane half of this lives in `panes.py` and the token counting in `usage.py`; `__init__.py`
-re-exports all three, so `sessions.live_sessions()` and `sessions.iterm_status()` read the same
+re-exports all three, so `sessions.live_sessions()` and `sessions.pane_status()` read the same
 from outside as they always did.
 """
 
@@ -218,8 +218,8 @@ def _records() -> list[dict]:
     return found
 
 
-#: The whole listing, and whether iTerm answered when it was built. Cached because building it
-#: costs two subprocesses — `ps` for the pid join, `it2` for the panes — and nearly every route
+#: The whole listing, and whether tmux answered when it was built. Cached because building it
+#: costs two subprocesses — `ps` for the pid join, `tmux` for the panes — and nearly every route
 #: in the daemon asks for it. Without this the phone paid for both on every poll of every route:
 #: the session page alone re-reads turns every 1.1 s, the rail every 4 s and the deck every 6 s,
 #: each arriving as its own threadpool thread sitting on a subprocess. Forty of those is the
@@ -260,17 +260,17 @@ def _listed() -> tuple[list[Session], bool]:
     return found, answered
 
 
-def live_sessions(iterm_only: bool = True) -> list[Session]:
+def live_sessions(paned_only: bool = True) -> list[Session]:
     """Live interactive Claude sessions, most recently active first.
 
     The pane filter is applied here rather than inside `_build`, so one cached listing answers
-    both callers. `iterm_only` drops the sessions iTerm has no pane for, and only while iTerm
-    answered at all: a lookup that came back with nothing is iTerm being unavailable, which
+    both callers. `paned_only` drops the sessions tmux has no pane for, and only while tmux
+    answered at all: a lookup that came back with nothing is tmux being unavailable, which
     keeps every session rather than hiding all of them.
     """
     found, answered = _listed()
-    if iterm_only and answered:
-        # A Codex thread never has a pane. The rule is about Claude sessions iTerm cannot see,
+    if paned_only and answered:
+        # A Codex thread never has a pane. The rule is about Claude sessions tmux cannot see,
         # not about sessions that were never in a terminal at all.
         return [s for s in found if s.pane is not None or s.provider == "codex"]
     # A new list every time, because the one behind it is now shared between every caller and
@@ -279,10 +279,10 @@ def live_sessions(iterm_only: bool = True) -> list[Session]:
 
 
 def _build() -> tuple[list[Session], bool]:
-    """Every live session with its pane attached, and whether iTerm answered at all.
+    """Every live session with its pane attached, and whether tmux answered at all.
 
     Built unfiltered on purpose. The pane filter used to run inside this loop, which meant a
-    live session iTerm had no pane for was missing from `found` — and `found` is what the three
+    live session tmux had no pane for was missing from `found` — and `found` is what the three
     maps below are pruned against, so that session's own `/clear` tracking was dropped while it
     was still running. Filtering after the fact is both the shareable answer and the right one.
     """
@@ -332,14 +332,12 @@ def _build() -> tuple[list[Session], bool]:
 
 
 def focus(session: Session) -> bool:
-    """Bring the session's iTerm pane to the front on the Mac."""
+    """Show the session's pane in the tmux client on the Mac: its window, then the pane in it."""
     if session.pane is None:
         return False
-    r = subprocess.run(
-        ["it2", "session", "focus", session.pane.iterm_session_id],
-        capture_output=True,
-        text=True,
-        timeout=10,
-        check=False,
-    )
-    return r.returncode == 0
+    pane = session.pane.iterm_session_id
+    for verb in ("select-window", "select-pane"):
+        r = subprocess.run(["tmux", verb, "-t", pane], capture_output=True, text=True, timeout=10, check=False)
+        if r.returncode != 0:
+            return False
+    return True

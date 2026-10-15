@@ -1,10 +1,8 @@
-"""Starting a session where there is no iTerm: tmux, on Ubuntu and on Fractal.
+"""Starting a session in tmux: on this Mac, on Ubuntu and on Fractal.
 
-`starting.py` is `it2` from end to end — a window, then the pane id out of that window, then a
-line run in that pane — and there is no fallback in it to switch off. So this is the second
-backend that observation always implied (`docs/network.md`, *Left out*), and it is deliberately
-the smallest one that can exist: tmux makes a detached window, runs `claude` in it, and
-everything after that is `starting`'s own waiting, unchanged and shared.
+Deliberately the smallest thing that can exist: tmux makes a detached window, runs `claude` in
+it, and everything after that is `starting`'s own waiting, unchanged and shared. `open_window` is
+the Mac's way in too (`starting.start`), with the Mac's own launch line; `start` is a hand's.
 
 **Two facts, measured on 2026-09-13 rather than assumed.**
 
@@ -17,10 +15,10 @@ everything after that is `starting`'s own waiting, unchanged and shared.
   instantly, and the failure reads as "claude was started but has not reported itself yet":
   a timeout forty seconds later describing the wrong thing entirely.
 
-**No pane, and that is not a gap.** A hand has no iTerm, so `Session.pane` stays None and every
-screen reads that as "cannot be typed into" — which is what a remote session already is. The
-keyboard route refuses here for the reason it always refused, and nothing about the authority
-invariant is relaxed to let this exist.
+**No pane, and that is not a gap.** The hub rebuilds a remote session with `pane` None
+(`fleet/merge.py`), so every screen reads it as "cannot be typed into", and a hand delivers down
+the socket only. The keyboard route refuses here for the reason it always refused, and nothing
+about the authority invariant is relaxed to let this exist.
 """
 
 from __future__ import annotations
@@ -57,16 +55,16 @@ def start(cwd: str, model: str = "") -> tuple[Session | None, str | None]:
     if cwd not in trusted():
         return None, (f"Claude Code has not been trusted in {folder.name} yet — it has to be "
                       f"started there once on that machine and the trust question answered")
-    running = live_sessions(iterm_only=False)
+    running = live_sessions(paned_only=False)
     known = {s.session_id for s in running}
     name = free_name(folder.name, running)
-    if not _new_session(name, folder, model):
+    if not open_window(name, folder, _launch(name, model)):
         return None, "tmux would not start a session there"
     log.info("started claude in %s under tmux", folder)
     return settled(folder, known)
 
 
-def _new_session(name: str, folder: Path, model: str) -> bool:
+def open_window(name: str, folder: Path, line: str) -> bool:
     """A window in the session the person actually attaches to where there is one, a detached
     session of its own where there is not. Detached either way, because nobody is watching: the
     hand has to outlive this request, and that is what makes tmux the supervisor and not us.
@@ -85,7 +83,7 @@ def _new_session(name: str, folder: Path, model: str) -> bool:
         else:
             command = [_tmux(), "new-window", "-d", "-t", f"{target}:", "-n", handle, "-c", str(folder)]
         done = subprocess.run(
-            [*command, _launch(name, model)],
+            [*command, line],
             capture_output=True, text=True, timeout=TMUX_TIMEOUT, check=False
         )
         if done.returncode == 0 and target is not None:

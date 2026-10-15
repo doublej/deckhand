@@ -68,7 +68,7 @@ def test_one_listing_is_shared_rather_than_rebuilt_for_every_route(claude_home, 
 
     first = sessions.live_sessions()
     again = sessions.live_sessions()
-    both = sessions.live_sessions(iterm_only=False)
+    both = sessions.live_sessions(paned_only=False)
 
     assert len(asked) == 1  # three routes' worth of listing, one `ps`
     assert [s.name for s in again] == [s.name for s in first]
@@ -218,3 +218,13 @@ def test_an_idle_record_is_never_raised_to_busy(claude_home):
     _transcript(claude_home, sid, _said("tool_use"))
     listed = next(s for s in sessions.live_sessions() if s.session_id == sid)
     assert listed.status == "idle"
+
+
+def test_a_tmux_listing_maps_each_tty_to_its_pane():
+    from deckhand_daemon.sessions import panes
+
+    listing = "/dev/ttys042\t%1\t@1\tmain:2\t✳ behangrand\n/dev/ttys045\t%2\t@2\tmain:3\t\n\n"
+    assert panes.parse(listing) == {
+        "ttys042": sessions.Pane("%1", "@1", "main:2", "✳ behangrand"),
+        "ttys045": sessions.Pane("%2", "@2", "main:3", ""),
+    }

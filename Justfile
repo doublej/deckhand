@@ -116,11 +116,6 @@ unpublish-release:
 logs:
     tail -f ~/Library/Logs/Deckhand/deckhand.log
 
-# Let the daemon read iTerm's colours: connects once as `deckhand`; answer iTerm's dialog at the Mac.
-[group('develop')]
-iterm-styles:
-    uv run --directory daemon python -m deckhand_daemon.space.iterm
-
 # Regenerate docs/commands.md's tables from the routes, the MCP tools and the deckhand command.
 [group('develop')]
 commands-doc:
@@ -403,9 +398,9 @@ setup web_url="" remote_url="" web_dir="" xr_dir="":
     else
         echo "deckhand-windows: none at $xr/windows, skipped. Only the headset shows Mac windows (xr_dir=<folder>)."
     fi
-    if [[ "$(defaults read com.googlecode.iterm2 EnableAPIServer 2>/dev/null)" != 1 ]]; then
+    if ! command -v tmux >/dev/null; then
         echo
-        echo "One switch in iTerm2: Settings > General > Magic > Enable Python API."
+        echo "Install tmux (brew install tmux) and run Claude Code inside it."
         echo "Deckhand finds which terminal each session is in through it, and types into it when you ask."
     fi
     echo

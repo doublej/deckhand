@@ -74,25 +74,17 @@ Every route needs `x-deckhand-token`.
 - `GET /sessions/{id}/screen` → `{lines, at, styled, runs?}`: the pane as it stands, shared
   across polls for 0.5 s. It is what the headset's terminal plane shows — the prompt box and a
   pending permission question are on the screen and in no transcript. No pane is a 409, as
-  `/focus` answers. `lines` is plain text either way. `styled: true` adds `runs`, one list per
-  line of `{t, fg?, bg?, b?, f?, i?, u?, v?}` — text, colours as `#rrggbb`, bold, faint, italic,
-  underline, inverse — adjacent cells of one style made one run. A default colour is left out;
-  ANSI 0–15 come through the pane's profile (bold 0–7 drawn bright when it says so), 16–255 the
-  xterm table, 24-bit as is. A double-width character is one run character, its placeholder
-  cell dropped. `styled: false` is `it2 session read` (~0.13 s), which is all there is until
-  iTerm's API is approved, and for a minute after it fails.
-- `GET /terminal/theme?session=` → `{font: {family, size}, fg, bg, bold, cursor, selection,
-  ansi: [16], lineSpacing, charSpacing, brightBold}`: what iTerm draws the pane with, colours as
-  `#rrggbb` (null when the profile has none), the font as its PostScript name. With `session`
-  and the API approved it is that pane's own profile; otherwise the default profile out of
-  iTerm's preferences, ` (Light)` or ` (Dark)` colours by the Mac's appearance when the profile
-  keeps both. Shared for 10 s.
-
-**Approving the API is JJ's step, once, at the Mac.** iTerm asks by name whether a new client
-may connect, with a dialog on the screen, and every API call waits until it is answered — so the
-daemon never connects on its own. `just iterm-styles` connects as `deckhand` from a terminal, JJ
-answers the dialog, and it writes `iterm-approved` in the data dir; the daemon reads that marker
-on every call and needs no restart. Delete the marker to go back to plain text.
+  `/focus` answers. Read with `tmux capture-pane -e`, so `lines` is the plain text and `styled`
+  is always true: `runs` is one list per line of `{t, fg?, bg?, b?, f?, i?, u?, v?}` — text,
+  colours as `#rrggbb`, bold, faint, italic, underline, inverse — adjacent text of one style made
+  one run. A default colour is left out; ANSI 0–15 come through the profile (bold 0–7 drawn bright
+  when it says so), 16–255 the xterm table, 24-bit as is. A double-width character is one run
+  character; tmux writes no placeholder after it.
+- `GET /terminal/theme` → `{font: {family, size}, fg, bg, bold, cursor, selection,
+  ansi: [16], lineSpacing, charSpacing, brightBold}`: what the terminal tmux runs in draws with,
+  colours as `#rrggbb` (null when the profile has none), the font as its PostScript name. The
+  default profile out of iTerm's preferences, ` (Light)` or ` (Dark)` colours by the Mac's
+  appearance when the profile keeps both; a `?session=` changes nothing. Shared for 10 s.
 
 `Plane = {id, kind, url, window, title, near, by, at}`. `Pose = {x, y, z, yaw, pitch?, roll?, scale?, group?, minimized?}` — metres in
 the floor-origin space, angles in radians, scale 0.25–4. Planes whose poses share a `group` are one project to the
@@ -101,11 +93,6 @@ put down on its own and `"group"` for one put down with its whole group, so rest
 lifts only those; the headset decides who joins,
 by snapping one plane against another, and this only keeps the answer. State is `space.json` in the data dir, written whole through
 `os.replace`.
-
-A terminal's group is also its iTerm tab group (iTerm 3.7+), both ways: `space/tabs.py` compares
-each side with where they last agreed (`iterm-groups.json`) every 3 s and carries whichever moved —
-a group into one tab group per window, a tab group into the headset as `beside`, so the session
-stands flush with its group. Both moved: the headset wins. Needs the approved iTerm API.
 
 - **The stream is relayed, never buffered.** It has no end. When the headset goes, the relay
   closes its side to the helper — in a background task, because Starlette cancels the stream on a

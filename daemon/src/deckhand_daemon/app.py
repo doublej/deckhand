@@ -44,7 +44,6 @@ from .reading import asked, commands, context, readable, transcripts
 from .reading import routes as reading_routes
 from .settings import routes as settings_routes
 from .space import routes as space_routes
-from .space import tabs as tab_groups
 
 
 def require_token(request: Request, x_deckhand_token: str = Header(default="")) -> None:
@@ -68,7 +67,6 @@ async def lifespan(_: FastAPI):
     watchers = [asyncio.create_task(plugin.watch()), asyncio.create_task(push.watch()),
                 asyncio.create_task(nudge.watch()), asyncio.create_task(briefings.watch()),
                 asyncio.create_task(manager_agent.watch()),
-                asyncio.create_task(tab_groups.watch()),
                 # Open every machine's link now rather than on the first listing that wants one
                 # — otherwise the whole ssh handshake lands on the one request a person is
                 # watching — and go on asking, so a link that drops is remade in the background
@@ -119,10 +117,10 @@ _last_listing: tuple[int, str] | None = None
 def list_sessions() -> dict:
     global _last_listing
     live = sessions.live_sessions()
-    status = sessions.iterm_status()
+    status = sessions.pane_status()
     if _last_listing != (len(live), status):
         _last_listing = (len(live), status)
-        log.info("listing changed: %d sessions, iterm %s", len(live), status)
+        log.info("listing changed: %d sessions, panes %s", len(live), status)
         # The phone asks for this every few seconds anyway, so the plugin page gets a live
         # count for free rather than the daemon paying for one of its own.
         plugin.status(sessions=f"{len(live)} live")
@@ -293,7 +291,7 @@ def clear_queue(session_id: str) -> dict:
 def focus_session(session_id: str) -> dict:
     session = saying.session_or_404(session_id)
     if not sessions.focus(session):
-        raise HTTPException(status_code=409, detail="session has no iTerm pane")
+        raise HTTPException(status_code=409, detail="session is not in a tmux pane")
     return {"focused": True}
 
 

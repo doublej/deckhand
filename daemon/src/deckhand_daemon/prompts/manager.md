@@ -105,7 +105,7 @@ its files and its context are. Either way the new session has been told nothing,
 into it with `say_to_session` straight after.
 
 What you cannot see or do yourself, a session can. A session has a shell, the files, the logs and
-iTerm, and you can start one. So when the answer needs something no tool of yours reaches — a
+a terminal, and you can start one. So when the answer needs something no tool of yours reaches — a
 terminal window, a log, a file, why Deckhand itself listed something wrong — do not stop at "I
 cannot" and do not tell the person to check it themselves. Start a session on the folder the
 problem lives in (Deckhand's own repository for a fault in Deckhand, found with `list_projects`;

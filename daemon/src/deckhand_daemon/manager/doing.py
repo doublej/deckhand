@@ -181,12 +181,12 @@ def on_phone(action: str, target: str) -> dict:
 
 
 def focus(wanted: str) -> dict:
-    """Bring a session's iTerm pane to the front on the Mac. Types nothing into it."""
+    """Show a session's tmux pane on the Mac. Types nothing into it."""
     session = find(wanted)
     if session is None:
         return missing(wanted)
     if not sessions.focus(session):
-        return said(f"{session.name} has no pane iTerm will answer for, so nothing to bring up.")
+        return said(f"{session.name} is not in a tmux pane, so nothing to bring up.")
     talk.say("act", f"brought {session.name} to the front on the Mac")
     return said(f"{session.name} is at the front on the Mac.")
 

@@ -1,4 +1,4 @@
-"""`/terminal/theme`: iTerm's font, spacing and colours, from its preferences or a pane's profile."""
+"""`/terminal/theme`: iTerm's font, spacing and colours, from its default profile."""
 
 from __future__ import annotations
 
@@ -77,18 +77,9 @@ def test_a_component_is_clamped_and_rounded():
     assert theme.hex_of(None) is None
 
 
-def test_unapproved_it_is_the_default_profile_and_iterm_is_never_asked(
-    client, head, listed, iterm_api
-):
+def test_every_pane_draws_with_the_default_profile(client, head, listed, monkeypatch):
+    monkeypatch.setattr(theme, "_kept", None)
+    monkeypatch.setattr(theme, "dark", lambda: False)
     answered = client.get("/terminal/theme?session=any", headers=head).json()
     assert set(answered) == WIRE
     assert answered["font"]["family"] == "JetBrainsMonoNF-Regular"
-    assert iterm_api.connects == 0
-
-
-def test_approved_it_is_the_sessions_own_profile(client, head, listed, iterm_api, approved):
-    iterm_api.profile = {"Normal Font": "Hack-Regular 14"}
-    answered = client.get("/terminal/theme?session=any", headers=head).json()
-    assert answered["font"] == {"family": "Hack-Regular", "size": 14.0}
-    plain = client.get("/terminal/theme", headers=head).json()
-    assert plain["font"]["family"] == "JetBrainsMonoNF-Regular"

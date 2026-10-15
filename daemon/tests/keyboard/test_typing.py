@@ -45,8 +45,8 @@ def watched(home: Path, socket_path: str, session_id: str = SID) -> tuple[Sessio
     return session, transcript
 
 
-def recording_it2(monkeypatch) -> list[str]:
-    """Every burst `it2` was handed, in order."""
+def recording_tmux(monkeypatch) -> list[str]:
+    """Every burst tmux was handed, in order."""
     bursts: list[str] = []
 
     def run(argv, **_kwargs):
@@ -58,7 +58,7 @@ def recording_it2(monkeypatch) -> list[str]:
 
 
 def taking(transcript: Path, monkeypatch, keep=slice(None)):
-    """An `it2` whose session writes what it was typed into its transcript, as one would."""
+    """A tmux whose session writes what it was typed into its transcript, as one would."""
     def run(argv, **_kwargs):
         if argv[-1] not in (deliver.CLEAR_LINE, deliver.RETURN):
             transcript.write_text(json.dumps({"message": {"content": argv[-1][keep]}}) + "\n")
@@ -73,7 +73,7 @@ def test_a_message_longer_than_one_read_is_typed_in_pieces(inbox, claude_home, m
     a live session, a 1212-character prompt sent whole came back with its first 1014 characters
     gone — delivered, reported delivered, and not what was said."""
     monkeypatch.setattr(deliver, "SUBMITTED", 0.05)  # nothing writes the transcript here
-    typed = recording_it2(monkeypatch)
+    typed = recording_tmux(monkeypatch)
     session, _ = watched(claude_home, inbox.getsockname())
     said = "another sentence about the rail. " * 200
 
@@ -93,12 +93,12 @@ def test_words_are_never_cut_through_the_middle_of_a_character():
 
 
 def test_a_prompt_the_session_never_took_is_not_called_delivered(inbox, claude_home, monkeypatch):
-    """`it2` exiting 0 says the keys were accepted, never that the prompt was submitted — and a
+    """`send-keys` exiting 0 says the keys were accepted, never that the prompt was submitted — and a
     prompt left sitting in the box was reported to the phone as sent for as long as that was the
     only thing asked. The route is `auto` on purpose: words already in a session's box are not
     words to say again down the socket, which would leave it holding both."""
     monkeypatch.setattr(deliver, "SUBMITTED", 0.1)
-    typed = recording_it2(monkeypatch)
+    typed = recording_tmux(monkeypatch)
     session, _ = watched(claude_home, inbox.getsockname())
 
     taken, error = deliver.deliver(session, "run the tests")
