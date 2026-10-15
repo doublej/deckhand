@@ -103,7 +103,7 @@ def sync() -> None:
     if read is None:
         return
     tabs, titles = read
-    now = {sid: (groups[sid], tabs.get(sid)) for sid in panes}
+    now = {sid: (groups[sid], tabs[sid]) for sid in panes if sid in tabs}  # not found is not "left"
     path = config.data_dir() / STATE
     last = _load(path)
     to_iterm, to_headset = decide(now, last)
@@ -113,7 +113,8 @@ def sync() -> None:
         tabs, titles = read if pushed is None else pushed
     if to_iterm or to_headset:
         log.info("tab groups: %d into iTerm, %d into the headset", len(to_iterm), len(to_headset))
-    agreed = {sid: {"d": after.get(sid, d), "i": tabs.get(sid)} for sid, (d, _) in now.items()}
+    agreed = {sid: was for sid, was in last.items() if sid in panes}  # unseen this pass: as they were
+    agreed |= {sid: {"d": after.get(sid, d), "i": tabs.get(sid, i)} for sid, (d, i) in now.items()}
     if agreed != last:
         path.write_text(json.dumps(agreed, indent=2) + "\n")
     stored.name({a["d"]: titles[a["i"]] for a in agreed.values() if a["d"] and a["i"] in titles})
