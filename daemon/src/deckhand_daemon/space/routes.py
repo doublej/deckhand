@@ -10,7 +10,8 @@ Bodies are taken as plain objects and checked by hand, as `bindings/routes.py` d
 wrong with one is a 400 with a `detail` and a key nobody asked for is dropped.
 
 No token check of its own: `app.py` mounts this with the dependency every other route carries,
-and `/windows` rides along on the same router so it is mounted, and guarded, in the same breath.
+and `/windows` and `/camera` ride along on the same router so they are mounted, and guarded, in
+the same breath.
 """
 
 from __future__ import annotations
@@ -30,17 +31,20 @@ from ..log import log
 from ..projects import catalog
 from ..projects import routes as projects
 from ..sessions import live_sessions, project
-from . import around, screen, stored, theme, windows
+from . import around, camera, screen, stored, theme, windows
 
 router = APIRouter(tags=["space"])
 router.include_router(windows.router)
 router.include_router(screen.router)
 router.include_router(theme.router)
+router.include_router(camera.router)
 
 #: A host that means "this machine" to whoever wrote it — and the headset is another machine.
 LOOPBACK = {"localhost", "127.0.0.1", "0.0.0.0", "::1"}
-#: The fixed planes, which are neither a session nor a kept plane.
-FIXED = {"manager", "projects", "launcher"}
+#: The fixed planes, which are neither a session nor a kept plane; `monitor` is the headset's
+#: own, what its camera sees, and kept here so it can stand in a group like any plane, and
+#: `camera` is where the camera itself stands.
+FIXED = {"manager", "projects", "launcher", "monitor", "camera"}
 GROUP = re.compile(r"[A-Za-z0-9_-]{1,64}")
 MIN_SCALE, MAX_SCALE = 0.25, 4.0
 #: Further from the floor origin than this is a pose gone wrong, not a room.
@@ -175,12 +179,13 @@ async def close_plane(plane_id: str, by: str = "") -> Response:
 @router.put("/space/poses/{key}", status_code=204)
 async def place(key: str, sent: Annotated[dict, Body()]) -> Response:
     """`{x, y, z, yaw, pitch?, roll?, scale?, group?, minimized?}` for `session:<id>`,
-    `plane:<id>`, `manager`, `projects` or `launcher`. The headset's to call."""
+    `plane:<id>`, `manager`, `projects`, `launcher`, `monitor` or `camera`. The headset's to
+    call."""
     kind, _, rest = key.partition(":")
     if not (key in FIXED or (kind in ("session", "plane") and rest)):
         raise HTTPException(
             status_code=400,
-            detail="key must be session:<id>, plane:<id>, manager, projects or launcher",
+            detail="key must be session:<id>, plane:<id>, manager, projects, launcher, monitor or camera",
         )
     if kind == "plane" and not await asyncio.to_thread(stored.has_plane, rest):
         raise HTTPException(status_code=404, detail="no plane with that id")

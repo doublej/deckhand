@@ -135,7 +135,9 @@ def test_closing_a_plane_drops_it_and_its_pose(client, head):
     assert client.delete(f"/space/planes/{plane['id']}", headers=head).status_code == 404
 
 
-@pytest.mark.parametrize("key", [f"session:{LIVE}", "manager", "projects", "launcher"])
+@pytest.mark.parametrize(
+    "key", [f"session:{LIVE}", "manager", "projects", "launcher", "monitor", "camera"]
+)
 def test_every_kind_of_key_can_be_placed(client, head, key):
     pose = {"x": 0, "y": 1.2, "z": -1, "yaw": -3.1, "stray": True}
     assert client.put(f"/space/poses/{key}", json=pose, headers=head).status_code == 204
