@@ -84,6 +84,20 @@ struct BeaconTests {
         #expect(ServerSettings.adopts("mini.local", answering: true) == false)
     }
 
+    /// The IP moved: the failing address goes to the Mac it was paired with, and to no other.
+    @Test("a failing pairing moves only to the same Mac")
+    func sameMac() throws {
+        let beacon = try #require(Beacon.read(name: "mini", txt: ["host": "mini.local",
+                                                                    "id": "a1b2c3d4e5f6"]))
+        #expect(beacon.mac == "a1b2c3d4e5f6")
+        #expect(ServerSettings.adopts("10.0.0.4", answering: false, kept: "a1b2c3d4e5f6",
+                                      heard: beacon.mac))
+        #expect(ServerSettings.adopts("10.0.0.4", answering: false, kept: "a1b2c3d4e5f6",
+                                      heard: "ffffffffffff") == false)
+        #expect(ServerSettings.adopts("10.0.0.4", answering: false, kept: "a1b2c3d4e5f6",
+                                      heard: nil) == false)
+    }
+
     /// Nil is "nobody has asked", which a check in flight and a missing token both are. Reading
     /// either of them as a failure would move an address the person typed by hand.
     @Test("an address nobody has tried yet is left alone")
