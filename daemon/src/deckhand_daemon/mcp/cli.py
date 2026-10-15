@@ -1,7 +1,7 @@
-"""`deckhand` — the MCP server's twelve tools as one shell command.
+"""`deckhand` — the MCP server's fourteen tools as one shell command.
 
 **One surface, three doors.** The daemon's routes are the API; `server.py` turns nine of them and
-the skill's two slip scripts into tools; this file calls *those same functions*, so the command
+the skill's two slip scripts into tools, and two more over tmux; this file calls *those same functions*, so the command
 and the tool cannot drift — `test_cli.py` fails the day a tool exists without a command. Nothing
 here reaches the daemon or writes a slip on its own.
 
@@ -18,10 +18,10 @@ import json
 import logging
 import sys
 from pathlib import Path
-from typing import Any, NoReturn
+from typing import Any, NoReturn, get_args
 
 from .. import __version__
-from . import refused, server
+from . import refused, server, tmux
 
 #: Every route, tool and command in one page, generated from the code (`daemon/tools/commands_doc.py`).
 DOC = Path(__file__).resolve().parents[4] / "docs" / "commands.md"
@@ -29,7 +29,9 @@ DOC = Path(__file__).resolve().parents[4] / "docs" / "commands.md"
 PURPOSE = ("Reach the person — in this conversation when they are at the laptop or in the "
            "headset, on their phone when they are not — speak to the other Claude sessions on "
            "this Mac, and in their headset see what stands beside this session, put a page or a "
-           "Mac window there, or start another session there.")
+           "Mac window there, or start another session there — and organise the person's tmux: read "
+           "every window and pane, then rename, group, move, swap, join, break, lay out, zoom "
+           "or focus them.")
 
 #: Exit status per category. 4 is not an error: it is a question answered "no" — not said, not
 #: pushed, not answered yet — which a loop must be able to tell from a crash.
@@ -60,6 +62,12 @@ ERRORS: dict[str, tuple[str, bool, str]] = {
                       "`deckhand space` shows them whole")),
     "NOT_STARTABLE": ("user_error", False, ("`message` says why and lists folders a session can "
                       "start in, nearest first; pass one to `deckhand start`")),
+    "NO_TMUX": ("user_error", False, "no tmux server answers here: this session is not in tmux"),
+    "NO_SUCH_TARGET": ("user_error", False, ("`deckhand tmux` lists every pane and window; a "
+                       "session name, %pane, @window, session:index or window name")),
+    "BAD_ARRANGE": ("user_error", False, ("rename and group need --name, move, swap and join "
+                    "need --to, layout needs --layout")),
+    "TMUX_REFUSED": ("upstream", False, "tmux's own words are in `message`"),
     "PERSON_ONLY": ("user_error", False, ("refused on purpose, not missing: it is the person's "
                     "own. Ask them — `deckhand presence` says where — rather than going around "
                     "it with curl")),
@@ -99,6 +107,14 @@ COMMANDS: list[dict[str, str]] = [
      "does": "close a plane by its id or a unique prefix — a page or a window, never a session"},
     {"name": "windows", "tool": "mac_windows", "args": "",
      "does": "this Mac's windows, with the ids `open --window` takes"},
+    {"name": "tmux", "tool": "tmux_tree", "args": "",
+     "does": "every tmux session, window and pane, with the Claude session in each; `you` is "
+             "this one's pane"},
+    {"name": "arrange", "tool": "tmux_arrange",
+     "args": "ACTION TARGET [--to TARGET] [--name TEXT] [--layout LAYOUT] [--split right|below]",
+     "does": "move tmux's furniture: rename, group, ungroup, move, swap, join, break, layout, "
+             "zoom, focus. TARGET is a session name, %pane, @window, session:index or window "
+             "name"},
 ]
 
 SESSION_FIELDS = ("session", "name", "folder", "status", "waiting", "provider")
@@ -142,6 +158,13 @@ def build_parser() -> Parser:
     sub.choices["space"].add_argument("--full", action="store_true")
     sub.choices["start"].add_argument("folder", nargs="?", help="a listed project; default here")
     sub.choices["start"].add_argument("--provider", default="claude", choices=("claude", "codex"))
+    arrange = sub.choices["arrange"]
+    arrange.add_argument("action", choices=get_args(tmux.Action))
+    arrange.add_argument("target", help="session name, %pane, @window, session:index, window name")
+    arrange.add_argument("--to")
+    arrange.add_argument("--name")
+    arrange.add_argument("--layout", choices=tmux.LAYOUTS)
+    arrange.add_argument("--split", default="right", choices=("right", "below"))
     for each in sub.choices.values():
         each.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     return parser
@@ -178,6 +201,11 @@ async def _call(a: argparse.Namespace) -> dict[str, Any]:
             return await server.mac_windows()
         case "start":
             return await server.start_session(a.folder, provider=a.provider)
+        case "tmux":
+            return await server.tmux_tree()
+        case "arrange":
+            return await server.tmux_arrange(a.action, a.target, to=a.to, name=a.name,
+                                             layout=a.layout, split=a.split)
     raise AssertionError(a.command)
 
 
@@ -277,6 +305,13 @@ def prime(detected: dict[str, Any]) -> str:
 4. `deckhand close <id prefix>` — take a page or window away again.
 When the person puts a page beside you, or takes one away, a message from the daemon says so;
 `close` from here is closed as you, and nobody is told.
+
+## In tmux
+1. `deckhand tmux` — every window and pane, the Claude session in each, and `you`.
+2. `deckhand arrange group utt --name review` — a window's `@group`; the headset follows it.
+3. `deckhand arrange join utt --to deckhand` then `deckhand arrange layout deckhand --layout
+   even-horizontal` — two sessions side by side; `break` takes one out again.
+`focus` moves what the person is looking at: only when they asked.
 
 ## Output contract
 - stdout is data: JSON when piped or with `--json`, aligned text on a terminal. `presence`

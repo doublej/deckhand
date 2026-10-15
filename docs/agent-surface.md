@@ -139,7 +139,7 @@ the daemon, because neither needs to.
 
 **Built on 2026-09-10, ahead of that evidence and on JJ's say-so** — the point of the surface was
 always that a session could work the app rather than only read about it. It lives in
-`daemon/src/deckhand_daemon/mcp/`, is installed once with `just install-mcp`, and is the twelve
+`daemon/src/deckhand_daemon/mcp/`, is installed once with `just install-mcp`, and is the fourteen
 tools in [`docs/commands.md`](commands.md) with the refusals below. Two of them do not touch the daemon at all: `ask_on_phone`
 and `read_answer` run the skill's own scripts, so the tool and the shell command write the same
 file. The rest of this section is what was designed and is what shipped; phase 3's agent token

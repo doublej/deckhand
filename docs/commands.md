@@ -122,6 +122,8 @@ Each command is one MCP tool, and each tool is the route or script it reaches.
 | `deckhand start` | `start_session` | `POST /space/sessions`, `GET /projects` | no |
 | `deckhand close` | `close_plane` | `GET /space`, `DELETE /space/planes/{id}` | no |
 | `deckhand windows` | `mac_windows` | `GET /windows` | yes |
+| `deckhand tmux` | `tmux_tree` | `GET /sessions`, `tmux list-panes` | yes |
+| `deckhand arrange` | `tmux_arrange` | `GET /sessions`, `tmux rename-window`, `tmux set-option`, `tmux move-window`, `tmux swap-window`, `tmux join-pane`, `tmux break-pane`, `tmux select-layout`, `tmux resize-pane`, `tmux select-window`, `tmux select-pane`, `tmux list-panes` | no |
 <!-- /generated:parity -->
 
 Two things need neither a tool nor a command, because they are files in the session's own folder:
@@ -146,6 +148,7 @@ one table, `daemon/src/deckhand_daemon/mcp/refused.py`.
 | `click`, `input` | `POST /windows/{id}/input` | it drives the Mac's real cursor and keyboard, which is the person's hand |
 | `settings`, `filters`, `orders` | `PUT /settings, PUT /sessions/{id}/filters, PUT /sessions/{id}/orders` | what this Mac and a session are set to do is the person's; an agent that can rewrite a filter chain can remove the filter that would have stopped it |
 | `pair`, `devices`, `forget` | `POST /pair/open, DELETE /devices/{id}` | pairing hands a device everything this Mac's token can do, so it is opened by the person standing at the Mac (`just pair`), never on someone's behalf |
+| `send-keys`, `kill-pane`, `kill-window`, `respawn` | `tmux send-keys, kill-pane, kill-window, respawn-pane` | typing into a pane is the keyboard route, and killing or respawning one ends the session in it — the person's own press. `tmux_arrange` moves panes, never into them |
 | `manager` | `POST /manager/say` | it speaks into the manager's conversation as the person. The manager is a session too: Claude Code's own SendMessage to `deckhand-manager` reaches it as an agent |
 <!-- /generated:refused -->
 
@@ -170,6 +173,8 @@ command takes `--json`; `-` for a question, line or text reads it from stdin.
 | `deckhand start` | `[FOLDER] [--provider claude\|codex]` | `start_session` | `BAD_ANSWER`, `DAEMON_DOWN`, `NOT_STARTABLE`, `NO_SESSION`, `REFUSED` | start a session beside this one in the headset; brief it with `say` |
 | `deckhand close` | `ID\|PREFIX` | `close_plane` | `BAD_ANSWER`, `DAEMON_DOWN`, `NO_SUCH_PLANE`, `REFUSED` | close a plane by its id or a unique prefix — a page or a window, never a session |
 | `deckhand windows` | — | `mac_windows` | `BAD_ANSWER`, `DAEMON_DOWN`, `REFUSED` | this Mac's windows, with the ids `open --window` takes |
+| `deckhand tmux` | — | `tmux_tree` | `BAD_ANSWER`, `DAEMON_DOWN`, `NO_TMUX`, `REFUSED` | every tmux session, window and pane, with the Claude session in each; `you` is this one's pane |
+| `deckhand arrange` | `ACTION TARGET [--to TARGET] [--name TEXT] [--layout LAYOUT] [--split right\|below]` | `tmux_arrange` | `BAD_ANSWER`, `BAD_ARRANGE`, `DAEMON_DOWN`, `NO_SUCH_TARGET`, `NO_TMUX`, `REFUSED`, `TMUX_REFUSED` | move tmux's furniture: rename, group, ungroup, move, swap, join, break, layout, zoom, focus. TARGET is a session name, %pane, @window, session:index or window name |
 
 | Exit | Categories |
 |---|---|
@@ -194,6 +199,10 @@ command takes `--json`; `-` for a question, line or text reads it from stdin.
 | `PENDING` | negative | yes | no answer yet; the daemon messages this session when one lands, or block on it: `deckhand answer <id> --wait 300` |
 | `NO_SUCH_PLANE` | user_error | no | `message` lists the planes open, by id prefix; `deckhand space` shows them whole |
 | `NOT_STARTABLE` | user_error | no | `message` says why and lists folders a session can start in, nearest first; pass one to `deckhand start` |
+| `NO_TMUX` | user_error | no | no tmux server answers here: this session is not in tmux |
+| `NO_SUCH_TARGET` | user_error | no | `deckhand tmux` lists every pane and window; a session name, %pane, @window, session:index or window name |
+| `BAD_ARRANGE` | user_error | no | rename and group need --name, move, swap and join need --to, layout needs --layout |
+| `TMUX_REFUSED` | upstream | no | tmux's own words are in `message` |
 | `PERSON_ONLY` | user_error | no | refused on purpose, not missing: it is the person's own. Ask them — `deckhand presence` says where — rather than going around it with curl |
 | `USAGE` | usage | no | `deckhand prime` lists every command and its arguments |
 <!-- /generated:cli -->
@@ -205,6 +214,42 @@ The arguments are the tool's own JSON schema. A tool never raises: a failure com
 into exit 4.
 
 <!-- generated:mcp -->
+### `tmux_tree` — reads only
+
+Arguments: —  
+Reaches: `GET /sessions`, `tmux list-panes`  
+Fails with: `BAD_ANSWER`, `DAEMON_DOWN`, `NO_TMUX`, `REFUSED`
+
+The person's whole tmux, to organise it with `tmux_arrange`: every tmux session, its
+windows (id, index, name, `group`, active, zoomed) and their panes (id, size, the command
+running, its folder, and the Claude session in it by name, id and status). `you` is the pane
+this session is in.
+
+### `tmux_arrange` — writes
+
+Arguments: `action`: rename|group|ungroup|move|swap|join|break|layout|zoom|focus, `target`: string, `to`: string = null, `name`: string = null, `layout`: string = null, `split`: right|below = "right"  
+Reaches: `GET /sessions`, `tmux rename-window`, `tmux set-option`, `tmux move-window`, `tmux swap-window`, `tmux join-pane`, `tmux break-pane`, `tmux select-layout`, `tmux resize-pane`, `tmux select-window`, `tmux select-pane`, `tmux list-panes`  
+Fails with: `BAD_ANSWER`, `BAD_ARRANGE`, `DAEMON_DOWN`, `NO_SUCH_TARGET`, `NO_TMUX`, `REFUSED`, `TMUX_REFUSED`
+
+Move the furniture of the person's tmux — never what runs in it. `target` and `to` are a
+Claude session's name or id (its pane), a pane `%3`, a window `@2`, `session:index`,
+`session:name` or a window name; `tmux_tree` shows them all.
+
+- `rename` the target's window to `name`.
+- `group` its window under `name` (tmux's `@group`, which the headset follows within
+  seconds: grouped sessions stand together there); `ungroup` drops it.
+- `move` its window to just after `to`'s, or to the end of tmux session `to`.
+- `swap` its window with `to`'s.
+- `join` its pane into `to`'s window, `split` to the right or below — two sessions side by
+  side. `break` takes a pane out into a window of its own, called `name` if given, keeping
+  its group.
+- `layout` the target's window: tiled, even-horizontal, even-vertical, main-horizontal or
+  main-vertical. `zoom` toggles its pane filling the window.
+- `focus` shows the target in the person's terminal: it moves what they are looking at, so
+  only when they asked.
+
+Nothing here types into a pane or closes one; those are the person's.
+
 ### `whoami` — reads only
 
 Arguments: —  

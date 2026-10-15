@@ -31,6 +31,10 @@ REFUSED: list[dict[str, str]] = [
     {"verbs": "pair devices forget", "route": "POST /pair/open, DELETE /devices/{id}",
      "why": "pairing hands a device everything this Mac's token can do, so it is opened by the "
             "person standing at the Mac (`just pair`), never on someone's behalf"},
+    {"verbs": "send-keys kill-pane kill-window respawn",
+     "route": "tmux send-keys, kill-pane, kill-window, respawn-pane",
+     "why": "typing into a pane is the keyboard route, and killing or respawning one ends the "
+            "session in it — the person's own press. `tmux_arrange` moves panes, never into them"},
     {"verbs": "manager", "route": "POST /manager/say",
      "why": "it speaks into the manager's conversation as the person. The manager is a session "
             "too: Claude Code's own SendMessage to `deckhand-manager` reaches it as an agent"},

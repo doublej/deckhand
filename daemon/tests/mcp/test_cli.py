@@ -1,4 +1,4 @@
-"""The `deckhand` command: the same twelve tools as the MCP server, and how it says no."""
+"""The `deckhand` command: the same fourteen tools as the MCP server, and how it says no."""
 
 import asyncio
 import json
@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from deckhand_daemon.mcp import cli, refused, server
+from deckhand_daemon.mcp import cli, refused, server, tmux
 
 
 def test_every_tool_is_a_command_and_every_command_a_tool():
@@ -18,10 +18,10 @@ def test_every_tool_is_a_command_and_every_command_a_tool():
 
 def test_every_error_code_a_tool_can_return_is_known():
     """An unknown code would end the command in a KeyError instead of a hint."""
-    source = Path(server.__file__).read_text() + Path(server.here.__file__).read_text()
+    source = "".join(Path(m.__file__).read_text() for m in (server, server.here, tmux))
     for code in ("NO_SESSION", "DAEMON_DOWN", "REFUSED", "BAD_ANSWER", "BAD_KIND",
                  "NO_SUCH_SESSION", "CODEX_THREAD", "BAD_PLANE", "NO_SUCH_PLANE",
-                 "NOT_STARTABLE"):
+                 "NOT_STARTABLE", "NO_TMUX", "NO_SUCH_TARGET", "BAD_ARRANGE", "TMUX_REFUSED"):
         assert f'"{code}"' in source and code in cli.ERRORS
 
 

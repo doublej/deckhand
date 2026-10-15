@@ -33,6 +33,7 @@ DOC = Path(__file__).resolve().parents[2] / "docs" / "commands.md"
 BLOCK = re.compile(r"(<!-- generated:(\w+) -->\n).*?(<!-- /generated:\2 -->)", re.DOTALL)
 REACH = re.compile(r'reach\(\s*"(\w+)",\s*f?"([^"]+)"')
 SCRIPT = re.compile(r'_script\("([\w.]+)"')
+TMUX_VERB = re.compile(r'\("([a-z]+-[a-z]+)"')
 CODE = re.compile(r'"([A-Z][A-Z_]+)"')
 RAISED = re.compile(r"HTTPException\(\s*(?:status_code=)?(\d{3})")
 LOOKUP = re.compile(r"\b(?:session_or_404|live_session)\(")
@@ -58,23 +59,25 @@ def tools() -> dict:
 
 def source(name: str) -> str:
     """A tool's body, and the body of every `_helper` of the server's it calls, once each."""
+    home = inspect.getmodule(getattr(server, name))  # `server`, or `mcp/tmux.py` for its two
     seen: set[str] = set()
     todo, text = [name], []
     while todo:
         if (each := todo.pop()) in seen:
             continue
         seen.add(each)
-        body = inspect.getsource(getattr(server, each))
+        body = inspect.getsource(getattr(home, each))
         text.append(body)
         todo += [n for n in re.findall(r"\b(_\w+)\(", body)
-                 if inspect.isfunction(getattr(server, n, None))]
+                 if inspect.isfunction(getattr(home, n, None))]
     return "\n".join(text)
 
 
 def calls(body: str) -> str:
     routes = [f"`{m} {re.sub(r'{[^}]*}', '{id}', p)}`" for m, p in REACH.findall(body)]
     scripts = [f"`skills/deckhand/scripts/{s}`" for s in SCRIPT.findall(body)]
-    return ", ".join(dict.fromkeys(routes + scripts)) or "this session's own record"
+    ran = [f"`tmux {verb}`" for verb in TMUX_VERB.findall(body)]
+    return ", ".join(dict.fromkeys(routes + scripts + ran)) or "this session's own record"
 
 
 def codes(body: str) -> list[str]:

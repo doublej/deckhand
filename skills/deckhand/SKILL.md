@@ -37,7 +37,7 @@ itself, so say in one line that the slip is there.
 
 ## The same things as tools, and as one command
 
-Where the `deckhand` MCP server is installed, twelve tools arrive with it and are the shorter path.
+Where the `deckhand` MCP server is installed, fourteen tools arrive with it and are the shorter path.
 `presence` says where the person is; `ask_on_phone` and `read_answer` write and read exactly the
 file the scripts below do; `call_for_attention` puts a card on the Lock Screen; `whoami` says
 which session this is; and `sessions` and `say_to_session` reach the other sessions on this Mac.
@@ -45,13 +45,15 @@ which session this is; and `sessions` and `say_to_session` reach the other sessi
 `close_plane`, `space` and `mac_windows` go with it — a URL there must be reachable from the
 headset, so prefer `https://<slug>.atlas.local.jurrejan.com` over localhost. `start_session`
 starts another session beside this one, in a folder the Mac lists and trusts; brief it with
-`say_to_session`.
+`say_to_session`. `tmux_tree` reads the person's whole tmux — every window and pane, with the
+Claude session in each — and `tmux_arrange` renames, groups, moves, swaps, joins, breaks, lays
+out, zooms and focuses them; a window's group is the headset's group too.
 They work from any directory, because they take this session's folder out of its own record
 rather than out of `cwd`.
 
 Every one of them is also a `deckhand` shell command (`just install-cli` puts it on PATH):
 `presence`, `whoami`, `sessions`, `ask`, `answer`, `notify`, `say`, `open`, `space`, `close`,
-`windows`, `start`. JSON when piped, a structured
+`windows`, `start`, `tmux`, `arrange`. JSON when piped, a structured
 error on stderr, and an exit status to branch on — 4 means "no": not said, not pushed, not
 answered yet. `deckhand prime` prints the whole contract.
 

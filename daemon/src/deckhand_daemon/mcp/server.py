@@ -1,4 +1,4 @@
-"""The twelve tools a session gets so it can reach the person, wherever they are.
+"""The fourteen tools a session gets so it can reach the person, wherever they are.
 
 The skill said all of this in prose first, and the prose is still the better half: a slip is a
 file an agent writes in its own folder, and knowing that is worth more than any tool. These exist
@@ -30,6 +30,11 @@ only in a folder the listing names and Claude Code trusts — the gates the phon
 A session is never a plane the space keeps, so `close_plane` has nothing to name one by — closing
 a session stays the person's own press.
 
+**Two of them are the person's tmux** (`mcp/tmux.py`): `tmux_tree` reads every tmux session,
+window and pane with the Claude session in each, and `tmux_arrange` renames, groups, moves, swaps,
+joins, breaks, lays out, zooms and focuses them. Furniture again: nothing in it types into a pane
+or closes one.
+
 **`presence` comes first.** It says `laptop`, `headset` or `phone`. At the laptop the person is reading
 this conversation, so ask in it; on the phone, ask there. Every tool here is also a `deckhand`
 shell command (`mcp/cli.py`, `deckhand prime`), so a session without these tools loses nothing.
@@ -50,6 +55,8 @@ from mcp.server.mcpserver import MCPServer
 from mcp.types import ToolAnnotations
 
 from . import here, refused
+from .here import match as _match
+from .tmux import tmux_arrange, tmux_tree
 
 # The skill's own scripts, from this repo rather than from `~/.claude/skills/deckhand` — the same
 # files either way, since that is a symlink, and this way a checkout that has not been installed
@@ -66,6 +73,8 @@ WRITES = ToolAnnotations(open_world_hint=False)
 server = MCPServer(name="deckhand", instructions=(
     f"{__doc__}\n**Not here on purpose — the person's own, so stop looking:**\n"
     f"{refused.markdown()}\n"))
+server.tool(annotations=READ_ONLY)(tmux_tree)
+server.tool(annotations=WRITES)(tmux_arrange)
 
 
 async def _script(name: str, *args: str) -> tuple[bool, str]:
@@ -95,16 +104,6 @@ def _folder() -> tuple[dict, str] | tuple[None, str]:
 
 def _nobody(why: str) -> dict:
     return {"error": why, "code": "NO_SESSION"}
-
-
-def _match(wanted: str, live: list[dict]) -> dict | None:
-    """By id or name exactly, else by the one id it begins or the one name it is part of —
-    `say utt` should not need the whole of `utt-review`. Two candidates is no match."""
-    for exact in (s for s in live if wanted in (s.get("session_id"), s.get("name"))):
-        return exact
-    near = [s for s in live if (s.get("session_id") or "").startswith(wanted)
-            or wanted.lower() in (s.get("name") or "").lower()]
-    return near[0] if len(near) == 1 else None
 
 
 @server.tool(annotations=READ_ONLY)

@@ -69,6 +69,16 @@ def mine() -> dict | None:
     return None
 
 
+def match(wanted: str, live: list[dict]) -> dict | None:
+    """By id or name exactly, else by the one id it begins or the one name it is part of —
+    `say utt` should not need the whole of `utt-review`. Two candidates is no match."""
+    for exact in (s for s in live if wanted in (s.get("session_id"), s.get("name"))):
+        return exact
+    near = [s for s in live if (s.get("session_id") or "").startswith(wanted)
+            or wanted.lower() in (s.get("name") or "").lower()]
+    return near[0] if len(near) == 1 else None
+
+
 def _said(answered: httpx.Response) -> str:
     """The daemon's own sentence: FastAPI's `detail`, not the JSON it is wrapped in."""
     try:
