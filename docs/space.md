@@ -94,6 +94,14 @@ lifts only those; the headset decides who joins,
 by snapping one plane against another, and this only keeps the answer. State is `space.json` in the data dir, written whole through
 `os.replace`.
 
+A terminal's group is also its tmux window's `@group` (the name) and `@group_color`, both ways:
+`space/groups.py` compares each side with where they last agreed (`tmux-groups.json`) every 3 s
+and carries whichever moved — a headset group onto every member's window, named for its project
+unless a member already has a name; an `@group` into the headset as `beside`, so the session stands
+flush with its group. A whole group under a new `@group` is a rename and moves nothing. Both moved:
+tmux wins. `names` in `space.json` is each group's `@group`. iTerm's tab groups follow `@group`
+through a launchd agent outside this repo (`com.jurrejan.iterm-groups`, dotfiles).
+
 - **The stream is relayed, never buffered.** It has no end. When the headset goes, the relay
   closes its side to the helper — in a background task, because Starlette cancels the stream on a
   disconnect and an await inside that cancelled scope would be cancelled too. Verified against a
