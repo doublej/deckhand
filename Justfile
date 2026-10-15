@@ -153,11 +153,6 @@ devices:
 forget id:
     @uv run --directory daemon python -m deckhand_daemon.pairing forget {{ id }}
 
-# A token that can call POST /transcribe and nothing else, for a web page's mic; onto the clipboard.
-[group('develop')]
-transcribe-token name="browser":
-    @uv run --directory daemon python -m deckhand_daemon.pairing transcribe-token {{ name }}
-
 # How far a clip survives being sped up and silence-trimmed (`--report` re-reads the last run).
 [group('develop')]
 audio-bench *args:

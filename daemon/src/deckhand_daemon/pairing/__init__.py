@@ -10,8 +10,8 @@ decision and that page is where it was made.
 - **A paired device holds a token of its own** (`devices.py`), minted by `POST /pair` in
   exchange for the six-digit code the person at the Mac opened (`window.py`). Revoking it is
   `DELETE /devices/{id}`, and touches no other device.
-- **A scoped token can do one thing.** `just transcribe-token` mints a device whose row carries
-  `scope: transcribe`: a web page may hold it to call `POST /transcribe` and nothing else, so a
+- **A scoped token can do one thing.** `python -m deckhand_daemon.pairing transcribe-token NAME`
+  mints a device whose row carries `scope: transcribe`: a web page may hold it to call `POST /transcribe` and nothing else, so a
   browser's localStorage never holds a token that can speak into a session. `allows` refuses it
   everywhere; `allows_transcribe` is the one place it counts.
 - **`allows` is the one question**, asked by `app.require_token` and by the two middlewares that

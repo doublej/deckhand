@@ -245,7 +245,7 @@ it. It is the only thing in front of a daemon that can type into Claude sessions
 | `DELETE /devices/{id}` | the Mac's own | 204: that device's token stops working at once |
 | `POST /pair/transcribe` | the Mac's own | `{token, device}`: a token scoped to `/transcribe` |
 
-**A token for one route.** `just transcribe-token name=<page>` mints a device row with
+**A token for one route.** `uv run --directory daemon python -m deckhand_daemon.pairing transcribe-token <page>` mints a device row with
 `scope: transcribe` and puts its token on the clipboard, never on the screen. That token passes
 `pairing.allows_transcribe` and nothing else: every other route, `/pair/check` included, answers
 it 401. It is the token a web page keeps in localStorage for its mic button (the Jaimes chat in
