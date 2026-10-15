@@ -42,6 +42,7 @@ from .reading import asked, commands, context, readable, transcripts
 from .reading import routes as reading_routes
 from .settings import routes as settings_routes
 from .space import routes as space_routes
+from .space import tabs as tab_groups
 
 
 def require_token(request: Request, x_deckhand_token: str = Header(default="")) -> None:
@@ -65,6 +66,7 @@ async def lifespan(_: FastAPI):
     watchers = [asyncio.create_task(plugin.watch()), asyncio.create_task(push.watch()),
                 asyncio.create_task(nudge.watch()), asyncio.create_task(briefings.watch()),
                 asyncio.create_task(manager_agent.watch()),
+                asyncio.create_task(tab_groups.watch()),
                 # Open every machine's link now rather than on the first listing that wants one
                 # — otherwise the whole ssh handshake lands on the one request a person is
                 # watching — and go on asking, so a link that drops is remade in the background

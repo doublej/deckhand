@@ -80,6 +80,26 @@ def started(session_id: str, by: str) -> None:
         _write(kept)
 
 
+def regroup(session_id: str, mate: str) -> None:
+    """Move `session_id` into `mate`'s group: its pose is dropped and it stands `beside` the mate,
+    so the headset puts it flush there, in that group — or in a new one with the mate."""
+    with _lock:
+        kept = space()
+        kept["poses"].pop(f"session:{session_id}", None)
+        kept.setdefault("beside", {})[session_id] = mate
+        _write(kept)
+
+
+def ungroup(session_id: str) -> None:
+    """Take `session_id` out of its group where it stands."""
+    with _lock:
+        kept = space()
+        pose = kept["poses"].get(f"session:{session_id}")
+        if pose is None or pose.pop("group", None) is None:
+            return
+        _write(kept)
+
+
 def has_plane(plane_id: str) -> bool:
     return any(p["id"] == plane_id for p in space()["planes"])
 

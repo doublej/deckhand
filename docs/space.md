@@ -102,6 +102,11 @@ lifts only those; the headset decides who joins,
 by snapping one plane against another, and this only keeps the answer. State is `space.json` in the data dir, written whole through
 `os.replace`.
 
+A terminal's group is also its iTerm tab group (iTerm 3.7+), both ways: `space/tabs.py` compares
+each side with where they last agreed (`iterm-groups.json`) every 3 s and carries whichever moved —
+a group into one tab group per window, a tab group into the headset as `beside`, so the session
+stands flush with its group. Both moved: the headset wins. Needs the approved iTerm API.
+
 - **The stream is relayed, never buffered.** It has no end. When the headset goes, the relay
   closes its side to the helper — in a background task, because Starlette cancels the stream on a
   disconnect and an await inside that cancelled scope would be cancelled too. Verified against a
