@@ -36,7 +36,7 @@ import subprocess
 from urllib.parse import urlsplit
 
 from . import __version__
-from .config import PORT, base_url, lan_address
+from .config import PORT, base_url, lan_address, machine_id
 from .log import log
 
 SERVICE = "_deckhand._tcp"
@@ -63,8 +63,13 @@ def command() -> list[str]:
     was `172.20.10.8`, an iPhone personal-hotspot range, which is exactly the day a hardcoded
     address would have been wrong. An address that cannot be worked out at all is left out
     rather than advertised empty: absence is a key the phone never sees.
+
+    `id=` is which Mac this is, the same `machine_id` `/health` answers with. An address moves;
+    the id is how a phone or a headset holding a stale one picks *its* Mac out of a browse
+    rather than whichever answered first.
     """
-    txt = [f"host={urlsplit(base_url()).netloc}", "name=deckhand", f"version={__version__}"]
+    txt = [f"host={urlsplit(base_url()).netloc}", "name=deckhand", f"version={__version__}",
+           f"id={machine_id()}"]
     if lan := lan_address():
         txt.append(f"lan={lan}:{PORT}")
     return ["dns-sd", "-R", machine_name(), SERVICE, "local", str(PORT), *txt]

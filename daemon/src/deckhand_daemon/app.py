@@ -109,6 +109,7 @@ def health() -> dict:
         "host": config.base_url(),
         # So the phone can turn a session's `localhost:5173` into something it can actually open.
         "lan": config.lan_address(),
+        "id": config.machine_id(), "web": config.web_url(), "remote": config.remote_url(),
         "iterm": sessions.iterm_status(), "codex": sessions.codex.answered(),
         # Who has this Mac. Unauthenticated like the rest of /health, and deliberately so: it
         # says whether a person is at the keyboard, never what they are doing.
@@ -116,7 +117,6 @@ def health() -> dict:
         # utt's cover reads this, the one route with no token; null keeps it down.
         "cover": presence.cover(person),
     }
-
 
 
 # Two clients polling every few seconds would bury everything else in the log, so a listing

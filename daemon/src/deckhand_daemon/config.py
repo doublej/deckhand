@@ -75,6 +75,44 @@ def token() -> str:
     return fresh
 
 
+def machine_id() -> str:
+    """Which Mac this is, so a phone or a headset can find it again after its address moves.
+
+    Twelve hex characters made once and kept beside the token. Random rather than read off the
+    hardware: it goes out on an unauthenticated broadcast, and a hardware serial on the LAN is a
+    fingerprint for good. It names this Mac and grants nothing, so it is not a secret — deleting
+    the data folder makes a new Mac of it, exactly as it makes a new token.
+    """
+    path = data_dir() / "id"
+    if path.exists() and (existing := path.read_text().strip()):
+        return existing
+    fresh = secrets.token_hex(6)
+    path.write_text(fresh + "\n")
+    return fresh
+
+
+def web_url() -> str | None:
+    """Where deckhand-web answers, as `just setup web_url=…` was told. None until it was."""
+    return _kept("web-url")
+
+
+def remote_url() -> str | None:
+    """This Mac's address off the home network, as `just setup remote_url=…` was told."""
+    return _kept("remote-url")
+
+
+def _kept(name: str) -> str | None:
+    """One line in the data folder, the way `token` is: written at install, read per request.
+
+    Files rather than environment variables in the plist, so re-rendering the plist cannot
+    quietly drop them, and a client learns them from the Mac it found rather than from a
+    constant compiled into it.
+    """
+    path = data_dir() / name
+    text = path.read_text().strip() if path.exists() else ""
+    return text or None
+
+
 def claude_homes() -> list[Path]:
     """Every Claude Code config dir on this Mac, `~/.claude` first.
 
