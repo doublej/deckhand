@@ -14,6 +14,8 @@ from the extension, so a wav named `.m4a` fails to open however correct it is.
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -32,6 +34,9 @@ TIMEOUT = 180
 # 300 ms pickup interval.
 POLL = 0.02
 AUDIO_SUFFIXES = {".wav", ".m4a", ".mp3", ".aiff", ".flac", ".caf"}
+# What a browser's MediaRecorder hands over and AVFoundation cannot open: Chrome and Firefox record
+# Opus in webm or ogg, Safari AAC in mp4. ffmpeg turns each into a wav before utt sees it.
+CONVERTED = {".webm", ".ogg", ".mp4", ".aac"}
 # What this daemon knows how to read out of utt's answer file. Everything else rides through.
 KNOWN = ("text", "error", "finishedAt")
 # The order utt's own stages run in. Its `timings` is a dict and a dict has no order, so this is
@@ -59,8 +64,22 @@ class Heard:
     extra: dict = field(default_factory=dict)
 
 
+def ready() -> bool:
+    """Whether a browser's clip could be heard right now: utt servicing its jobs folder, and
+    ffmpeg there to read what a browser records. Two stats and a PATH walk, cheap enough for
+    `/health`, which is polled."""
+    return plugin.jobs_dir().is_dir() and not plugin.turned_off() and converter() is not None
+
+
+def converter() -> str | None:
+    """ffmpeg, which the launchd plist's PATH finds under Homebrew."""
+    return shutil.which("ffmpeg")
+
+
 def transcribe(clip: Path, hints: list[str] | None = None) -> Heard:
     """Never raises: a clip that cannot be transcribed is still stored."""
+    if clip.suffix.lower() in CONVERTED:
+        return _converted(clip, hints)
     if clip.suffix.lower() not in AUDIO_SUFFIXES:
         return Heard(error=f"utt cannot open {clip.suffix} files")
     jobs = plugin.jobs_dir()
@@ -82,6 +101,31 @@ def transcribe(clip: Path, hints: list[str] | None = None) -> Heard:
     finally:
         _clean(job)
     heard.stages = stages
+    return heard
+
+
+def _converted(clip: Path, hints: list[str] | None) -> Heard:
+    """The clip as a 16 kHz mono wav beside it, heard, and the wav gone again. The clip itself
+    stays, exactly as one utt can open does."""
+    ffmpeg = converter()
+    if ffmpeg is None:
+        return Heard(error=f"ffmpeg is needed to read {clip.suffix} files (brew install ffmpeg)")
+    wav = clip.with_name(f"{clip.stem}.converted.wav")
+    stages: dict[str, float] = {}
+    try:
+        with took(stages, "convert"):
+            done = subprocess.run([ffmpeg, "-v", "error", "-y", "-i", str(clip), "-ac", "1",
+                                   "-ar", "16000", str(wav)], capture_output=True, timeout=60,
+                                  check=False)
+        if done.returncode != 0:
+            log.warning("ffmpeg could not read %s: %s", clip.name, done.stderr.decode()[-200:])
+            return Heard(error=f"could not read that {clip.suffix} clip", stages=stages)
+        heard = transcribe(wav, hints)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        return Heard(error=f"could not convert the clip: {error}", stages=stages)
+    finally:
+        wav.unlink(missing_ok=True)
+    heard.stages = stages | heard.stages
     return heard
 
 

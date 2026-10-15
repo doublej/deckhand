@@ -1,4 +1,5 @@
 import json
+import subprocess
 import threading
 import time
 from pathlib import Path
@@ -121,9 +122,9 @@ def test_a_closed_utt_is_named_as_the_cause(tmp_path, monkeypatch):
 def test_a_format_utt_cannot_open_is_refused_before_the_wait(jobs):
     """The extension is how AVFoundation picks its reader, so an unopenable one is a 3 minute
     wait for an answer that will never come."""
-    clip = jobs.parent / "clip.webm"
+    clip = jobs.parent / "clip.amr"
     clip.write_bytes(b"x")
-    assert transcribe.transcribe(clip).error == "utt cannot open .webm files"
+    assert transcribe.transcribe(clip).error == "utt cannot open .amr files"
 
 
 def test_silence_from_utt_gives_up_rather_than_hanging(jobs, monkeypatch):
@@ -186,3 +187,26 @@ def test_utts_span_is_measured_finer_than_utt_answers():
     largest stage in the whole path — at the old 0.2 s it was measured with a fifth of a second
     of noise on it, which is not measurement."""
     assert transcribe.POLL <= 0.05
+
+
+@pytest.mark.skipif(transcribe.converter() is None, reason="needs ffmpeg")
+def test_a_browser_clip_is_converted_and_only_the_wav_is_tidied(jobs):
+    """Chrome records Opus in webm, which AVFoundation cannot open: utt is handed a wav made
+    from it, the wav is gone afterwards, and the clip itself is left where it was."""
+    clip = jobs.parent / "clip.webm"
+    subprocess.run([transcribe.converter(), "-v", "error", "-f", "lavfi", "-i", "sine=d=0.3",
+                    "-c:a", "libopus", str(clip)], check=True)
+    fake_utt(jobs, {"text": "from a browser"})
+    heard = transcribe.transcribe(clip)
+    assert (heard.text, heard.error) == ("from a browser", None)
+    assert next(iter(heard.stages)) == "convert"
+    assert clip.exists() and not list(jobs.parent.glob("*.converted.wav"))
+
+
+def test_a_clip_ffmpeg_cannot_read_is_an_error_not_a_raise(jobs):
+    if transcribe.converter() is None:
+        pytest.skip("needs ffmpeg")
+    clip = jobs.parent / "clip.webm"
+    clip.write_bytes(b"not audio at all")
+    heard = transcribe.transcribe(clip)
+    assert heard.text is None and "webm" in heard.error

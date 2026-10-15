@@ -425,11 +425,13 @@ inside a helper is not listed, so treat the column as the least a route can answ
 | `POST /presence/phone` | — | 204 | 401 | The person just touched the app. It says so at most every ten seconds and on coming to the front, and from then until a key is pressed at the Mac, `where` is `phone`. |
 | `POST /presence/headset` | — | 204 | 401 | The headset is being worn: it beats every ten seconds while it is, and for `HEADSET_LIVE` after the last beat `where` is `headset`. |
 | `POST /pair/open` | — | 200 | 401 | A six-digit code, good once for `window.LASTS` seconds; replaces any code already open. |
+| `POST /pair/transcribe` | `?name`: string = "browser" | 200 | 401, 422 | A token that can call `POST /transcribe` and nothing else, for a web page's mic button. Minted here rather than paired: the person at the Mac asks for it, so there is no code. |
 | `POST /pair` | body `{code, name?, kind?}` | 200 | 422 | Trade the code on the Mac's screen for a token of this device's own. |
 | `GET /pair/check` | — | 200 | 401 | 200 for any token this Mac accepts, 401 for anything else. For the NAS Caddy's `forward_auth`, so a device token works off the home network without the edge holding a literal of its own. |
 | `GET /devices` | — | 200 | 401 | Every device paired with a code: id, name, kind, when it paired, when it was last heard. |
 | `DELETE /devices/{device_id}` | — | 204 | 401, 404, 422 | Take one device's token away. It stops working on its next request; no other changes. |
 | `GET /health` | — | 200 | — | Open on purpose: the app pings it to tell 'wrong host' from 'wrong token'. |
+| `POST /transcribe` | form `{file}` | 200 | 400, 401, 413, 415, 422 | A clip in, its words out. No session, no delivery, and the clip is not kept. |
 | `GET /sessions` | — | 200 | 401 | — |
 | `GET /machines` | — | 200 | 401 | Every machine on the network and whether it is reachable right now. |
 | `GET /sessions/all` | — | 200 | 401 | The whole network's sessions in one answer, newest first. |
