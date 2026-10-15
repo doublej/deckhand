@@ -13,7 +13,8 @@ decision and that page is where it was made.
 - **A scoped token can do one thing.** `python -m deckhand_daemon.pairing transcribe-token NAME`
   mints a device whose row carries `scope: transcribe`: a web page may hold it to call `POST /transcribe` and nothing else, so a
   browser's localStorage never holds a token that can speak into a session. `allows` refuses it
-  everywhere; `allows_transcribe` is the one place it counts.
+  everywhere; `allows_transcribe` is the one place it counts. `manager-token NAME` is the same
+  for `/mcp`, the manager's tools over HTTP (`mcp/remote.py`), and `allows_manager` its check.
 - **`allows` is the one question**, asked by `app.require_token` and by the two middlewares that
   answer before a route's own dependency runs (`fleet/routing.py`, `sessions/codex_routes.py`).
   A check of its own anywhere else is a door this module does not know about.
@@ -26,8 +27,10 @@ import secrets
 from .. import config
 from . import devices
 
-#: The one scope there is: `POST /transcribe`, and nothing else on this daemon.
+#: `POST /transcribe`, and nothing else on this daemon.
 TRANSCRIBE = "transcribe"
+#: `/mcp`, the manager's tools, and nothing else on this daemon.
+MANAGER = "manager"
 
 
 def allows(given: str) -> bool:
@@ -47,7 +50,16 @@ def allows(given: str) -> bool:
 
 def allows_transcribe(given: str) -> bool:
     """`allows`, or a token minted for `/transcribe` alone."""
+    return _allows_scope(given, TRANSCRIBE)
+
+
+def allows_manager(given: str) -> bool:
+    """`allows`, or a token minted for `/mcp` alone."""
+    return _allows_scope(given, MANAGER)
+
+
+def _allows_scope(given: str, scope: str) -> bool:
     if allows(given):
         return True
     device = devices.known(given) if given else None
-    return device is not None and device.get("scope") == TRANSCRIBE
+    return device is not None and device.get("scope") == scope

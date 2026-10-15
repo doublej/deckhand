@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 
 from .. import beacon, config, plugin
 from ..log import log
-from . import TRANSCRIBE, allows, devices, window
+from . import MANAGER, TRANSCRIBE, allows, devices, window
 
 router = APIRouter()
 
@@ -55,6 +55,15 @@ def mint_transcribe(name: str = Query(default="browser", min_length=1, max_lengt
     Minted here rather than paired: the person at the Mac asks for it, so there is no code."""
     token, device = devices.mint(name.strip(), TRANSCRIBE, scope=TRANSCRIBE)
     log.info("minted a transcribe-only token for %s as %s", device["name"], device["id"])
+    return {"token": token, "device": device}
+
+
+@router.post("/pair/manager", dependencies=[Depends(require_mac)])
+def mint_manager(name: str = Query(default="mcp", min_length=1, max_length=60)) -> dict:
+    """A token that can reach `/mcp`, the manager's tools, and nothing else — for an MCP client
+    off this Mac. Minted like the transcribe one: the person at the Mac asks for it."""
+    token, device = devices.mint(name.strip(), MANAGER, scope=MANAGER)
+    log.info("minted a manager-only token for %s as %s", device["name"], device["id"])
     return {"token": token, "device": device}
 
 

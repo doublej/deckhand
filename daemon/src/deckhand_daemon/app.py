@@ -36,6 +36,7 @@ from .links import routes as link_routes
 from .log import log
 from .manager import agent as manager_agent
 from .manager import routes as manager_routes
+from .mcp import remote as mcp_remote
 from .orders import routes as order_routes
 from .pairing import routes as pairing_routes
 from .projects import routes as project_routes
@@ -73,7 +74,8 @@ async def lifespan(_: FastAPI):
                 # watching — and go on asking, so a link that drops is remade in the background
                 # and the hand behind it never falls silent long enough to time itself out.
                 asyncio.create_task(fleet.keep_warm())]
-    yield
+    async with mcp_remote.serving():
+        yield
     beacon.stop()
     for watcher in watchers:
         watcher.cancel()
@@ -103,6 +105,8 @@ app.include_router(settings_routes.router, dependencies=[Depends(require_token)]
 app.include_router(space_routes.router, dependencies=[Depends(require_token)])
 app.include_router(saying.router, dependencies=[Depends(require_token)])
 app.include_router(pairing_routes.router)  # its own checks: `POST /pair` has no token yet
+# The manager's tools over MCP's HTTP transport, behind a bearer token of its own (`mcp/remote.py`).
+app.add_route("/mcp", mcp_remote.endpoint)
 app.include_router(browser_routes.router)  # `/health` is open; `/transcribe` has a scope of its own
 
 

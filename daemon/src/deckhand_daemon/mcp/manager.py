@@ -14,7 +14,8 @@ the person's own presses, and `manager/doing.py` says why for each.
 
 Installed apart from `deckhand-mcp` on purpose (`claude mcp add deckhand-manager -- uv run
 --project <checkout>/daemon deckhand-manager-mcp`): every session gets that one, and only a
-session the person chose should be able to change this Mac's switches.
+session the person chose should be able to change this Mac's switches. From off this Mac it is
+`https://deckhand-mcp.jurrejan.com/mcp` with a manager-only bearer token (`remote.py`).
 """
 
 from __future__ import annotations
@@ -41,12 +42,14 @@ def _forwarded(name: str):
     return run
 
 
-def build():
-    """The manager's tools as they are described to it, each forwarded to the daemon."""
+def build(forwarded: bool = True):
+    """The manager's tools as they are described to it — each forwarded to the daemon, or for
+    `/mcp` (`remote.py`), which is the daemon, run where they are."""
     described = prompts.load("manager").settings["tools"]
-    forwarded = [dataclasses.replace(made, handler=_forwarded(made.name))
-                 for made in doing.build(described)]
-    server = create_sdk_mcp_server(name="deckhand-manager", tools=forwarded)["instance"]
+    made = doing.build(described)
+    if forwarded:
+        made = [dataclasses.replace(one, handler=_forwarded(one.name)) for one in made]
+    server = create_sdk_mcp_server(name="deckhand-manager", tools=made)["instance"]
     server.instructions = __doc__
     return server
 

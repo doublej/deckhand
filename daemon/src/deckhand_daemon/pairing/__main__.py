@@ -72,6 +72,15 @@ def transcribe_token(name: str) -> None:
           f"`just forget {minted['device']['id']}` takes it back.")
 
 
+def manager_token(name: str) -> None:
+    """The same, for `/mcp`: the manager's tools and nothing else."""
+    minted = _call("POST", f"/pair/manager?name={quote(name)}").json()
+    subprocess.run(["pbcopy"], input=minted["token"].encode(), check=True)
+    print(f"A manager-only token for {minted['device']['name']} (id {minted['device']['id']}) "
+          "is on the clipboard. Send it as `Authorization: Bearer <token>` to /mcp; "
+          f"`just forget {minted['device']['id']}` takes it back.")
+
+
 def main(argv: list[str]) -> None:
     match argv:
         case ["pair"]:
@@ -82,9 +91,11 @@ def main(argv: list[str]) -> None:
             forget(device_id)
         case ["transcribe-token", name]:
             transcribe_token(name)
+        case ["manager-token", name]:
+            manager_token(name)
         case _:
             sys.exit("usage: python -m deckhand_daemon.pairing pair | devices | forget ID | "
-                     "transcribe-token NAME")
+                     "transcribe-token NAME | manager-token NAME")
 
 
 if __name__ == "__main__":

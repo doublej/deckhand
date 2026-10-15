@@ -427,6 +427,7 @@ inside a helper is not listed, so treat the column as the least a route can answ
 | `POST /presence/headset` | — | 204 | 401 | The headset is being worn: it beats every ten seconds while it is, and for `HEADSET_LIVE` after the last beat `where` is `headset`. |
 | `POST /pair/open` | — | 200 | 401 | A six-digit code, good once for `window.LASTS` seconds; replaces any code already open. |
 | `POST /pair/transcribe` | `?name`: string = "browser" | 200 | 401, 422 | A token that can call `POST /transcribe` and nothing else, for a web page's mic button. Minted here rather than paired: the person at the Mac asks for it, so there is no code. |
+| `POST /pair/manager` | `?name`: string = "mcp" | 200 | 401, 422 | A token that can reach `/mcp`, the manager's tools, and nothing else — for an MCP client off this Mac. Minted like the transcribe one: the person at the Mac asks for it. |
 | `POST /pair` | body `{code, name?, kind?}` | 200 | 422 | Trade the code on the Mac's screen for a token of this device's own. |
 | `GET /pair/check` | — | 200 | 401 | 200 for any token this Mac accepts, 401 for anything else. For the NAS Caddy's `forward_auth`, so a device token works off the home network without the edge holding a literal of its own. |
 | `GET /devices` | — | 200 | 401 | Every device paired with a code: id, name, kind, when it paired, when it was last heard. |
