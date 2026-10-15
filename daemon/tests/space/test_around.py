@@ -19,20 +19,22 @@ def _plane(pid: str, near: str | None = None, by: str | None = None) -> dict:
             "near": near, "by": by}
 
 
-def test_a_projects_terminals_are_one_group_until_one_is_moved_out():
+def test_only_a_kept_pose_puts_a_terminal_in_a_group():
     rows = [_row("a", "proj-1"), _row("b", "proj-1"), _row("c", "proj-2")]
     kept = {"planes": [], "poses": {}}
-    seen = around.around(kept, rows, "a")
-    assert seen["group"] == "proj-1" and [b["session"] for b in seen["beside"]] == ["b"]
-    assert around.around(kept, rows, "c")["group"] is None  # alone in its project: no group
-    kept["poses"]["session:b"] = {"x": 0, "y": 0, "z": 0, "yaw": 0}  # moved, no group kept
+    assert around.around(kept, rows, "a")["group"] is None  # one project is not a group
     assert around.around(kept, rows, "a")["beside"] == []
+    for sid in ("a", "c"):
+        kept["poses"][f"session:{sid}"] = {"x": 0, "y": 0, "z": 0, "yaw": 0, "group": "g1"}
+    seen = around.around(kept, rows, "a")
+    assert seen["group"] == "g1" and [b["session"] for b in seen["beside"]] == ["c"]
 
 
 def test_a_page_is_beside_you_when_near_you_or_in_your_group():
     rows = [_row("a", "proj-1"), _row("b", "proj-1")]
+    pose = {"x": 0, "y": 0, "z": 0, "yaw": 0, "group": "g1"}
     kept = {"planes": [_plane("p1", near="a"), _plane("p2", near="b"), _plane("p3")],
-            "poses": {"plane:p3": {"x": 0, "y": 0, "z": 0, "yaw": 0, "group": "proj-1"}}}
+            "poses": {"session:a": pose, "session:b": pose, "plane:p3": pose}}
     beside = {b.get("plane") for b in around.around(kept, rows, "a")["beside"]} - {None}
     assert beside == {"p1", "p2", "p3"}
 
@@ -122,9 +124,12 @@ def test_taken_goes_down_the_socket_and_says_what_became_of_it(monkeypatch):
 
 
 def test_a_session_sees_its_group_over_the_wire(client, head):
+    assert client.get(f"/sessions/{LIVE}/space", headers=head).json()["group"] is None
+    pose = {"x": 0, "y": 0, "z": 0, "yaw": 0, "group": "g1"}
+    for sid in (LIVE, OTHER):
+        client.put(f"/space/poses/session:{sid}", json=pose, headers=head)
     seen = client.get(f"/sessions/{LIVE}/space", headers=head).json()
-    assert seen["group"].startswith("proj-")
-    assert [b["session"] for b in seen["beside"]] == [OTHER]
+    assert seen["group"] == "g1" and [b["session"] for b in seen["beside"]] == [OTHER]
 
 
 def test_a_session_started_beside_another_stands_beside_it(client, head, monkeypatch, tmp_path):

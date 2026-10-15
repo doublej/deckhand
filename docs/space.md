@@ -53,9 +53,9 @@ Every route needs `x-deckhand-token`.
   it.
 - Every `/sessions` row carries `project: {key, color, parent, group}` — the repo the session is
   in, the colours JJ's statusline gives it (`sessions/project.py`, cross-checked against the
-  script), and the group id its terminals share by default. The headset tints a terminal with
-  `color` and groups a project's terminals under `group` while two or more are live and none has
-  a kept pose — named here so the daemon can say who is in a group the headset never wrote down.
+  script), and a stable id for the project. The headset tints a terminal with `color`; it no
+  longer groups a project's terminals by default — only the person groups, and a group exists
+  only in kept poses.
 - `GET /sessions/{id}/space` → `{pose, group, beside}`: where that session stands, its group by
   the headset's rule, and every session, page and window in that group or opened `near` it
   (`space/around.py`). What the `space` tool hands an agent as `around_you`.
