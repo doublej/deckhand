@@ -7,8 +7,10 @@ here (`mcp/refused.py`). This talks to the running daemon, because the window li
 
 from __future__ import annotations
 
+import subprocess
 import sys
 import time
+from urllib.parse import quote
 
 import httpx
 
@@ -61,6 +63,15 @@ def forget(device_id: str) -> None:
     print(f"{device_id} can no longer reach this Mac.")
 
 
+def transcribe_token(name: str) -> None:
+    """Straight onto the clipboard: the token is never printed, so it is in no scrollback."""
+    minted = _call("POST", f"/pair/transcribe?name={quote(name)}").json()
+    subprocess.run(["pbcopy"], input=minted["token"].encode(), check=True)
+    print(f"A transcribe-only token for {minted['device']['name']} (id {minted['device']['id']}) "
+          "is on the clipboard. It can call POST /transcribe and nothing else; "
+          f"`just forget {minted['device']['id']}` takes it back.")
+
+
 def main(argv: list[str]) -> None:
     match argv:
         case ["pair"]:
@@ -69,8 +80,11 @@ def main(argv: list[str]) -> None:
             devices()
         case ["forget", device_id]:
             forget(device_id)
+        case ["transcribe-token", name]:
+            transcribe_token(name)
         case _:
-            sys.exit("usage: python -m deckhand_daemon.pairing pair | devices | forget ID")
+            sys.exit("usage: python -m deckhand_daemon.pairing pair | devices | forget ID | "
+                     "transcribe-token NAME")
 
 
 if __name__ == "__main__":

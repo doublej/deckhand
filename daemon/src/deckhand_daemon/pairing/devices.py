@@ -60,12 +60,15 @@ def public(row: dict) -> dict:
     return {key: value for key, value in row.items() if key != "hash"}
 
 
-def mint(name: str, kind: str) -> tuple[str, dict]:
-    """A new device and the only copy of its token, which goes back to it and nowhere else."""
+def mint(name: str, kind: str, scope: str | None = None) -> tuple[str, dict]:
+    """A new device and the only copy of its token, which goes back to it and nowhere else.
+    A `scope` narrows the token to that one thing (`pairing.allows_transcribe`)."""
     token = secrets.token_urlsafe(24)
     now = int(time.time())
     row = {"id": secrets.token_hex(4), "name": name, "kind": kind, "paired": now, "seen": now,
            "hash": _digest(token)}
+    if scope:
+        row["scope"] = scope
     rows = _rows()
     rows.append(row)
     _keep(rows)

@@ -11,12 +11,12 @@ from __future__ import annotations
 
 import secrets
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from .. import beacon, config, plugin
 from ..log import log
-from . import allows, devices, window
+from . import TRANSCRIBE, allows, devices, window
 
 router = APIRouter()
 
@@ -47,6 +47,15 @@ def open_window() -> dict:
 def open_pairing() -> dict:
     """A six-digit code, good once for `window.LASTS` seconds; replaces any code already open."""
     return open_window()
+
+
+@router.post("/pair/transcribe", dependencies=[Depends(require_mac)])
+def mint_transcribe(name: str = Query(default="browser", min_length=1, max_length=60)) -> dict:
+    """A token that can call `POST /transcribe` and nothing else, for a web page's mic button.
+    Minted here rather than paired: the person at the Mac asks for it, so there is no code."""
+    token, device = devices.mint(name.strip(), TRANSCRIBE, scope=TRANSCRIBE)
+    log.info("minted a transcribe-only token for %s as %s", device["name"], device["id"])
+    return {"token": token, "device": device}
 
 
 @router.post("/pair")

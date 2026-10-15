@@ -243,6 +243,15 @@ it. It is the only thing in front of a daemon that can type into Claude sessions
 | `GET /pair/check` | any | 200 or 401: for Caddy's `forward_auth` |
 | `GET /devices` | the Mac's own | every paired device: id, name, kind, paired, last seen |
 | `DELETE /devices/{id}` | the Mac's own | 204: that device's token stops working at once |
+| `POST /pair/transcribe` | the Mac's own | `{token, device}`: a token scoped to `/transcribe` |
+
+**A token for one route.** `just transcribe-token name=<page>` mints a device row with
+`scope: transcribe` and puts its token on the clipboard, never on the screen. That token passes
+`pairing.allows_transcribe` and nothing else: every other route, `/pair/check` included, answers
+it 401. It is the token a web page keeps in localStorage for its mic button (the Jaimes chat in
+wallgen's web UI), where any script on that page can read it, so it can turn audio into text and
+cannot speak into a session. `just forget <id>` revokes it like any device. The page reaches
+`/health` and `/transcribe` through CORS for two origins only (`browser/`).
 
 ## Decisions for JJ
 

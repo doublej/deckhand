@@ -10,6 +10,10 @@ decision and that page is where it was made.
 - **A paired device holds a token of its own** (`devices.py`), minted by `POST /pair` in
   exchange for the six-digit code the person at the Mac opened (`window.py`). Revoking it is
   `DELETE /devices/{id}`, and touches no other device.
+- **A scoped token can do one thing.** `just transcribe-token` mints a device whose row carries
+  `scope: transcribe`: a web page may hold it to call `POST /transcribe` and nothing else, so a
+  browser's localStorage never holds a token that can speak into a session. `allows` refuses it
+  everywhere; `allows_transcribe` is the one place it counts.
 - **`allows` is the one question**, asked by `app.require_token` and by the two middlewares that
   answer before a route's own dependency runs (`fleet/routing.py`, `sessions/codex_routes.py`).
   A check of its own anywhere else is a door this module does not know about.
@@ -22,6 +26,9 @@ import secrets
 from .. import config
 from . import devices
 
+#: The one scope there is: `POST /transcribe`, and nothing else on this daemon.
+TRANSCRIBE = "transcribe"
+
 
 def allows(given: str) -> bool:
     """Whether a request carrying this token may be answered.
@@ -32,4 +39,15 @@ def allows(given: str) -> bool:
     """
     if not given:
         return False
-    return secrets.compare_digest(given, config.token()) or devices.known(given) is not None
+    if secrets.compare_digest(given, config.token()):
+        return True
+    device = devices.known(given)
+    return device is not None and "scope" not in device
+
+
+def allows_transcribe(given: str) -> bool:
+    """`allows`, or a token minted for `/transcribe` alone."""
+    if allows(given):
+        return True
+    device = devices.known(given) if given else None
+    return device is not None and device.get("scope") == TRANSCRIBE

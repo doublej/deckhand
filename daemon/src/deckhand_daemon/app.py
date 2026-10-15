@@ -29,6 +29,7 @@ from . import (
     summarize,
 )
 from .bindings import routes as binding_routes
+from .browser import routes as browser_routes
 from .filters import routes as filter_routes
 from .fleet import routing as fleet_routing
 from .links import routes as link_routes
@@ -86,6 +87,8 @@ app = FastAPI(title="Deckhand", version=__version__, lifespan=lifespan)
 # added later is local until somebody says otherwise: see `fleet/routing.py`.
 app.middleware("http")(fleet_routing.forward_remote_reads)
 app.middleware("http")(sessions.answer_for_codex)
+# Last, so it runs first: a browser's preflight is answered before anything asks for a token.
+app.middleware("http")(browser_routes.cors)
 app.include_router(artifacts.router, dependencies=[Depends(require_token)])
 app.include_router(binding_routes.router, dependencies=[Depends(require_token)])
 app.include_router(filter_routes.router, dependencies=[Depends(require_token)])
@@ -100,25 +103,7 @@ app.include_router(settings_routes.router, dependencies=[Depends(require_token)]
 app.include_router(space_routes.router, dependencies=[Depends(require_token)])
 app.include_router(saying.router, dependencies=[Depends(require_token)])
 app.include_router(pairing_routes.router)  # its own checks: `POST /pair` has no token yet
-
-
-@app.get("/health")
-def health() -> dict:
-    """Open on purpose: the app pings it to tell 'wrong host' from 'wrong token'."""
-    return {
-        "name": "deckhand",
-        "version": __version__,
-        "host": config.base_url(),
-        # So the phone can turn a session's `localhost:5173` into something it can actually open.
-        "lan": config.lan_address(),
-        "id": config.machine_id(), "web": config.web_url(), "remote": config.remote_url(),
-        "iterm": sessions.iterm_status(), "codex": sessions.codex.answered(),
-        # Who has this Mac. Unauthenticated like the rest of /health, and deliberately so: it
-        # says whether a person is at the keyboard, never what they are doing.
-        "presence": (person := presence.state()),
-        # utt's cover reads this, the one route with no token; null keeps it down.
-        "cover": presence.cover(person),
-    }
+app.include_router(browser_routes.router)  # `/health` is open; `/transcribe` has a scope of its own
 
 
 # Two clients polling every few seconds would bury everything else in the log, so a listing
