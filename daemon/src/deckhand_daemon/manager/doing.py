@@ -228,7 +228,17 @@ def server(described: dict[str, str]):
     does, out of `prompts/manager.md`: a tool description is prompt, and every prompt in this
     daemon lives in a file.
     """
-    from claude_agent_sdk import ToolAnnotations, create_sdk_mcp_server, tool
+    from claude_agent_sdk import create_sdk_mcp_server
+
+    return create_sdk_mcp_server(name="deckhand", tools=build(described))
+
+
+def build(described: dict[str, str]) -> list:
+    """The same tools, unmounted. `server` mounts them for the run in this daemon;
+    `POST /manager/tools/{name}` runs one for `deckhand-manager-mcp`, a session acting as the
+    manager — the same functions in this same process either way, so there is one manager surface
+    and not two that drift."""
+    from claude_agent_sdk import ToolAnnotations, tool
 
     # The same annotation mcp/server.py hands its own readers. read_only_hint is the one
     # the SDK acts on rather than merely shows: it is what lets a turn that reads three
@@ -297,7 +307,7 @@ def server(described: dict[str, str]):
             focus_session, show_on_phone]
     if len(made) != len(TOOLS):
         log.warning("the manager's tool list and TOOLS have drifted apart")
-    return create_sdk_mcp_server(name="deckhand", tools=made)
+    return made
 
 
 #: The names the model calls them by once the server above is mounted. Spelled out rather than

@@ -402,6 +402,7 @@ inside a helper is not listed, so treat the column as the least a route can answ
 | `POST /manager/say` | body `{text}` | 201 | 400, 401, 422 | Say something to the manager. Answers with the entry, not with the reply. |
 | `POST /manager/audio` | `?say`: boolean = true (false to transcribe only, for the review card), form `{file}` | 201 | 400, 401, 413, 415, 422 | A clip for the manager: utt turns it into text and the manager is asked with it. |
 | `POST /manager/clear` | — | 200 | 401 | Start over. The entries go and so does the thread behind them — see `talk.clear`. |
+| `POST /manager/tools/{name}` | body: JSON object | 200 | 401, 404, 422 | One of the manager's tools, run in this process — where the fleet's links and the conversation file already live — and answered as the text the tool said. |
 
 ### orders
 

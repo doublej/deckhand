@@ -1,4 +1,4 @@
-"""The manager's own front door. Four routes, and only one of them changes anything.
+"""The manager's own front door.
 
 The panel is a poll, not a stream: `GET /manager?since=` hands back every entry after the id the
 phone last saw, and `working` is what makes it poll fast. There is no socket to hold open to a
@@ -8,11 +8,16 @@ is the channel and the cursor is the whole protocol.
 Speaking to the manager answers the moment the words are written down, never when the model is
 done. The panel draws what was said immediately and fills in the answer as the poll brings it,
 which is also why a run taking a minute is not a failed request.
+
+`POST /manager/tools/{name}` is the other way to be the manager: one of its own tools, run here
+for `deckhand-manager-mcp` (`mcp/manager.py`), so a session the person is talking to at the
+keyboard can do what the panel's manager does and nothing it does not.
 """
 
 from __future__ import annotations
 
 import asyncio
+import functools
 import time
 import uuid
 from pathlib import Path
@@ -22,7 +27,7 @@ from fastapi import APIRouter, Body, HTTPException, Query, UploadFile
 from .. import config, plugin, sessions, transcribe
 from ..log import log
 from ..settings import aliases
-from . import agent, talk
+from . import agent, doing, talk
 
 router = APIRouter(tags=["manager"])
 
@@ -109,6 +114,22 @@ def clear_manager() -> dict:
     """Start over. The entries go and so does the thread behind them — see `talk.clear`."""
     agent.clear()
     return {"entries": [], "newest": 0, "working": False}
+
+
+@router.post("/manager/tools/{name}")
+async def run_manager_tool(name: str, args: dict) -> dict:
+    """One of the manager's tools, run in this process — where the fleet's links and the
+    conversation file already live — and answered as the text the tool said."""
+    found = _tools().get(name)
+    if found is None:
+        raise HTTPException(status_code=404, detail=f"the manager has no tool called {name!r}")
+    answer = await found.handler(args)
+    return {"text": "\n".join(block["text"] for block in answer["content"])}
+
+
+@functools.cache
+def _tools() -> dict:
+    return {made.name: made for made in doing.build(agent.MANAGER.settings["tools"])}
 
 
 def _hints() -> list[str]:
