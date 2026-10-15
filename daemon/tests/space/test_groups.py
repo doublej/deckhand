@@ -42,11 +42,11 @@ def test_a_headset_group_is_named_for_its_project_unless_a_member_has_a_name(mon
     projects = {s: {"key": "multi-stack/deckhand", "color": "#00afff"} for s in windows}
     now = {"a": ("g1", None), "b": ("g1", None), "c": (None, "drieluik"), "x": (None, "deckhand")}
     held = {"a": "g1", "b": "g1", "c": None, "x": None}
-    groups.push(now, windows, held, {"a": "g1", "b": "g1", "c": None}, {"@2": "#ff0000"}, projects)
+    groups.push(now, windows, held, {"a": "g1", "b": "g1", "c": None}, {"@2": "#ff0000"}, projects, {})
     assert calls == [("@3", "@group", None), ("@1", "@group", "deckhand 2"), ("@2", "@group", "deckhand 2")]
     calls.clear()
     now = {"a": ("g1", None), "b": ("g1", "drieluik")}
-    groups.push(now, windows, {"a": "g1", "b": "g1"}, {"a": "g1"}, {}, projects)
+    groups.push(now, windows, {"a": "g1", "b": "g1"}, {"a": "g1"}, {}, projects, {})
     assert calls == [("@1", "@group", "drieluik"), ("@1", "@group_color", "#00afff"),
                      ("@2", "@group_color", "#00afff")]
 
@@ -77,3 +77,12 @@ def test_a_rename_brings_who_had_no_headset_group_beside_it(claude_home):
     assert groups.pull(now, {"a": "drieluik", "c": "drieluik"}) == {"c": None}
     assert stored.space()["poses"]["session:a"]["group"] == "g1"
     assert stored.space()["beside"] == {"c": "a"}
+
+
+def test_a_group_the_headset_already_named_keeps_that_name(monkeypatch):
+    calls = []
+    monkeypatch.setattr(groups, "_set", lambda w, o, v: calls.append((w, o, v)))
+    projects = {"a": {"key": "web/theme", "color": "#00afff"}}
+    groups.push({"a": ("g1", None)}, {"a": "@1"}, {"a": "g1"}, {"a": "g1"}, {"@1": "#fff"}, projects,
+                {"g1": "drieluiken"})
+    assert calls == [("@1", "@group", "drieluiken")]

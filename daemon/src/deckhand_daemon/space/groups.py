@@ -9,7 +9,7 @@ so each pass compares both against what they were when they last agreed (`tmux-g
 wins.
 
 - **Into tmux** a group becomes one `@group` on every member's window: the name a member that did
-  not move already has, else its project's, with " 2" on it when another group has that one.
+  not move already has, else the name the headset already shows it under, else its project's, with " 2" on it when another group has that one.
   `@group_color` is the project's colour, written only where no member's window has one.
 - **Into the headset** an `@group` is the same `beside` a started session uses: the session's
   pose is dropped and it stands beside a session already in that group, so the headset puts it
@@ -105,7 +105,7 @@ def pull(now: Now, to_headset: dict[str, str | None]) -> dict[str, str | None]:
 
 
 def push(now: Now, windows: dict[str, str], groups: dict[str, str | None], to_tmux: dict[str, str | None],
-         colors: dict[str, str], projects: dict[str, dict]) -> None:
+         colors: dict[str, str], projects: dict[str, dict], names: dict[str, str]) -> None:
     """Moves tmux's `@group` to match the headset's groups."""
     for sid, d in to_tmux.items():
         if d is None and now[sid][1] is not None:
@@ -114,7 +114,7 @@ def push(now: Now, windows: dict[str, str], groups: dict[str, str | None], to_tm
         members = sorted(s for s, g in groups.items() if g == d and s in windows)
         stayed = [now[s][1] for s in members if s not in to_tmux and now[s][1]]
         taken = {i for s, (_, i) in now.items() if i and s not in members}
-        name = stayed[0] if stayed else fresh(projects[members[0]]["key"].rsplit("/", 1)[-1], taken)
+        name = stayed[0] if stayed else fresh(names.get(d) or projects[members[0]]["key"].rsplit("/", 1)[-1], taken)
         color = next((c for s in members if (c := colors.get(windows[s]))), None)
         for sid in members:
             if now[sid][1] != name:
@@ -149,7 +149,8 @@ def sync() -> None:
     after = pull(now, to_headset)
     if to_tmux:
         projects = {s.session_id: project.of(s.cwd) for s in live}
-        push(now, windows, groups, to_tmux, {w: c for w, (_, c) in read.items() if c}, projects)
+        colors = {w: c for w, (_, c) in read.items() if c}
+        push(now, windows, groups, to_tmux, colors, projects, stored.space().get("names", {}))
         read = _windows() or read
         now = {sid: (d, read.get(windows[sid], (i,))[0]) for sid, (d, i) in now.items()}
         log.info("tmux groups: %d into tmux, %d into the headset", len(to_tmux), len(to_headset))
