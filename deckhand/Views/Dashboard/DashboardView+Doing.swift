@@ -81,10 +81,10 @@ extension DashboardView {
     }
 
     /// Escape. The one control worth reaching for while something is running, which is why the
-    /// square says whether anything is. A Codex session needs no pane for it: the Mac asks Codex
-    /// to interrupt its own turn.
+    /// square says whether anything is. A Codex or OpenCode session needs no pane for it: the Mac
+    /// asks that program to interrupt its own turn.
     var stopTile: some View {
-        let reachable = hasPane || session.isCodex
+        let reachable = session.stops
         return DashboardTile(glyph: Control.cancel.symbol,
                              title: "Stop",
                              value: session.isBusy ? "Busy" : "Idle",

@@ -69,11 +69,52 @@ public struct Week: Codable, Hashable, Sendable {
 }
 
 public extension Session {
-    /// The one question every screen asks about the provider. A Codex thread has no pane and no
-    /// CLAUDE.md tree, so the Mac refuses rename, focus, compact, clear, exit, the context tree, the
-    /// slash commands and the inbox line for it, and the phone does not offer them. Stop is the
-    /// exception: the Mac asks Codex to interrupt its own turn.
+    /// A Codex thread has no pane and no CLAUDE.md tree, so the Mac refuses rename, focus, compact,
+    /// clear, exit, the context tree, the slash commands and the inbox line for it, and the phone
+    /// does not offer them. Stop is the exception: the Mac asks Codex to interrupt its own turn.
     var isCodex: Bool { provider == .codex }
+
+    /// An OpenCode session lives in OpenCode's service, not in a pane, and its API does most of
+    /// what a pane did: stop, compact, rename, slash commands and the inbox all work without one.
+    /// What it has no answer for is the CLAUDE.md tree, clear, exit and bringing a pane forward.
+    var isOpenCode: Bool { provider == .opencode }
+
+    /// Claude Code's own session. Nil is a Mac older than the field, which only listed Claude.
+    var isClaude: Bool { provider == nil || provider == .claude }
+
+    /// The word a session that is not Claude carries beside its state. Nil for Claude: every
+    /// surface was written for one, so it says nothing.
+    var providerWord: String? {
+        switch provider {
+        case .codex: "CODEX"
+        case .opencode: "OPENCODE"
+        case .claude, nil: nil
+        }
+    }
+
+    /// What its own replies are labelled with in the conversation.
+    var theirWord: String { providerWord ?? "CLAUDE" }
+
+    // What the Mac can do to it, asked by capability rather than by provider, so a screen never
+    // has to know which program answers which verb. Claude's controls are keystrokes in a pane;
+    // the other two are their own server's API and need none.
+
+    /// Stop the running turn.
+    var stops: Bool { !isClaude || pane != nil }
+    /// Fold the conversation down: `/compact` in a pane, or OpenCode's own compaction.
+    var compacts: Bool { isOpenCode || (isClaude && pane != nil) }
+    /// Give it a new name: `/rename` in a pane, or OpenCode's title.
+    var renames: Bool { isOpenCode || (isClaude && pane != nil) }
+    /// Clear or exit — the two that cannot be undone. Claude Code's commands, typed into a pane.
+    var endsByKeys: Bool { isClaude }
+    /// Has slash commands and skills the phone can offer by name.
+    var takesCommands: Bool { !isCodex }
+    /// Has an inbox of prompts admitted and not yet read, which the Mac can clear.
+    var hasInbox: Bool { !isCodex }
+    /// Runs under a CLAUDE.md tree the Mac can draw.
+    var hasContextTree: Bool { isClaude }
+    /// Sits in a tmux pane the Mac can bring to the front.
+    var isOnTheMac: Bool { isClaude }
 
     /// "sonnet", out of `claude-sonnet-5`. The family is the whole of what a glance wants; the
     /// build date on a haiku is the first thing that would not fit and the last anyone reads.
@@ -108,7 +149,7 @@ public extension Session {
 /// take the whole listing down on a phone nobody has rebuilt. Claude is what every surface was
 /// written for, so such a session is offered what a Claude one is and the Mac refuses the rest.
 public enum Provider: String, Codable, Sendable {
-    case claude, codex
+    case claude, codex, opencode
 
     public init(from decoder: Decoder) throws {
         let raw = try decoder.singleValueContainer().decode(String.self)

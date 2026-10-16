@@ -195,9 +195,11 @@ the same header in front of the Mac so `/health` is not open to the internet eit
 Both `/health` and `/sessions` carry an `iterm` field saying whether pane data is trustworthy —
 named for iTerm, which tmux replaced on 2026-10-15; the key, like `pane.iterm_session_id`, stays
 because the installed apps decode it.
-Every row carries `provider`, `claude` or `codex` (a Codex app-server thread: `pid` 0, no `tty`, no
-pane); `/health` carries `codex`, whether the app server answered the last listing; and
-`POST /projects/session` takes `provider` as well. See `daemon/CLAUDE.md` under *Codex threads*.
+Every row carries `provider`: `claude`, `codex` (a Codex app-server thread) or `opencode` (a
+session in this Mac's OpenCode service) — the last two with `pid` 0, no `tty` and no pane.
+`/health` carries `codex` and `opencode`, whether each server answered the last listing, and
+`POST /projects/session` takes `provider` as well. See `daemon/CLAUDE.md` under *Codex threads* and
+*OpenCode sessions*.
 
 ## Commands
 

@@ -170,7 +170,7 @@ command takes `--json`; `-` for a question, line or text reads it from stdin.
 | `deckhand say` | `SESSION TEXT\|-` | `say_to_session` | `BAD_ANSWER`, `CODEX_THREAD`, `DAEMON_DOWN`, `NO_SUCH_SESSION`, `REFUSED`, `NOT_DELIVERED` | message another session down its inbox, as an agent; exit 4 when it was not said |
 | `deckhand open` | `[URL] [--window ID] [--title TEXT]` | `open_plane` | `BAD_ANSWER`, `BAD_PLANE`, `DAEMON_DOWN`, `REFUSED` | put a web page, or a Mac window by id, beside this session in the person's headset; the URL must be reachable from the headset on the LAN |
 | `deckhand space` | `[--full]` | `space` | `BAD_ANSWER`, `DAEMON_DOWN`, `REFUSED` | where this session is in the headset, what is beside it, and every page and window open; --full adds every kept pose |
-| `deckhand start` | `[FOLDER] [--provider claude\|codex]` | `start_session` | `BAD_ANSWER`, `DAEMON_DOWN`, `NOT_STARTABLE`, `NO_SESSION`, `REFUSED` | start a session beside this one in the headset; brief it with `say` |
+| `deckhand start` | `[FOLDER] [--provider claude\|codex\|opencode]` | `start_session` | `BAD_ANSWER`, `DAEMON_DOWN`, `NOT_STARTABLE`, `NO_SESSION`, `REFUSED` | start a session beside this one in the headset; brief it with `say` |
 | `deckhand close` | `ID\|PREFIX` | `close_plane` | `BAD_ANSWER`, `DAEMON_DOWN`, `NO_SUCH_PLANE`, `REFUSED` | close a plane by its id or a unique prefix — a page or a window, never a session |
 | `deckhand windows` | — | `mac_windows` | `BAD_ANSWER`, `DAEMON_DOWN`, `REFUSED` | this Mac's windows, with the ids `open --window` takes |
 | `deckhand tmux` | — | `tmux_tree` | `BAD_ANSWER`, `DAEMON_DOWN`, `NO_TMUX`, `REFUSED` | every tmux session, window and pane, with the Claude session in each; `you` is this one's pane |
@@ -313,9 +313,10 @@ Arguments: —
 Reaches: `GET /sessions`  
 Fails with: `BAD_ANSWER`, `DAEMON_DOWN`, `REFUSED`
 
-Every Claude Code session live on this Mac: its name, folder, whether it is busy, how
-many slips it has left waiting for the person, and its `provider` — a `codex` thread is
-listed but takes no agent's words, so `say_to_session` refuses it.
+Every session live on this Mac — Claude Code, Codex or OpenCode: its name, folder,
+whether it is busy, how many slips it has left waiting for the person, and its `provider`. A
+`codex` thread is listed but takes no agent's words, so `say_to_session` refuses it; an
+`opencode` session takes them, labelled as not from its user.
 
 ### `say_to_session` — writes
 
@@ -325,8 +326,9 @@ Fails with: `BAD_ANSWER`, `CODEX_THREAD`, `DAEMON_DOWN`, `NO_SUCH_SESSION`, `REF
 
 Say something to another session on this Mac, by name or by id.
 
-It arrives down that session's peer inbox, labelled as coming from another Claude session and
-carrying none of your user's authority — which is the only way an agent may speak to one. It
+It arrives down that session's peer inbox — or, for an OpenCode session, as OpenCode's
+synthetic input — labelled as coming from another agent and carrying none of your user's
+authority, which is the only way an agent may speak to one. It
 can be stopped by that session's filters, so read the receipt: `went: false` means it was not
 said, whatever the reason beside it.
 
@@ -362,7 +364,7 @@ room coordinates and rarely what you need.
 
 ### `start_session` — writes
 
-Arguments: `folder`: string = null, `provider`: claude|codex = "claude"  
+Arguments: `folder`: string = null, `provider`: claude|codex|opencode = "claude"  
 Reaches: `POST /space/sessions`, `GET /projects`  
 Fails with: `BAD_ANSWER`, `DAEMON_DOWN`, `NOT_STARTABLE`, `NO_SESSION`, `REFUSED`
 

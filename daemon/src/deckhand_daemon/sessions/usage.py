@@ -16,7 +16,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from ..reading.transcripts import TAIL_WINDOWS, parse_line, tail_lines, transcript_path
-from .live import sessions_dir
+from . import opencode
+from .live import Session, sessions_dir
 
 # How far back to look for the last request's token usage. Small on purpose: it is the last
 # assistant entry in the file, and this is read for every session on every listing.
@@ -59,6 +60,18 @@ class LastRequest:
             "model": self.model or None,
             "effort": self.effort or None,
         }
+
+
+def filled(session: Session, window: int) -> dict:
+    """The listing's fragment for one row: out of its transcript, or out of OpenCode's messages.
+
+    An OpenCode session's window is its model's, from OpenCode's own catalogue, rather than the
+    one number this Mac's Claude Code compacts at.
+    """
+    if session.provider == "opencode":
+        last, limit = opencode.last_request(session)
+        return last.to_json(limit or window)
+    return last_request(session.session_id).to_json(window)
 
 
 def last_request(session_id: str) -> LastRequest:

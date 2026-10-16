@@ -33,19 +33,17 @@ extension DashboardView {
         filesTile
         ordersTile
         chainTile
-        // Absent for Codex rather than dimmed. A Codex thread has no pane to type into and no
-        // CLAUDE.md tree, so the Mac refuses all five, and a square that can never light is a menu
-        // row somebody keeps pressing. Stop stays: Codex interrupts its own turn.
-        if !session.isCodex {
-            contextTile
-            windowTile
-        }
+        // Absent rather than dimmed where the Mac refuses one outright, because a square that can
+        // never light is a menu row somebody keeps pressing. A Codex thread has no pane and no
+        // CLAUDE.md tree, so it loses all four; an OpenCode session compacts and clears its inbox
+        // over its own API and loses only the tree and the pane. Stop stays for both: each
+        // interrupts its own turn.
+        if session.hasContextTree { contextTile }
+        if !session.isCodex { windowTile }
         projectTile
         commandsTile
-        if !session.isCodex {
-            macTile
-            inboxTile
-        }
+        if session.isOnTheMac { macTile }
+        if session.hasInbox { inboxTile }
         stopTile
     }
 
@@ -167,13 +165,13 @@ extension DashboardView {
                       value: session.context?.line ?? "Not read yet",
                       // The caveat wins over the model when there is one: a dimmed square with
                       // no sentence on it is a square nobody can act on.
-                      caption: needsPane ?? Dashboard.answering(family: session.family,
-                                                                effort: session.effort),
+                      caption: (session.compacts ? nil : needsPane)
+                          ?? Dashboard.answering(family: session.family, effort: session.effort),
                       // The one square whose fact is a share, so the one square with a bar.
                       // "372k of 450k" is arithmetic; the bar has already done it.
                       meter: session.context?.share,
                       lit: session.context.map { Palette.pressure($0.pressure) },
-                      ready: hasPane,
+                      ready: session.compacts,
                       spoken: Control.compact.label) { run(.compact) }
     }
 

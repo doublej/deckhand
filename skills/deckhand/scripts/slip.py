@@ -10,8 +10,9 @@ and a list.
 Nothing here talks to the daemon, because nothing needs to: a slip is a file in the session's own
 `cwd`, which is the whole reason it needs no tool. It goes under `.deckhand/artifacts/<session
 id>/`, so only the session that asked lists it and the answer comes back to the session that
-asked. `$CLAUDE_CODE_SESSION_ID` is that id and is in every Bash call Claude Code makes; with it
-unset — a person running this in a terminal — the slip is written flat, which is the older scope
+asked. `$CLAUDE_CODE_SESSION_ID` is that id and is in every Bash call Claude Code makes, as
+`$OPENCODE_SESSION_ID` is in every shell OpenCode runs; with neither set — a person running this
+in a terminal — the slip is written flat, which is the older scope
 and means the folder rather than a session.
 
     slip.py --kind confirm --title "Tag 0.4.0 and push it?" --option "Tag and push"
@@ -152,9 +153,11 @@ def main() -> int:
     parse.add_argument("--dir", default=".", metavar="DIR",
                        help="the session's own folder (default: here). Nothing walks upward "
                             "looking for one, so a slip written elsewhere is invisible")
-    parse.add_argument("--session", default=os.environ.get("CLAUDE_CODE_SESSION_ID", ""),
+    parse.add_argument("--session", default=os.environ.get("CLAUDE_CODE_SESSION_ID")
+                       or os.environ.get("OPENCODE_SESSION_ID", ""),
                        metavar="ID",
-                       help="whose slip this is (default: $CLAUDE_CODE_SESSION_ID). Empty writes "
+                       help="whose slip this is (default: $CLAUDE_CODE_SESSION_ID, else OpenCode's "
+                            "$OPENCODE_SESSION_ID). Empty writes "
                             "it to the folder, where every session working there sees it")
     said = parse.parse_args()
 

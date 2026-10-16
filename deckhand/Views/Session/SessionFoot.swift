@@ -225,7 +225,7 @@ struct SessionFoot: View {
                 // The names this session answers to, for the front of the words. Fetched when
                 // the picker opens rather than held here: two hundred of them, and most cards
                 // never ask. None for Codex: the Mac has no slash commands to offer one.
-                commands: session.isCodex ? nil : { await model.commands(for: session) },
+                commands: session.takesCommands ? { await model.commands(for: session) } : nil,
                 // The Mac's word list, so the sheet can say what is already on it and correct a
                 // row rather than doubling it.
                 aliases: model.wants.aliases,

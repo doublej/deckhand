@@ -64,8 +64,8 @@ struct ProjectListView: View {
         .task { await model.loadProjects() }
         .sheet(item: $configuring) { ProjectSettingsView(model: model, project: $0) }
         .sheet(item: $commanding) { ProjectCommandsView(model: model, project: $0) }
-        // Which program, asked every time rather than remembered. Claude Code and Codex are two
-        // different sessions with two different pages, and a row that quietly started whichever
+        // Which program, asked every time rather than remembered. Claude Code, Codex and OpenCode
+        // are three different sessions with three different pages, and a row that quietly started whichever
         // was chosen last would be a row doing something nobody said.
         .confirmationDialog(
             "Start a session in \(choosing?.name ?? "")",
@@ -75,6 +75,7 @@ struct ProjectListView: View {
         ) { project in
             Button("Claude Code") { begin(project, as: .claude) }
             Button("Codex") { begin(project, as: .codex) }
+            Button("OpenCode") { begin(project, as: .opencode) }
         }
     }
 
@@ -155,7 +156,7 @@ struct ProjectListView: View {
             .padding(.top, Spacing.large)
     }
 
-    /// One project. Tapping it asks Claude Code or Codex, then starts a session and hands it back —
+    /// One project. Tapping it asks which program, then starts a session and hands it back —
     /// and while that is happening the row says so, because waiting for the session to report
     /// itself takes seconds and a row that does nothing visible reads as a tap that missed.
     private func row(_ project: Project) -> some View {

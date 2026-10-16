@@ -51,7 +51,7 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import quote
 
-from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver import Context, MCPServer
 from mcp.types import ToolAnnotations
 
 from . import here, refused
@@ -70,7 +70,28 @@ MAX_WAIT = 600.0
 READ_ONLY = ToolAnnotations(read_only_hint=True, open_world_hint=False)
 WRITES = ToolAnnotations(open_world_hint=False)
 
-server = MCPServer(name="deckhand", instructions=(
+class _Server(MCPServer):
+    """The SDK's server, with the calling OpenCode session lifted out of each call's `_meta`.
+
+    One override rather than a `Context` parameter on every tool: `here.mine()` is the one place
+    a tool asks who it is, and it already sits under a dozen of them.
+    """
+
+    async def call_tool(self, name: str, arguments: dict, context: Context | None = None):
+        meta = None
+        try:
+            meta = context.request_context.meta if context is not None else None
+        except ValueError:
+            pass  # no request behind this call, which is a test calling the tool directly
+        asked = (meta or {}).get(here.OPENCODE_META)
+        held = here.calling.set(asked if isinstance(asked, str) else "")
+        try:
+            return await super().call_tool(name, arguments, context)
+        finally:
+            here.calling.reset(held)
+
+
+server = _Server(name="deckhand", instructions=(
     f"{__doc__}\n**Not here on purpose — the person's own, so stop looking:**\n"
     f"{refused.markdown()}\n"))
 server.tool(annotations=READ_ONLY)(tmux_tree)
@@ -90,8 +111,8 @@ async def _script(name: str, *args: str) -> tuple[bool, str]:
     return done.returncode == 0, (done.stdout or done.stderr).strip()
 
 
-NO_SESSION = ("this is not running inside a Claude Code session, so there is no folder to write "
-              "a slip in and no session to speak as")
+NO_SESSION = ("this is not running inside a Claude Code or OpenCode session, so there is no folder "
+              "to write a slip in and no session to speak as")
 
 
 def _folder() -> tuple[dict, str] | tuple[None, str]:
@@ -194,9 +215,10 @@ async def call_for_attention(line: str) -> dict:
 
 @server.tool(annotations=READ_ONLY)
 async def sessions() -> dict:
-    """Every Claude Code session live on this Mac: its name, folder, whether it is busy, how
-    many slips it has left waiting for the person, and its `provider` — a `codex` thread is
-    listed but takes no agent's words, so `say_to_session` refuses it."""
+    """Every session live on this Mac — Claude Code, Codex or OpenCode: its name, folder,
+    whether it is busy, how many slips it has left waiting for the person, and its `provider`. A
+    `codex` thread is listed but takes no agent's words, so `say_to_session` refuses it; an
+    `opencode` session takes them, labelled as not from its user."""
     answered = await here.reach("GET", "/sessions")
     if "error" in answered:
         return answered
@@ -212,8 +234,9 @@ async def sessions() -> dict:
 async def say_to_session(session: str, text: str) -> dict:
     """Say something to another session on this Mac, by name or by id.
 
-    It arrives down that session's peer inbox, labelled as coming from another Claude session and
-    carrying none of your user's authority — which is the only way an agent may speak to one. It
+    It arrives down that session's peer inbox — or, for an OpenCode session, as OpenCode's
+    synthetic input — labelled as coming from another agent and carrying none of your user's
+    authority, which is the only way an agent may speak to one. It
     can be stopped by that session's filters, so read the receipt: `went: false` means it was not
     said, whatever the reason beside it.
     """
@@ -309,7 +332,7 @@ async def _startable(near: str) -> str:
 
 @server.tool(annotations=WRITES)
 async def start_session(folder: str | None = None,
-                        provider: Literal["claude", "codex"] = "claude") -> dict:
+                        provider: Literal["claude", "codex", "opencode"] = "claude") -> dict:
     """Start another Claude Code session, standing beside you in the person's headset in your
     group — to hand it part of the work, or to show the person something running. `folder`
     defaults to your own; it must be a project the Mac lists and Claude Code already trusts, or

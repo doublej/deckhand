@@ -32,7 +32,7 @@ from pathlib import Path
 from .. import config, fleet
 from ..log import log
 from ..reading.transcripts import turn_ended
-from . import codex, panes, project
+from . import codex, opencode, panes, project
 from .panes import Pane
 
 
@@ -54,8 +54,9 @@ class Session:
     # Which machine this session runs on, named as atlas names it. A daemon only ever builds
     # sessions for its own machine; a hand's listing arrives already stamped with its own.
     machine: str = ""
-    # `claude`, or `codex` for a thread in the Codex app server: no pid, no tty, no pane and no
-    # socket, and its words go in through Codex's own turn lane. See `codex.py`.
+    # `claude`; `codex` for a thread in the Codex app server; `opencode` for a session in the
+    # OpenCode service. Neither of the other two has a pid, a tty, a pane or a socket: their words
+    # go in through their own server's API. See `codex.py` and `opencode.py`.
     provider: str = "claude"
 
     def to_json(self) -> dict:
@@ -270,9 +271,9 @@ def live_sessions(paned_only: bool = True) -> list[Session]:
     """
     found, answered = _listed()
     if paned_only and answered:
-        # A Codex thread never has a pane. The rule is about Claude sessions tmux cannot see,
-        # not about sessions that were never in a terminal at all.
-        return [s for s in found if s.pane is not None or s.provider == "codex"]
+        # A Codex thread or an OpenCode session never has a pane. The rule is about Claude
+        # sessions tmux cannot see, not about sessions that were never in a terminal at all.
+        return [s for s in found if s.pane is not None or s.provider != "claude"]
     # A new list every time, because the one behind it is now shared between every caller and
     # a caller that sorted it in place would quietly reorder the rail for everybody.
     return list(found)
@@ -324,9 +325,10 @@ def _build() -> tuple[list[Session], bool]:
         if pid not in alive:
             del _retired[old]
     _frozen.intersection_update(s.session_id for s in found)
-    # After the pid bookkeeping, which is about processes a Codex thread does not have, and before
-    # the sort, so both kinds share one clock. `records` never raises and backs off on its own.
+    # After the pid bookkeeping, which is about processes neither of the others has, and before
+    # the sort, so every kind shares one clock. Both `records` never raise and back off on their own.
     found.extend(Session(**record, machine=machine) for record in codex.records())
+    found.extend(Session(**record, machine=machine) for record in opencode.records())
     found.sort(key=lambda s: s.updated_at, reverse=True)
     return [s for s in found if s.session_id], bool(found_panes)
 

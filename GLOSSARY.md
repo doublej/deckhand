@@ -14,6 +14,7 @@ the wire.** Everywhere else the word is the same on both sides.
 | **pane** | The iTerm split a session is running in. Absent when iTerm cannot be reached. | window, tab, terminal |
 | **record** | `~/.claude/sessions/<pid>.json` — what Claude Code writes about a live session. | session file |
 | **transcript** | The session's own JSONL under `~/.claude/projects/`. Never written by Deckhand. | log, history |
+| **provider** | Which program a session is: `claude`, `codex` or `opencode`. The last two have no pid, tty or pane, and are reached over their own server's API. | backend, engine, harness |
 | **listing** | What `/sessions` answers: every live session plus what is true of the Mac as a whole. | index, list of sessions |
 | **pairing token** | The `x-deckhand-token` secret. `/health` is the only route without it. | api key, password |
 
@@ -51,7 +52,7 @@ is a field on a row and a way to slice the list, never an address it dials.
 | **alias** | One pair kept for the whole Mac: what utt hands back, and what was actually said. Swapped on every clip, before the chain and before the manager (`settings/aliases.py`). The per-terminal version is a step in the `words` filter and is never called an alias. | replacement, correction, substitution |
 | **route** | Keyboard or socket — whose authority the words carry. `auto`, `keyboard`, `socket`. | channel, transport |
 | **keyboard route** | `it2 session send` typing into the pane, as the person at the machine. | type route, direct |
-| **socket route** | The session's own peer socket, labelled as another agent. | fallback (in code), IPC |
+| **socket route** | The session's own peer socket, labelled as another agent. For OpenCode, its synthetic input wrapped in `prompts/opencode-peer.md`. | fallback (in code), IPC |
 | **delivered** | The daemon accepted and wrote it. Never on its own — ask `Delivery.went`. | sent, said |
 | **orders** | What the person has told one session to keep in mind, carried in front of every prompt it is sent. "Standing orders" in prose — a ship's hold for every watch, and so do these. They are the person's; the **context** (`/context`) is the project's CLAUDE.md and is a different thing. | rules, memory, context, system prompt |
 | **control** | Stop, compact, clear: a keystroke, not a message (`Control`, `deliver.control`). | command, action |

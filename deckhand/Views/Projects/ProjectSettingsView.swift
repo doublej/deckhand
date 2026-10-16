@@ -117,11 +117,10 @@ struct ProjectSettingsView: View {
                                 .foregroundStyle(Palette.textPrimary)
                                 .lineLimit(1)
                             Spacer(minLength: Spacing.extraSmall)
-                            // Both are typed into a pane; a Codex thread has none to type into.
-                            if !session.isCodex {
-                                act(.compact, on: session)
-                                act(.exit, on: session)
-                            }
+                            // Compact is OpenCode's own verb too, so only Codex lacks it; exit
+                            // is Claude Code's alone, typed into its pane.
+                            if !session.isCodex { act(.compact, on: session) }
+                            if session.endsByKeys { act(.exit, on: session) }
                         }
                         .frame(minHeight: 40)
                     }

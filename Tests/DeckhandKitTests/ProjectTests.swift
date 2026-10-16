@@ -84,6 +84,41 @@ extension ClientTests {
         #expect(sessions[2].provider == .claude)
         #expect(!sessions[2].isCodex)
     }
+
+    /// What each program can be asked for, by capability, so no screen has to know which program
+    /// answers which verb. Claude's controls need its pane; OpenCode's are its own API.
+    @Test("each provider offers the controls its own Mac side can carry out")
+    func capabilities() async throws {
+        let found = try await threeProviders()
+        let (claude, codex, opencode) = (found[0], found[1], found[2])
+        #expect(opencode.provider == .opencode && opencode.isOpenCode)
+        #expect([claude.providerWord, codex.providerWord, opencode.providerWord]
+            == [nil, "CODEX", "OPENCODE"])
+        #expect([claude.theirWord, codex.theirWord, opencode.theirWord]
+            == ["CLAUDE", "CODEX", "OPENCODE"])
+        // A Claude session with no pane can do nothing that is a keystroke.
+        #expect(!claude.stops && !claude.compacts && !claude.renames)
+        #expect(claude.endsByKeys && claude.hasContextTree && claude.isOnTheMac)
+        #expect(codex.stops && !codex.compacts && !codex.renames && !codex.takesCommands)
+        #expect(!codex.hasInbox && !codex.endsByKeys)
+        #expect(opencode.stops && opencode.compacts && opencode.renames && opencode.takesCommands)
+        #expect(opencode.hasInbox && !opencode.endsByKeys && !opencode.hasContextTree)
+        #expect(!opencode.isOnTheMac)
+    }
+
+    /// A paneless Claude session, a Codex thread and an OpenCode session, off one listing.
+    private func threeProviders() async throws -> [Session] {
+        StubProtocol.respond(with: Data("""
+        {"sessions":[
+          {"session_id":"cc","pid":1,"name":"a","cwd":"/c","folder":"c","status":"idle",
+           "updated_at":1.0,"tty":"ttys001","pane":null},
+          {"session_id":"cdx","pid":0,"name":"b","cwd":"/c","folder":"c","status":"busy",
+           "updated_at":1.0,"tty":"","pane":null,"provider":"codex"},
+          {"session_id":"ses_1","pid":0,"name":"c","cwd":"/c","folder":"c","status":"busy",
+           "updated_at":1.0,"tty":"","pane":null,"provider":"opencode"}]}
+        """.utf8))
+        return try await stub().sessions().sessions
+    }
 }
 
 /// Everything a project row decides for itself, with no Mac involved.

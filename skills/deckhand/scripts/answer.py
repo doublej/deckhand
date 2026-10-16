@@ -58,9 +58,11 @@ def main() -> int:
                        help="how long to block (default: look once)")
     parse.add_argument("--dir", default=".", metavar="DIR",
                        help="the session's own folder (default: here)")
-    parse.add_argument("--session", default=os.environ.get("CLAUDE_CODE_SESSION_ID", ""),
+    parse.add_argument("--session", default=os.environ.get("CLAUDE_CODE_SESSION_ID")
+                       or os.environ.get("OPENCODE_SESSION_ID", ""),
                        metavar="ID",
-                       help="whose slip this is (default: $CLAUDE_CODE_SESSION_ID). A slip "
+                       help="whose slip this is (default: $CLAUDE_CODE_SESSION_ID, else OpenCode's "
+                            "$OPENCODE_SESSION_ID). A slip "
                             "written flat, belonging to the folder, is looked for either way")
     said = parse.parse_args()
 

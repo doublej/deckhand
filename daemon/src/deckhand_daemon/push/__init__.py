@@ -2,8 +2,9 @@
 
 `sending.py` is what goes over APNs; this is what decides there is anything to send.
 
-Three events and no others. A slip nothing has answered, or an agent calling for you outright —
-both `asking`, which may raise a card and may make a noise. A session's list of asks going from
+Three events and no others. A slip nothing has answered, an agent calling for you outright, or an
+OpenCode session stopped on a permission or a question — all `asking`, which may raise a card and
+may make a noise. A session's list of asks going from
 something to nothing — `finished`, which is silent and may only ever update a card already up.
 A turn merely ending is neither, and deleting it is what this half was rebuilt for: it was once
 the only trigger here, at 294 cards in 28 hours. Measured over that same window, a turn ending is
@@ -39,6 +40,8 @@ POLL = 5.0
 _slips: dict[str, int] = {}
 #: Asks still open on each session's list last sweep. Non-empty → empty is the `finished` event.
 _open: dict[str, int] = {}
+#: What each OpenCode session was blocked on the person for last sweep, one line per request.
+_blocked: dict[str, list[str]] = {}
 #: What an agent asked to be told, where one asked. Beats anything read out of a transcript,
 #: because an agent that used its own words meant them.
 _said: dict[str, str] = {}
@@ -83,9 +86,12 @@ def sweep() -> None:
     for session in live:
         _slipped(session)
         _cleared(session)
-    for gone in (set(_slips) | set(_open)) - alive:
+        if session.provider == "opencode":
+            _stopped(session)
+    for gone in (set(_slips) | set(_open) | set(_blocked)) - alive:
         _slips.pop(gone, None)
         _open.pop(gone, None)
+        _blocked.pop(gone, None)
         _said.pop(gone, None)
         # A card about a session that no longer exists can never be answered or cleared.
         end(gone)
@@ -113,6 +119,29 @@ def _slipped(session) -> None:
         log.info("lock screen: %s has a slip waiting, but this folder is set quiet", session.name)
         return
     log.info("lock screen: %s is waiting on a slip", session.name)
+    announce(session, ASKING)
+
+
+def _stopped(session) -> None:
+    """An OpenCode session holding its turn open on a permission or a form, which is the session
+    asking for you as surely as a slip is — and the moment nothing is left, that card's end.
+
+    Gated on `slips`, the switch for "something is waiting on my answer". The line is what it is
+    waiting for, because that beats any summary of what it last said.
+    """
+    waiting = sessions.opencode_input.asks(session)
+    was = _blocked.get(session.session_id)
+    _blocked[session.session_id] = waiting
+    if was is None or set(waiting) <= set(was):
+        if was and not waiting:
+            spoke_to(session.session_id)
+        return
+    if not wants.resolved(session.cwd).slips:
+        log.info("lock screen: %s is waiting on you, but this folder is set quiet", session.name)
+        return
+    line = next(w for w in waiting if w not in was)
+    _said[session.session_id] = shortened(line, ASKING)
+    log.info("lock screen: %s %s", session.name, line)
     announce(session, ASKING)
 
 

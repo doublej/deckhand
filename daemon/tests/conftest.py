@@ -115,6 +115,22 @@ def keep_the_real_codex_out(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def keep_the_real_opencode_out(tmp_path, monkeypatch):
+    """No listing in a test reaches the OpenCode service a person is using. Its registration is a
+    file that is not there, which is the real "not installed" path, and every memory it keeps
+    between listings starts blank. A suite run from OpenCode's own shell carries that session's
+    id in the environment, and the MCP server would otherwise take it for its own."""
+    from deckhand_daemon.sessions import opencode
+
+    monkeypatch.delenv("OPENCODE_SESSION_ID", raising=False)
+    monkeypatch.setenv("DECKHAND_OPENCODE_SERVICE", str(tmp_path / "opencode" / "service.json"))
+    monkeypatch.setattr(opencode, "_asked", (0.0, False))
+    monkeypatch.setattr(opencode, "_registered", (0.0, {}))
+    monkeypatch.setattr(opencode, "_usage", {})
+    monkeypatch.setattr(opencode, "_limits", (0.0, {}))
+
+
+@pytest.fixture(autouse=True)
 def keep_utts_plugin_folder_clean(tmp_path, monkeypatch):
     """A test run must not install a plugin page into the utt a person is using."""
     monkeypatch.setenv("DECKHAND_PLUGIN_DIR", str(tmp_path / "plugins"))

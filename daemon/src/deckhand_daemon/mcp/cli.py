@@ -101,7 +101,7 @@ COMMANDS: list[dict[str, str]] = [
     {"name": "space", "tool": "space", "args": "[--full]",
      "does": "where this session is in the headset, what is beside it, and every page and window "
              "open; --full adds every kept pose"},
-    {"name": "start", "tool": "start_session", "args": "[FOLDER] [--provider claude|codex]",
+    {"name": "start", "tool": "start_session", "args": "[FOLDER] [--provider claude|codex|opencode]",
      "does": "start a session beside this one in the headset; brief it with `say`"},
     {"name": "close", "tool": "close_plane", "args": "ID|PREFIX",
      "does": "close a plane by its id or a unique prefix — a page or a window, never a session"},
@@ -157,7 +157,8 @@ def build_parser() -> Parser:
     sub.choices["close"].add_argument("id")
     sub.choices["space"].add_argument("--full", action="store_true")
     sub.choices["start"].add_argument("folder", nargs="?", help="a listed project; default here")
-    sub.choices["start"].add_argument("--provider", default="claude", choices=("claude", "codex"))
+    sub.choices["start"].add_argument("--provider", default="claude",
+                                       choices=("claude", "codex", "opencode"))
     arrange = sub.choices["arrange"]
     arrange.add_argument("action", choices=get_args(tmux.Action))
     arrange.add_argument("target", help="session name, %pane, @window, session:index, window name")

@@ -18,7 +18,7 @@ app.py          # the endpoints, and nothing else
 __init__.py     # the version, and `main` — the process from the outside, `--hand` included
 config.py       # data dir, token, port
 log.py          # the one log file, in ~/Library/Logs
-sessions/       # which Claude sessions and Codex threads are alive, their pane, what they spent
+sessions/       # which Claude, Codex and OpenCode sessions are alive, their pane, what they spent
 fleet/          # every other machine: the registry, the ssh link, the hand, the merge
 projects/       # what folders there are, and starting a session in one
 reading/        # everything that reads a transcript and nothing that writes one
@@ -266,6 +266,51 @@ generated schema on 2026-09-13.
 - **A Codex row's name is a key like any other**, so an unnamed thread is never its folder's bare
   name: that is the Claude session's star and filter chain. A thread the phone just started has no
   name yet and is `deckhand-codex-<last 4 of its id>` until Codex names it.
+
+## OpenCode sessions: the third provider
+
+`sessions/opencode.py` lists the sessions of this Mac's OpenCode service beside the other two, as
+`provider: opencode`. OpenCode 2 runs one background service per user that owns every session and
+runs every agent loop, and every TUI is only a client of it — so this is one HTTP API, with no
+pid, pane or socket anywhere. Read off OpenCode 2.0.31 and the `/openapi.json` it served on
+2026-10-16; every write below was run against the real service with a throwaway session.
+
+- **Found, never started.** `~/.local/state/opencode/service.json` (`DECKHAND_OPENCODE_SERVICE`, else
+  `$XDG_STATE_HOME`) holds the URL and a password; the auth is HTTP Basic as `opencode`, which is
+  what `@opencode/client/service` builds. Re-read on mtime, because `opencode service restart`
+  moves both. No registration, a dead port or a 401 is a listing without OpenCode rows, the same
+  2 s timeout and 30 s backoff as Codex. `/health` carries `opencode`.
+- **Live is JJ's rule, not a process:** a root session running now (`GET /api/session/active`) or
+  updated in the last two hours (`GET /api/session?parentID=null&order=desc`). OpenCode keeps every
+  session forever. Children are subagents: `/sessions/{id}/agents` lists them and each reads as a
+  conversation, and a subagent's tool dot carries the child's id as its `tool_id`.
+- **Both lanes, and the difference is still authority.** `auto` and `keyboard` go in as
+  `POST …/prompt` — the person's own input, steering into a busy turn as the TUI does
+  (`opencode-direct | opencode-steered`). `socket` goes in as `POST …/synthetic`, which runs the
+  loop but tells the model nothing about who sent it, so the words are wrapped in
+  `prompts/opencode-peer.md` and the bare words ride in `metadata.deckhand` for the phone to show.
+  That is the lane the manager, the idle check and the space notes use — JJ chose it over Codex's
+  refusal on 2026-10-16. A throwaway session's model, asked who sent the wrapped message, answered
+  "Deckhand, the Mac's daemon, another agent". `auto` never becomes `socket` here: nothing types
+  into a pane, so the reason it does for Claude is not there.
+- **A slash is OpenCode's own command** (`POST …/command`), else a skill handed to a prompt
+  (`skills: [{id}]`). On the agent lane a slash is refused, as on Claude's socket.
+- **What the API does that a pane did:** `control cancel` is `POST …/interrupt`, `compact` is
+  `POST …/compact`, `/name` is `PATCH {title}` and lands at once, `queue/clear` cancels what is in
+  `GET …/inbox`. `clear`, `exit`, `focus` and the CLAUDE.md `context` tree are refused. `deliver`
+  carries the first three, so the routes keep their filter carry-over and the record; the reads
+  are answered in `sessions/opencode_routes.py`, an allow-list like Codex's.
+- **The context figure** is the last finished assistant message's `input + cache.read + cache.write`
+  against its model's window from `GET /api/model`, read again only when the session moved.
+- **Waiting on you is shown, not answered.** A busy session's pending permission requests and forms
+  close its conversation as one line and raise an `asking` card, gated on `slips`. Answering them
+  from the phone is the next step; until then OpenCode keeps the turn open for its own clients.
+- **The MCP server knows its session from the call.** One `opencode serve` starts `deckhand-mcp`
+  once per folder and shares it, and its environment names no session, so the walk up to a
+  `claude` process finds nothing. OpenCode puts the calling session in every call's
+  `_meta["ai.opencode/sessionID"]`; `mcp/server.py` lifts it for the length of the call and
+  `here.mine()` asks the service for that session. Shells OpenCode runs carry
+  `OPENCODE_SESSION_ID`, which is how the `deckhand` command and the slip scripts find it.
 
 ## What the person has set this Mac to do
 

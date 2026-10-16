@@ -98,6 +98,10 @@ having mentioned it. Draw in a slip with inline SVG; draw in a sentence with a f
   it. Neither is in the `claude` process's own exec-time environment — only in the shells it
   spawns, which is exactly where they are wanted. Verified from inside a subagent's shell, where
   they still name the session the phone lists.
+- **Inside OpenCode the same id is `OPENCODE_SESSION_ID`** (`ses_…`), in every shell its agent
+  runs, and it too is the `{id}` every route takes — the phone lists OpenCode sessions as
+  `provider: opencode`. `slip.py`, `answer.py` and the `deckhand` command read it when
+  `CLAUDE_CODE_SESSION_ID` is not there.
 - **A record outlives its process.** `~/.claude/sessions/<pid>.json` stays on disk after the
   session goes, so a record only counts when `ps` still shows that pid. The daemon does that
   join; anything reading those files directly has to do it too.

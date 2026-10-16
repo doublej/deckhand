@@ -65,21 +65,26 @@ public struct StateWord: View {
     }
 }
 
-/// The word a Codex session carries beside its state, on the rail and on its own page.
+/// The word a Codex or OpenCode session carries beside its state, on the rail and on its own page
+/// — `Session.providerWord`.
 ///
 /// Not a `RunState`: it never changes, so it is not a state and has no state's colour. It borrows
 /// the state word's voice — 9pt mono, tracked — in the quietest ink, with nothing around it for
 /// `StateWord`'s reason. A Claude session carries nothing: every surface was written for one.
-public struct CodexWord: View {
-    public init() {}
+public struct ProviderWord: View {
+    private let word: String
+
+    public init(_ word: String) {
+        self.word = word
+    }
 
     public var body: some View {
-        Text("CODEX")
+        Text(word)
             .font(Typography.state)
             .tracking(2)
             .lineLimit(1)
             .foregroundStyle(Palette.textTertiary)
-            .accessibilityLabel("Codex")
+            .accessibilityLabel(word.capitalized)
     }
 }
 

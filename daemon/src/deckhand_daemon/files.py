@@ -7,6 +7,9 @@ wrote, a clip it rendered. Those are what this collects.
 The same list bounds serving one back. A path that never appeared in this session's transcript
 is not readable through the daemon, which is what keeps a file endpoint from being a file
 browser on someone's Mac.
+
+An OpenCode session has no transcript on disk; its recent history, read over OpenCode's API, is
+searched for paths in exactly the same way, so the rule is the same rule.
 """
 
 from __future__ import annotations
@@ -16,6 +19,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from .reading.transcripts import TAIL_WINDOWS, tail_lines, transcript_path
+from .sessions import opencode, opencode_turns
 
 KINDS = {
     "image": (".png", ".jpg", ".jpeg", ".gif", ".heic", ".webp", ".bmp", ".tiff"),
@@ -56,15 +60,12 @@ class Asset:
         return asdict(self)
 
 
-def readable_files(session_id: str, cwd: str) -> list[Asset]:
+def readable_files(session_id: str, cwd: str, provider: str = "claude") -> list[Asset]:
     """Every openable file this session touched, newest first."""
-    path = transcript_path(session_id)
-    if path is None:
-        return []
     found: dict[tuple[int, int], Asset] = {}
     tried: set[Path] = set()
-    for raw in tail_lines(path, TAIL_WINDOWS[1]):
-        for candidate in _candidates(raw.decode("utf-8", "replace"), cwd):
+    for line in _lines(session_id, provider):
+        for candidate in _candidates(line, cwd):
             if candidate in tried:
                 continue
             tried.add(candidate)
@@ -76,12 +77,25 @@ def readable_files(session_id: str, cwd: str) -> list[Asset]:
     return newest[:MAX_FILES]
 
 
-def allowed(session_id: str, cwd: str, wanted: str) -> Path | None:
+def allowed(session_id: str, cwd: str, wanted: str, provider: str = "claude") -> Path | None:
     """The file at `wanted`, but only because this session's transcript named it."""
-    for asset in readable_files(session_id, cwd):
+    for asset in readable_files(session_id, cwd, provider):
         if asset.path == wanted:
             return Path(asset.path)
     return None
+
+
+def _lines(session_id: str, provider: str) -> list[str]:
+    """What the session wrote down, as text: its transcript's tail, or OpenCode's recent history."""
+    if provider == "opencode":
+        try:
+            return opencode_turns.texts(session_id)
+        except opencode.OpenCodeError:
+            return []
+    path = transcript_path(session_id)
+    if path is None:
+        return []
+    return [raw.decode("utf-8", "replace") for raw in tail_lines(path, TAIL_WINDOWS[1])]
 
 
 def _runs(text: str) -> list[str]:

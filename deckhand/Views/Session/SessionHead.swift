@@ -86,12 +86,12 @@ struct SessionHead: View {
     /// it advertises disappears. Circled, accent, 16pt semibold is what this strip already uses
     /// to mean "press this".
     ///
-    /// **Absent, never dimmed, when it cannot work.** `/rename` is typed into a pane, so a Codex
-    /// thread and a session iTerm cannot see both get the title alone. The square it replaces
-    /// said "Needs its pane"; a strip has nowhere to put that, and a dead pencil with no
-    /// explanation is worse than a title that simply is one.
+    /// **Absent, never dimmed, when it cannot work** (`Session.renames`): a Codex thread and a
+    /// session tmux cannot see get the title alone, and OpenCode renames over its own API. The
+    /// square it replaces said "Needs its pane"; a strip has nowhere to put that, and a dead pencil
+    /// with no explanation is worse than a title that simply is one.
     @ViewBuilder private var name: some View {
-        if session.isCodex || hasNoPane {
+        if !session.renames {
             title
         } else {
             Button { renaming = true } label: {
@@ -137,8 +137,9 @@ struct SessionHead: View {
             // the same set and is not any more: compacting asks first too, and it belongs on
             // the dashboard where the window figure that decides it is printed — not in here,
             // drawn red among the two nothing brings back.
-            // Absent for Codex: both are a command typed into a pane, and a Codex thread has none.
-            if !session.isCodex {
+            // Claude Code's alone: both are its own command typed into a pane, and neither Codex
+            // nor OpenCode has one or an equivalent.
+            if session.endsByKeys {
                 Section("Run") {
                     ForEach(Control.allCases.filter(\.isIrreversible), id: \.self) { action in
                         Button(action.label, systemImage: action.symbol, role: .destructive) {
@@ -230,7 +231,7 @@ struct SessionHead: View {
             }
             Spacer(minLength: Spacing.extraSmall)
             if working { ProgressView().controlSize(.mini) }
-            if session.isCodex { CodexWord() }
+            if let word = session.providerWord { ProviderWord(word) }
             StateWord(session.isBusy ? .busy : .idle)
             dots
         }

@@ -20,12 +20,13 @@ from typing import Annotated
 from fastapi import APIRouter, Body, HTTPException
 
 from ..fleet import merge, proxy, registry
-from ..sessions import Session, codex, forget_listing, live_sessions
+from ..sessions import Session, codex, forget_listing, live_sessions, opencode
 from ..settings import wants
 from . import commands, sources, starting
 
 router = APIRouter(tags=["projects"])
-PROVIDERS = ("claude", "codex")
+PROVIDERS = ("claude", "codex", "opencode")
+SPOKEN = {"claude": "Claude Code", "codex": "Codex", "opencode": "OpenCode"}
 
 
 @router.get("/projects")
@@ -97,10 +98,11 @@ async def start_project_session(
     taking a machine off the request would be letting the caller name a target this Mac never
     offered — and the listing being the whole permission is the rule this route was built on.
 
-    **`provider` says what runs there**: `claude` unless the phone says `codex`. A Codex session is
-    a durable thread in this Mac's app server with Codex's own model, approvals and sandbox —
-    nothing is passed for any of them. The listing gate holds for both. The trust gate is Claude
-    Code's record of its own dialog and has nothing to say about Codex, so it is not asked.
+    **`provider` says what runs there**: `claude` unless the phone says `codex` or `opencode`. A
+    Codex session is a durable thread in this Mac's app server with Codex's own model, approvals
+    and sandbox, and an OpenCode one a session in this Mac's OpenCode service with OpenCode's own —
+    nothing is passed for any of them. The listing gate holds for all three. The trust gate is
+    Claude Code's record of its own dialog and has nothing to say about either, so it is not asked.
     """
     if provider not in PROVIDERS:
         raise HTTPException(status_code=400, detail=f"no such provider {provider!r}")
@@ -109,12 +111,15 @@ async def start_project_session(
         raise HTTPException(status_code=400, detail="that folder is not in the project list")
     here = registry.here()
     machine = project.machine or here
-    if machine != here and provider == "codex":
-        raise HTTPException(status_code=409, detail="a Codex session starts on this Mac only")
+    if machine != here and provider != "claude":
+        raise HTTPException(status_code=409,
+                            detail=f"a {SPOKEN[provider]} session starts on this Mac only")
     if machine != here:
         return await _start_over_there(machine, path)
     if provider == "codex":
         return {"session": await asyncio.to_thread(_start_codex, path, here)}
+    if provider == "opencode":
+        return {"session": await asyncio.to_thread(_start_opencode, path, here)}
     session, error = await asyncio.to_thread(starting.start, path)
     if session is None:
         raise HTTPException(status_code=409, detail=error or "could not start a session there")
@@ -129,6 +134,18 @@ def _start_codex(path: str, here: str) -> dict:
     except codex.CodexError as error:
         raise HTTPException(status_code=409,
                             detail=f"Codex would not start there: {error}") from error
+    forget_listing()
+    sources.forget()
+    return Session(**record, machine=here).to_json()
+
+
+def _start_opencode(path: str, here: str) -> dict:
+    """A new session in this Mac's OpenCode service, answered as the row the listing will draw."""
+    try:
+        record = opencode.start(path)
+    except opencode.OpenCodeError as error:
+        raise HTTPException(status_code=409,
+                            detail=f"OpenCode would not start there: {error}") from error
     forget_listing()
     sources.forget()
     return Session(**record, machine=here).to_json()

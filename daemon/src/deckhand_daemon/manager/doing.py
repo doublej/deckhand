@@ -74,8 +74,8 @@ def speak(wanted: str, text: str) -> dict:
         return said(f"it did not go in: {error}")
     talk.say("act", f"said to {session.name}: {_short(text)}")
     return said(
-        f"delivered to {session.name} over the {by} route. It arrived labelled as another Claude "
-        f"session, so that session knows it does not carry the person's authority — and a busy "
+        f"delivered to {session.name} over the {by} route. It arrived labelled as another agent, "
+        f"so that session knows it does not carry the person's authority — and a busy "
         f"session queues it until its turn ends. Nothing comes back; ask again in a minute to "
         f"see what it did."
     )

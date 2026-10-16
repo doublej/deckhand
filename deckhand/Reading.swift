@@ -91,10 +91,11 @@ extension AppModel {
 
     /// The standing instructions a session in this folder runs under. Asked for when the tab is
     /// opened, like the file list beside it, and handed back rather than kept: it is a directory
-    /// walk on the Mac and nothing else in the app wants it. Not asked for a Codex session, which
-    /// the Mac refuses: the answer is already known, and asking would put a refusal in `status`.
+    /// walk on the Mac and nothing else in the app wants it. Not asked for a Codex or OpenCode
+    /// session, which the Mac refuses: the answer is already known, and asking would put a refusal
+    /// in `status`.
     func context(for session: Session) async -> ContextDocs {
-        guard !session.isCodex, let client = settings.client() else { return ContextDocs() }
+        guard session.hasContextTree, let client = settings.client() else { return ContextDocs() }
         do {
             return try await client.context(of: session.sessionId)
         } catch {

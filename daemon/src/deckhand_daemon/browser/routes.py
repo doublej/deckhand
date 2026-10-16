@@ -53,6 +53,7 @@ def health() -> dict:
         "lan": config.lan_address(),
         "id": config.machine_id(), "web": config.web_url(), "remote": config.remote_url(),
         "iterm": sessions.pane_status(), "codex": sessions.codex.answered(),
+        "opencode": sessions.opencode.answered(),
         # Who has this Mac. Unauthenticated like the rest of /health, and deliberately so: it
         # says whether a person is at the keyboard, never what they are doing.
         "presence": (person := presence.state()),

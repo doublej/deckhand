@@ -52,7 +52,7 @@ struct TranscriptView: View {
                             if !turn.text.isEmpty {
                                 TurnCard(turn: turn,
                                          showsRole: startsRun(index),
-                                         theirWord: session.isCodex ? "CODEX" : "CLAUDE",
+                                         theirWord: session.theirWord,
                                          onHold: { held = Held(turn: turn) })
                             }
                         }
@@ -101,7 +101,7 @@ struct TranscriptView: View {
             // Held here rather than on the card: a sheet per row in a lazy stack is a sheet
             // that is torn down the moment the row it hangs off scrolls out of the list.
             .sheet(item: $held) {
-                TurnReader(turn: $0.turn, theirWord: session.isCodex ? "CODEX" : "CLAUDE")
+                TurnReader(turn: $0.turn, theirWord: session.theirWord)
             }
             .sheet(item: $reading) { AgentView(model: model, session: session, agent: $0) }
         }

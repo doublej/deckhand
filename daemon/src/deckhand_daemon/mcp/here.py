@@ -8,6 +8,15 @@ it. What it does have is an ancestor: `claude` itself, whose pid keys
 rather than one `getppid()` because the launch line goes through `uv`, so the parent is uv and
 `claude` is its grandparent. The variable is still read first, free and correct where it is set.
 
+**Inside OpenCode there is no such ancestor, and the call says who is asking instead.** One
+`opencode serve` starts this server once per folder and shares it between every session there,
+so neither the process tree nor the environment can name the session. OpenCode puts the calling
+session's id into every tool call's `_meta` (`ai.opencode/sessionID`); `server.py` lifts it into
+`calling` for the length of the call, and the record is asked of OpenCode's own service. A shell
+OpenCode's agent runs carries `OPENCODE_SESSION_ID`, which is how the `deckhand` command finds the
+same answer. The id is a correlation, not a credential, which is all it is used as here: it picks
+whose folder a slip goes in, exactly as the Claude record does.
+
 **The folder comes from that record too, never from `os.getcwd()`.** An MCP server inherits the
 cwd of whatever started it, and a slip written in the wrong folder is invisible to the phone
 rather than an error anybody sees.
@@ -23,6 +32,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+from contextvars import ContextVar
 
 import httpx
 
@@ -32,6 +42,10 @@ from .. import config
 # and the ceiling is only there so a strange tree ends the walk rather than the walk ending it.
 ANCESTORS = 8
 TIMEOUT = 20.0
+#: Where OpenCode names the calling session in a tool call's `_meta`.
+OPENCODE_META = "ai.opencode/sessionID"
+#: The OpenCode session the tool call in flight was made for, or empty. Set by `server.py`.
+calling: ContextVar[str] = ContextVar("calling", default="")
 
 
 def _record(pid: int) -> dict | None:
@@ -58,6 +72,8 @@ def mine() -> dict | None:
     None is a real outcome, not a failure to handle later: run by hand from a terminal there is
     no session above, and every tool that needs one says so rather than guessing at the newest.
     """
+    if asked := calling.get():
+        return _opencode(asked)
     wanted = os.environ.get("CLAUDE_CODE_SESSION_ID", "")
     pid: int | None = os.getpid()
     for _ in range(ANCESTORS):
@@ -66,7 +82,24 @@ def mine() -> dict | None:
             break
         if (held := _record(pid)) and (not wanted or held.get("sessionId") == wanted):
             return held
+    if shell := os.environ.get("OPENCODE_SESSION_ID", ""):
+        return _opencode(shell)
     return None
+
+
+def _opencode(session_id: str) -> dict | None:
+    """An OpenCode session's record, in the keys a Claude one has, asked of OpenCode's service.
+
+    Imported here rather than at the top: only a call from OpenCode pays for the daemon's sessions
+    package, and a Claude session's server never loads it.
+    """
+    from ..sessions import opencode
+
+    found = opencode.fetch(session_id)
+    if found is None:
+        return None
+    return {"sessionId": found["session_id"], "name": found["name"], "cwd": found["cwd"],
+            "status": found["status"], "provider": found["provider"]}
 
 
 def match(wanted: str, live: list[dict]) -> dict | None:

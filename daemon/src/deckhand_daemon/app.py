@@ -88,6 +88,7 @@ app = FastAPI(title="Deckhand", version=__version__, lifespan=lifespan)
 # added later is local until somebody says otherwise: see `fleet/routing.py`.
 app.middleware("http")(fleet_routing.forward_remote_reads)
 app.middleware("http")(sessions.answer_for_codex)
+app.middleware("http")(sessions.answer_for_opencode)
 # Last, so it runs first: a browser's preflight is answered before anything asks for a token.
 app.middleware("http")(browser_routes.cors)
 app.include_router(artifacts.router, dependencies=[Depends(require_token)])
@@ -131,7 +132,7 @@ def list_sessions() -> dict:
     window = sessions.context_window()
     listed = [
         s.to_json()
-        | sessions.last_request(s.session_id).to_json(window)
+        | sessions.filled(s, window)
         # And how far the person has got with what it asked them: a page with no answer file
         # beside it is the session stopped and waiting, which is the one thing on a row that is
         # genuinely blocked on you. It travels with the listing rather than costing the phone a
@@ -205,7 +206,8 @@ def all_briefings() -> dict:
 def session_files(session_id: str) -> dict:
     """Everything this session touched that a person could open and look at."""
     session = saying.session_or_404(session_id)
-    return {"files": [f.to_json() for f in files.readable_files(session_id, session.cwd)]}
+    return {"files": [f.to_json() for f in files.readable_files(session_id, session.cwd,
+                                                                    session.provider)]}
 
 
 @app.get("/sessions/{session_id}/file", dependencies=[Depends(require_token)])
@@ -223,7 +225,8 @@ def session_file(session_id: str, path: str = Query(description="one of /files")
     # standing instructions a session here already runs under, so they are readable whether this
     # run happened to open them or not. Both sets are computed rather than supplied, which is
     # what keeps this a window onto one session's work and not a file browser.
-    found = files.allowed(session_id, session.cwd, path) or context.allowed(session.cwd, path)
+    found = (files.allowed(session_id, session.cwd, path, session.provider)
+             or context.allowed(session.cwd, path))
     if found is None:
         raise HTTPException(status_code=404, detail="that file is not in this session's transcript")
     size = found.stat().st_size

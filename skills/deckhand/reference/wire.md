@@ -25,7 +25,7 @@ curl -s "$DECK/sessions" -H "x-deckhand-token: $TOKEN"
 - **`GET /health` is the only route without the token header.** Everything else answers 401.
 - **This session's own id is already in the environment**: `CLAUDE_CODE_SESSION_ID`, injected
   into every Bash tool call, is the `{id}` these routes take. `CLAUDE_PID` is beside it. There is
-  no discovery step.
+  no discovery step. In OpenCode it is `OPENCODE_SESSION_ID`.
 
 ## What a session is
 

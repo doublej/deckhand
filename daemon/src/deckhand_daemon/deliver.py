@@ -29,7 +29,7 @@ from . import config, presence
 from .fleet import here, remote
 from .log import log
 from .reading.transcripts import transcript_path
-from .sessions import Session, codex
+from .sessions import Session, codex, opencode_input
 
 TIMEOUT = 5.0
 TYPE_TIMEOUT = 15
@@ -70,6 +70,8 @@ PREAMBLE = "JJ, spoken:"
 
 
 ROUTES = ("auto", "keyboard", "socket")
+#: The providers whose words go in over their own server's API: provider -> its `deliver`.
+SERVED = {"codex": codex.deliver, "opencode": opencode_input.deliver}
 
 ESCAPE = "\x1b"
 # The three things you can do to a session that are not saying something to it. Each one is
@@ -94,6 +96,8 @@ def control(session: Session, action: str) -> str | None:
     bursts = CONTROLS.get(action)
     if bursts is None:
         return f"no such control {action!r}"
+    if session.provider == "opencode":  # its own API stops and compacts, with no pane
+        return opencode_input.control(session, action)
     if not session.pane:
         return f"{session.name} is not in a tmux pane — nothing to press keys in"
     for burst in bursts:
@@ -117,6 +121,8 @@ def rename(session: Session, name: str) -> str | None:
     wanted = clean_name(name)
     if not wanted:
         return "a name cannot be empty"
+    if session.provider == "opencode":  # its title, which its API sets at once, busy or not
+        return opencode_input.rename(session, wanted)
     if not session.pane:
         return f"{session.name} is not in a tmux pane — nothing to type the rename into"
     for burst in (CLEAR_LINE, f"/rename {wanted}", RETURN):
@@ -163,10 +169,11 @@ def deliver(session: Session, text: str, route: str = "auto") -> tuple[str | Non
         return None, "nothing to deliver"
     if route not in ROUTES:
         return None, f"no such route {route!r}"
-    # A Codex thread has no pane and no peer inbox, only its own turn lane — and that lane carries
-    # the person's authority, so which routes may use it, and slashes, are Codex's to refuse.
-    if session.provider == "codex":
-        return codex.deliver(session, message, route)
+    # Codex and OpenCode take words over their own server's API rather than a pane or a socket,
+    # so which routes may reach them, and slashes, are theirs to decide. Codex's one lane carries
+    # the person's authority; OpenCode keeps both, and `socket` is its agent lane.
+    if served := SERVED.get(session.provider):
+        return served(session, message, route)
     # A slash command is only a command where it is typed. Down the socket it is a *message* that
     # happens to start with a slash — the receiving session reads it as words, runs nothing, and
     # nothing anywhere reports a failure, because nothing failed. Refusing is the only way that

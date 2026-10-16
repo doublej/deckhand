@@ -316,8 +316,8 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   on the grid, printing the same name `SessionHead` already draws in the same 20pt two rows above
   it — two copies of one word, and the pressable one was the lower. The title carries a pencil
   now and opens the same `Renaming` sheet; the square, the `.name` destination and the page's
-  `rename` are gone. The pencil is **absent** rather than dimmed on a Codex thread or a session
-  with no pane: `/rename` is typed into a pane, and a strip has nowhere to put the square's
+  `rename` are gone. The pencil is **absent** rather than dimmed where `Session.renames` is false
+  — a Codex thread, or a Claude session with no pane: `/rename` is typed into a pane, and a strip has nowhere to put the square's
   "Needs its pane" caption. `manager/doing.py`'s `PANES` never knew the word, so nothing on the
   wire lost a name it could ask for.
 - **The manager still knows five pane names and the phone still answers to all five.**
@@ -501,14 +501,18 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   card carries one line of what the session said rather than the prompt it is blocked on. No
   `compact`, `clear` or `exit` either: two of them cannot be undone and a Lock Screen has nowhere
   to ask first.
-- **A Codex session is offered what the Mac will do for it, and what it will not is absent rather
-  than dimmed.** A Codex thread has no pane and no CLAUDE.md tree, so `Session.isCodex` removes
-  the dashboard's Context, Compact, Name, On the Mac and Clear inbox squares, the header's Run
-  section, the project page's compact and exit, and the review card's Command button — and
-  `AppModel.context` does not ask, or the refusal would land in `status`. Stop stays, and is live
-  with no pane: the Mac asks Codex to interrupt its own turn. The word `CODEX` (`CodexWord`) sits
-  beside the state on the rail row and in the header, and the transcript's eyebrow says CODEX. A
-  project row asks Claude Code or Codex in a `confirmationDialog` every time — never remembered.
+- **A Codex or OpenCode session is offered what the Mac will do for it, and what it will not is
+  absent rather than dimmed.** Every view asks a capability on `Session`, never the provider. A
+  Codex thread has no pane and no CLAUDE.md tree, so it loses the dashboard's Context, Compact, On
+  the Mac and Clear inbox squares, the pencil, the header's Run section, the project page's
+  compact and exit, and the review card's Command button — and `AppModel.context` does not ask, or
+  the refusal would land in `status`. An OpenCode session keeps Compact, the pencil, Clear inbox
+  and the Command button, because OpenCode's API does each without a pane, and loses only Context,
+  On the Mac, and clear and exit. Stop stays live for both with no pane: the Mac asks that
+  program to interrupt its own turn. The word `CODEX` or `OPENCODE` (`ProviderWord`) sits beside
+  the state on the rail row and in the header, and the transcript's eyebrow says it too. A
+  project row asks Claude Code, Codex or OpenCode in a `confirmationDialog` every time — never
+  remembered.
 - **The pairing screen finds the Mac, and never moves one that is working.** `Beacons` (in
   `Views/Settings/`) browses for `_deckhand._tcp` through `DeckhandKit`'s `Lookout` and fills the
   Address field in — the `.local` name when `/health` answers on it at the moment of the tap,

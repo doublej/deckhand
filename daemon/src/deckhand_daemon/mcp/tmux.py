@@ -115,7 +115,10 @@ async def tmux_tree() -> dict:
     rows = await _rows()
     if isinstance(rows, dict):
         return rows
-    return {"you": os.environ.get("TMUX_PANE"), "sessions": tree(rows, await _labels())}
+    # Under OpenCode this server is the service's child, not a pane's: the `TMUX_PANE` it
+    # inherited is whichever pane started `opencode serve`, and naming it would be a lie.
+    you = None if here.calling.get() else os.environ.get("TMUX_PANE")
+    return {"you": you, "sessions": tree(rows, await _labels())}
 
 
 async def tmux_arrange(action: Action, target: str, to: str | None = None,

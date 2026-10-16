@@ -183,8 +183,8 @@ public struct Tool: Codable, Hashable, Sendable, Identifiable {
     public var id: String { toolId.isEmpty ? "\(name)\(detail)\(succeeded)" : toolId }
 
     /// A subagent, rather than something this session ran itself. `Task` is the older spelling
-    /// and still appears in transcripts written before it changed.
-    public var isAgent: Bool { name == "Agent" || name == "Task" }
+    /// and still appears in transcripts written before it changed; `subagent` is OpenCode's.
+    public var isAgent: Bool { name == "Agent" || name == "Task" || name == "subagent" }
 
     /// What a tool does, which is the only thing a single dot has room to say. Reading,
     /// changing and running are worth telling apart at a glance; the exact tool is a tap away.
@@ -192,12 +192,16 @@ public struct Tool: Codable, Hashable, Sendable, Identifiable {
         case reading, changing, running, asking, other
     }
 
+    /// Claude Code's tool names, then OpenCode's own lowercase ones, which the Mac passes through
+    /// as OpenCode wrote them rather than translating — the expanded dot shows the real name.
     public var kind: Kind {
         switch name {
-        case "Read", "Grep", "Glob", "NotebookRead": .reading
-        case "Edit", "Write", "NotebookEdit", "MultiEdit": .changing
-        case "Bash", "BashOutput", "KillBash": .running
-        case "Task", "Agent", "WebFetch", "WebSearch", "AskUserQuestion": .asking
+        case "Read", "Grep", "Glob", "NotebookRead", "read", "grep", "glob", "list": .reading
+        case "Edit", "Write", "NotebookEdit", "MultiEdit", "edit", "write", "apply_patch":
+            .changing
+        case "Bash", "BashOutput", "KillBash", "shell": .running
+        case "Task", "Agent", "WebFetch", "WebSearch", "AskUserQuestion",
+             "subagent", "webfetch", "websearch", "question": .asking
         default: .other
         }
     }

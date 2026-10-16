@@ -98,6 +98,12 @@ And one that is not about the keyboard:
 typing. So `say_to_session` refuses a Codex session outright and sends nothing — the one refusal
 here that is a check rather than an absence, because the session is on the same listing.
 
+**An OpenCode session, on its agent lane.** OpenCode has both: its prompt is the person's, and its
+synthetic input is not. The socket route `say_to_session` always takes becomes OpenCode's
+synthetic input, wrapped in `prompts/opencode-peer.md` saying it is another agent and carries
+none of the user's authority — so the manager reaches an OpenCode session exactly as it reaches a
+Claude one, labelled the same way. See `daemon/CLAUDE.md` under *OpenCode sessions*.
+
 **`start_session` is allowed where `docs/agent-surface.md` refuses it.** That refusal is about an
 agent starting a process nobody asked for. This one only ever runs because somebody spoke into
 the panel, and both gates are unchanged: the folder must be on this Mac's own project list, and

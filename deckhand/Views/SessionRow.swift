@@ -201,7 +201,7 @@ struct SessionRow: View {
                     .foregroundStyle(accent)
                     .accessibilityLabel("Starred")
             }
-            if session.isCodex { CodexWord() }
+            if let word = session.providerWord { ProviderWord(word) }
             StateWord(talk.isRecording ? .rec : talk.busy ? .wait : session.isBusy ? .busy : .idle)
         }
     }
