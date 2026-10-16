@@ -178,7 +178,7 @@ async def close_plane(plane_id: str, by: str = "") -> Response:
 
 @router.put("/space/poses/{key}", status_code=204)
 async def place(key: str, sent: Annotated[dict, Body()]) -> Response:
-    """`{x, y, z, yaw, pitch?, roll?, scale?, group?, minimized?}` for `session:<id>`,
+    """`{x, y, z, yaw, pitch?, roll?, scale?, group?, minimized?, pin?}` for `session:<id>`,
     `plane:<id>`, `manager`, `projects`, `launcher`, `monitor` or `camera`. The headset's to
     call."""
     kind, _, rest = key.partition(":")
@@ -217,6 +217,12 @@ async def place(key: str, sent: Annotated[dict, Body()]) -> Response:
             raise HTTPException(status_code=400, detail='minimized is true, false or "group"')
         if minimized:
             pose["minimized"] = minimized
+    # A plane the person pinned: `"fixed"` stands exactly where it was left, `"slide"` keeps its
+    # height and depth and may only slide sideways. Absent, the room arranges it whole.
+    if (pin := sent.get("pin")) is not None:
+        if pin not in ("fixed", "slide"):
+            raise HTTPException(status_code=400, detail='pin is "fixed" or "slide"')
+        pose["pin"] = pin
     await asyncio.to_thread(stored.place, key, pose)
     return Response(status_code=204)
 

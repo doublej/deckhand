@@ -86,11 +86,12 @@ Every route needs `x-deckhand-token`.
   default profile out of iTerm's preferences, ` (Light)` or ` (Dark)` colours by the Mac's
   appearance when the profile keeps both; a `?session=` changes nothing. Shared for 10 s.
 
-`Plane = {id, kind, url, window, title, near, by, at}`. `Pose = {x, y, z, yaw, pitch?, roll?, scale?, group?, minimized?}` — metres in
+`Plane = {id, kind, url, window, title, near, by, at}`. `Pose = {x, y, z, yaw, pitch?, roll?, scale?, group?, minimized?, pin?}` — metres in
 the floor-origin space, angles in radians, scale 0.25–4. Planes whose poses share a `group` are one project to the
 person — any mix of sessions, pages and windows — and move as one. `minimized` is `true` for a plane
 put down on its own and `"group"` for one put down with its whole group, so restoring the group
-lifts only those; the headset decides who joins,
+lifts only those. `pin` is `"fixed"` for a plane the headset's arranger must leave exactly where the person
+put it and `"slide"` for one it may only slide sideways; absent, it arranges it. The headset decides who joins,
 by snapping one plane against another, and this only keeps the answer. State is `space.json` in the data dir, written whole through
 `os.replace`.
 

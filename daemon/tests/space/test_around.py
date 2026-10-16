@@ -187,3 +187,14 @@ def test_a_pose_keeps_minimized_only_while_it_is(client, head):
     for bad in ("yes", 1):
         refused = client.put("/space/poses/manager", json=pose | {"minimized": bad}, headers=head)
         assert refused.status_code == 400
+
+
+def test_a_pose_keeps_its_pin_and_a_pose_without_one_is_free(client, head):
+    pose = {"x": 0, "y": 1, "z": 1, "yaw": 0}
+    for pin in ("fixed", "slide"):
+        assert client.put("/space/poses/manager", json=pose | {"pin": pin}, headers=head).status_code == 204
+        assert client.get("/space", headers=head).json()["poses"]["manager"]["pin"] == pin
+    client.put("/space/poses/manager", json=pose, headers=head)  # a PUT is the whole pose: no pin is free
+    assert "pin" not in client.get("/space", headers=head).json()["poses"]["manager"]
+    for bad in ("yes", True, 1):
+        assert client.put("/space/poses/manager", json=pose | {"pin": bad}, headers=head).status_code == 400
