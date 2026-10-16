@@ -121,7 +121,7 @@ stands is pose key `camera`:
 
 - `POST /camera/frames` — the body is one JPEG (`image/jpeg`), the newest frame; anything else is
   a 400, over 2 MB a 413. Answers `{viewers}`, so the headset learns in the same breath whether
-  anyone still watches. It sends 1280 × 720 at quality 70, 12 a second, one per POST, one in
+  anyone still watches. It sends 2560 × 1440 at quality 85, 12 a second, one per POST, one in
   flight.
 - `GET /camera/stream` — `multipart/x-mixed-replace; boundary=frame`, the newest frame first and
   then each new one; frames nobody fetched in time are skipped, never queued. Counts as a viewer
