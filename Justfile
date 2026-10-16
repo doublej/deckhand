@@ -138,6 +138,19 @@ token:
 camera:
     ffplay -window_title "Deckhand camera" -loglevel error -nostats -fflags nobuffer -flags low_delay -framedrop -sync video -probesize 32 -analyzeduration 0 -f mpjpeg -headers "x-deckhand-token: $(cat ~/Library/Application\ Support/Deckhand/token)"$'\r\n' http://127.0.0.1:4180/camera/stream
 
+# The stdio copy logs nothing itself: Claude Code keeps a log of it per session (tool calls,
+# errors), re-globbed every minute for new sessions. The remote one is uvicorn's `POST /mcp`.
+
+# Follow the MCP server's traffic, stdio and remote.
+[group('develop')]
+mcp-log:
+    #!/usr/bin/env zsh
+    trap 'kill 0' EXIT
+    tail -n 2000 -F ~/Library/Logs/Deckhand/launchd.out.log | grep --line-buffered ' /mcp ' | sed -u 's/^/remote /' &
+    n=3
+    while :; do timeout 60 tail -q -n $n -F ~/Library/Caches/claude-cli-nodejs/*/mcp-logs-deckhand/*.jsonl(om[1,30]N) </dev/null; n=0; done \
+        | jq -r --unbuffered '"\(.timestamp[11:19]) \(.cwd | split("/") | last) \(.debug // .error // tostring)"'
+
 # A six-digit code a phone or headset trades for a token of its own; waits to say who paired.
 [group('develop')]
 pair:
