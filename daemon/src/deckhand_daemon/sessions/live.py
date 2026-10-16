@@ -58,6 +58,11 @@ class Session:
     # OpenCode service. Neither of the other two has a pid, a tty, a pane or a socket: their words
     # go in through their own server's API. See `codex.py` and `opencode.py`.
     provider: str = "claude"
+    # Whether a client on this Mac has it open. Only OpenCode answers it: a session there outlives
+    # every window showing it, so this is whether a TUI has it as a TUI tab (`opencode_tabs.py`).
+    # None for the other two, and for an OpenCode Mac that cannot tell. A Claude session is
+    # listed only while its process runs, so it is always open.
+    in_client: bool | None = None
 
     def to_json(self) -> dict:
         d = asdict(self)

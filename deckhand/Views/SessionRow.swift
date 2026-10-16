@@ -202,7 +202,7 @@ struct SessionRow: View {
                     .accessibilityLabel("Starred")
             }
             if let word = session.providerWord { ProviderWord(word) }
-            StateWord(talk.isRecording ? .rec : talk.busy ? .wait : session.isBusy ? .busy : .idle)
+            StateWord(talk.isRecording ? .rec : talk.busy ? .wait : session.runState)
         }
     }
 }

@@ -262,7 +262,7 @@ private struct Column: View {
                     .tracking(1)
                     .foregroundStyle(Palette.textSecondary)
             }
-            StateWord(isRecording ? .rec : busy ? .wait : session.isBusy ? .busy : .idle)
+            StateWord(isRecording ? .rec : busy ? .wait : session.runState)
         }
         .padding(.horizontal, Spacing.extraSmall)
         .padding(.vertical, 6)

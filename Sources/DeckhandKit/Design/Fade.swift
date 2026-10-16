@@ -6,8 +6,8 @@ import SwiftUI
 /// The rail is a list of things competing for one glance, and most of them are not what you
 /// came for. Nothing here adds a decoration to say which is which: the row that last did
 /// something is drawn exactly as the app has always drawn it, and the ones that have gone quiet
-/// recede from it. So this can only ever take contrast away — full is the design, and age is the
-/// only thing that spends it.
+/// recede from it. So this can only ever take contrast away — full is the design, and age is what
+/// spends it, along with a session no client on the Mac has open any more.
 ///
 /// One multiplier over the whole row rather than a second palette. Opacity on the rail's dark
 /// ground moves ink, tile and border toward that ground together, which is what "less contrast"
@@ -46,8 +46,13 @@ public extension Session {
     /// session that has been working for an hour carries an hour-old timestamp. Measured on this
     /// Mac — a session reporting `busy` with `updated_at` 1553 s old while it was mid-turn.
     /// Reading that as idle age would make the hardest-working row on the rail the faintest one.
+    ///
+    /// A session no client has open is at the floor straight away. Its OFF says so in words, and
+    /// it is the same receding the clock would give it in a few hours, arrived at now: a session
+    /// nobody has open is not one you are deciding whether to go back to.
     func contrast(asOf now: Date = Date()) -> Double {
-        isBusy ? 1 : Fade.contrast(idleFor: now.timeIntervalSince(lastActive))
+        if isBusy { return 1 }
+        return isOpen ? Fade.contrast(idleFor: now.timeIntervalSince(lastActive)) : Fade.floor
     }
 }
 

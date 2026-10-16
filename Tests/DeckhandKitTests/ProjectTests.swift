@@ -106,6 +106,28 @@ extension ClientTests {
         #expect(!opencode.isOnTheMac)
     }
 
+    /// OpenCode lists sessions touched lately whether or not a TUI still has them; `in_client` is
+    /// the line between the two, and a row that does not carry it is open.
+    @Test("an OpenCode session no TUI has open reads OFF and recedes, unless it is working")
+    func closedReadsOff() async throws {
+        StubProtocol.respond(with: Data("""
+        {"sessions":[
+          {"session_id":"cc","pid":1,"name":"a","cwd":"/c","folder":"c","status":"idle",
+           "updated_at":1.0,"tty":"ttys001","pane":null},
+          {"session_id":"ses_open","pid":0,"name":"b","cwd":"/c","folder":"c","status":"idle",
+           "updated_at":1.0,"tty":"","pane":null,"provider":"opencode","in_client":true},
+          {"session_id":"ses_shut","pid":0,"name":"c","cwd":"/c","folder":"c","status":"idle",
+           "updated_at":1.0,"tty":"","pane":null,"provider":"opencode","in_client":false},
+          {"session_id":"ses_bg","pid":0,"name":"d","cwd":"/c","folder":"c","status":"busy",
+           "updated_at":1.0,"tty":"","pane":null,"provider":"opencode","in_client":false}]}
+        """.utf8))
+        let found = try await stub().sessions().sessions
+        #expect(found.map(\.isOpen) == [true, true, false, false])
+        #expect(found.map(\.runState) == [.idle, .idle, .off, .busy])
+        let fresh = Date(timeIntervalSince1970: 1)
+        #expect(found.map { $0.contrast(asOf: fresh) } == [1, 1, Fade.floor, 1])
+    }
+
     /// A paneless Claude session, a Codex thread and an OpenCode session, off one listing.
     private func threeProviders() async throws -> [Session] {
         StubProtocol.respond(with: Data("""

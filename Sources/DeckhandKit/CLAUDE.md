@@ -22,6 +22,10 @@ Design is its own packet (`Design/CLAUDE.md`).
   not take the listing down. Views ask a capability — `stops`, `compacts`, `renames`,
   `endsByKeys`, `takesCommands`, `hasInbox`, `hasContextTree`, `isOnTheMac` — and `providerWord` for
   the label, never the raw word, so a fourth provider is a change in `Listing.swift` alone.
+- **A state word is `session.runState`, never `isBusy ? .busy : .idle`.** An OpenCode session
+  stays listed for two hours after a TUI closed it, and `in_client: false` is how the Mac says so;
+  `runState` turns that into OFF, and `contrast` puts the row at the floor. A missing key is open,
+  which is every Claude and Codex row and every Mac older than the field.
 - **`ManagerFeed.newest` is the cursor, never `entries.last?.id`.** A poll that brought nothing
   back still has to leave the phone asking for the right thing, or the next one re-fetches the
   whole conversation. A test holds it down.

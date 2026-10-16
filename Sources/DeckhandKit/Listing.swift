@@ -95,6 +95,17 @@ public extension Session {
     /// What its own replies are labelled with in the conversation.
     var theirWord: String { providerWord ?? "CLAUDE" }
 
+    /// Whether something on the Mac still has it open. An OpenCode session outlives every window
+    /// showing it, and the Mac lists the ones touched in the last two hours whether or not a TUI
+    /// still has them, so this is the line between "still open" and "happened lately". Every
+    /// session nobody asked about is open: a Claude one is listed only while its process runs.
+    var isOpen: Bool { inClient ?? true }
+
+    /// The state word its row and its page carry: BUSY while it works, IDLE while it is open and
+    /// waiting, OFF once no client has it open. OFF is utt's word for switched off by the person,
+    /// which is what closing the last tab showing a session is.
+    var runState: RunState { isBusy ? .busy : isOpen ? .idle : .off }
+
     // What the Mac can do to it, asked by capability rather than by provider, so a screen never
     // has to know which program answers which verb. Claude's controls are keystrokes in a pane;
     // the other two are their own server's API and need none.

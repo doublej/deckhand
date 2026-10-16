@@ -17,9 +17,12 @@ asked for.
 `opencode service restart` moves both the port and the password.
 
 **Which sessions count as live is JJ's choice, made on 2026-10-16:** a root session that is running
-now, or that was touched in the last two hours. OpenCode keeps every session it ever had, so "the
-process is alive", which is the rule for Claude, means nothing here. Children (`parentID`) are a
-session's subagents, and the phone reads them under that session (`opencode_turns.children`).
+now, that a TUI on this Mac has open as a TUI tab, or that was touched in the last two hours.
+OpenCode keeps every session it ever had, so "the process is alive", which is the rule for
+Claude, means nothing here. Each row says which of them a TUI has open (`in_client`, worked out
+in `opencode_tabs.py`), so the phone can tell what is still open from what merely happened
+lately. Children (`parentID`) are a session's subagents, and the phone reads them under that
+session (`opencode_turns.children`).
 
 `opencode_input.py` is everything that changes a session and `opencode_turns.py` everything that
 reads one; this file is the link, the listing and starting one.
@@ -36,6 +39,7 @@ from typing import TYPE_CHECKING
 import httpx
 
 from ..log import log
+from . import opencode_tabs
 
 if TYPE_CHECKING:
     from .live import Session
@@ -156,7 +160,7 @@ def answered() -> bool:
 
 
 def records() -> list[dict]:
-    """The root sessions running now or touched lately, as session records.
+    """The root sessions running now, open in a TUI, or touched lately, as session records.
 
     Never raises: OpenCode being absent, down or hung is a listing with no OpenCode rows in it,
     never a listing without the Claude ones. After a failure it does not ask again for
@@ -168,7 +172,8 @@ def records() -> list[dict]:
         return []
     try:
         running = set(request("GET", "/api/session/active", timeout=TIMEOUT).get("data") or {})
-        found = _recent(running)
+        opened = opencode_tabs.open_sessions(registration_path().parent)
+        found = _recent(running | (opened or set()))
     except OpenCodeError as error:
         if ok or not at:
             log.warning("opencode sessions unavailable: %s", error)
@@ -177,12 +182,13 @@ def records() -> list[dict]:
     _asked = (time.monotonic(), True)
     for gone in set(_usage) - {info.get("id") for info in found}:
         del _usage[gone]
-    return [record(info, info["id"] in running) for info in found]
+    return [record(info, info["id"] in running, None if opened is None else info["id"] in opened)
+            for info in found]
 
 
-def _recent(running: set[str]) -> list[dict]:
+def _recent(kept: set[str]) -> list[dict]:
     """Every live root session: newest pages until one is older than the cutoff, plus anything
-    running that those pages did not reach."""
+    running or open in a TUI that those pages did not reach."""
     cutoff = (time.time() - LIVE_FOR) * 1000
     found: dict[str, dict] = {}
     cursor = None
@@ -191,35 +197,36 @@ def _recent(running: set[str]) -> list[dict]:
         page = request("GET", "/api/session", query=query, timeout=TIMEOUT)
         rows = [info for info in page.get("data") or [] if isinstance(info, dict)]
         for info in rows:
-            if _live(info, running, cutoff):
+            if _live(info, kept, cutoff):
                 found[info["id"]] = info
         cursor = (page.get("cursor") or {}).get("next")
         if not cursor or not rows or _updated(rows[-1]) < cutoff:
             break
-    for session_id in running - set(found):
+    for session_id in kept - set(found):
         try:
             info = request("GET", f"/api/session/{session_id}", timeout=TIMEOUT).get("data") or {}
         except Unreachable:
             raise
         except OpenCodeError:
             continue
-        if _live(info, running, cutoff):
+        if _live(info, kept, cutoff):
             found[session_id] = info
     return list(found.values())
 
 
-def _live(info: dict, running: set[str], cutoff: float) -> bool:
+def _live(info: dict, kept: set[str], cutoff: float) -> bool:
     if not info.get("id") or info.get("parentID") or (info.get("time") or {}).get("archived"):
         return False
-    return info["id"] in running or _updated(info) >= cutoff
+    return info["id"] in kept or _updated(info) >= cutoff
 
 
 def _updated(info: dict) -> float:
     return float((info.get("time") or {}).get("updated") or 0)
 
 
-def record(info: dict, busy: bool) -> dict:
-    """One session in the shape `live.Session` is built from."""
+def record(info: dict, busy: bool, in_client: bool | None = None) -> dict:
+    """One session in the shape `live.Session` is built from. `in_client` is None where nobody
+    asked which TUI has it open: one session fetched for the MCP, or one just started."""
     session_id = str(info.get("id") or "")
     cwd = folder_of(info)
     title = " ".join(str(info.get("title") or "").split())
@@ -235,6 +242,7 @@ def record(info: dict, busy: bool) -> dict:
         "tty": "",
         "pane": None,
         "provider": PROVIDER,
+        "in_client": in_client,
     }
 
 

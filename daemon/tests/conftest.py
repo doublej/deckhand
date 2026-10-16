@@ -119,8 +119,9 @@ def keep_the_real_opencode_out(tmp_path, monkeypatch):
     """No listing in a test reaches the OpenCode service a person is using. Its registration is a
     file that is not there, which is the real "not installed" path, and every memory it keeps
     between listings starts blank. A suite run from OpenCode's own shell carries that session's
-    id in the environment, and the MCP server would otherwise take it for its own."""
-    from deckhand_daemon.sessions import opencode
+    id in the environment, and the MCP server would otherwise take it for its own. Which TUIs are
+    running is never asked of this Mac either: a test that wants one says so."""
+    from deckhand_daemon.sessions import opencode, opencode_tabs
 
     monkeypatch.delenv("OPENCODE_SESSION_ID", raising=False)
     monkeypatch.setenv("DECKHAND_OPENCODE_SERVICE", str(tmp_path / "opencode" / "service.json"))
@@ -128,6 +129,9 @@ def keep_the_real_opencode_out(tmp_path, monkeypatch):
     monkeypatch.setattr(opencode, "_registered", (0.0, {}))
     monkeypatch.setattr(opencode, "_usage", {})
     monkeypatch.setattr(opencode, "_limits", (0.0, {}))
+    monkeypatch.setattr(opencode_tabs, "clients", lambda: None)
+    monkeypatch.setattr(opencode_tabs, "_folders", {})
+    monkeypatch.setattr(opencode_tabs, "_read", ((), {}))
 
 
 @pytest.fixture(autouse=True)

@@ -232,7 +232,7 @@ struct SessionHead: View {
             Spacer(minLength: Spacing.extraSmall)
             if working { ProgressView().controlSize(.mini) }
             if let word = session.providerWord { ProviderWord(word) }
-            StateWord(session.isBusy ? .busy : .idle)
+            StateWord(session.runState)
             dots
         }
         .padding(.horizontal, Spacing.medium)
