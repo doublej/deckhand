@@ -133,6 +133,11 @@ icon:
 token:
     @cat ~/Library/Application\ Support/Deckhand/token
 
+# The headset's camera in a window on this Mac. `-sync video`: the stream is 12 fps, ffplay assumes 25.
+[group('develop')]
+camera:
+    ffplay -window_title "Deckhand camera" -loglevel error -nostats -fflags nobuffer -flags low_delay -framedrop -sync video -probesize 32 -analyzeduration 0 -f mpjpeg -headers "x-deckhand-token: $(cat ~/Library/Application\ Support/Deckhand/token)"$'\r\n' http://127.0.0.1:4180/camera/stream
+
 # A six-digit code a phone or headset trades for a token of its own; waits to say who paired.
 [group('develop')]
 pair:
