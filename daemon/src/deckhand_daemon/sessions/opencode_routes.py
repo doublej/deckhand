@@ -24,7 +24,7 @@ from .. import config, pairing, presence
 from ..reading.transcripts import Turn
 from . import opencode_input, opencode_turns
 from .live import Session, live_sessions
-from .opencode import PROVIDER, OpenCodeError
+from .opencode import PROVIDER, OpenCodeError, fetch, owns
 
 #: What an OpenCode session cannot be asked for that a Claude session can, and why.
 REFUSED = {
@@ -47,17 +47,26 @@ async def answer_for_opencode(request: Request, call_next) -> Response:
     # A wrong token falls through, and the route's own dependency refuses it as it always has.
     if not pairing.allows(request.headers.get(config.TOKEN_HEADER, "")):
         return await call_next(request)
-    session = await asyncio.to_thread(_opencode_session, session_id)
+    session = await asyncio.to_thread(opencode_session, session_id)
     if session is None:
         return await call_next(request)
     presence.seen(request)
     return await asyncio.to_thread(_answer, wanted, suffix, session, request.query_params)
 
 
-def _opencode_session(session_id: str) -> Session | None:
-    """The live OpenCode row with that id, off the shared listing. None for anything else."""
-    return next((s for s in live_sessions()
-                 if s.session_id == session_id and s.provider == PROVIDER), None)
+def opencode_session(session_id: str) -> Session | None:
+    """The OpenCode session with that id: off the shared listing, else asked of the service.
+
+    The listing is JJ's two-hour rule, so a session that went quiet, or one a listing timeout
+    left out for the 30 s backoff, fell through to Claude's routes and every read and every
+    prompt answered 404 — 138 in a row for one session. OpenCode keeps every session, so an id
+    it still knows can still be read and spoken to. None for anything that is not OpenCode's.
+    """
+    listed = next((s for s in live_sessions()
+                   if s.session_id == session_id and s.provider == PROVIDER), None)
+    if listed or not owns(session_id):
+        return listed
+    return Session(**found) if (found := fetch(session_id)) else None
 
 
 def _answer(wanted: tuple[str, str], suffix: str, session: Session, query: QueryParams) -> Response:

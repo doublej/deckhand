@@ -119,8 +119,7 @@ def control(session: Session, action: str) -> str | None:
     """Stop and compact are OpenCode's own verbs. Clear and exit have no OpenCode equivalent."""
     try:
         if action == "cancel":
-            stopped = opencode.request("POST", f"/api/session/{session.session_id}/interrupt")
-            if not stopped.get("interrupted"):
+            if not _interrupt(session.session_id):
                 return f"{session.name} has nothing running to stop"
         elif action == "compact":
             opencode.request("POST", f"/api/session/{session.session_id}/compact", {})
@@ -131,6 +130,24 @@ def control(session: Session, action: str) -> str | None:
         return f"OpenCode would not {action} {session.name}: {error}"
     log.info("sent %s to %s", action, session.name)
     return None
+
+
+def _interrupt(session_id: str) -> bool:
+    """Stop the session and every subagent running under it; whether anything was running.
+
+    `resume=true`, because without it the words the person said into the turn stay parked and
+    the session goes idle: they were never read, and the next prompt released them beside
+    itself, so the person's line arrived twice. With it the session goes on to those words, as
+    steering means. A subagent left running is a stop that did not stop, so each is stopped too.
+    """
+    running = set(opencode.request("GET", "/api/session/active").get("data") or {})
+    under = [sid for sid in running if sid != session_id and opencode.root_of(sid) == session_id]
+    stopped = opencode.request("POST", f"/api/session/{session_id}/interrupt",
+                               query={"resume": "true"}).get("interrupted")
+    for child in under:
+        stopped = opencode.request("POST", f"/api/session/{child}/interrupt").get(
+            "interrupted") or stopped
+    return bool(stopped)
 
 
 def rename(session: Session, name: str) -> str | None:
@@ -151,20 +168,28 @@ def queued(session_id: str) -> list[dict]:
 def clear_queue(session_id: str) -> dict:
     """Cancel every prompt still waiting. OpenCode's own verb: a cancelled item is never read."""
     gone = 0
-    for inbox_id, _ in _inbox(session_id):
+    for inbox_id, _ in _inbox(session_id, everything=True):
         opencode.request("DELETE", f"/api/session/{session_id}/inbox/{inbox_id}")
         gone += 1
     return {"cleared": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
             "cancelled": gone}
 
 
-def _inbox(session_id: str) -> list[tuple[str, str]]:
-    """(inbox id, words) for each user or synthetic item still waiting."""
+def _inbox(session_id: str, everything: bool = False) -> list[tuple[str, str]]:
+    """(inbox id, words) for each prompt still waiting: the person's, or one Deckhand sent.
+
+    OpenCode parks notes of its own here too — a shell "cancelled because the server restarted"
+    sat in two idle sessions for hours — and those are not anybody's words waiting to be read.
+    Clearing takes `everything`: a stale note left there rides into the model with the next prompt.
+    """
     found = []
     for item in opencode.request("GET", f"/api/session/{session_id}/inbox").get("data") or []:
         if not isinstance(item, dict) or item.get("type") not in ("user", "synthetic"):
             continue
         payload = item.get("payload") or {}
+        ours = item.get("type") == "synthetic" and SAID in (payload.get("metadata") or {})
+        if not (item.get("type") == "user" or ours or everything):
+            continue
         said = (payload.get("metadata") or {}).get(SAID) or payload.get("text") or ""
         found.append((str(item.get("id") or ""), str(said)))
     return found

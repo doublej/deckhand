@@ -59,6 +59,9 @@ def found_session(session_id: str) -> sessions.Session | None:
     ):
         log.info("%s was cleared — %s answers for it now", session_id[:8], found.name)
         return found
+    # An OpenCode session the two-hour listing has let go is still OpenCode's to answer for.
+    if found := sessions.opencode_session(session_id):
+        return found
     # Not on this Mac, so try the rest of the network. The routes that need a pane still refuse
     # a session found this way — it comes back with `pane=None`, which is the same refusal a
     # local pane-less session already gets — but `say`, a clip and a slip's answer all work,

@@ -132,7 +132,14 @@ def _turns(messages: list[dict]) -> list[Turn]:
     for message in messages:
         kind = message.get("type")
         when = _stamp(message.get("time"))
-        if kind in ("user", "synthetic"):
+        if kind == "synthetic" and SAID not in (message.get("metadata") or {}):
+            # OpenCode's own note — a background result, "the server restarted", AGENTS.md —
+            # is something that happened in the run, not something somebody said to it.
+            text = str(message.get("text") or "")
+            tools.append(Tool(name=str(message.get("description") or "OpenCode"),
+                              detail=" ".join(text.split())[:DETAIL], result=text[:WHOLE],
+                              tool_id=str(message.get("id") or "")))
+        elif kind in ("user", "synthetic"):
             if tools or thoughts:
                 found.append(Turn(role="assistant", text="", timestamp=when, tools=tools,
                                   thoughts=thoughts))

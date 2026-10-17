@@ -295,7 +295,9 @@ pid, pane or socket anywhere. Read off OpenCode 2.0.31 and the `/openapi.json` i
   into a pane, so the reason it does for Claude is not there.
 - **A slash is OpenCode's own command** (`POST …/command`), else a skill handed to a prompt
   (`skills: [{id}]`). On the agent lane a slash is refused, as on Claude's socket.
-- **What the API does that a pane did:** `control cancel` is `POST …/interrupt`, `compact` is
+- **What the API does that a pane did:** `control cancel` is `POST …/interrupt?resume=true` on the
+  session and a plain interrupt on each subagent running under it — without `resume` the words said
+  into the turn stay parked and ride in twice with the next prompt. `compact` is
   `POST …/compact`, `/name` is `PATCH {title}` and lands at once, `queue/clear` cancels what is in
   `GET …/inbox`. `clear`, `exit`, `focus` and the CLAUDE.md `context` tree are refused. `deliver`
   carries the first three, so the routes keep their filter carry-over and the record; the reads

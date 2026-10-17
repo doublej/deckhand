@@ -22,7 +22,7 @@ from .live import (
     sessions_dir,
     succeeded_by,
 )
-from .opencode_routes import answer_for_opencode
+from .opencode_routes import answer_for_opencode, opencode_session
 from .panes import Pane
 from .panes import forget as forget_panes
 from .panes import status as pane_status
@@ -41,5 +41,5 @@ from .usage import (
 __all__ = [
     "DEFAULT_WINDOW", "SYNTHETIC", "USAGE_WINDOW", "WEEK_CACHE", "LastRequest", "Pane",
     "Session", "answer_for_codex", "answer_for_opencode", "codex", "context_window", "filled", "focus", "forget_listing", "forget_panes",
-    "last_request", "live_sessions", "opencode", "opencode_input", "pane_status", "sessions_dir", "succeeded_by", "week_usage",
+    "last_request", "live_sessions", "opencode", "opencode_input", "opencode_session", "pane_status", "sessions_dir", "succeeded_by", "week_usage",
 ]

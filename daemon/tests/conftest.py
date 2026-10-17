@@ -129,6 +129,8 @@ def keep_the_real_opencode_out(tmp_path, monkeypatch):
     monkeypatch.setattr(opencode, "_registered", (0.0, {}))
     monkeypatch.setattr(opencode, "_usage", {})
     monkeypatch.setattr(opencode, "_limits", (0.0, {}))
+    monkeypatch.setattr(opencode, "_roots", {})
+    monkeypatch.setattr(opencode, "_gone", set())
     monkeypatch.setattr(opencode_tabs, "clients", lambda: None)
     monkeypatch.setattr(opencode_tabs, "_folders", {})
     monkeypatch.setattr(opencode_tabs, "_read", ((), {}))

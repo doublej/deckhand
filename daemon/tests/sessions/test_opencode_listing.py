@@ -38,7 +38,8 @@ def test_a_running_or_recent_root_session_is_a_row(opencode_service, client):
     busy = ours["ses_busy0001"]
     assert (busy["status"], busy["name"], busy["cwd"], busy["pane"], busy["pid"]) == (
         "busy", "Busy one", SHOP, None, 0)
-    assert ours["ses_idle0002"]["status"] == "idle"
+    # Its own turn ended, but the subagent it left running is its work still going.
+    assert ours["ses_idle0002"]["status"] == "busy"
     # Untitled until its first prompt, and never the folder's bare name, which is the Claude row's.
     assert ours["ses_none0006"]["name"] == "shop-opencode-0006"
     # Claude's rows are still there: a third provider is beside them, not instead of them.

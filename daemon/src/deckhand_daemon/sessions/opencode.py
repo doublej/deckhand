@@ -96,6 +96,11 @@ _asked: tuple[float, bool] = (0.0, False)
 _usage: dict[str, tuple[float, float, LastRequest, tuple[str, str]]] = {}
 #: (when read, (providerID, model id) -> context limit).
 _limits: tuple[float, dict[tuple[str, str], int]] = (0.0, {})
+#: session id -> the root session it is a subagent of (itself for a root). A parent never changes.
+_roots: dict[str, str] = {}
+#: Ids the service answered "not found" for — a deleted session a TUI's tabs still name. Asking
+#: again on every listing was 14 000 404s a session in OpenCode's own log in a day.
+_gone: set[str] = set()
 
 
 def _service() -> dict:
@@ -177,7 +182,10 @@ def records() -> list[dict]:
     if at and not ok and time.monotonic() - at < RETRY_AFTER:
         return []
     try:
-        running = set(request("GET", "/api/session/active", timeout=TIMEOUT).get("data") or {})
+        # A root is busy while any of its subagents runs: a turn that left background subagents
+        # going reads idle on its own, and its row would say so while the work goes on.
+        running = _roots_of(set(request("GET", "/api/session/active", timeout=TIMEOUT)
+                                .get("data") or {}))
         opened = opencode_tabs.open_sessions(registration_path().parent)
         found = _recent(running | (opened or set()))
     except OpenCodeError as error:
@@ -208,16 +216,44 @@ def _recent(kept: set[str]) -> list[dict]:
         cursor = (page.get("cursor") or {}).get("next")
         if not cursor or not rows or _updated(rows[-1]) < cutoff:
             break
-    for session_id in kept - set(found):
+    for session_id in kept - set(found) - _gone:
         try:
             info = request("GET", f"/api/session/{session_id}", timeout=TIMEOUT).get("data") or {}
         except Unreachable:
             raise
         except OpenCodeError:
+            _gone.add(session_id)
             continue
         if _live(info, kept, cutoff):
             found[session_id] = info
     return list(found.values())
+
+
+def root_of(session_id: str) -> str:
+    """The root session a subagent belongs to, up its `parentID`s; a root is its own."""
+    seen = [session_id]
+    while seen[-1] not in _roots and len(seen) < 8:
+        info = request("GET", f"/api/session/{seen[-1]}", timeout=TIMEOUT).get("data") or {}
+        if not info.get("parentID"):
+            _roots[seen[-1]] = seen[-1]
+            break
+        seen.append(str(info["parentID"]))
+    root = _roots.get(seen[-1], seen[-1])
+    _roots.update(dict.fromkeys(seen, root))
+    return root
+
+
+def _roots_of(running: set[str]) -> set[str]:
+    """The root sessions with anything running under them. One that has gone is dropped."""
+    found = set()
+    for session_id in running:
+        try:
+            found.add(root_of(session_id))
+        except Unreachable:
+            raise
+        except OpenCodeError:
+            continue
+    return found
 
 
 def _live(info: dict, kept: set[str], cutoff: float) -> bool:
