@@ -61,6 +61,20 @@ def raw_lines(session_id: str, limit: int) -> list[str]:
     return lines[-limit:]
 
 
+def activity(session_id: str, cap: int = 12_000) -> str:
+    """What the session has done since it was last spoken to, in the lines
+    `transcripts.activity_since_last_user` writes, so a briefing reads both providers alike."""
+    events: list[str] = []
+    for turn in _turns(_messages(session_id, RAW_MESSAGES)[0]):
+        if turn.role == "user":
+            events = []  # spoken to: everything before that is old news
+            continue
+        events.extend(f"ran {tool.name}: {tool.detail}" for tool in turn.tools)
+        if turn.text.strip():
+            events.append(f"said: {turn.text.strip()[:600]}")
+    return "\n".join(events)[-cap:]
+
+
 def texts(session_id: str) -> list[str]:
     """The recent history as text, for `files` to find the paths in."""
     return [json.dumps(m, ensure_ascii=False) for m in _messages(session_id, RAW_MESSAGES)[0]]

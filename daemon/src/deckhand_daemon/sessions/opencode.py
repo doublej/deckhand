@@ -74,6 +74,12 @@ class Unreachable(OpenCodeError):
     """The service is not registered, not there, or did not answer in time."""
 
 
+def owns(session_id: str) -> bool:
+    """Whether an id is an OpenCode session's, for a caller holding an id and no `Session`.
+    OpenCode prefixes every session id `ses_`; Claude Code's and Codex's are UUIDs."""
+    return session_id.startswith("ses_")
+
+
 def registration_path() -> Path:
     if given := os.environ.get("DECKHAND_OPENCODE_SERVICE"):
         return Path(given)

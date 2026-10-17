@@ -30,6 +30,10 @@ from . import sessions, summarize, tasks
 from .config import data_dir
 from .log import log
 from .reading import asked, transcripts
+from .sessions import opencode, opencode_turns
+
+# The providers a briefing can be written for: those with a history to read.
+BRIEFED = ("claude", opencode.PROVIDER)
 
 # Between two briefings. One model at a time, always: six sessions summarised at once is six
 # models thinking, and nothing on the phone is waiting for any of them.
@@ -102,14 +106,8 @@ def _moved(session_id: str) -> bool:
     behind it, so a file that moved without saying anything is settled there rather than left
     reading stale here. Without that half this would be a spinner that never stopped.
     """
-    kept = load(session_id)
-    file = transcripts.transcript_path(session_id)
-    if file is None:
-        return False
-    try:
-        return kept.get("mtime") != file.stat().st_mtime
-    except OSError:
-        return False
+    moved = _mark(session_id)
+    return moved is not None and load(session_id).get("mtime") != moved
 
 
 def bump(session_id: str) -> None:
@@ -167,7 +165,7 @@ def _next() -> str | None:
     """
     global _cursor
     # A Codex thread has no transcript to write a briefing from, so it is never in the cycle.
-    live = [s.session_id for s in sessions.live_sessions() if s.provider == "claude"]
+    live = [s.session_id for s in sessions.live_sessions() if s.provider in BRIEFED]
     while _bumped:
         wanted = _bumped.pop(0)
         if wanted not in live:
@@ -206,14 +204,8 @@ def _due(session_id: str) -> bool:
     if _too_soon(session_id):
         return False
     kept = load(session_id)
-    file = transcripts.transcript_path(session_id)
-    if file is None:
-        return False
-    try:
-        moved = file.stat().st_mtime
-    except OSError:
-        return False
-    if kept.get("mtime") == moved:
+    moved = _mark(session_id)
+    if moved is None or kept.get("mtime") == moved:
         return False
     if kept.get("hash") != _hash(session_id):
         return True
@@ -235,21 +227,46 @@ def _too_soon(session_id: str) -> bool:
     return time.time() - load(session_id).get("written_at", 0.0) < SAME_SESSION
 
 
+def _mark(session_id: str) -> float | None:
+    """When the session last moved, or None when there is nothing to read: its transcript's
+    mtime, or for an OpenCode session — which has no file — the `updated` time its service keeps."""
+    if opencode.owns(session_id):
+        found = (s.updated_at for s in sessions.live_sessions() if s.session_id == session_id)
+        return next(found, None)
+    file = transcripts.transcript_path(session_id)
+    try:
+        return file.stat().st_mtime if file else None
+    except OSError:
+        return None
+
+
+def _read(session_id: str) -> tuple[str, str]:
+    """The asks and the activity, the two things `summarize` is handed and `_hash` keys on.
+
+    OpenCode has no `AskUserQuestion` to read asks out of, and a service that does not answer
+    reads as nothing new rather than taking the worker down with it.
+    """
+    if not opencode.owns(session_id):
+        return asked.asks_of(session_id), transcripts.activity_since_last_user(session_id)
+    try:
+        return "", opencode_turns.activity(session_id)
+    except opencode.OpenCodeError as error:
+        log.warning("briefing for %s: OpenCode did not answer: %s", session_id, error)
+        return "", ""
+
+
 def _hash(session_id: str) -> str:
     """What the session has done, as one string. The same reading `summarize` is handed."""
-    activity = transcripts.activity_since_last_user(session_id)
-    asks = asked.asks_of(session_id)
+    asks, activity = _read(session_id)
     return hashlib.sha256(f"{asks}\n\n{activity}".encode()).hexdigest()
 
 
 async def _write(session_id: str) -> None:
     """One briefing, stored whatever happens — an error is news too, and it is not free."""
-    activity = await asyncio.to_thread(transcripts.activity_since_last_user, session_id)
-    asks = await asyncio.to_thread(asked.asks_of, session_id)
-    file = transcripts.transcript_path(session_id)
-    # Read before the model runs, not after: a transcript that moves while the model is thinking
-    # is a session that has done something new, and marking it current would swallow that.
-    moved = file.stat().st_mtime if file else 0.0
+    # Marked before the model runs, not after: a transcript that moves while the model is
+    # thinking is a session that has done something new, and marking it current would swallow that.
+    moved = await asyncio.to_thread(_mark, session_id) or 0.0
+    asks, activity = await asyncio.to_thread(_read, session_id)
     fingerprint = hashlib.sha256(f"{asks}\n\n{activity}".encode()).hexdigest()
     summary, error = await summarize.summarize(session_id, activity, asks)
     if summary is None and error is None:

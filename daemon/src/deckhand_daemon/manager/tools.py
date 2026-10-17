@@ -20,6 +20,7 @@ from ..filters import config as filter_config
 from ..orders import kept
 from ..projects import sources, starting
 from ..reading import context, transcripts
+from ..sessions import codex, codex_turns, opencode, opencode_turns
 from ..settings import wants
 from . import talk
 
@@ -58,15 +59,15 @@ def listing() -> dict:
     window = sessions.context_window()
     lines = []
     for session in live:
-        request = sessions.last_request(session.session_id)
-        share = f"{100 * request.used // window}%" if window and request.used else "—"
+        fill = sessions.filled(session, window)["context"]
+        share = f"{100 * fill['used'] // fill['limit']}%" if fill["limit"] and fill["used"] else "—"
         slips = artifacts.counted(session).get("artifacts_waiting", 0)
         open_asks = len(tasks.outstanding(session.session_id))
         headline = briefings.of(session.session_id).get("headline") or ""
         lines.append(
             f"- {session.name} [{session.status}] in {_tilde(session.cwd)} · context {share}"
             f" · {open_asks} open ask(s) · {slips} slip(s) waiting"
-            f" · {'pane' if session.pane else 'no pane'}"
+            f" · {_reached(session)}"
             + (f"\n    {headline}" if headline else "")
         )
     return said("\n".join(lines))
@@ -88,7 +89,7 @@ def one(session: sessions.Session, turns: int) -> dict:
     if waiting:
         parts.append("slips waiting: " + ", ".join(f"{r['id']} — {r['title']}" for r in waiting))
     if turns:
-        parts.append("last of the conversation:\n" + _turns(session.session_id, turns))
+        parts.append("last of the conversation:\n" + _turns(session, turns))
     return said("\n\n".join(parts))
 
 
@@ -154,8 +155,25 @@ def _chain(steps: list[dict]) -> str:
     return ", ".join(drawn) or "(none)"
 
 
-def _turns(session_id: str, limit: int) -> str:
-    read = transcripts.read_turns(session_id, limit=limit)
+def _reached(session: sessions.Session) -> str:
+    """How words get in. A Codex or OpenCode session never has a pane — its server's API is the
+    way in — so "no pane" there would read as broken when it is only different."""
+    if session.provider != "claude":
+        return f"no pane, spoken to over {session.provider}'s API"
+    return "pane" if session.pane else "no pane"
+
+
+def _turns(session: sessions.Session, limit: int) -> str:
+    """The last turns, read where that provider keeps them: Claude's transcript, or the Codex or
+    OpenCode server — the readers the phone's own routes use."""
+    reader = {"codex": codex_turns, opencode.PROVIDER: opencode_turns}.get(session.provider)
+    if reader is None:
+        read = transcripts.read_turns(session.session_id, limit=limit)
+    else:
+        try:
+            read = reader.page_turns(session.session_id, limit, 0)[0]
+        except (codex.CodexError, opencode.OpenCodeError) as error:
+            return f"  ({session.provider} would not answer: {error})"
     if not read:
         return "  (nothing readable in the transcript)"
     return "\n".join(f"  {turn.role}: {' '.join(turn.text.split())[:400]}" for turn in read)
