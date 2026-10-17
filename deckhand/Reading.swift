@@ -34,8 +34,12 @@ extension AppModel {
         var more = false
         await run {
             let rounds = try await client.turns(of: session.sessionId, limit: limit)
-            self.turns = rounds.turns
-            self.queued[session.sessionId] = rounds.queued
+            // Only on a change: this runs every five seconds, and assigning an equal list still
+            // redraws every card on screen and re-reads its markdown.
+            if self.turns != rounds.turns { self.turns = rounds.turns }
+            if self.queued[session.sessionId] != rounds.queued {
+                self.queued[session.sessionId] = rounds.queued
+            }
             more = rounds.more
         }
         await loadAgents(for: session)
@@ -51,7 +55,7 @@ extension AppModel {
     func loadAgents(for session: Session) async {
         guard let client = settings.client() else { return }
         guard let found = try? await client.agents(of: session.sessionId) else {
-            agents = [:]
+            if !agents.isEmpty { agents = [:] }
             return
         }
         // Keyed by the tool call where there is one, and by the agent's own id where there is
@@ -59,7 +63,8 @@ extension AppModel {
         // window the Mac reads, and every one of those sharing the empty key collapsed the whole
         // listing to a single row. The two spellings cannot collide — `toolu_…` against `agent-…`.
         let keyed = found.map { ($0.toolUseId.isEmpty ? $0.id : $0.toolUseId, $0) }
-        agents = Dictionary(keyed) { first, _ in first }
+        let fresh = Dictionary(keyed) { first, _ in first }
+        if agents != fresh { agents = fresh }
     }
 
     /// The page before the one on screen, put in front of it. Hands back how many arrived — the

@@ -68,14 +68,14 @@ struct WaitingSlip: View {
                 .truncationMode(.tail)
             if more > 0 {
                 Text("\(more) more")
-                    .foregroundStyle(Color.white.opacity(0.75))
+                    .foregroundStyle(Palette.lcdGround.opacity(0.75))
             }
             Spacer(minLength: Spacing.extraSmall)
             Image(systemName: "chevron.right")
                 .font(.system(size: 11, weight: .semibold))
         }
         .font(Typography.primaryRow)
-        .foregroundStyle(Color.white)
+        .foregroundStyle(Palette.lcdGround)
         .padding(.horizontal, Spacing.medium)
         .frame(maxWidth: .infinity, minHeight: Self.target)
         .background(Capsule().fill(accent))

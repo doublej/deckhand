@@ -49,9 +49,10 @@ struct RailFoot: View {
     private var controls: some View {
         HStack(spacing: Spacing.small) {
             if let reason {
+                // Secondary, not tertiary: what is wrong is the one line here you came to read.
                 Text(reason)
                     .font(Typography.hint)
-                    .foregroundStyle(Palette.textTertiary)
+                    .foregroundStyle(Palette.textSecondary)
                     .lineLimit(1)
             }
             // Only when there is nothing wrong. One line holds one of the two: what the Mac is
@@ -59,6 +60,17 @@ struct RailFoot: View {
             // sentence, so it is the thing that would be squeezed to an ellipsis by these.
             if reason == nil { Statusline(model: model) }
             StateWord(model.connection.state)
+            buttons
+        }
+        .font(.system(size: 12, weight: .semibold))
+        .foregroundStyle(Palette.textTertiary)
+        .padding(.horizontal, Spacing.small)
+    }
+
+    /// Spaced by their own 44pt targets rather than by gaps between 12pt glyphs, which left a
+    /// target the size of the glyph.
+    private var buttons: some View {
+        HStack(spacing: 0) {
             Button("New session", systemImage: "plus") { showProjects = true }
                 .accessibilityIdentifier("new-session")
             Button("Hidden sessions", systemImage: model.showsHidden ? "eye" : "eye.slash") {
@@ -68,10 +80,17 @@ struct RailFoot: View {
             // The panel is reached by swiping the screen left, and a gesture nobody is told
             // about is not a way in for somebody using VoiceOver. Last in the row because it
             // is the one thing here that is a place rather than a switch.
-            Button("Manager", systemImage: "bubble.left.and.text.bubble.right") {
+            Button {
                 withAnimation(Motion.opening) { model.manager.page = 1 }
+            } label: {
+                // How many slips wait across the rail, so the way to the tray says why to go.
+                HStack(spacing: Spacing.xxs) {
+                    Label("Manager", systemImage: "bubble.left.and.text.bubble.right")
+                    if waiting > 0 { Text("\(waiting)").foregroundStyle(Palette.lcdYellow) }
+                }
             }
             .accessibilityIdentifier("open-manager")
+            .accessibilityValue(waiting > 0 ? "\(waiting) waiting" : "")
             // Only once there is more than one machine. On a rail that has always been one Mac
             // this is a page saying "there is one machine", which is what the rail already says.
             if model.namesMachines {
@@ -82,10 +101,10 @@ struct RailFoot: View {
             }
         }
         .labelStyle(.iconOnly)
-        .font(.system(size: 12, weight: .semibold))
-        .foregroundStyle(Palette.textTertiary)
-        .padding(.horizontal, Spacing.small)
+        .buttonStyle(Target())
     }
+
+    private var waiting: Int { model.visibleSessions.reduce(0) { $0 + $1.waitingPages } }
 
     /// What the pill cannot carry: the reason. Nothing at all when the Mac is simply there.
     private var reason: String? {
@@ -93,5 +112,15 @@ struct RailFoot: View {
         case .connected(let iterm): iterm == "ok" ? nil : iterm
         default: model.status ?? model.connection.label
         }
+    }
+}
+
+/// A glyph button whose target is 40 × 44 whatever the glyph's own size.
+private struct Target: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .frame(minWidth: 40, minHeight: 44)
+            .contentShape(Rectangle())
+            .opacity(configuration.isPressed ? 0.5 : 1)
     }
 }

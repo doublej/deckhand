@@ -26,12 +26,15 @@ public enum Links {
     /// `\.accent` because this is not a view: an `AttributedString` is built outside the view tree
     /// and has no environment to read. A caller that is a view passes what it read there; the
     /// default is for the ones with no opinion.
+    /// One for the process: every turn card on screen built its own, every redraw.
+    /// `NSRegularExpression`, which this is, is immutable and documented thread-safe.
+    private nonisolated(unsafe) static let detector =
+        try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
+
     public static func linked(_ attributed: AttributedString, in tint: Color = Palette.tint) -> AttributedString {
         var out = attributed
         let plain = String(attributed.characters)
-        guard !plain.isEmpty,
-              let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
-        else { return out }
+        guard !plain.isEmpty, let detector else { return out }
         for match in detector.matches(in: plain, range: NSRange(plain.startIndex..., in: plain)) {
             guard let url = match.url, let span = range(of: match.range, in: out, plain: plain),
                   out[span].link == nil else { continue }

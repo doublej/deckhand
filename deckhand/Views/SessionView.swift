@@ -169,6 +169,9 @@ struct SessionView: View {
         .onChange(of: model.manager.pane) { _, name in show(name) }
         .task {
             model.turns = []
+            // Its inbox too: none at all is how the transcript knows it has not heard yet, and
+            // can say "Reading…" rather than claim the session has said nothing.
+            model.queued[session.sessionId] = nil
             // The subagents go with them. Both are one session's at a time, and the dashboard
             // now says how many are running the instant it appears — so the previous session's
             // count would be on screen for the second it takes the first poll to land, on the

@@ -10,6 +10,8 @@ public struct TrayState: Sendable {
     public private(set) var updates: [TrayUpdate] = []
     /// The last update id this phone has. What the next poll asks for everything after.
     public private(set) var cursor = 0
+    /// Whether the Mac has answered once. Before then an empty tray is not knowing, not quiet.
+    public private(set) var loaded = false
     /// How many updates are kept. The Mac keeps the same, so a phone cannot hold more than it.
     public static let kept = 200
 
@@ -17,6 +19,7 @@ public struct TrayState: Sendable {
 
     public mutating func absorb(_ feed: TrayFeed) {
         open = feed.open
+        loaded = true
         // The file went: ids below ours are a new list, not old news.
         if feed.newest < cursor {
             updates = []

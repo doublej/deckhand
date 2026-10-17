@@ -23,13 +23,22 @@ struct TrayView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: Spacing.small) {
-                if let note = desk.trayNote {
-                    Text(note)
-                        .font(Typography.hint)
-                        .foregroundStyle(Palette.lcdRed)
-                        .onTapGesture { desk.trayNote = nil }
+                if let trouble = desk.trayTrouble {
+                    Text(trouble).font(Typography.hint).foregroundStyle(Palette.lcdRed)
                 }
-                if desk.tray.open.isEmpty && desk.tray.updates.isEmpty { quiet }
+                if let note = desk.trayNote {
+                    Button { desk.trayNote = nil } label: {
+                        Text(note).font(Typography.hint).foregroundStyle(Palette.lcdRed)
+                            .multilineTextAlignment(.leading)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Dismisses this note")
+                }
+                if !desk.tray.loaded {
+                    if desk.trayTrouble == nil { asking }
+                } else if desk.tray.open.isEmpty && desk.tray.updates.isEmpty {
+                    quiet
+                }
                 if !desk.tray.open.isEmpty {
                     eyebrow("NEEDS YOU", count: desk.tray.waitingCount)
                     ForEach(desk.tray.open) { row in
@@ -62,6 +71,14 @@ struct TrayView: View {
                          say: Dictation(recorder: recorder, mode: model.preferences.talkMode,
                                         words: { await model.dictated($0, for: slip.session) }))
         }
+    }
+
+    /// Before the Mac has answered once: "nothing needs you" would be a guess.
+    private var asking: some View {
+        Text("Asking the Mac…")
+            .font(Typography.prose)
+            .foregroundStyle(Palette.textSecondary)
+            .padding(.horizontal, Spacing.extraSmall)
     }
 
     /// Nothing open and nothing has happened: said once, plainly, rather than an empty screen.

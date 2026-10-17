@@ -77,6 +77,8 @@ final class ManagerDesk {
     var tray = TrayState()
     /// An answer that landed but did not reach its session, said once at the top of the tray.
     var trayNote: String?
+    /// Why the last poll of the tray failed. Gone on the next poll that works, unlike `trayNote`.
+    var trayTrouble: String?
     /// The newest update the person has had the tray open over. Newer ones are drawn as new.
     var seen = UserDefaults.standard.integer(forKey: ManagerDesk.seenKey)
     /// The newest manager entry read on its own tab, so a reply landing on the tray says so.

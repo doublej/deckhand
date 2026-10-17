@@ -78,7 +78,8 @@ struct SessionListView: View {
         .task {
             while !Task.isCancelled {
                 await model.refreshSessions()
-                await model.refreshLinks()
+                // Only the rail draws the links, so they are not fetched under a page or panel.
+                if chosen == nil && !model.manager.open { await model.refreshLinks() }
                 try? await Task.sleep(for: .seconds(4))
             }
         }

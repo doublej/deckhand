@@ -131,10 +131,10 @@ struct FilesView: View {
             HStack(spacing: Spacing.extraSmall) {
                 Text(words)
                 Text(count.formatted())
-                    .foregroundStyle(chosen ? Color.white.opacity(0.75) : Palette.textTertiary)
+                    .foregroundStyle(chosen ? Palette.lcdGround.opacity(0.75) : Palette.textTertiary)
             }
             .font(Typography.primaryRow)
-            .foregroundStyle(chosen ? Color.white : Palette.textSecondary)
+            .foregroundStyle(chosen ? Palette.lcdGround : Palette.textSecondary)
             .lineLimit(1)
             .padding(.horizontal, Spacing.medium)
             .frame(minHeight: Self.target)

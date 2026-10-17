@@ -56,7 +56,7 @@ struct PinCallout: View {
         HStack(alignment: .firstTextBaseline, spacing: Spacing.extraSmall) {
             Text(place)
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Color.white)
+                .foregroundStyle(Palette.lcdGround)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
                 .frame(width: 18, height: 18)

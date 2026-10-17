@@ -110,8 +110,6 @@ public struct Project: Codable, Hashable, Identifiable, Sendable {
     /// half, so no pair of values can collide by concatenating into the same string.
     public var id: String { "\(machine)\n\(path)" }
 
-    public var lastTouched: Date { Date(timeIntervalSince1970: touchedAt) }
-
     /// What to show under the name: where it lives, and what it is for when it says so.
     public var line: String {
         description.isEmpty ? relative : "\(relative) · \(description)"

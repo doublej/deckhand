@@ -117,6 +117,8 @@ struct SlipQuestion: View {
                 Button("Send", systemImage: "arrow.up") { send(SlipAsk.answer(words)) }
                     .labelStyle(.iconOnly)
                     .font(.system(size: 13, weight: .semibold))
+                    .frame(minWidth: Self.target, minHeight: Self.target)
+                    .contentShape(Rectangle())
                     .disabled(words.isEmpty)
             }
         case .aloud:

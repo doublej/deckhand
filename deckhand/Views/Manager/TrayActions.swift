@@ -15,8 +15,9 @@ extension AppModel {
         guard let client = settings.client() else { return }
         do {
             manager.tray.absorb(try await client.tray(since: manager.tray.cursor))
+            manager.trayTrouble = nil
         } catch {
-            manager.trayNote = reason(error)
+            manager.trayTrouble = reason(error)
         }
     }
 
@@ -42,9 +43,17 @@ extension AppModel {
         }
     }
 
-    /// Leave the panel for one session's page.
+    /// Leave the panel for one session's page — unless it has ended, when leaving would land on
+    /// the rail with nothing said about why.
     func goTo(session id: String) async {
+        guard sessions.contains(where: { $0.sessionId == id }) else {
+            manager.trayNote = "That session has ended."
+            return
+        }
         manager.open = false
+        // On what it last said rather than its dashboard: you came from "needs you", and what it
+        // needs you for is at the end of the transcript.
+        manager.pane = "transcript"
         await open(.session(id))
     }
 }

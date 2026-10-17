@@ -82,7 +82,7 @@ struct ManagerView: View {
             .tracking(2)
             .foregroundStyle(desk.tab == which ? Palette.textPrimary
                              : unread ? accent : Palette.textTertiary)
-            .frame(minHeight: 32)
+            .frame(minHeight: 44)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -197,7 +197,9 @@ struct ManagerView: View {
             }
             .labelStyle(.iconOnly)
             .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(Palette.textTertiary)
+            .foregroundStyle(Palette.textSecondary)
+            .frame(minWidth: 44, minHeight: 44)
+            .contentShape(Rectangle())
             mark
         }
         .padding(.bottom, Spacing.extraSmall)

@@ -51,7 +51,9 @@ struct TrayTests {
     @Test("updates are appended by cursor, and a list that went is started again")
     func cursor() {
         var state = TrayState()
+        #expect(!state.loaded)
         state.absorb(TrayFeed(updates: [update(1, "called"), update(2, "called")], newest: 2))
+        #expect(state.loaded)
         state.absorb(TrayFeed(updates: [], newest: 2))
         #expect(state.updates.map(\.id) == [1, 2])
         state.absorb(TrayFeed(updates: [update(1, "called")], newest: 1))

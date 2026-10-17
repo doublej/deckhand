@@ -154,7 +154,8 @@ struct TranscriptView: View {
     }
 
     private var nothingYet: some View {
-        Text(model.connection.isHealthy ? "Nothing said yet in this session" : "Waiting for the Mac…")
+        Text(!model.connection.isHealthy ? "Waiting for the Mac…"
+             : model.queued[session.sessionId] == nil ? "Reading…" : "Nothing said yet in this session")
             .font(Typography.subtitle)
             .foregroundStyle(Palette.textSecondary)
             .padding(.vertical, Spacing.small)

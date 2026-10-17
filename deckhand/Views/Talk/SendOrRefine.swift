@@ -135,7 +135,7 @@ struct SendOrRefine: View {
     private func face(_ label: String, glyph: String) -> some View {
         Label(label, systemImage: glyph)
             .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(.white)
+            .foregroundStyle(Palette.lcdGround)
             .lineLimit(1)
             .minimumScaleFactor(0.85)
             .padding(.horizontal, Spacing.extraSmall)

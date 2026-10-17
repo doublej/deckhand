@@ -53,7 +53,7 @@ struct ReviewActions: View {
             // width is left over rather than a fixed half of the row.
             Spacer(minLength: Spacing.extraSmall)
             Button { send(words) } label: {
-                face("Send", glyph: "paperplane.fill", ink: .white, fill: accent, weight: .semibold)
+                face("Send", glyph: "paperplane.fill", ink: Palette.lcdGround, fill: accent, weight: .semibold)
             }
             .buttonStyle(.plain)
             .disabled(waiting)
