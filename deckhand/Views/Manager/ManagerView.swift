@@ -277,9 +277,11 @@ struct ManagerView: View {
     /// The tray rides the same loop: one panel, one pace.
     private func poll() async {
         guard desk.open else { return }
-        if desk.readEntry == 0 { desk.readEntry = desk.entries.last?.id ?? 0 }
         while !Task.isCancelled && desk.open {
             await model.pollManager()
+            // What was already said before this launch is not unread. After the poll that
+            // brought it, never before: on a cold start the conversation is empty until then.
+            if desk.readEntry == 0 { desk.readEntry = desk.entries.last?.id ?? 0 }
             await model.pollTray()
             try? await Task.sleep(for: .seconds(desk.working ? 1 : 4))
         }
