@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 
 from deckhand_daemon.reading import transcripts
 
@@ -268,7 +267,8 @@ def test_a_page_of_turns_walks_backwards_from_the_end(claude_home, monkeypatch):
     monkeypatch.setattr(transcripts, "_scan",
                         lambda path, window: [transcripts.Turn(role="assistant", text=t, timestamp="")
                                               for t in said])
-    monkeypatch.setattr(transcripts, "transcript_path", lambda sid: Path("/does/not/matter"))
+    (stand_in := claude_home / "stand-in.jsonl").touch()  # the page is kept per file state
+    monkeypatch.setattr(transcripts, "transcript_path", lambda sid: stand_in)
 
     newest, more = transcripts.page_turns("sid", limit=4)
     assert [t.text for t in newest] == ["line 9", "line 10", "line 11", "line 12"]
@@ -296,7 +296,8 @@ def test_reading_the_tail_still_means_the_tail(claude_home, monkeypatch):
     monkeypatch.setattr(transcripts, "_scan",
                         lambda path, window: [transcripts.Turn(role="assistant", text=str(n), timestamp="")
                                               for n in range(6)])
-    monkeypatch.setattr(transcripts, "transcript_path", lambda sid: Path("/does/not/matter"))
+    (stand_in := claude_home / "stand-in.jsonl").touch()  # the page is kept per file state
+    monkeypatch.setattr(transcripts, "transcript_path", lambda sid: stand_in)
     assert [t.text for t in transcripts.read_turns("sid", 2)] == ["4", "5"]
 
 
@@ -395,3 +396,4 @@ def test_the_folder_walk_happens_once_per_session(claude_home, monkeypatch):
     for _ in range(5):
         transcripts.transcript_path(SID)
     assert walks == 0
+

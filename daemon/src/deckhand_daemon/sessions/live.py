@@ -231,11 +231,20 @@ def _records() -> list[dict]:
 #: each arriving as its own threadpool thread sitting on a subprocess. Forty of those is the
 #: whole pool, and then everything queues behind them, `/health` included.
 LISTING_TTL = 2.0
+#: Past `LISTING_TTL` the old listing is still answered while one thread builds the next behind
+#: it: the phone polls every 4-5 s, so a plain TTL made nearly every request wait 0.3-1.1 s for
+#: `ps`, tmux and OpenCode. Past this, nobody has asked in a while and a listing that old is no
+#: longer worth showing even once, so the caller builds and waits as on the very first call.
+LISTING_STALE = 30.0
 _listing: tuple[float, list[Session], bool] = (0.0, [], False)
 #: One thread builds, the rest take what it built. The lock is not an optimisation on top of the
 #: cache, it is most of the point: a bare TTL lets forty threads miss together and run forty
 #: `ps` calls, which is the pile-up this exists to stop happening at all.
 _building = threading.Lock()
+#: Held for as long as a background rebuild is in flight, so a stale listing starts one at most.
+_refreshing = threading.Lock()
+#: Moved by `forget_listing`, so a rebuild that started before it cannot store what it read.
+_generation = 0
 
 
 def forget_listing() -> None:
@@ -245,25 +254,47 @@ def forget_listing() -> None:
     ago cannot be in a listing built before it existed, and `projects.starting` is sitting in a
     loop waiting for exactly that. Same reason `panes.forget` exists, one layer up.
     """
-    global _listing
+    global _listing, _generation
+    _generation += 1
     _listing = (0.0, [], False)
 
 
 def _listed() -> tuple[list[Session], bool]:
-    """The cached listing, rebuilt when it is older than `LISTING_TTL`."""
+    """The cached listing: fresh under `LISTING_TTL`, answered stale while a rebuild runs behind
+    it under `LISTING_STALE`, and built while the caller waits past that or after a forget."""
     global _listing
     built_at, found, answered = _listing
-    if time.monotonic() - built_at < LISTING_TTL:
+    age = time.monotonic() - built_at if built_at else float("inf")
+    if age < LISTING_TTL:
+        return found, answered
+    if age < LISTING_STALE:
+        if _refreshing.acquire(blocking=False):
+            threading.Thread(target=_refresh, args=(_generation,), daemon=True).start()
         return found, answered
     with _building:
         # Somebody may have built it while this thread waited for the lock. Taking theirs is
         # the whole reason for waiting.
         built_at, found, answered = _listing
-        if time.monotonic() - built_at < LISTING_TTL:
+        if built_at and time.monotonic() - built_at < LISTING_TTL:
             return found, answered
         found, answered = _build()
         _listing = (time.monotonic(), found, answered)
     return found, answered
+
+
+def _refresh(generation: int) -> None:
+    """Build the next listing behind the one still being answered with. Under `_building` too,
+    so it never runs beside a caller's own build: `_build` also moves `_current`/`_retired`."""
+    global _listing
+    try:
+        with _building:
+            found, answered = _build()
+            if generation == _generation:
+                _listing = (time.monotonic(), found, answered)
+    except Exception:  # noqa: BLE001 -- a thread nobody awaits; the old listing stands
+        log.exception("rebuilding the session listing failed; the old one stands")
+    finally:
+        _refreshing.release()
 
 
 def live_sessions(paned_only: bool = True) -> list[Session]:

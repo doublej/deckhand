@@ -118,3 +118,22 @@ def test_the_tray_is_every_open_slip_with_its_shape_and_the_feed(tmp_path, monke
     assert body["newest"] == 1
     assert client.get("/tray?since=1", headers={config.TOKEN_HEADER: config.token()}
                       ).json()["updates"] == []
+
+
+def test_an_odd_row_from_an_older_hand_is_left_out_rather_than_failing_the_tray(
+        tmp_path, monkeypatch):
+    monkeypatch.setattr(sessions, "live_sessions", lambda paned_only=True: [])
+
+    async def hands(method, path, **kwargs):
+        return {"ubuntu": {"open": [
+            {"session": "old", "name": "old", "slips": [{"id": "a"}]},  # no `modified`
+            {"session": "new", "name": "new", "slips": [{"id": "b", "modified": 5.0}]},
+            {"session": "bare", "name": "bare"},  # no `slips` at all
+            "not a row", {"name": "no session"}, {"session": "x", "name": "x", "slips": "no"}]},
+            "fractal": ["not", "a", "body"]}
+
+    monkeypatch.setattr(routes.proxy, "every", hands)
+    answer = TestClient(app).get("/tray", headers={config.TOKEN_HEADER: config.token()})
+    assert answer.status_code == 200
+    assert [(row["session"], row["slips"] != []) for row in answer.json()["open"]] == [
+        ("new", True), ("old", True), ("bare", False)]

@@ -183,6 +183,8 @@ async def watch() -> None:
                 await asyncio.to_thread(show_presence)
         except OSError as error:  # a plugin page must never take the daemon down with it
             log.warning("utt plugin poll failed: %s", error)
+        except Exception:  # noqa: BLE001 -- anything else would end this task for good, silently
+            log.exception("utt plugin poll failed")
 
 
 def show_presence() -> None:

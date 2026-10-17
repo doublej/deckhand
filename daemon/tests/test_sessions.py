@@ -80,15 +80,27 @@ def test_the_shared_listing_expires_on_its_own(claude_home, monkeypatch):
 
     Nothing calls `forget_listing` on the polling path, so expiry is the only thing that lets a
     session that has stopped running disappear from the phone — and that join is what the whole
-    repo hangs off. The window is shorter than every poll the app makes.
+    repo hangs off. Once expired, the poll that notices is answered with the old listing rather
+    than made to wait for `ps`, and the next one sees what the rebuild behind it found.
     """
     monkeypatch.setattr(sessions.live, "LISTING_TTL", 0.05)
+    monkeypatch.setattr(sessions.live, "LISTING_STALE", 30.0)
     assert [s.name for s in sessions.live_sessions()] == ["warm-okapi", "cold-otter"]
 
     monkeypatch.setattr(sessions.live, "_processes", lambda pids: {4243: "ttys015"})
     time.sleep(0.06)
 
+    assert [s.name for s in sessions.live_sessions()] == ["warm-okapi", "cold-otter"]
+    deadline = time.monotonic() + 5
+    while sessions.live._refreshing.locked() and time.monotonic() < deadline:
+        time.sleep(0.01)
     assert [s.name for s in sessions.live_sessions()] == ["cold-otter"]
+
+    # Too old to show even once: built while the caller waits.
+    monkeypatch.setattr(sessions.live, "_processes", lambda pids: {})
+    monkeypatch.setattr(sessions.live, "LISTING_STALE", 0.0)
+    time.sleep(0.06)
+    assert sessions.live_sessions() == []
 
 
 def test_a_caller_waiting_on_a_new_session_can_make_it_ask_again(claude_home, monkeypatch):

@@ -52,6 +52,8 @@ async def watch() -> None:
             await asyncio.to_thread(sync)
         except (OSError, subprocess.SubprocessError) as error:
             log.warning("tmux group sync failed: %s", error)
+        except Exception:  # noqa: BLE001 -- anything else would end this task for good, silently
+            log.exception("tmux group sync failed")
 
 
 def decide(now: Now, last: dict[str, dict]) -> tuple[dict[str, str | None], dict[str, str | None]]:

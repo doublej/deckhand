@@ -19,11 +19,15 @@ def main() -> None:
         hand.main()
         return
 
+    import logging
+
     import uvicorn
 
     from . import app as service
     from . import config
-    from .log import log
+    from .log import QuietPolls, log
 
     log.info("deckhand %s  token: %s", config.base_url(), config.token())
+    # uvicorn's own logging setup keeps a filter already on the logger: it replaces handlers only.
+    logging.getLogger("uvicorn.access").addFilter(QuietPolls())
     uvicorn.run(service.app, host="0.0.0.0", port=config.PORT, log_level="info")

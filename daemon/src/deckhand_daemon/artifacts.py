@@ -174,10 +174,12 @@ def answered(session: sessions.Session, artifact_id: str) -> Any:
     if beside is None or not beside.is_file():
         return None
     try:
-        return json.loads(beside.read_text()).get("value")
+        found = json.loads(beside.read_text())
     except (OSError, json.JSONDecodeError) as error:
         log.warning("could not read the answer to %s: %s", artifact_id, error)
         return None
+    # The file is written by this daemon, but it sits in the session's own folder.
+    return found.get("value") if isinstance(found, dict) else None
 
 
 def answer(session: sessions.Session, artifact_id: str, value: Any) -> dict | None:

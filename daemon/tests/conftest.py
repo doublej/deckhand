@@ -29,6 +29,7 @@ def the_person_is_on_the_phone(monkeypatch):
     from deckhand_daemon import presence
 
     monkeypatch.setattr(presence, "where", lambda: "phone")
+    monkeypatch.setattr(presence, "_facts", (float("-inf"), None, False))
 
 
 @pytest.fixture
@@ -75,6 +76,7 @@ def claude_home(tmp_path, monkeypatch):
     # a record and looks again would have to sleep through. Off here; `test_sessions` turns it
     # back on for the two tests that are about the cache itself.
     monkeypatch.setattr(sessions.live, "LISTING_TTL", 0.0)
+    monkeypatch.setattr(sessions.live, "LISTING_STALE", 0.0)
     monkeypatch.setattr(sessions.live, "_listing", (0.0, [], False))
     # Which conversation is running under which pid outlives a single listing, so it outlives a
     # single test too unless it is blanked here.

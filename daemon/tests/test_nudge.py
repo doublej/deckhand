@@ -179,3 +179,28 @@ def test_the_question_is_addressed_to_the_session_by_name(deckhand_data, monkeyp
     # reads the transcript. Observed live: framelink answered t35 to a peer, not in its turn.
     assert "your own reply in this session" in asked
     assert "{" not in asked, "a placeholder left unfilled goes to a live session as the word"
+
+
+def test_a_sweep_that_raises_anything_does_not_end_the_watcher(monkeypatch):
+    """Only `OSError` was caught, so any other exception ended the task for good, and silently."""
+    import asyncio
+
+    swept = []
+
+    def sweep():
+        swept.append(1)
+        if len(swept) == 1:
+            raise KeyError("a row nobody expected")
+
+    monkeypatch.setattr(nudge, "POLL", 0)
+    monkeypatch.setattr(nudge, "sweep", sweep)
+
+    async def run():
+        task = asyncio.create_task(nudge.watch())
+        while len(swept) < 2 and not task.done():
+            await asyncio.sleep(0.01)
+        task.cancel()
+        return task.done() and not task.cancelled()
+
+    assert asyncio.run(asyncio.wait_for(run(), 5)) is False
+    assert len(swept) >= 2

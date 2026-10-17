@@ -81,6 +81,8 @@ async def watch() -> None:
             await asyncio.to_thread(sweep)
         except OSError as error:
             log.warning("lock screen sweep failed: %s", error)
+        except Exception:  # noqa: BLE001 -- anything else would end this task for good, silently
+            log.exception("lock screen sweep failed")
 
 
 def sweep() -> None:

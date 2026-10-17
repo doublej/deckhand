@@ -61,6 +61,8 @@ async def watch() -> None:
             await asyncio.to_thread(sweep)
         except OSError as error:
             log.warning("idle check failed: %s", error)
+        except Exception:  # noqa: BLE001 -- anything else would end this task for good, silently
+            log.exception("idle check failed")
 
 
 def sweep(now: float | None = None) -> list[str]:

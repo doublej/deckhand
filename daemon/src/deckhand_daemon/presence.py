@@ -44,6 +44,10 @@ PHONE_RECENT = 300.0
 #: so three missed beats and it is not being worn.
 HEADSET_LIVE = 30.0
 TIMEOUT = 2.0
+#: How long one pair of `ioreg` readings answers `state()`. `/health` and `/presence` together
+#: ask about twice a second, for facts that change on a human timescale.
+FACTS_FOR = 1.0
+_facts: tuple[float, float | None, bool] = (float("-inf"), None, False)
 
 _phone_seen: float | None = None
 #: When the person last touched the app — not when it last polled. The app says so itself,
@@ -71,12 +75,13 @@ def seen(request) -> None:
 def idle_seconds() -> float | None:
     """Seconds since the last keyboard or mouse event, or None when the Mac will not say.
 
-    `ioreg` reports nanoseconds as a plain integer. Parsed off the raw line rather than through
+    Asked for the one key on the one class (`-r -k -d 1`) rather than the whole IOHIDSystem
+    subtree. `ioreg` reports nanoseconds as a plain integer. Parsed off the raw line rather than through
     a locale-aware format, because this Mac is nl_NL and a decimal comma would turn 977 seconds
     into something that is not a number.
     """
     try:
-        out = subprocess.run(["/usr/sbin/ioreg", "-c", "IOHIDSystem"],
+        out = subprocess.run(["/usr/sbin/ioreg", "-r", "-c", "IOHIDSystem", "-k", "HIDIdleTime", "-d", "1"],
                              capture_output=True, text=True, timeout=TIMEOUT, check=False).stdout
     except (OSError, subprocess.SubprocessError):
         return None
@@ -157,10 +162,15 @@ def state() -> dict:
     Neither is cheap: `ioreg` walks the whole IO registry, and the two invocations print 351 KB
     and 206 KB here. Measured against each other in one process, one `state()` went from
     141 ms to 67 ms; on a cold registry it was 406 ms. The phone asks every four seconds, on
-    a threadpool thread, for a fact that changes on a human timescale.
+    a threadpool thread, for a fact that changes on a human timescale — so the two `ioreg`
+    readings are also kept for `FACTS_FOR`. Only those: the phone's and headset's stamps are
+    read fresh, so `POST /presence/phone` shows on the very next answer.
     """
-    idle = idle_seconds()
-    screen_locked = locked()
+    global _facts
+    read_at, idle, screen_locked = _facts
+    if time.monotonic() - read_at >= FACTS_FOR:
+        idle, screen_locked = idle_seconds(), locked()
+        _facts = (time.monotonic(), idle, screen_locked)
     touched = _since(_phone_touched)
     seen_ago = _since(_phone_seen)
     beat = _since(_headset_beat)

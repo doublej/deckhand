@@ -45,10 +45,23 @@ async def tray(
     """Everything open on every machine, newest first, and every update after the cursor."""
     found = await asyncio.to_thread(open_here, push.waiting_lines())
     for body in (await proxy.every("GET", "/tray/open")).values():
-        found.extend(body.get("open", []))
-    found.sort(key=lambda row: max((s["modified"] for s in row["slips"]), default=0.0),
+        rows = body.get("open") if isinstance(body, dict) else None
+        found.extend(kept for row in rows or [] if (kept := _sound(row)) is not None)
+    found.sort(key=lambda row: max((s.get("modified") or 0.0 for s in row["slips"]), default=0.0),
                reverse=True)
     return {"open": found, "updates": feed.after(since), "newest": feed.newest()}
+
+
+def _sound(row: object) -> dict | None:
+    """A hand's row in the shape the sort and the phone read, or None to leave it out. A hand is
+    upgraded on its own schedule, and one odd row must not take the whole tray down with a 500."""
+    if not isinstance(row, dict) or not all(isinstance(row.get(k), str) for k in ("session", "name")):
+        return None
+    slips = row.get("slips") or []
+    if not isinstance(slips, list) or not all(
+            isinstance(s, dict) and isinstance(s.get("modified") or 0.0, int | float) for s in slips):
+        return None
+    return row | {"slips": slips}
 
 
 @here_router.get("/tray/open")

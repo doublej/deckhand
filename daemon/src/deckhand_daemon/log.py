@@ -59,6 +59,24 @@ def setup() -> logging.Logger:
 
 log = setup()
 
+#: The routes every phone polls every few seconds. uvicorn's access log goes to launchd's
+#: `launchd.out.log`, which `MAX_BYTES` does not cover and nothing else rotates either, and a
+#: line per successful poll of these took it to 78 MB.
+QUIET_PATHS = ("/health", "/presence")
+
+
+class QuietPolls(logging.Filter):
+    """Drops uvicorn's access line for a 2xx or 3xx answer on `QUIET_PATHS`, and nothing else:
+    a failing poll, and every other route, is still written."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        # uvicorn's access record: (client, method, path with query, http version, status).
+        args = record.args
+        if not isinstance(args, tuple) or len(args) != 5:
+            return True
+        path, status = str(args[2]).partition("?")[0], args[4]
+        return not (path in QUIET_PATHS and isinstance(status, int) and status < 400)
+
 
 @contextmanager
 def took(stages: dict[str, float], name: str) -> Iterator[None]:

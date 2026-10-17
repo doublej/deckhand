@@ -128,14 +128,15 @@ async def watch() -> None:
     while True:
         try:
             session_id = await asyncio.to_thread(_next)
+            if session_id is not None:
+                await _write(session_id)
         except OSError as error:
             log.warning("briefing sweep failed: %s", error)
             session_id = None
-        if session_id is None:
-            await _sleep(IDLE)
-            continue
-        await _write(session_id)
-        await _sleep(GAP)
+        except Exception:  # noqa: BLE001 -- anything else would end this task for good, silently
+            log.exception("briefing sweep failed")
+            session_id = None
+        await _sleep(IDLE if session_id is None else GAP)
 
 
 async def _sleep(seconds: float) -> None:

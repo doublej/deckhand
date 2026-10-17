@@ -83,14 +83,14 @@ def test_the_registration_is_basic_auth_and_a_stale_password_is_unreachable(
         seen.update(method=method, url=url, auth=sent["auth"], params=sent["params"])
         return httpx.Response(200, json={"data": {}})
 
-    monkeypatch.setattr(opencode.httpx, "request", answered)
+    monkeypatch.setattr(opencode._client, "request", answered)
     assert opencode.request("GET", "/api/session/active", query={"a": "b"}) == {"data": {}}
     assert seen == {"method": "GET", "url": "http://127.0.0.1:5555/api/session/active",
                     "auth": ("opencode", "pw"), "params": {"a": "b"}}
-    monkeypatch.setattr(opencode.httpx, "request", lambda *a, **k: httpx.Response(401))
+    monkeypatch.setattr(opencode._client, "request", lambda *a, **k: httpx.Response(401))
     with pytest.raises(opencode.Unreachable):
         opencode.request("GET", "/api/session/active")
-    monkeypatch.setattr(opencode.httpx, "request", lambda *a, **k: httpx.Response(
+    monkeypatch.setattr(opencode._client, "request", lambda *a, **k: httpx.Response(
         404, json={"_tag": "SessionNotFoundError", "message": "Session not found: x"}))
     with pytest.raises(opencode.OpenCodeError, match="Session not found: x"):
         opencode.request("GET", "/api/session/x")

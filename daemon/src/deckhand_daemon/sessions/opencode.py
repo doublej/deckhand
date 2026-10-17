@@ -58,6 +58,9 @@ LIVE_FOR = 2 * 60 * 60
 #: Root sessions read per page of the listing, newest first, and how many pages at most.
 PAGE = 50
 PAGES = 3
+#: One client for the daemon's life. `httpx.request` builds a client and an SSL context per call,
+#: which was a third of a listing's time spent on a plain-HTTP loopback service.
+_client = httpx.Client()
 #: How often a running session's context figure is read again. Its `updated` moves every step.
 USAGE_EVERY = 10.0
 #: How long the model catalogue's context limits are kept. They change when a provider does.
@@ -132,7 +135,7 @@ def request(method: str, path: str, body: dict | None = None, *, query: dict | N
     service = _service()
     password = service.get("password")
     try:
-        answered = httpx.request(
+        answered = _client.request(
             method, str(service["url"]).rstrip("/") + path, json=body, params=query,
             auth=(USER, str(password)) if password else None, timeout=timeout)
     except httpx.HTTPError as error:

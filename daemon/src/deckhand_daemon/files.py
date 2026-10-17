@@ -15,6 +15,7 @@ searched for paths in exactly the same way, so the rule is the same rule.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -44,6 +45,12 @@ ENDING = re.compile(r"\.(?:" + "|".join(s[1:] for s in SUFFIXES) + r")\b", re.IG
 # Machinery, not work. A phone showing 200 files out of node_modules shows nothing.
 SKIP = {".git", "node_modules", ".venv", "__pycache__", ".build", ".mypy_cache", "DerivedData"}
 MAX_FILES = 60
+#: transcript -> ((size, mtime, cwd), every path it names). The scan of a 4 MB tail is ~0.5-1 s
+#: and was paid on every dashboard open and every `/file` download, for a file that had not
+#: moved. Only the names are kept: each one is still stat-ed per call, so a file that changed
+#: or went is answered as it is now. One entry per transcript, replaced when it grows.
+# ponytail: never evicted; a session id's entry is a few KB and the daemon restarts often.
+_named: dict[Path, tuple[tuple[int, int, str], tuple[Path, ...]]] = {}
 
 
 @dataclass(slots=True)
@@ -63,16 +70,11 @@ class Asset:
 def readable_files(session_id: str, cwd: str, provider: str = "claude") -> list[Asset]:
     """Every openable file this session touched, newest first."""
     found: dict[tuple[int, int], Asset] = {}
-    tried: set[Path] = set()
-    for line in _lines(session_id, provider):
-        for candidate in _candidates(line, cwd):
-            if candidate in tried:
-                continue
-            tried.add(candidate)
-            # Keyed on the file itself, not its name: `CLAUDE.md` and `claude.md` are one
-            # file on this disk and would otherwise be two rows saying the same thing.
-            if pair := _asset(candidate):
-                found.setdefault(pair[0], pair[1])
+    for candidate in _names(session_id, cwd, provider):
+        # Keyed on the file itself, not its name: `CLAUDE.md` and `claude.md` are one
+        # file on this disk and would otherwise be two rows saying the same thing.
+        if pair := _asset(candidate):
+            found.setdefault(pair[0], pair[1])
     newest = sorted(found.values(), key=lambda a: a.modified, reverse=True)
     return newest[:MAX_FILES]
 
@@ -85,17 +87,31 @@ def allowed(session_id: str, cwd: str, wanted: str, provider: str = "claude") ->
     return None
 
 
-def _lines(session_id: str, provider: str) -> list[str]:
-    """What the session wrote down, as text: its transcript's tail, or OpenCode's recent history."""
+def _names(session_id: str, cwd: str, provider: str) -> tuple[Path, ...]:
+    """Every distinct path the session wrote down, in the order first named: off its
+    transcript's tail, kept in `_named` until the file moves, or off OpenCode's recent history."""
     if provider == "opencode":
         try:
-            return opencode_turns.texts(session_id)
+            return _distinct(opencode_turns.texts(session_id), cwd)
         except opencode.OpenCodeError:
-            return []
+            return ()
     path = transcript_path(session_id)
     if path is None:
-        return []
-    return [raw.decode("utf-8", "replace") for raw in tail_lines(path, TAIL_WINDOWS[1])]
+        return ()
+    try:
+        stat = path.stat()
+    except OSError:
+        return ()
+    key = (stat.st_size, stat.st_mtime_ns, cwd)
+    kept = _named.get(path)
+    if kept is None or kept[0] != key:
+        lines = (raw.decode("utf-8", "replace") for raw in tail_lines(path, TAIL_WINDOWS[1]))
+        kept = _named[path] = (key, _distinct(lines, cwd))
+    return kept[1]
+
+
+def _distinct(lines: Iterable[str], cwd: str) -> tuple[Path, ...]:
+    return tuple(dict.fromkeys(found for line in lines for found in _candidates(line, cwd)))
 
 
 def _runs(text: str) -> list[str]:

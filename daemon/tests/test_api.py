@@ -342,3 +342,21 @@ def test_a_live_activity_token_says_which_card_it_addresses(token):
     assert c.post("/live/token", json={"token": "s1", "kind": "start"}).status_code == 200
     assert push.sending.tokens()["start"] == "s1"
     assert c.post("/live/token", json={"token": "x", "kind": "banner"}).status_code == 400
+
+
+def test_a_successful_poll_of_health_or_presence_is_not_written_to_the_access_log():
+    """uvicorn's access log is `launchd.out.log`, which nothing rotates: it reached 78 MB."""
+    import logging
+
+    from deckhand_daemon.log import QuietPolls
+
+    def line(path, status):
+        return logging.LogRecord("uvicorn.access", logging.INFO, "", 0, '%s - "%s %s HTTP/%s" %d',
+                                 ("192.168.1.40:5", "GET", path, "1.1", status), None)
+
+    quiet = QuietPolls()
+    assert not quiet.filter(line("/health", 200))
+    assert not quiet.filter(line("/presence?x=1", 304))
+    assert quiet.filter(line("/health", 500))
+    assert quiet.filter(line("/sessions", 200))
+    assert quiet.filter(line("/healthy", 200))

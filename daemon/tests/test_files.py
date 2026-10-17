@@ -83,3 +83,24 @@ def test_a_clip_the_session_talked_about_is_listed_as_audio(claude_home, tmp_pat
     assert [(a.name, a.kind) for a in files.readable_files(SID, str(tmp_path))] == [
         ("take.m4a", "audio")
     ]
+
+
+def test_the_names_are_kept_until_the_transcript_moves(claude_home, tmp_path, monkeypatch):
+    """The scan is kept per transcript size and mtime; a file named after it must still show."""
+    first = tmp_path / "first.md"
+    first.write_text("one")
+    later = tmp_path / "later.md"
+    later.write_text("two")
+    path = write_transcript(claude_home, [ran("Read", file_path=str(first))])
+    assert [a.name for a in files.readable_files(SID, str(tmp_path))] == ["first.md"]
+
+    scans = []
+    scan = files._distinct
+    monkeypatch.setattr(files, "_distinct", lambda lines, cwd: scans.append(1) or scan(lines, cwd))
+    files.readable_files(SID, str(tmp_path))
+    assert scans == []  # unchanged transcript, no second scan
+
+    with path.open("a") as grown:
+        grown.write(json.dumps(ran("Read", file_path=str(later))) + "\n")
+    assert {a.name for a in files.readable_files(SID, str(tmp_path))} == {"first.md", "later.md"}
+    assert scans == [1]

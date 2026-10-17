@@ -8,11 +8,13 @@ read.
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import re
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 
 from .. import config
@@ -183,10 +185,24 @@ def page_turns(session_id: str, limit: int = 8, before: int = 0) -> tuple[list[T
 
     The whole of a session's history is on this Mac and always was — nothing about a phone
     restart loses any of it. What was missing was a way to ask for more than the tail.
+
+    The page is kept per file size and mtime (`_page`), because the open session re-reads it
+    every few seconds and a transcript that has not moved parses to the same turns. Handed out
+    as a deep copy: a `Turn` is mutable and the kept one answers the next caller too.
     """
     path = transcript_path(session_id)
     if path is None:
         return [], False
+    try:
+        stat = path.stat()
+    except OSError:
+        return [], False
+    return copy.deepcopy(_page(path, stat.st_size, stat.st_mtime_ns, limit, before))
+
+
+@lru_cache(maxsize=64)
+def _page(path: Path, size: int, mtime: int, limit: int, before: int) -> tuple[list[Turn], bool]:
+    """`page_turns` for one state of the file; `size` and `mtime` are only the cache's key."""
     wanted = limit + before
     turns: list[Turn] = []
     for window in TAIL_WINDOWS:
