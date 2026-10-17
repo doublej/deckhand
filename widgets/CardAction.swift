@@ -1,23 +1,23 @@
+import ActivityKit
 import AppIntents
 import DeckhandKit
 import Foundation
 
-/// The one thing a Lock Screen card may do to a session.
+/// The one thing a Lock Screen card may do: answer a yes-or-no slip.
 ///
-/// **A card may only ever make a session do less, never more.** That sentence is the whole
-/// design, and it is what decides which buttons exist here. Escape can only take work away, so
-/// it is on the card. Everything else is off it, by absence rather than by a check:
+/// **A card answers only the question it shows.** The daemon puts a slip's id and buttons on a
+/// card only for a confirm, and then the card's line *is* that slip's question — so a Yes is
+/// never pressed under a sentence other than the one it answers. The answer goes through the
+/// same route as the slip page's own buttons (`POST …/artifacts/{id}/answer`), as the person,
+/// because it is the person.
 ///
-/// - **There is no Approve.** Answering a permission prompt is the keyboard route, and the root
-///   CLAUDE.md's invariant is that the route is an authority choice, not a transport choice — the
-///   keyboard arrives *as the person at the machine*. A finger on a Lock Screen genuinely is that
-///   person, but only if that person read the question, and a card carries one line of what the
-///   session said rather than the prompt it is blocked on. One tap from a phone lying face-up on
-///   a table would grant a permission nobody read. The daemon has no route for it either, and
-///   that is the same decision made once already at the other end.
-/// - **No `compact`, no `clear`, no `exit`.** Two of them cannot be undone and the phone asks
-///   before them on a screen where it can (`Control.caution`); a Lock Screen has nowhere to ask.
-///   `exit` costs the session itself, which nothing on this phone can start again.
+/// What is still not here, by absence:
+///
+/// - **There is no Approve.** Answering a permission prompt is the keyboard route, and a card
+///   carries one line of what the session said rather than the prompt it is blocked on. A slip is
+///   different in kind: the agent wrote the question for the person, and the card shows all of it.
+/// - **No Stop, `compact`, `clear` or `exit`.** Stop was here and was never pressed; the other
+///   three cannot be undone or cost the session itself, and a Lock Screen has nowhere to ask first.
 ///
 /// `LiveActivityIntent` rather than a plain `AppIntent`: the system performs one of these in the
 /// **app's** process, so `ServerSettings.load()` reads the pairing the person typed into the app.
@@ -26,32 +26,50 @@ import Foundation
 ///
 /// The file lives under `widgets/` and is compiled into **both** targets (`project.yml`): the
 /// widget names the intent in its `Button`, the app performs it, so each binary needs the type.
-struct StopRun: LiveActivityIntent {
-    static var title: LocalizedStringResource { "Stop this run" }
+struct AnswerSlip: LiveActivityIntent {
+    static var title: LocalizedStringResource { "Answer this slip" }
     static var description: IntentDescription? {
-        IntentDescription("Presses Escape in this session's pane on the Mac.")
+        IntentDescription("Answers a yes-or-no question a session asked on the phone.")
     }
 
-    /// `.alwaysAllowed`, deliberately: Escape is the reversible control — the worst it costs is
-    /// a turn that has to be asked for again — and a stop you must unlock the phone to reach is
-    /// a stop you would rather do by picking the phone up.
+    /// A Yes can do something that cannot be taken back — "Tag and push?" — and a phone face-up
+    /// on a table takes stray taps. With Face ID this costs nothing when you are looking at it.
     ///
-    /// ponytail: if a stray tap turns out to be a real problem on a real phone, the upgrade is
-    /// one word — `.requiresLocalDeviceAuthentication` puts Face ID in front of it.
-    static var authenticationPolicy: IntentAuthenticationPolicy { .alwaysAllowed }
+    /// ponytail: `.alwaysAllowed` if the unlock ever gets in the way on a real phone.
+    static var authenticationPolicy: IntentAuthenticationPolicy { .requiresLocalDeviceAuthentication }
 
     @Parameter(title: "Session")
     var session: String
 
+    @Parameter(title: "Slip")
+    var slip: String
+
+    @Parameter(title: "Yes")
+    var yes: Bool
+
     init() {}
 
-    init(session: String) {
+    init(session: String, slip: String, yes: Bool) {
         self.session = session
+        self.slip = slip
+        self.yes = yes
     }
 
+    /// Answers, then says so on the card at once rather than when the Mac next sweeps. The Mac
+    /// takes the card down, or moves it on to the next slip, a few seconds later.
     func perform() async throws -> some IntentResult {
         guard let client = ServerSettings.load().client() else { throw Trouble.noMac }
-        try await client.control(.cancel, of: session)
+        let sent = try await client.answer(slip, in: session,
+                                           valueJSON: yes ? #"{"answer":true}"# : #"{"answer":false}"#,
+                                           route: Preferences.load().route)
+        for card in Activity<Deck>.activities where card.attributes.session == session {
+            var state = card.content.state
+            let said = (yes ? state.accept : state.decline) ?? (yes ? "Yes" : "No")
+            state.line = sent.went ? "You said \(said)." : "You said \(said) — the session was not told."
+            state.kind = .finished
+            state.slip = nil
+            await card.update(ActivityContent(state: state, staleDate: nil))
+        }
         return .result()
     }
 }

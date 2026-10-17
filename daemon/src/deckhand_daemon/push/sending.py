@@ -47,8 +47,8 @@ TIMEOUT = 10
 ASKING = "asking"
 FINISHED = "finished"
 #: How much of the line the card can actually draw, by kind. The line is the hero, and an `asking`
-#: card gives one of its lines up to the Stop button: two lines of `Typography.lead` 17 hold about
-#: 80 characters, three hold about 120. Sending more is not generosity — it is a sentence cut
+#: card can give one of its lines up to Yes and No: two lines of `Typography.lead` 17 hold
+#: about 80 characters, three hold about 120. Sending more is not generosity — it is a sentence cut
 #: through a third of the way in on precisely the cards that needed a person.
 MAX_LINE = {ASKING: 80, FINISHED: 120}
 #: What a card says when nothing better could be found. Never empty: that made a card two-thirds
@@ -73,9 +73,16 @@ class Card:
     kind: str
     line: str
     when: float
+    #: A confirm slip the card can answer, and the words on its buttons. All three or none.
+    slip: str = ""
+    accept: str = ""
+    decline: str = ""
 
     def state(self) -> dict:
-        return {"kind": self.kind, "line": self.line, "when": self.when}
+        said = {"kind": self.kind, "line": self.line, "when": self.when}
+        if self.slip:
+            said |= {"slip": self.slip, "accept": self.accept, "decline": self.decline}
+        return said
 
 
 def shortened(said: str, kind: str) -> str:
@@ -189,22 +196,23 @@ def bearer() -> str | None:
     return token
 
 
-def show(card: Card, mac: str) -> str | None:
+def show(card: Card, mac: str, loud: bool = True) -> str | None:
     """Update this session's card, or raise one if it has none. Returns an error, or None.
 
     Update first, start second: an update to a card that is gone is refused cheaply, whereas
     starting one that exists would put two cards for one session on the Lock Screen. `finished`
-    stops there — a list going empty is nothing at all for a quiet Lock Screen.
+    stops there — a list going empty is nothing at all for a quiet Lock Screen — and so does a
+    quiet update, which moves a card on and never raises one the person swiped away.
     """
     if not (auth := bearer()):
         return "no push key on this Mac — run `just sync-apns`"
     held = tokens()
     if token := _cards(held).get(card.session):
-        if not (error := _post(token, _update(card), auth, "update")):
+        if not (error := _post(token, _update(card, loud), auth, "update")):
             return None
         log.info("lock screen: %s's card would not take it (%s)", card.name, error)
         _drop(card.session)
-    if card.kind != ASKING:
+    if card.kind != ASKING or not loud:
         return None
     if time.time() - _raised.get(card.session, 0.0) < QUIET:
         # A start went out and its card has not said which it is. Sending another is how three
@@ -235,9 +243,9 @@ def end(session_id: str) -> None:
         log.info("lock screen: %s", error)
 
 
-def _update(card: Card) -> dict:
+def _update(card: Card, loud: bool = True) -> dict:
     aps = {"timestamp": int(card.when), "event": "update", "content-state": card.state()}
-    if card.kind == ASKING:
+    if card.kind == ASKING and loud:
         aps["alert"] = _alert(card)
     return {"aps": aps}
 

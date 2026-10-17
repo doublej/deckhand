@@ -35,9 +35,9 @@ __all__ = ["ASKING", "FINISHED", "Card", "called", "end", "remember", "router", 
            "sweep", "told", "watch"]
 
 POLL = 5.0
-#: Slips waiting per session last sweep. A *new* one is the event; one sitting there all
+#: Slips waiting per session last sweep, by id. A *new* one is the event; one sitting there all
 #: afternoon is not, and a drop back to none is that card's end.
-_slips: dict[str, int] = {}
+_slips: dict[str, set[str]] = {}
 #: Asks still open on each session's list last sweep. Non-empty → empty is the `finished` event.
 _open: dict[str, int] = {}
 #: What each OpenCode session was blocked on the person for last sweep, one line per request.
@@ -103,7 +103,8 @@ def _slipped(session) -> None:
     session per sweep: the honest cost of noticing a file appear without a filesystem watcher,
     against a folder the session wrote to seconds ago, so it is warm.
     # ponytail: polled; a real watcher if this ever shows up in the log's timings."""
-    waiting = int(artifacts.counted(session).get("artifacts_waiting", 0) or 0)
+    rows = [row for row in artifacts.listing(session) if not row["answered"]]  # newest first
+    waiting = {row["id"] for row in rows}
     was = _slips.get(session.session_id)
     _slips[session.session_id] = waiting
     # `was` is None the first time: slips already sitting there are not something that happened.
@@ -112,14 +113,19 @@ def _slipped(session) -> None:
     if was and not waiting:
         end(session.session_id)
         return
-    if waiting <= was:
+    fresh = [row for row in rows if row["id"] not in was]
+    if not fresh:
+        # One was answered and others still wait. The card moves on, quietly: left alone, its
+        # buttons could answer a question that already has one.
+        if was - waiting:
+            announce(session, ASKING, slip=rows[0], loud=False)
         return
     # Per folder rather than once for the Mac: "not this one" is the shape that opinion takes.
     if not wants.resolved(session.cwd).slips:
         log.info("lock screen: %s has a slip waiting, but this folder is set quiet", session.name)
         return
     log.info("lock screen: %s is waiting on a slip", session.name)
-    announce(session, ASKING)
+    announce(session, ASKING, slip=fresh[0])
 
 
 def _stopped(session) -> None:
@@ -188,15 +194,23 @@ def spoke_to(session_id: str) -> None:
     end(session_id)
 
 
-def announce(session, kind: str) -> None:
-    card = Card(session=session.session_id, name=session.name, kind=kind,
-                line=_line(session.session_id, kind), when=time.time())
-    _alerts.append({"id": next(_ids), **asdict(card)})
+def announce(session, kind: str, slip: dict | None = None, loud: bool = True) -> None:
+    """`slip` is the one this card is about. A confirm carries its id and its two buttons, and
+    its line is the question itself — a Yes pressed under any other sentence answers something
+    the person did not read."""
+    line, ask = _line(session.session_id, kind), {}
+    if slip and (labels := artifacts.yes_no(session, slip["id"])):
+        line = shortened(slip["title"], kind)
+        ask = {"slip": slip["id"], "accept": labels[0], "decline": labels[1]}
+    card = Card(session=session.session_id, name=session.name, kind=kind, line=line,
+                when=time.time(), **ask)
+    if loud:
+        _alerts.append({"id": next(_ids), **asdict(card)})
     # The session's own machine rather than the one answering the phone. They are the same
     # thing on a one-machine network and different the moment they are not, and the card saying
     # "m2" over a session running on Ubuntu is the card lying about the only thing it adds.
     where = session.machine or config.base_url().removeprefix("http://").split(":")[0]
-    if error := show(card, where):
+    if error := show(card, where, loud=loud):
         log.info("lock screen: %s", error)
 
 

@@ -72,8 +72,9 @@ def fillCommon(page: str, title: str, slug: str, note: str) -> str:
 
 def fillConfirm(page: str, options: list[str]) -> str:
     """Yes and no, in that order — the primary button is what you are asking for."""
-    yes = options[0] if options else "Go ahead"
-    no = options[1] if len(options) > 1 else "Not yet"
+    # Short on purpose: these are the Lock Screen card's two buttons as well as the page's.
+    yes = options[0] if options else "Yes"
+    no = options[1] if len(options) > 1 else "No"
     page = swap(page, r"\n\s*<h2>What ran</h2>\s*<ul>.*?</ul>", "")
     page = swap(page, r'<button id="no">.*?</button>',
                 f'<button id="no">{html.escape(no)}</button>')

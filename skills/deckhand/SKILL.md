@@ -82,7 +82,10 @@ It prints the path it wrote. Tell the person, then read the answer:
 python3 ~/.claude/skills/deckhand/scripts/answer.py which-branch --wait 300
 ```
 
-`--kind` is `confirm`, `pick`, `text` or `aloud`. `answer.py` prints the answered JSON, or exits 1
+`--kind` is `confirm`, `pick`, `text` or `aloud`. A `confirm` is the one the person can answer
+from the Lock Screen without opening the app: keep its question under 80 characters, since the card
+shows nothing else, and put the rest in `--note`. Its buttons say Yes and No unless two `--option`
+name them; the answer is `{"answer": true}` or `{"answer": false}`. `answer.py` prints the answered JSON, or exits 1
 while nothing has answered; `--wait` blocks, bounded by the tool call's own timeout — though the
 daemon also messages this session when an answer lands, so a stopped session is woken rather than
 polling. Run both from the session's own folder: nothing walks upward, so a slip written from a

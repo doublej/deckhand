@@ -26,19 +26,26 @@ def blank(monkeypatch, tmp_path):
     monkeypatch.setattr(push, "artifacts", Slips({}))
     monkeypatch.setattr(push, "tasks", Asks({}))
     said = []
-    monkeypatch.setattr(push, "show", lambda card, mac: said.append(card))
+    monkeypatch.setattr(push, "show", lambda card, mac, loud=True: said.append(card))
     monkeypatch.setattr(push, "end", lambda sid: said.append(("end", sid)))
     return said
 
 
 class Slips:
-    """Stands in for `artifacts`: how many slips each session has waiting, by session id."""
+    """Stands in for `artifacts`: how many slips each session has waiting, by session id, and
+    which of them are confirms — `s0`, `s1`, … oldest first."""
 
-    def __init__(self, waiting):
+    def __init__(self, waiting, confirms=()):
         self.waiting = waiting
+        self.confirms = set(confirms)
 
-    def counted(self, session):
-        return {"artifacts_waiting": self.waiting.get(session.session_id, 0)}
+    def listing(self, session):
+        count = self.waiting.get(session.session_id, 0)
+        return [{"id": f"s{n}", "title": f"Ship s{n}?", "answered": False}
+                for n in reversed(range(count))]
+
+    def yes_no(self, session, artifact_id):
+        return ("Ship it", "Hold") if artifact_id in self.confirms else None
 
 
 class Asks:
@@ -59,8 +66,8 @@ def live(*pairs):
     ]
 
 
-def card(kind=push.ASKING, line="shall I run the tests?"):
-    return push.Card(session="one", name="one", kind=kind, line=line, when=0.0)
+def card(kind=push.ASKING, line="shall I run the tests?", **ask):
+    return push.Card(session="one", name="one", kind=kind, line=line, when=0.0, **ask)
 
 
 def posts(monkeypatch):
@@ -110,6 +117,62 @@ def test_answering_the_last_slip_ends_the_card(monkeypatch, blank):
     slips.waiting["one"] = 0
     push.sweep()
     assert blank == [("end", "one")]
+
+
+def test_a_confirm_slip_puts_its_question_and_buttons_on_the_card(monkeypatch, blank):
+    """A Yes pressed under any sentence but the question answers something nobody read."""
+    slips = Slips({}, confirms={"s0"})
+    monkeypatch.setattr(push, "artifacts", slips)
+    monkeypatch.setattr(sessions, "live_sessions", lambda: live(("one", "idle")))
+    push.sweep()
+    slips.waiting["one"] = 1
+    push.sweep()
+    assert blank[0].line == "Ship s0?"
+    assert blank[0].state()["slip"] == "s0"
+    assert (blank[0].accept, blank[0].decline) == ("Ship it", "Hold")
+
+
+def test_any_other_slip_carries_no_buttons(monkeypatch, blank):
+    slips = Slips({})
+    monkeypatch.setattr(push, "artifacts", slips)
+    monkeypatch.setattr(sessions, "live_sessions", lambda: live(("one", "idle")))
+    push.sweep()
+    slips.waiting["one"] = 1
+    push.sweep()
+    assert "slip" not in blank[0].state()
+
+
+def test_answering_one_of_two_moves_the_card_on_quietly(monkeypatch, blank):
+    shown = []
+    monkeypatch.setattr(push, "show", lambda card, mac, loud=True: shown.append((card, loud)))
+    slips = Slips({}, confirms={"s0", "s1"})
+    monkeypatch.setattr(push, "artifacts", slips)
+    monkeypatch.setattr(sessions, "live_sessions", lambda: live(("one", "idle")))
+    push.sweep()
+    slips.waiting["one"] = 1
+    push.sweep()
+    slips.waiting["one"] = 2
+    push.sweep()
+    assert shown[-1][0].slip == "s1" and shown[-1][1]
+    # s1, the one on the card, is answered; s0 still waits.
+    monkeypatch.setattr(slips, "listing", lambda session: [
+        {"id": "s0", "title": "Ship s0?", "answered": False},
+        {"id": "s1", "title": "Ship s1?", "answered": True}])
+    push.sweep()
+    assert shown[-1][0].slip == "s0" and not shown[-1][1]
+    push.sweep()
+    assert len(shown) == 3, "nothing changed, so nothing is sent"
+
+
+def test_a_quiet_update_never_raises_a_card(monkeypatch):
+    sent = posts(monkeypatch)
+    push.remember("start-token", "start")
+    assert push.show(card(), "m2", loud=False) is None
+    assert sent == []
+
+
+def test_a_quiet_update_carries_no_alert():
+    assert "alert" not in push.sending._update(card(), loud=False)["aps"]
 
 
 def test_a_session_that_goes_away_has_its_card_ended(monkeypatch, blank):
@@ -296,7 +359,7 @@ def test_the_card_is_the_shape_the_swift_type_decodes():
     """`attributes-type`, the field names and the kinds are the whole contract, and there is no
     Swift on the sending side to keep them in step — so read the Swift."""
     swift = (Path(__file__).parents[3] / "Sources/DeckhandKit/LiveActivity.swift").read_text()
-    payload = push.sending._start(card(), "m2-2")["aps"]
+    payload = push.sending._start(card(slip="s0", accept="Yes", decline="No"), "m2-2")["aps"]
     assert f"public struct {payload['attributes-type']}: ActivityAttributes" in swift
     state = swift.split("struct ContentState")[1].split("public init")[0]
     assert set(re.findall(r"public var (\w+):", state)) == set(payload["content-state"])

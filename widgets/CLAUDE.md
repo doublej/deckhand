@@ -23,6 +23,11 @@ number on the Lock Screen is drawn by iOS for free, and the card's own space goe
   raise a card or make a noise. `finished` may only ever *update* one already on screen, and it
   means a session cleared its whole list of asks, not one box ticked: single check-offs measured
   12.3/h, worse than the turns they replaced. A list going empty is 4/h across the Mac.
+- **A confirm slip is answered from the card.** The daemon sends `slip`, `accept` and `decline` only for a
+  slip whose page has `<button id="yes">` and `<button id="no">` (`artifacts.yes_no`), and then
+  the line is that slip's question — a Yes under any other sentence answers something unread.
+  `AnswerSlip` posts `{"answer": bool}` and redraws the card at once; answering one of several
+  moves the card to the next with a quiet update, never one that raises a swiped-away card.
 - **`Kind` decodes unknown as `finished`, the quiet one.** The Mac is upgraded by a git pull and
   the phone by a rebuild, so they are routinely a version apart. A daemon that learns a louder
   kind must never be able to make an older phone louder than it was built to be — the same

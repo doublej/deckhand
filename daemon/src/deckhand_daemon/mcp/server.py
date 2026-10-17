@@ -144,6 +144,11 @@ async def ask_on_phone(question: str,
                        note: str = "", questions: list[str] | None = None) -> dict:
     """Ask the person a question on their phone. Returns the slip's id, to read the answer by.
 
+    A yes-or-no question is the default and the fastest to answer: a confirm is answered straight
+    from the Lock Screen card, without opening the app. Keep it under 80 characters — the card
+    shows the question and nothing else — and put any detail in `note`, which the page shows.
+    The answer is `{"answer": true}` or `{"answer": false}`.
+
     `kind` is one of confirm, pick, text, aloud. `options` is the yes label then the no label for
     a confirm, one row per choice for a pick, and the field's label for a text. `questions` is for
     an aloud slip only, each one `id:the question`, and the person answers by speaking.

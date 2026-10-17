@@ -489,18 +489,17 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   push-to-start token carries **no session key at all**, not an empty one: it belongs to the app
   rather than to a card, and the daemon's parameter defaults to empty, so absence *is* the start
   slot.
-- **The card's one button lives in `widgets/CardAction.swift` and is compiled into both targets.**
+- **The card's buttons live in `widgets/CardAction.swift` and are compiled into both targets.**
   A `LiveActivityIntent` is named by the widget's `Button` and *performed in the app's process*,
   which is the whole reason it is that protocol and not a plain `AppIntent`: the app's process has
   the pairing the person typed in, where a widget extension has a `UserDefaults` of its own and
   would find no Mac. Membership in two targets (`project.yml`) rather than a third module, because
   an App Intent in a Swift package needs `AppIntentsPackage` ceremony for one small file.
-  **A card may only ever make a session do less, never more.** Stop is on it because Escape can
-  only take work away. There is no Approve and there is not going to be one — answering a
-  permission prompt is the keyboard route, which arrives *as the person at the machine*, and a
-  card carries one line of what the session said rather than the prompt it is blocked on. No
-  `compact`, `clear` or `exit` either: two of them cannot be undone and a Lock Screen has nowhere
-  to ask first.
+  **A card answers only the question it shows**: Yes and No for a confirm slip, whose question
+  the daemon makes the card's line, behind Face ID. Stop was here and was never pressed. There is
+  no Approve and there is not going to be one — answering a permission prompt is the keyboard
+  route, and a card carries one line of what the session said rather than the prompt it is
+  blocked on. No `compact`, `clear` or `exit` either: a Lock Screen has nowhere to ask first.
 - **A Codex or OpenCode session is offered what the Mac will do for it, and what it will not is
   absent rather than dimmed.** Every view asks a capability on `Session`, never the provider. A
   Codex thread has no pane and no CLAUDE.md tree, so it loses the dashboard's Context, Compact, On

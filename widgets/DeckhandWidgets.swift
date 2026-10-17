@@ -103,11 +103,11 @@ private struct LockScreen: View {
             Text(hero)
                 .font(Typography.lead)
                 .foregroundStyle(Palette.textPrimary)
-                // The button costs a line of what the session said, and that is the trade rather
-                // than an accident: 16 + 22 + 8 + hero + 8 + 44 + 16 puts a three-line asking
-                // card at ~166 against a 160 ceiling, where two lines is ~155. A finished card
-                // has no button and keeps the third line. Arithmetic, not seen on a device.
-                .lineLimit(showsStop ? 2 : 3)
+                // The buttons cost a line of what the session said, and that is the trade rather
+                // than an accident: 16 + 22 + 8 + hero + 8 + 44 + 16 puts a three-line card with
+                // buttons at ~166 against a 160 ceiling, where two lines is ~155. A card without
+                // them keeps the third line. Arithmetic, not seen on a device.
+                .lineLimit(state.answerable == nil ? 3 : 2)
                 // A `Text` draws into whatever height it is offered and clips the rest. This is
                 // the ask for its own ideal height, and the reason later lines survive.
                 .fixedSize(horizontal: false, vertical: true)
@@ -119,7 +119,7 @@ private struct LockScreen: View {
         .activitySystemActionForegroundColor(Palette.tint)
         .environment(\.colorScheme, .dark)
         // The card and the island link to the same screen, which is what the HIG asks for. On the
-        // card this is the *background* tap: the Stop button below takes its own hits first.
+        // card this is the *background* tap: the Yes and No buttons take their own hits first.
         .widgetURL(deck.cardLink)
     }
 
@@ -158,48 +158,11 @@ private struct LockScreen: View {
                 .truncationMode(.tail)
             Text("·")
             Age(state.moment)
-            if showsStop { stop }
+            if let answerable = state.answerable { Answers(deck: deck, ask: answerable) }
         }
         .font(Typography.hint)
         .foregroundStyle(Palette.textSecondary)
     }
-
-    /// The one thing a card may do to a session, below the sentence rather than beside the name:
-    /// the card's job is to be read, and a control beside the identity would be the first thing
-    /// the eye lands on.
-    ///
-    /// **Only on `asking`.** A `finished` card is a session that has cleared your list — there is
-    /// nothing running for Escape to take away, and because a card is *updated* rather than
-    /// re-raised, a finished card can still be on screen after the session has been given
-    /// something new. A button that acts on state the card no longer describes is worse than no
-    /// button. This is the sentence to change if that reading is wrong; nothing else moves.
-    ///
-    /// Not mono and not tracked, which is deliberate. `WAIT` two rows up is the state vocabulary,
-    /// and the design layer's rule is that a state is never a thing you press — so the one thing
-    /// you actually can press must not borrow the state's voice. `Radius.small` and not a capsule,
-    /// for the same reason a filled control inside a card is: corners get tighter inwards.
-    private var stop: some View {
-        Button(intent: StopRun(session: deck.session)) {
-            Label("Stop", systemImage: Control.cancel.symbol)
-                .font(Typography.primaryRow)
-                .foregroundStyle(Palette.textPrimary)
-                .padding(.horizontal, Spacing.small)
-                .padding(.vertical, Spacing.extraSmall)
-                .background(
-                    RoundedRectangle(cornerRadius: Radius.small, style: .continuous)
-                        .fill(Palette.tileIdle)
-                )
-                // The pill draws at ~31pt; Apple's floor for anything you tap is 44. The extra
-                // points are hit area and nothing else, which is why they are inside the label
-                // and why `contentShape` is what makes them count.
-                .frame(minHeight: 44)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-
-    /// Whether this card has anything to stop. See `stop`.
-    private var showsStop: Bool { state.kind == .asking }
 
     /// `line` is documented as never empty, and this is the one place that would be a blank card
     /// rather than a wrong one — the payload is JSON composed in Python, so the guard stays.
@@ -217,21 +180,28 @@ private struct Panel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.xxs) {
-            Text(deck.name)
-                .font(Typography.prose)
-                .foregroundStyle(Palette.textSecondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-            Text(state.line)
-                .font(Typography.lead)
-                .foregroundStyle(Palette.textPrimary)
-                .lineLimit(2)
-                // The same ask as the card's, and the reason the second line was sliced through
-                // the middle before it was here.
-                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: Spacing.xxs) {
+                Text(deck.name)
+                    .font(Typography.prose)
+                    .foregroundStyle(Palette.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(state.line)
+                    .font(Typography.lead)
+                    .foregroundStyle(Palette.textPrimary)
+                    .lineLimit(2)
+                    // The same ask as the card's, and the reason the second line was sliced
+                    // through the middle before it was here.
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            // The words read as one element; the buttons stay two, or VoiceOver cannot press them.
+            .accessibilityElement(children: .combine)
+            if let answerable = state.answerable {
+                Answers(deck: deck, ask: answerable)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .combine)
     }
 }
 

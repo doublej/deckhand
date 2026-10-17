@@ -31,11 +31,22 @@ public struct Deck: ActivityAttributes {
         public var line: String
         /// Unix seconds. The view makes it tick by itself so a glance says how stale this is.
         public var when: Double
+        /// A yes-or-no slip this card can answer from the Lock Screen, and the words on its Yes
+        /// and No buttons — all three or none. The daemon only sends them for a confirm slip, and then
+        /// `line` is that slip's question, so a Yes is never pressed under any other sentence.
+        /// Optional, so a card from an older Mac decodes with no buttons rather than not at all.
+        public var slip: String?
+        public var accept: String?
+        public var decline: String?
 
-        public init(kind: Kind, line: String, when: Double) {
+        public init(kind: Kind, line: String, when: Double,
+                    slip: String? = nil, accept: String? = nil, decline: String? = nil) {
             self.kind = kind
             self.line = line
             self.when = when
+            self.slip = slip
+            self.accept = accept
+            self.decline = decline
         }
 
         public var moment: Date { Date(timeIntervalSince1970: when) }

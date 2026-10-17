@@ -287,7 +287,8 @@ def prime(detected: dict[str, Any]) -> str:
 ## Start here
 1. `deckhand presence` — `laptop` or `headset`: the person is reading this conversation, ask here
    and stop. `phone`: go on.
-2. `deckhand ask "Ship it?" --option Ship --option Wait` — prints the slip id.
+2. `deckhand ask "Ship it?"` — prints the slip id. A yes-or-no question is answered from the Lock
+   Screen without opening the app; keep it under 80 characters and put detail in `--note`.
 3. `deckhand answer <id>` — exit 4 until they answer. The daemon also messages this session the
    moment an answer lands, so there is no need to poll.
 4. Nothing to ask but they must know: `deckhand notify "Build done, 3 tests fail"`.
