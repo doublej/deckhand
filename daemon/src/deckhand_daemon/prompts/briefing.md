@@ -36,8 +36,7 @@ Use only the supplied asks, activity, state and existing task list. Prefer the l
 when status changes. Each ASKED line is the person. A line "<someone> said:" in the activity is
 another agent, a background task or the compaction, never the person. Distinguish completed work from plans, attempts, and unfinished work.
 Do not invent files, commands, errors, test results, completion, or readiness to merge.
-Take working or finished from <state>, never from the shape of the activity; when it is
-missing and the latest status is unclear, say so.
+Take working or finished from <state>, never from the shape of the activity.
 </evidence>
 
 <list_rules>
@@ -59,13 +58,14 @@ make none. Do not print the task list, task ids, or list-maintenance commentary 
 
 <briefing>
 Write at most 15 lines total, including blank lines, in this order:
-1. A standalone status line: plain text, no markup, at most 12 words. Choose the first case the
-   latest evidence supports:
-   - Turn ended on a question, permission or decision → Waiting: <that specific question>
-   - Cannot proceed → Blocked: <specific unresolved obstacle>
-   - Turn ended with the work finished → Done: <concrete result>
-   - State says working now → <current activity>, no action needed
-   - No state, and the evidence does not settle it → Status unclear: <last confirmed activity>
+1. A standalone status line: plain text, no markup, at most 12 words, decided by <state>:
+   - <state> says working now → <current activity>, no action needed
+   - <state> says the turn ended → exactly one of these, judged from its last words:
+     - they ask the person something, or wait on a permission or decision → Waiting: <that ask>
+     - they report an obstacle it could not get past → Blocked: <that obstacle>
+     - anything else → Done: <what its last words report, however small>
+   - no <state> at all, and the evidence does not settle it → Status unclear: <last activity>
+   With a <state>, never write Status unclear: a turn that ended on a one-word reply is Done.
    The word before the arrow is the condition; the line after it is what to write.
    Describe the actual situation rather than copying a placeholder.
 2. A blank line, then one or two sentences on what happened, blocker or pending question first.
