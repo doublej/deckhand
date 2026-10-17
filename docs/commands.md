@@ -439,6 +439,12 @@ inside a helper is not listed, so treat the column as the least a route can answ
 | `GET /sessions/{session_id}/filters` | — | 200 | 401, 404, 422 | What this terminal runs, and what it could run, in the one call a settings screen needs. |
 | `PUT /sessions/{session_id}/filters` | body `{steps}` | 200 | 400, 401, 404, 422 | Replace this terminal's chain. List order is run order, and a filter may appear twice. |
 
+### tray
+
+| Route | Arguments | Answers | Errors | What it does |
+|---|---|---|---|---|
+| `GET /tray` | `?since`: integer = 0 (the last update id this phone has seen) | 200 | 401, 422 | Everything open on every machine, newest first, and every update after the cursor. |
+
 ### links
 
 | Route | Arguments | Answers | Errors | What it does |

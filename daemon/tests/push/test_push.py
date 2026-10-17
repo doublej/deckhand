@@ -44,18 +44,27 @@ class Slips:
         return [{"id": f"s{n}", "title": f"Ship s{n}?", "answered": False}
                 for n in reversed(range(count))]
 
-    def yes_no(self, session, artifact_id):
-        return ("Ship it", "Hold") if artifact_id in self.confirms else None
+    def page(self, session, artifact_id):
+        if artifact_id not in self.confirms:
+            return "<p>a page</p>"
+        return '<button id="no">Hold</button><button id="yes" class="primary">Ship it</button>'
+
+    def answered(self, session, artifact_id):
+        return {"answer": True}
 
 
 class Asks:
     """Stands in for `tasks`: how many asks are still open on each session's list."""
 
-    def __init__(self, open_now):
+    def __init__(self, open_now, done=()):
         self.open_now = open_now
+        self.done = list(done)
 
-    def outstanding(self, session_id):
-        return [{"id": f"t{n}"} for n in range(self.open_now.get(session_id, 0))]
+    def load(self, session_id):
+        return ([{"id": f"t{n}", "text": f"ask {n}", "state": "todo"}
+                 for n in range(self.open_now.get(session_id, 0))]
+                + [{"id": f"d{n}", "text": text, "state": "done"}
+                   for n, text in enumerate(self.done)])
 
 
 def live(*pairs):

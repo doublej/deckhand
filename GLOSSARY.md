@@ -38,6 +38,7 @@ is a field on a row and a way to slice the list, never an address it dials.
 |---|---|---|
 | **turn** | One round of the conversation as the phone draws it. A message absorbed mid-turn is a turn. | message, exchange, round |
 | **inbox** | The session's own message queue, replayed from `queue-operation` lines. | queue (in prose), buffer |
+| **tray** | Every session that needs the person and what happened lately — the manager panel's first half (`GET /tray`). | inbox, feed, notifications |
 | **briefing** | What the small model writes about a session since you last spoke. A file on disk. | summary (in prose), digest |
 | **ask** | One item on the person's list, kept by the Mac, changed only by the three SDK tools. | todo, task (in the UI), item |
 | **task** | The same thing, in code and on the wire (`tasks.py`, `add_task`). | — |

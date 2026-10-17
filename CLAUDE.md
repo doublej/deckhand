@@ -180,6 +180,9 @@ the session. `?deliver=false` transcribes without sending, for the review card, 
 - `GET /alerts?since=` — every card the Mac raised for a session, by cursor, for the Mac app,
   which APNs cannot reach. `GET /manager?watching=false` is a poll with no panel on screen, and
   leaves the phone's pushes on
+- `GET /tray?since=` — every session that needs the person on every machine, each waiting slip
+  with the shape the phone answers it in, and what happened lately, by cursor
+  ([docs/tray.md](docs/tray.md))
 - `GET /space`, `POST /space/planes`, `DELETE /space/planes/{id}?by=`, `PUT /space/poses/{key}` —
   the headset's space: open web and window planes, near which session, and every plane's pose;
   `rev` rises on each change. A session is told when the person puts a plane beside it or takes

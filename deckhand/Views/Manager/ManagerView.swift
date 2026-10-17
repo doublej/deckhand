@@ -11,16 +11,14 @@ import SwiftUI
 /// session, answer a slip, or edit a filter chain. Those are the person's, and they are here.
 ///
 /// The rail surface, because it is reached from the rail and it is a list of things happening on
-/// the Mac. The conversation is bubbles, the person's trailing and the manager's leading — see
-/// `ManagerBubble` — and everything the manager *did* is a line rather than a bubble.
+/// the Mac. Two halves under one foot: the **tray** (`TrayView`), every session that needs you
+/// with its slips answerable in place, and the **manager**, whose conversation is bubbles — the
+/// person's trailing and the manager's leading, see `ManagerBubble` — with everything it *did* as
+/// a line rather than a bubble. Saying something to the manager turns to its half.
 struct ManagerView: View {
     @Bindable var model: AppModel
     @State private var recorder = Recorder()
     @State private var clearing = false
-    /// The panel's name, shown as it arrives and then gone. The same move the session panes make
-    /// when one is swiped to: a swipe can be accidental and four dots cannot say where you are.
-    /// It must never become permanent — a label that stayed would be a title bar.
-    @State private var named = false
     @FocusState private var typing: Bool
     @Environment(\.scenePhase) private var phase
 
@@ -29,7 +27,11 @@ struct ManagerView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            conversation
+            tabs
+            switch desk.tab {
+            case .tray: TrayView(model: model)
+            case .manager: conversation
+            }
             foot
         }
         .padding(.horizontal, Spacing.small)
@@ -37,12 +39,10 @@ struct ManagerView: View {
         .background(Palette.lcdGround.ignoresSafeArea())
         .environment(\.colorScheme, .dark)
         .accent(accent)
-        .overlay(alignment: .top) { arrival }
         // Keyed on `working` as well, so a send restarts the loop at the fast pace at once rather
         // than after whatever is left of a four-second rest.
         .task(id: [desk.open, desk.working]) { await poll() }
         .onChange(of: desk.open) { _, now in
-            named = now
             if !now {
                 typing = false
                 Task { await model.leaveManager() }
@@ -52,6 +52,41 @@ struct ManagerView: View {
         .onChange(of: phase) { _, now in
             if now != .active, desk.open { Task { await model.leaveManager() } }
         }
+    }
+
+    /// The two halves, as two words. The one showing is bright; the manager's goes the accent
+    /// when it has said something you have not read, which is the only way a reply landing behind
+    /// the tray is noticed.
+    private var tabs: some View {
+        HStack(spacing: Spacing.medium) {
+            tab("TRAY", .tray, count: desk.tray.waitingCount, unread: false)
+            tab("MANAGER", .manager, count: 0,
+                unread: (desk.entries.last?.id ?? 0) > desk.readEntry || desk.working)
+        }
+        .padding(.top, Spacing.extraSmall)
+        .onChange(of: desk.entries.last?.id) { _, last in
+            if desk.tab == .manager { desk.readEntry = last ?? 0 }
+        }
+        .onChange(of: desk.tab) { _, now in
+            if now == .manager { desk.readEntry = desk.entries.last?.id ?? 0 }
+        }
+    }
+
+    private func tab(_ word: String, _ which: ManagerTab, count: Int, unread: Bool) -> some View {
+        Button { desk.tab = which } label: {
+            HStack(spacing: Spacing.xxs) {
+                Text(word)
+                if count > 0 { Text("\(count)").foregroundStyle(Palette.lcdYellow) }
+            }
+            .font(Typography.eyebrow)
+            .tracking(2)
+            .foregroundStyle(desk.tab == which ? Palette.textPrimary
+                             : unread ? accent : Palette.textTertiary)
+            .frame(minHeight: 32)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(which == .tray ? "manager-tab-tray" : "manager-tab-manager")
     }
 
     /// Everything said, oldest first, with the working line after it when the Mac is still going.
@@ -205,7 +240,10 @@ struct ManagerView: View {
             mode: model.preferences.talkMode,
             isMine: true,
             onStart: { typing = false },
-            onClip: { await model.askManager(clip: $0) },
+            onClip: {
+                desk.tab = .manager
+                await model.askManager(clip: $0)
+            },
             content: { state in
                 TalkMark(state: state, level: recorder.level, saying: "Talk to the manager",
                          // Held for reading under the same switch as a session's clip: a
@@ -218,26 +256,10 @@ struct ManagerView: View {
         )
     }
 
-    /// The name, on arrival and for a second. See `named`.
-    private var arrival: some View {
-        Text("MANAGER")
-            .font(Typography.eyebrow)
-            .tracking(2)
-            .foregroundStyle(Palette.textTertiary)
-            .padding(.top, Spacing.extraSmall)
-            .opacity(named ? 1 : 0)
-            .animation(Motion.fading, value: named)
-            .allowsHitTesting(false)
-            .task(id: named) {
-                guard named else { return }
-                try? await Task.sleep(for: .seconds(1))
-                named = false
-            }
-    }
-
     private func send() { send(desk.draft) }
 
     private func send(_ words: String) {
+        desk.tab = .manager
         Task { await model.askManager(words) }
     }
 
@@ -252,10 +274,13 @@ struct ManagerView: View {
 
     /// One second while a run is in flight, four while it is not. The Mac answers this off a
     /// file whatever the manager is doing, so a fast poll costs a request rather than a model.
+    /// The tray rides the same loop: one panel, one pace.
     private func poll() async {
         guard desk.open else { return }
+        if desk.readEntry == 0 { desk.readEntry = desk.entries.last?.id ?? 0 }
         while !Task.isCancelled && desk.open {
             await model.pollManager()
+            await model.pollTray()
             try? await Task.sleep(for: .seconds(desk.working ? 1 : 4))
         }
     }

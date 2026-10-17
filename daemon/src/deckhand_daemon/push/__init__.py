@@ -29,10 +29,11 @@ from .. import artifacts, briefings, config, sessions, tasks
 from ..log import log
 from ..reading import transcripts
 from ..settings import wants
+from ..tray import feed, shapes
 from .sending import ASKING, FINISHED, NOTHING, Card, end, remember, shortened, show, told
 
 __all__ = ["ASKING", "FINISHED", "Card", "called", "end", "remember", "router", "spoke_to",
-           "sweep", "told", "watch"]
+           "sweep", "told", "waiting_lines", "watch"]
 
 POLL = 5.0
 #: Slips waiting per session last sweep, by id. A *new* one is the event; one sitting there all
@@ -40,6 +41,8 @@ POLL = 5.0
 _slips: dict[str, set[str]] = {}
 #: Asks still open on each session's list last sweep. Non-empty → empty is the `finished` event.
 _open: dict[str, int] = {}
+#: Which asks on each session's list were done last sweep, by id — each new one is an update.
+_done: dict[str, set[str]] = {}
 #: What each OpenCode session was blocked on the person for last sweep, one line per request.
 _blocked: dict[str, list[str]] = {}
 #: What an agent asked to be told, where one asked. Beats anything read out of a transcript,
@@ -91,6 +94,7 @@ def sweep() -> None:
     for gone in (set(_slips) | set(_open) | set(_blocked)) - alive:
         _slips.pop(gone, None)
         _open.pop(gone, None)
+        _done.pop(gone, None)
         _blocked.pop(gone, None)
         _said.pop(gone, None)
         # A card about a session that no longer exists can never be answered or cleared.
@@ -103,13 +107,19 @@ def _slipped(session) -> None:
     session per sweep: the honest cost of noticing a file appear without a filesystem watcher,
     against a folder the session wrote to seconds ago, so it is warm.
     # ponytail: polled; a real watcher if this ever shows up in the log's timings."""
-    rows = [row for row in artifacts.listing(session) if not row["answered"]]  # newest first
+    listed = artifacts.listing(session)  # newest first
+    rows = [row for row in listed if not row["answered"]]
     waiting = {row["id"] for row in rows}
     was = _slips.get(session.session_id)
     _slips[session.session_id] = waiting
     # `was` is None the first time: slips already sitting there are not something that happened.
     if was is None:
         return
+    # Gone from the waiting set *and* answered: a slip deleted unanswered was withdrawn, not
+    # answered, and saying it was would be the tray inventing a reply.
+    for row in listed:
+        if row["id"] in was and row["answered"]:
+            _answered(session, row)
     if was and not waiting:
         end(session.session_id)
         return
@@ -142,10 +152,11 @@ def _stopped(session) -> None:
         if was and not waiting:
             spoke_to(session.session_id)
         return
+    line = next(w for w in waiting if w not in was)
+    feed.add("blocked", session, line=line)
     if not wants.resolved(session.cwd).slips:
         log.info("lock screen: %s is waiting on you, but this folder is set quiet", session.name)
         return
-    line = next(w for w in waiting if w not in was)
     _said[session.session_id] = shortened(line, ASKING)
     log.info("lock screen: %s %s", session.name, line)
     announce(session, ASKING)
@@ -158,11 +169,19 @@ def _cleared(session) -> None:
     the phone reads. Polled rather than hooked into `tasks.set_state`, which would put the Lock
     Screen inside a model run and inside the three tools' only job.
     """
-    still = len(tasks.outstanding(session.session_id))
+    asks = tasks.load(session.session_id)
+    done = {ask["id"] for ask in asks if ask["state"] == "done"}
+    if (before := _done.get(session.session_id)) is not None:
+        for ask in asks:
+            if ask["id"] in done - before:
+                feed.add("done", session, ask=ask["text"])
+    _done[session.session_id] = done
+    still = len(asks) - len(done)
     was = _open.get(session.session_id)
     _open[session.session_id] = still
     if was is None or still or not was:
         return
+    feed.add("finished", session, asks=[ask["text"] for ask in asks])
     if not wants.resolved(session.cwd).finished:
         log.info("lock screen: %s cleared its list, but this folder is set quiet", session.name)
         return
@@ -183,9 +202,25 @@ def called(session, line: str) -> str | None:
         return "this folder is set not to be interrupted"
     said = shortened(line, ASKING)
     _said[session.session_id] = said
+    feed.add("called", session, line=" ".join(line.split()))
     log.info("lock screen: %s called for you: %s", session.name, said)
     announce(session, ASKING)
     return None
+
+
+def waiting_lines() -> dict[str, str]:
+    """What each session is waiting on you for, in its own words, where it said — for the tray.
+    An OpenCode session blocked in a folder set quiet raised no card, and still waits."""
+    lines = {sid: found[0] for sid, found in _blocked.items() if found}
+    return lines | _said
+
+
+def _answered(session, row: dict) -> None:
+    """A slip answered, from anywhere — the card, the page, or the tray — said back in the words
+    the person saw on it."""
+    shape = shapes.ask(artifacts.page(session, row["id"]))
+    feed.add("answered", session, slip=row["id"], title=row["title"],
+             answer=shapes.said(artifacts.answered(session, row["id"]), shape))
 
 
 def spoke_to(session_id: str) -> None:
@@ -199,9 +234,10 @@ def announce(session, kind: str, slip: dict | None = None, loud: bool = True) ->
     its line is the question itself — a Yes pressed under any other sentence answers something
     the person did not read."""
     line, ask = _line(session.session_id, kind), {}
-    if slip and (labels := artifacts.yes_no(session, slip["id"])):
+    shape = shapes.ask(artifacts.page(session, slip["id"])) if slip else {}
+    if slip and shape["kind"] == "confirm":
         line = shortened(slip["title"], kind)
-        ask = {"slip": slip["id"], "accept": labels[0], "decline": labels[1]}
+        ask = {"slip": slip["id"], "accept": shape["accept"], "decline": shape["decline"]}
     card = Card(session=session.session_id, name=session.name, kind=kind, line=line,
                 when=time.time(), **ask)
     if loud:

@@ -62,18 +62,22 @@ def deliver_to(machine_id: str, session_id: str, message: str) -> tuple[bool, st
     return True, None
 
 
-def forward(machine_id: str, method: str, path: str, query: str = "") -> httpx.Response | None:
-    """Hand a read straight to the machine that has the disk, and answer with what it says.
+def forward(machine_id: str, method: str, path: str, query: str = "", body: bytes = b"",
+            content_type: str = "") -> httpx.Response | None:
+    """Hand a request straight to the machine that has the disk, and answer with what it says.
 
     None when the machine is unreachable, which the caller turns into a 503 rather than an empty
-    page: a transcript that cannot be read is not a transcript with nothing in it.
+    page: a transcript that cannot be read is not a transcript with nothing in it. The body goes
+    across too: a slip's answer is a `POST` with the answer in it, and forwarding it empty was a
+    422 for every slip on another machine.
     """
     base = _base(machine_id)
     if base is None:
         return None
     url = f"{base}{path}{'?' + query if query else ''}"
     try:
-        return httpx.request(method, url, headers={TOKEN_HEADER: token()}, timeout=TIMEOUT)
+        headers = {TOKEN_HEADER: token()} | ({"content-type": content_type} if content_type else {})
+        return httpx.request(method, url, headers=headers, content=body or None, timeout=TIMEOUT)
     except (httpx.HTTPError, OSError) as error:
         if link := links.links().get(machine_id):
             links.went_down(link, f"{error.__class__.__name__}: {error}")

@@ -77,3 +77,22 @@ def test_paths_that_are_not_a_sessions_own_file(elsewhere, path):
     """`/sessions/links` is the sharp one: it looks like a session id followed by a suffix, and
     it is a route of its own that the daemon answers by merging every machine."""
     assert routing.owner_of(path) is None
+
+
+def test_an_answer_to_a_slip_on_another_machine_carries_its_body(elsewhere, monkeypatch):
+    """The answer is the body. Forwarded empty, every slip on another machine was a 422."""
+    from fastapi.testclient import TestClient
+
+    from deckhand_daemon import config
+    from deckhand_daemon.app import app
+
+    carried = []
+
+    def forward(*args):
+        carried.append(args)
+
+    monkeypatch.setattr(routing.remote, "forward", forward)
+    TestClient(app).post(f"/sessions/{SID}/artifacts/ship/answer", json={"value": {"answer": True}},
+                         headers={config.TOKEN_HEADER: config.token()})
+    (_, method, _, _, body, kind) = carried[0]
+    assert method == "POST" and b'"answer"' in body and kind == "application/json"

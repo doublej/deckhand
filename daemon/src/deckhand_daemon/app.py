@@ -45,6 +45,7 @@ from .reading import routes as reading_routes
 from .settings import routes as settings_routes
 from .space import groups as space_groups
 from .space import routes as space_routes
+from .tray import routes as tray_routes
 
 
 def require_token(request: Request, x_deckhand_token: str = Header(default="")) -> None:
@@ -94,6 +95,7 @@ app.middleware("http")(browser_routes.cors)
 app.include_router(artifacts.router, dependencies=[Depends(require_token)])
 app.include_router(binding_routes.router, dependencies=[Depends(require_token)])
 app.include_router(filter_routes.router, dependencies=[Depends(require_token)])
+app.include_router(tray_routes.router, dependencies=[Depends(require_token)])
 app.include_router(link_routes.router, dependencies=[Depends(require_token)])
 app.include_router(manager_routes.router, dependencies=[Depends(require_token)])
 app.include_router(order_routes.router, dependencies=[Depends(require_token)])

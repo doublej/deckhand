@@ -36,6 +36,7 @@ from ..log import log
 from ..projects import starting, tmux
 from ..reading import asked, commands, context, readable, transcripts
 from ..reading import routes as agent_routes
+from ..tray import routes as tray_routes
 from . import registry
 
 
@@ -60,6 +61,9 @@ app.include_router(link_routes.router, dependencies=[Depends(require_token)])
 # The third, and it arrives for the same reason: a subagent's conversation is a file under
 # `<sessionId>/subagents/` on the machine that ran it, so this is the machine that can read it.
 app.include_router(agent_routes.router, dependencies=[Depends(require_token)])
+# The fourth: what is open here, for the Mac's tray. Only the open half — the feed is written by
+# the Lock Screen's sweep, which is the daemon's and not a hand's.
+app.include_router(tray_routes.here_router, dependencies=[Depends(require_token)])
 
 
 def session_or_404(session_id: str) -> sessions.Session:

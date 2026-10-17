@@ -13,6 +13,8 @@ to edit**; change `project.yml` and run `just generate`.
 `Views/Manager/` is the manager panel and everything about it, including its own `AppModel`
 extension — `deckhand/` is on the 16-file gate, so `ManagerDesk.swift` holds the state object and
 the model's half of it together, the way `Views/Rail/Linking.swift` already does.
+The panel opens on the tray (`Tray*.swift`), the manager's conversation one tap over — see
+`docs/tray.md`.
 
 `Model` holds the listing and the selection; the files beside it are one feature each
 (`Dictating`, `Controlling`, `Filtering`, `Keeping`, `Markups`, `Reading`, `Snaps`,

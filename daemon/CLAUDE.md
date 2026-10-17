@@ -42,6 +42,7 @@ plugin.py       # Deckhand's page inside utt: the manifest, its settings, its bu
 beacon.py       # saying on the LAN where this Mac answers, so the phone need not be told
 presence.py     # `laptop`, `phone` or `headset`: idle, the lock flag, the headset's beat, utt's cover
 push/           # the Lock Screen: `sending.py` is APNs, `__init__.py` is what is worth a card
+tray/           # what needs the person, on every machine, and what happened: docs/tray.md
 ```
 
 Before editing under `reading/`, `filters/` or `prompts/`, read that folder's own CLAUDE.md.

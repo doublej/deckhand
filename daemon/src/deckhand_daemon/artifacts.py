@@ -64,9 +64,6 @@ TITLE = re.compile(rb"<title[^>]*>(.*?)</title>", re.IGNORECASE | re.DOTALL)
 MAX_PAGE_BYTES = 4 * 1024 * 1024
 # How much of the answer travels in the message. The file beside the page holds all of it.
 BRIEF = 240
-# The two buttons of a confirm slip (`demos/confirm.html`), which is what makes one answerable
-# from the Lock Screen: its answer is `{"answer": true|false}` and nothing else.
-BUTTON = r'<button id="{}"[^>]*>(.*?)</button>'
 
 
 def project(session: sessions.Session) -> Path:
@@ -181,16 +178,6 @@ def answered(session: sessions.Session, artifact_id: str) -> Any:
     except (OSError, json.JSONDecodeError) as error:
         log.warning("could not read the answer to %s: %s", artifact_id, error)
         return None
-
-
-def yes_no(session: sessions.Session, artifact_id: str) -> tuple[str, str] | None:
-    """The words on a confirm slip's two buttons, yes first. None for any other page."""
-    found = page(session, artifact_id) or ""
-    said = [re.search(BUTTON.format(which), found, re.DOTALL) for which in ("yes", "no")]
-    if not all(said):
-        return None
-    yes, no = (" ".join(html.unescape(re.sub(r"<[^>]+>", "", m.group(1))).split()) for m in said)
-    return (yes, no) if yes and no else None
 
 
 def answer(session: sessions.Session, artifact_id: str, value: Any) -> dict | None:

@@ -76,7 +76,8 @@ async def forward_remote_reads(request: Request, call_next):
     # machine taking the full timeout would otherwise stall every other request the daemon is
     # serving, the phone's own listing included.
     answer = await asyncio.to_thread(
-        remote.forward, machine, request.method, request.url.path, request.url.query
+        remote.forward, machine, request.method, request.url.path, request.url.query,
+        await request.body(), request.headers.get("content-type", ""),
     )
     if answer is None:
         log.info("%s unreachable for %s", machine, request.url.path)

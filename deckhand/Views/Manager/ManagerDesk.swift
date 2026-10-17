@@ -70,6 +70,24 @@ final class ManagerDesk {
     var route: ManagerRoute?
     var pane: String?
 
+    /// Which half of the panel is showing. The tray first: the panel is where you come to see
+    /// what needs you, and the manager is who you ask about it.
+    var tab: ManagerTab = .tray
+    /// Every session that needs the person, and what happened to the ones that did.
+    var tray = TrayState()
+    /// An answer that landed but did not reach its session, said once at the top of the tray.
+    var trayNote: String?
+    /// The newest update the person has had the tray open over. Newer ones are drawn as new.
+    var seen = UserDefaults.standard.integer(forKey: ManagerDesk.seenKey)
+    /// The newest manager entry read on its own tab, so a reply landing on the tray says so.
+    var readEntry = 0
+    private static let seenKey = "deckhand.tray.seen"
+
+    func markSeen() {
+        seen = tray.cursor
+        UserDefaults.standard.set(seen, forKey: Self.seenKey)
+    }
+
     /// Fold a poll's answer in, and hand back any commands that are new enough to obey.
     func absorb(_ feed: ManagerFeed) -> [ManagerCommand] {
         if cursor == 0 { entries.removeAll() }
@@ -230,6 +248,7 @@ extension AppModel {
         switch target {
         case .manager:
             manager.route = .list
+            manager.tab = .manager
             manager.open = true
         case .session(let id):
             await refreshSessions()
