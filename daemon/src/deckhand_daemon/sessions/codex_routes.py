@@ -66,7 +66,9 @@ def _answer(wanted: tuple[str, str], suffix: str, session: Session, query: Query
     if why := REFUSED.get(wanted):
         return _refused(409, f"{session.name}: {why}")
     kind = wanted[1]
-    if kind in ("files", "agents"):
+    if kind == "agents":
+        return _agents(suffix, session, query)
+    if kind == "files":
         # Nothing to list, and so nothing a row of that listing could open.
         if suffix == kind:
             return JSONResponse({kind: []})
@@ -86,6 +88,22 @@ def _answer(wanted: tuple[str, str], suffix: str, session: Session, query: Query
         return _refused(409, f"Codex would not read {session.name}: {error}")
     # No `queued`: Codex takes the words into a turn at once, so nothing waits in an inbox.
     return JSONResponse({"turns": [t.to_json() for t in turns], "queued": [], "more": more})
+
+
+def _agents(suffix: str, session: Session, query: QueryParams) -> Response:
+    """The child threads, or one child's own conversation paged as a thread's is."""
+    try:
+        started = codex_turns.children(session.session_id)
+        if suffix == "agents":
+            return JSONResponse({"agents": [a.to_json() for a in started]})
+        child, _, rest = suffix.removeprefix("agents/").partition("/")
+        if rest != "turns" or child not in {a.id for a in started}:
+            return _refused(404, f"{session.name} started no subagent {child!r}")
+        turns, more = codex_turns.page_turns(child, _number(query, "limit", 8, 1, 200),
+                                             _number(query, "before", 0, 0, 1000))
+    except codex.CodexError as error:
+        return _refused(409, f"Codex would not read {session.name}: {error}")
+    return JSONResponse({"turns": [t.to_json() for t in turns], "more": more})
 
 
 def _control(session: Session, action: str) -> Response:

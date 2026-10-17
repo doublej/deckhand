@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 
+from ..reading.agents import Agent
 from ..reading.readable import MAX_LINE
 from ..reading.transcripts import Tool, Turn
 from . import codex
@@ -28,6 +29,8 @@ WHOLE = 4000
 RAW_ROUNDS = 50
 #: The statuses an item fails with. An item with no status succeeded by being there.
 FAILED = ("failed", "declined")
+#: What a `subAgentActivity` says last about a child that is no longer working.
+FINISHED = ("completed", "interrupted")
 
 
 def page_turns(thread_id: str, limit: int, before: int) -> tuple[list[Turn], bool]:
@@ -48,6 +51,31 @@ def raw_lines(thread_id: str, limit: int) -> list[str]:
             who = "YOU" if turn.role == "user" else "CODEX"
             lines.append(f"{clock} {who} {' '.join(turn.text.split())[:MAX_LINE]}")
     return lines[-limit:]
+
+
+def children(thread_id: str) -> list[Agent]:
+    """The subagents this thread started, newest first, as the phone's agent rows.
+
+    Codex names each child thread in a `subAgentActivity` item — `started` once, then
+    `interacted` and finally `completed` or `interrupted` — and the child is a thread of its own
+    that `thread/turns/list` reads like any other, loaded or not.
+    """
+    answer = codex.request("thread/turns/list",
+                           {"threadId": thread_id, "limit": RAW_ROUNDS, "itemsView": "full"})
+    found: dict[str, Agent] = {}
+    for played in reversed(answer.get("data") or []):
+        for item in played.get("items") or [] if isinstance(played, dict) else []:
+            if not isinstance(item, dict) or item.get("type") != "subAgentActivity":
+                continue
+            child, kind = str(item.get("agentThreadId") or ""), item.get("kind")
+            if kind == "started" and child:
+                path = str(item.get("agentPath") or "")
+                found[child] = Agent(id=child, tool_use_id=child, kind=path.rsplit("/", 1)[-1],
+                                     description=path, model=str(item.get("model") or ""),
+                                     updated_at=float(played.get("startedAt") or 0))
+            if child in found:
+                found[child].running = kind not in FINISHED
+    return list(reversed(found.values()))
 
 
 def _read(thread_id: str, count: int) -> tuple[list[Turn], bool]:
@@ -108,13 +136,15 @@ def _tool(kind: str, item: dict) -> Tool:
                     or [change.get("diff") for change in changes] or item.get("results")
                     or item.get("output") or item.get("contentItems") or item.get("savedPath")
                     or item.get("error") or "")
+    started = kind == "subAgentActivity" and item.get("kind") == "started"
     return Tool(
-        name=str(item.get("tool") or kind),
+        # The dot that started a subagent carries the child thread's id, its agent row's id.
+        name="subagent" if started else str(item.get("tool") or kind),
         detail=" ".join(call.split())[:DETAIL],
         succeeded=item.get("status") not in FAILED and item.get("success") is not False,
         call=call[:WHOLE],
         result=result[:WHOLE],
-        tool_id=str(item.get("id") or ""),
+        tool_id=str(item.get("agentThreadId") if started else item.get("id") or ""),
     )
 
 

@@ -144,3 +144,30 @@ def test_a_provider_nobody_offers_is_refused(phone, monkeypatch):
     with pytest.raises(Exception) as raised:
         anyio.run(routes.start_project_session, SHOP, "gemini")
     assert "no such provider" in str(raised.value)
+
+
+def test_a_subagent_codex_started_is_an_agent_row_that_opens(phone, monkeypatch):
+    client, _ = phone
+    child = "01a146df-e7f5-76f1-b0e2-22bb464eaacd"
+    spawned = {"id": "turn-3", "status": "completed", "startedAt": 1789316400, "items": [
+        {"type": "subAgentActivity", "id": "s1", "kind": "started", "agentThreadId": child,
+         "agentPath": "/root/rewrite_clients", "model": "gpt-5.6"},
+        {"type": "subAgentActivity", "id": "s2", "kind": "completed", "agentThreadId": child,
+         "agentPath": "/root/rewrite_clients"}]}
+    worked = {"id": "turn-c", "status": "completed", "startedAt": 1789316401, "items": [
+        {"type": "agentMessage", "id": "m", "text": "Rewrote the clients."}]}
+    real = codex.request
+
+    def request(method, params=None, timeout=None):
+        if method == "thread/turns/list":
+            return {"data": [worked] if params["threadId"] == child else [spawned]}
+        return real(method, params, timeout)
+
+    monkeypatch.setattr(codex, "request", request)
+    rows = client.get(f"/sessions/{TID}/agents").json()["agents"]
+    assert [(r["id"], r["kind"], r["running"]) for r in rows] == [(child, "rewrite_clients", False)]
+    dot = client.get(f"/sessions/{TID}/turns").json()["turns"][-1]["tools"][0]
+    assert (dot["name"], dot["tool_id"]) == ("subagent", child)
+    opened = client.get(f"/sessions/{TID}/agents/{child}/turns").json()["turns"]
+    assert [t["text"] for t in opened] == ["Rewrote the clients."]
+    assert client.get(f"/sessions/{TID}/agents/nope/turns").status_code == 404
