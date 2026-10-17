@@ -150,7 +150,7 @@ def _turns(messages: list[dict]) -> list[Turn]:
                 if not isinstance(part, dict):
                     continue
                 if part.get("type") == "reasoning" and part.get("text"):
-                    thoughts.append(str(part["text"]))
+                    thoughts.append(str(part["text"])[:WHOLE])
                 elif part.get("type") == "tool":
                     tools.append(_tool(part))
                 elif part.get("type") == "text" and str(part.get("text") or "").strip():
@@ -167,6 +167,12 @@ def _turns(messages: list[dict]) -> list[Turn]:
                               succeeded=message.get("exit") in (0, None),
                               call=str(message.get("command") or "")[:WHOLE],
                               result=str(output)[:WHOLE], tool_id=str(message.get("id") or "")))
+        elif kind == "idle" and (error := message.get("error")) and not (
+                found and found[-1].text.startswith("Stopped:")):
+            # A run that failed before any step could say so: a revoked token, a dead provider.
+            found.append(Turn(role="assistant", text=f"Stopped: {_error(error)}", timestamp=when,
+                              tools=tools, thoughts=thoughts))
+            tools, thoughts = [], []
         elif kind == "compaction" and message.get("status") == "completed":
             tools.append(Tool(name="compaction", detail=str(message.get("reason") or ""),
                               result=str(message.get("summary") or "")[:WHOLE],
@@ -197,7 +203,8 @@ def _tool(part: dict) -> Tool:
                        if isinstance(c, dict) and c.get("type") == "text")
     if status == "error":
         result = _error(state.get("error")) + (f"\n{result}" if result else "")
-    child = (state.get("metadata") or {}).get("sessionID")
+    meta = state.get("metadata") or {}
+    child = meta.get("sessionID") or meta.get("sessionId")  # `task`, the older tool, spells it so
     return Tool(
         name=str(part.get("name") or "tool"),
         detail=" ".join(detail.split())[:DETAIL],

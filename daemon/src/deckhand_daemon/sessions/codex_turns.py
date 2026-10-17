@@ -76,9 +76,21 @@ def _turns(played: dict) -> list[Turn]:
                               timestamp=ended, tools=tools, thoughts=thoughts))
             tools, thoughts = [], []
         elif kind == "reasoning":
-            thoughts.extend(str(line) for line in item.get("summary") or [] if line)
+            # The summary is empty unless Codex is configured to write one
+            # (`model_reasoning_summary`); the raw reasoning is the fallback.
+            said = item.get("summary") or item.get("content") or []
+            thoughts.extend(str(line)[:WHOLE] for line in said if line)
         elif kind:
             tools.append(_tool(kind, item))
+    if error := played.get("error"):
+        why = error.get("message") if isinstance(error, dict) else error
+        found.append(Turn(role="assistant", text=f"Stopped: {why or 'an error'}", timestamp=ended,
+                          tools=tools, thoughts=thoughts))
+        tools, thoughts = [], []
+    elif played.get("status") == "interrupted":
+        found.append(Turn(role="assistant", text="Stopped.", timestamp=ended, tools=tools,
+                          thoughts=thoughts))
+        tools, thoughts = [], []
     if tools or thoughts:
         found.append(Turn(role="assistant", text="", timestamp=ended, tools=tools,
                           thoughts=thoughts))
@@ -89,9 +101,13 @@ def _tool(kind: str, item: dict) -> Tool:
     """Anything a round did that is neither words nor reasoning, as a dot under the next reply."""
     changes = [change for change in item.get("changes") or [] if isinstance(change, dict)]
     call = _plain(item.get("command") or item.get("query") or item.get("arguments")
-                  or [change.get("path") for change in changes] or item.get("text") or "")
+                  or [change.get("path") for change in changes] or item.get("path")
+                  or item.get("prompt") or item.get("revisedPrompt") or item.get("agentPath")
+                  or item.get("text") or "")
     result = _plain(item.get("aggregatedOutput") or item.get("result")
-                    or [change.get("diff") for change in changes] or "")
+                    or [change.get("diff") for change in changes] or item.get("results")
+                    or item.get("output") or item.get("contentItems") or item.get("savedPath")
+                    or item.get("error") or "")
     return Tool(
         name=str(item.get("tool") or kind),
         detail=" ".join(call.split())[:DETAIL],

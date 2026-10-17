@@ -183,8 +183,9 @@ public struct Tool: Codable, Hashable, Sendable, Identifiable {
     public var id: String { toolId.isEmpty ? "\(name)\(detail)\(succeeded)" : toolId }
 
     /// A subagent, rather than something this session ran itself. `Task` is the older spelling
-    /// and still appears in transcripts written before it changed; `subagent` is OpenCode's.
-    public var isAgent: Bool { name == "Agent" || name == "Task" || name == "subagent" }
+    /// and still appears in transcripts written before it changed; `subagent` is OpenCode's, and
+    /// `task` its older spelling.
+    public var isAgent: Bool { ["Agent", "Task", "subagent", "task"].contains(name) }
 
     /// What a tool does, which is the only thing a single dot has room to say. Reading,
     /// changing and running are worth telling apart at a glance; the exact tool is a tap away.
@@ -199,9 +200,9 @@ public struct Tool: Codable, Hashable, Sendable, Identifiable {
         case "Read", "Grep", "Glob", "NotebookRead", "read", "grep", "glob", "list": .reading
         case "Edit", "Write", "NotebookEdit", "MultiEdit", "edit", "write", "apply_patch":
             .changing
-        case "Bash", "BashOutput", "KillBash", "shell": .running
+        case "Bash", "BashOutput", "KillBash", "shell", "bash": .running
         case "Task", "Agent", "WebFetch", "WebSearch", "AskUserQuestion",
-             "subagent", "webfetch", "websearch", "question": .asking
+             "subagent", "task", "webfetch", "websearch", "question": .asking
         default: .other
         }
     }

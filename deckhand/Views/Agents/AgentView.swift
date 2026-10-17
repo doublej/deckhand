@@ -53,7 +53,7 @@ struct AgentView: View {
                 ForEach(Array(turns.enumerated()), id: \.offset) { index, turn in
                     VStack(alignment: .leading, spacing: Spacing.xxs) {
                         if !turn.tools.isEmpty { ToolTrace(tools: turn.tools) }
-                        if !turn.text.isEmpty {
+                        if !turn.text.isEmpty || !turn.thoughts.isEmpty {
                             TurnCard(turn: turn, showsRole: startsRun(index), theirWord: "AGENT")
                         }
                     }

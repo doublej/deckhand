@@ -128,4 +128,6 @@ def wrote_of(entry: dict) -> str:
     as an ordinary `user` entry when the session was idle and as a `queued_command` attachment
     when it was mid-run — and the phone has to say the same thing about them either way.
     """
+    if entry.get("isCompactSummary"):
+        return "the compaction"  # Claude Code's summary of what came before, not the person
     return machinery.wrote(queued(entry) or blocks_of(entry) or "")

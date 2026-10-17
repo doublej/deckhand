@@ -49,7 +49,8 @@ struct TranscriptView: View {
                                 AgentTrace(tools: started, agents: model.agents) { reading = $0 }
                             }
                             if !steps.isEmpty { ToolTrace(tools: steps) }
-                            if !turn.text.isEmpty {
+                            // Thinking with no words yet is a run in flight, and worth seeing.
+                            if !turn.text.isEmpty || !turn.thoughts.isEmpty {
                                 TurnCard(turn: turn,
                                          showsRole: startsRun(index),
                                          theirWord: session.theirWord,

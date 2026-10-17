@@ -99,6 +99,17 @@ struct TurnDecodingTests {
         #expect(turn.tools.first?.kind == .running)
     }
 
+    @Test("OpenCode's older tool names read as the newer ones do")
+    func olderOpenCodeNames() throws {
+        let json = """
+            {"role":"assistant","text":"","timestamp":"t",
+             "tools":[{"name":"task","detail":"find callers"},{"name":"bash","detail":"ls"}]}
+            """
+        let turn = try JSONDecoder().decode(Turn.self, from: Data(json.utf8))
+        #expect(turn.tools[0].isAgent)
+        #expect(turn.tools[1].kind == .running)
+    }
+
     @Test("a stamp with fractional seconds reads, which is the one the Mac actually sends")
     func fractional() {
         // Claude Code writes the transcript with milliseconds, and the default
