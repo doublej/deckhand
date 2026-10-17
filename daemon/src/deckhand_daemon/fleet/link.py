@@ -125,9 +125,11 @@ def links() -> dict[str, Link]:
     """Every remote machine's link, made on first ask. The primary has none: it is this Mac."""
     from .registry import machines
 
-    for index, machine in enumerate(m for m in machines() if not m.is_primary):
-        if machine.id not in _links:
-            _links[machine.id] = Link(machine=machine, port=FIRST_LOCAL_PORT + index)
+    for machine in machines():
+        if not machine.is_primary and machine.id not in _links:
+            # By count, not registry position: a host added while running would otherwise be
+            # handed a port an existing link already forwards on.
+            _links[machine.id] = Link(machine=machine, port=FIRST_LOCAL_PORT + len(_links))
     return _links
 
 
