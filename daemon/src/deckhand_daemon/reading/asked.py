@@ -12,10 +12,10 @@ import json
 from datetime import UTC, datetime
 
 from ..config import data_dir
-from .entries import MACHINE, text_of, unwrap
+from .activity import describe
+from .entries import MACHINE, text_of, unwrap, wrote_of
 from .transcripts import (
     TAIL_WINDOWS,
-    describe,
     parse_line,
     tail_lines,
     transcript_path,
@@ -43,7 +43,13 @@ def asks_of(session_id: str, cap: int = 8_000) -> str:
         if entry is None or entry.get("isSidechain"):
             continue
         if entry.get("type") == "user" and (said := text_of(entry)):
-            asks.append((said[:MAX_ASK], []))
+            # Only the person's words are asks. Another agent or a background task arriving here
+            # is something that happened to the work, so it goes in the trace.
+            if who := wrote_of(entry):
+                if asks:
+                    asks[-1][1].append(f"{who} said: {said}")
+            else:
+                asks.append((said[:MAX_ASK], []))
         elif entry.get("type") == "assistant" and asks:
             asks[-1][1].extend(describe(entry))
     # Their words whole, the work between them trimmed to its tail: the list is written from

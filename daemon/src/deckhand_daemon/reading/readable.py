@@ -15,10 +15,10 @@ from __future__ import annotations
 
 import json
 
+from .activity import describe
 from .transcripts import (
     TAIL_WINDOWS,
     absorbed,
-    describe,
     parse_line,
     tail_lines,
     text_of,

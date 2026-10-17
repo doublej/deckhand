@@ -30,7 +30,8 @@ from . import sessions, summarize, tasks
 from .config import data_dir
 from .log import log
 from .reading import asked, transcripts
-from .sessions import opencode, opencode_turns
+from .reading.activity import activity_since_last_user
+from .sessions import live, opencode, opencode_turns
 
 # The providers a briefing can be written for: those with a history to read.
 BRIEFED = ("claude", opencode.PROVIDER)
@@ -165,7 +166,11 @@ def _next() -> str | None:
     """
     global _cursor
     # A Codex thread has no transcript to write a briefing from, so it is never in the cycle.
-    live = [s.session_id for s in sessions.live_sessions() if s.provider in BRIEFED]
+    # Nor is an Agent SDK run — this daemon's own briefings and manager among them, which were
+    # being briefed in their turn whenever the daemon ran in a pane: a summary of a summary.
+    runs = _model_runs()
+    live = [s.session_id for s in sessions.live_sessions()
+            if s.provider in BRIEFED and s.pid not in runs]
     while _bumped:
         wanted = _bumped.pop(0)
         if wanted not in live:
@@ -247,12 +252,30 @@ def _read(session_id: str) -> tuple[str, str]:
     reads as nothing new rather than taking the worker down with it.
     """
     if not opencode.owns(session_id):
-        return asked.asks_of(session_id), transcripts.activity_since_last_user(session_id)
+        return asked.asks_of(session_id), activity_since_last_user(session_id)
     try:
         return "", opencode_turns.activity(session_id)
     except opencode.OpenCodeError as error:
         log.warning("briefing for %s: OpenCode did not answer: %s", session_id, error)
         return "", ""
+
+
+def _model_runs() -> set[int]:
+    """The pids whose session record says the Agent SDK started them, not a person."""
+    return {r["pid"] for r in live._records() if r.get("entrypoint") == "sdk-py"}
+
+
+def _state(session_id: str) -> str:
+    """Whether the session is working now or its turn has ended, and the time, for the model."""
+    now = time.strftime("%H:%M")
+    if opencode.owns(session_id):
+        found = next((s for s in sessions.live_sessions() if s.session_id == session_id), None)
+        ended = found.updated_at if found and found.status != "busy" else 0.0
+    else:
+        ended = transcripts.turn_ended(session_id)
+    if not ended:
+        return f"working now (it is {now})"
+    return f"turn ended at {time.strftime('%H:%M', time.localtime(ended))}; it is {now} now"
 
 
 def _hash(session_id: str) -> str:
@@ -267,8 +290,9 @@ async def _write(session_id: str) -> None:
     # thinking is a session that has done something new, and marking it current would swallow that.
     moved = await asyncio.to_thread(_mark, session_id) or 0.0
     asks, activity = await asyncio.to_thread(_read, session_id)
+    state = await asyncio.to_thread(_state, session_id)
     fingerprint = hashlib.sha256(f"{asks}\n\n{activity}".encode()).hexdigest()
-    summary, error = await summarize.summarize(session_id, activity, asks)
+    summary, error = await summarize.summarize(session_id, activity, asks, state)
     if summary is None and error is None:
         # Nothing said and nothing wrong: the session has done nothing since they last spoke.
         # Still worth recording, or it is asked again on every sweep for the rest of the day.

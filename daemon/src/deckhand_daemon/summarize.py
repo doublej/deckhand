@@ -80,17 +80,17 @@ def _count(session_id: str, usage: dict | None) -> None:
 
 
 async def summarize(
-    session_id: str, activity: str, asks: str = ""
+    session_id: str, activity: str, asks: str = "", state: str = ""
 ) -> tuple[str | None, str | None]:
     """Returns (summary, error). Never raises: a session without a summary is still usable."""
     if not activity.strip() and not asks.strip():
         return None, None
-    summary, error, usage = await _run(_prompt(session_id, activity, asks), session_id)
+    summary, error, usage = await _run(_prompt(session_id, activity, asks, state), session_id)
     _count(session_id, usage)
     return summary, error
 
 
-def _prompt(session_id: str, activity: str, asks: str) -> str:
+def _prompt(session_id: str, activity: str, asks: str, state: str = "") -> str:
     """The evidence in tags the system prompt names, and the ask after it.
 
     Uppercase headings left the boundary between what to do and what to read implicit, which is
@@ -99,6 +99,10 @@ def _prompt(session_id: str, activity: str, asks: str) -> str:
     to point at, and an empty `asks` no longer leaves the transcript unlabelled.
     """
     blocks = [f"<task_list>\n{tasks.render(session_id)}\n</task_list>"]
+    # Whether it is working now is a fact the daemon has and the activity does not say: without
+    # it the model guessed, and one headline in eight read "Status unclear".
+    if state:
+        blocks.append(f"<state>\n{state}\n</state>")
     if asks.strip():
         blocks.append(f"<asks>\n{asks}\n</asks>")
     if activity.strip():

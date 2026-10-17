@@ -166,46 +166,6 @@ def _at(stamp: object) -> float:
         return 0.0
 
 
-def activity_since_last_user(session_id: str, cap: int = 12_000) -> str:
-    """What the session has done since the person last spoke, as plain text to summarise.
-
-    Unlike `read_turns` this keeps the tool calls: what a session did is mostly what it ran.
-    """
-    path = transcript_path(session_id)
-    if path is None:
-        return ""
-    lines = tail_lines(path, TAIL_WINDOWS[1])
-    events: list[str] = []
-    for raw in lines:
-        entry = parse_line(raw)
-        if entry is None or entry.get("isSidechain"):
-            continue
-        if entry.get("type") == "user" and text_of(entry) is not None:
-            events = []  # the person spoke: everything before that is old news
-            continue
-        events.extend(describe(entry))
-    return "\n".join(events)[-cap:]
-
-
-def describe(entry: dict) -> list[str]:
-    """One line per thing the session did, in the order it did them."""
-    if entry.get("type") != "assistant":
-        return []
-    content = entry.get("message", {}).get("content")
-    if not isinstance(content, list):
-        return []
-    lines = []
-    for block in content:
-        if not isinstance(block, dict):
-            continue
-        if block.get("type") == "text" and block.get("text", "").strip():
-            lines.append(f"said: {block['text'].strip()[:600]}")
-        elif block.get("type") == "tool_use":
-            detail = json.dumps(block.get("input", {}))[:200]
-            lines.append(f"ran {block.get('name', 'a tool')}: {detail}")
-    return lines
-
-
 def read_turns(session_id: str, limit: int = 8) -> list[Turn]:
     """The last `limit` conversation turns, oldest first."""
     return page_turns(session_id, limit)[0]

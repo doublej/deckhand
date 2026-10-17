@@ -63,7 +63,7 @@ def raw_lines(session_id: str, limit: int) -> list[str]:
 
 def activity(session_id: str, cap: int = 12_000) -> str:
     """What the session has done since it was last spoken to, in the lines
-    `transcripts.activity_since_last_user` writes, so a briefing reads both providers alike."""
+    `activity.activity_since_last_user` writes, so a briefing reads both providers alike."""
     events: list[str] = []
     for turn in _turns(_messages(session_id, RAW_MESSAGES)[0]):
         if turn.role == "user":

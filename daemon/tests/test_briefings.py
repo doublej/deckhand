@@ -283,3 +283,47 @@ def test_bumping_one_session_over_and_over_is_one_request(claude_home):
     briefings.save(SID, {"summary": "a", "hash": "old", "mtime": 0.0,
                          "written_at": time.time() - briefings.SAME_SESSION - 1})
     assert briefings._next() == SID  # and honoured once the floor is out
+
+
+PEER = ('Another Claude session sent a message:\n<teammate-message teammate_id="verifier" '
+        'summary="green">All 40 tests pass.</teammate-message>')
+
+
+def ran(description, command):
+    return {"type": "assistant", "timestamp": "2026-09-09T10:00:02Z", "message": {
+        "stop_reason": "tool_use", "content": [
+            {"type": "tool_use", "name": "Bash",
+             "input": {"command": command, "description": description}}]}}
+
+
+def test_another_agent_is_a_line_in_the_activity_not_the_person_starting_over(claude_home):
+    """40% of `user` entries were agents and notices, and each wiped the activity it followed."""
+    transcript(claude_home, SID, [said("ship the fix"), ran("Run the suite", "just check"),
+                                  said(PEER), did("Shipped.")])
+    activity = briefings.activity_since_last_user(SID)
+    assert activity.startswith("ran Bash: Run the suite")
+    assert "verifier said:" in activity and activity.endswith("said: Shipped.")
+    asks = briefings.asked.asks_of(SID)
+    assert asks.count("ASKED:") == 1 and "ASKED: ship the fix" in asks
+
+
+def test_the_last_thing_said_is_kept_whole_enough_to_carry_its_result(claude_home):
+    transcript(claude_home, SID, [said("go"), did("a" * 900), did("b" * 1500)])
+    lines = briefings.activity_since_last_user(SID).splitlines()
+    assert len(lines[0]) == len("said: ") + 600 and len(lines[1]) == len("said: ") + 1500
+
+
+def test_the_model_is_told_whether_the_session_is_working(claude_home):
+    transcript(claude_home, SID, [said("go"), ran("Run the suite", "just check")])
+    assert briefings._state(SID).startswith("working now")
+    transcript(claude_home, SID, [said("go"), {**did("Done."), "message": {
+        "stop_reason": "end_turn", "content": [{"type": "text", "text": "Done."}]}}])
+    assert briefings._state(SID).startswith("turn ended at ")
+    assert "<state>\nworking now" in briefings.summarize._prompt(SID, "x", "", "working now")
+
+
+def test_an_agent_sdk_run_is_never_briefed(claude_home):
+    """This daemon's own briefing and manager runs are session records too."""
+    record = claude_home / "sessions" / "4242.json"
+    record.write_text(json.dumps(json.loads(record.read_text()) | {"entrypoint": "sdk-py"}))
+    assert briefings._model_runs() == {4242}
