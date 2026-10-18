@@ -24,7 +24,10 @@ import json
 import os
 import shutil
 import subprocess
+import time
 from pathlib import Path
+
+from .. import config
 
 #: OpenCode's subcommands (`opencode --help`, 2.0.31). A process whose first word is one of these
 #: is a tool run from a shell, not a TUI. `mini` is an interface too, but it keeps no TUI tabs.
@@ -37,6 +40,9 @@ VALUED = frozenset({"--server", "--session", "-s", "--prompt", "--log-level", "-
 NO_TTY = frozenset({"??", "?", "-"})
 #: What each probe waits. These run while the listing is being built, under its lock.
 PROBE = 2.0
+
+#: The sessions the person closed from Deckhand, in its own state folder.
+CLOSED = "opencode-closed.json"
 
 #: pid -> the folder that TUI keys its tabs by, or "" for an `opencode` process that is no TUI.
 #: A running process does not change what it was started as, so each pid is asked once and
@@ -62,6 +68,26 @@ def open_sessions(state: Path) -> set[str] | None:
     for folder in folders:
         found |= tabs.get(folder, set())
     return found
+
+
+def close(session_id: str) -> None:
+    """Take a session off the listing until anything touches it again.
+
+    OpenCode 2.0.31 has no archive, its DELETE takes the conversation with it, and a TUI's tabs
+    cannot be closed from outside that TUI. So closing is Deckhand's own: the history stays
+    OpenCode's, and the session comes back the moment its `updated` moves past the close.
+    """
+    kept = closed()
+    kept[session_id] = time.time() * 1000  # OpenCode's own milliseconds
+    (config.data_dir() / CLOSED).write_text(json.dumps(kept))
+
+
+def closed() -> dict[str, float]:
+    """session id -> when the person closed it. Nothing closed yet is an empty answer."""
+    try:
+        return json.loads((config.data_dir() / CLOSED).read_text())
+    except (OSError, json.JSONDecodeError):
+        return {}
 
 
 def clients() -> set[str] | None:

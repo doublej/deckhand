@@ -5,7 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 from opencode_fake import NOW, SHOP, info
 
-from deckhand_daemon import config, filters
+from deckhand_daemon import config, filters, sessions
 from deckhand_daemon.app import app
 from deckhand_daemon.orders import kept
 from deckhand_daemon.projects import routes, sources, starting
@@ -155,16 +155,15 @@ def test_a_slash_runs_a_command_and_else_hands_over_a_skill(phone):
     assert taken is None and "no command or skill called /nothing" in why
 
 
-def test_stop_and_compact_are_opencodes_and_claude_codes_controls_are_refused(phone):
+def test_stop_and_compact_are_opencodes_and_claude_codes_clear_is_refused(phone):
     client, fake = phone
     assert client.post(f"/sessions/{SID}/control", params={"action": "cancel"}).json() == {
         "sent": "cancel"}
     assert fake.calls[-1][1] == f"/api/session/{SID}/interrupt"
     assert client.post(f"/sessions/{SID}/control", params={"action": "compact"}).status_code == 200
     assert fake.calls[-1][1] == f"/api/session/{SID}/compact"
-    for action in ("clear", "exit"):
-        refused = client.post(f"/sessions/{SID}/control", params={"action": action})
-        assert refused.status_code == 409 and action in refused.json()["detail"]
+    refused = client.post(f"/sessions/{SID}/control", params={"action": "clear"})
+    assert refused.status_code == 409 and "clear" in refused.json()["detail"]
     for method, suffix in (("GET", "context"), ("POST", "focus")):
         assert client.request(method, f"/sessions/{SID}/{suffix}").status_code == 409
 
@@ -211,3 +210,13 @@ def _row(client):
 
     client.get("/sessions")
     return next(s for s in sessions.live_sessions() if s.session_id == SID)
+
+
+def test_exit_takes_it_off_the_listing_until_it_is_touched_again(phone):
+    client, fake = phone
+    assert client.post(f"/sessions/{SID}/control", params={"action": "exit"}).json() == {
+        "sent": "exit"}
+    assert not any(c[0] == "DELETE" for c in fake.calls)  # the conversation stays OpenCode's
+    assert SID not in {s.session_id for s in sessions.live_sessions()}
+    fake.sessions[SID]["time"]["updated"] = 10**13  # spoken to again, after the close
+    assert SID in {s.session_id for s in sessions.live_sessions()}

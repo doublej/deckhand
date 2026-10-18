@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING
 from .. import prompts
 from ..log import log
 from ..reading.commands import Command
-from . import opencode
+from . import opencode, opencode_tabs
 from .opencode import OpenCodeError
 
 if TYPE_CHECKING:
@@ -116,15 +116,18 @@ def commands(session: Session) -> list[Command]:
 
 
 def control(session: Session, action: str) -> str | None:
-    """Stop and compact are OpenCode's own verbs. Clear and exit have no OpenCode equivalent."""
+    """Stop and compact are OpenCode's own verbs, and exit closes it here (`opencode_tabs.close`).
+    Clear has no OpenCode equivalent."""
     try:
         if action == "cancel":
             if not _interrupt(session.session_id):
                 return f"{session.name} has nothing running to stop"
         elif action == "compact":
             opencode.request("POST", f"/api/session/{session.session_id}/compact", {})
+        elif action == "exit":
+            opencode_tabs.close(session.session_id)
         else:
-            return (f"{session.name} is an OpenCode session: it stops and compacts, and "
+            return (f"{session.name} is an OpenCode session: it stops, compacts and closes, and "
                     f"{action} is Claude Code's own command")
     except OpenCodeError as error:
         return f"OpenCode would not {action} {session.name}: {error}"

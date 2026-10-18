@@ -190,7 +190,9 @@ def records() -> list[dict]:
         running = _roots_of(set(request("GET", "/api/session/active", timeout=TIMEOUT)
                                 .get("data") or {}))
         opened = opencode_tabs.open_sessions(registration_path().parent)
-        found = _recent(running | (opened or set()))
+        closed = opencode_tabs.closed()
+        found = [info for info in _recent((running | (opened or set())) - set(closed))
+                 if _updated(info) > closed.get(info["id"], -1)]
     except OpenCodeError as error:
         if ok or not at:
             log.warning("opencode sessions unavailable: %s", error)
