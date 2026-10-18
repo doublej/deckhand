@@ -302,9 +302,15 @@ def build(described: dict[str, str]) -> list:
     async def show_on_phone(args: dict) -> dict:
         return on_phone(str(args.get("action", "")), str(args.get("target", "")))
 
+    @tool("look", described["look"], {"path": str, "session": str}, annotations=reads)
+    async def look(args: dict) -> dict:
+        from .looking import look as get
+
+        return await get(str(args.get("path", "")), str(args.get("session", "")))
+
     made = [list_sessions, read_session, list_projects, read_settings, read_context,
             say_to_session, set_orders, start_session, start_scratch_session, set_switch,
-            focus_session, show_on_phone]
+            focus_session, show_on_phone, look]
     if len(made) != len(TOOLS):
         log.warning("the manager's tool list and TOOLS have drifted apart")
     return made
@@ -317,5 +323,5 @@ TOOLS = tuple(
     f"mcp__deckhand__{name}"
     for name in ("list_sessions", "read_session", "list_projects", "read_settings",
                  "read_context", "say_to_session", "set_orders", "start_session",
-                 "start_scratch_session", "set_switch", "focus_session", "show_on_phone")
+                 "start_scratch_session", "set_switch", "focus_session", "show_on_phone", "look")
 )

@@ -50,7 +50,7 @@ def test_mcp_over_http_takes_a_manager_token_that_opens_nothing_else(token):
         answered = c.post("/mcp", json=listed, headers={**accept, "authorization": f"Bearer {scoped}"})
     assert answered.status_code == 200
     names = {tool["name"] for tool in answered.json()["result"]["tools"]}
-    assert len(names) == 14 and {"tmux_tree", "tmux_arrange"} <= names
+    assert len(names) == 15 and {"tmux_tree", "tmux_arrange"} <= names
     # The scope is the point: the same token is refused by every other route.
     assert not pairing.allows(scoped)
     other = TestClient(app)

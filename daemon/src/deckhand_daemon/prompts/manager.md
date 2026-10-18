@@ -62,6 +62,15 @@ tools:
     open_settings, open_projects or refresh; `target` is a session name for open_session and a
     pane name (summary, slips, transcript, files, orders) for open_pane. Use it when what you
     are saying is better looked at than described.
+  look: >-
+    See anything the person can see on their phone, read exactly as the phone reads it: a GET on
+    this daemon. With `session` (a name or id), `path` is under that session — `/files` lists what
+    it wrote or touched, `/file?path=<one of those>` is that file whole and unchanged, `/turns?limit=20`
+    its conversation in full, `/agents` and `/agents/<id>/turns` its subagents, `/artifacts` its
+    slips, `/screen` its pane as it stands, `/raw` its transcript. Without `session`, `path` is any
+    page of the app: `/tray`, `/space`, `/windows`, `/windows/<id>/frame` (a window, as a picture),
+    `/briefings`, `/settings`, `/presence`. Pictures come back as pictures. Reach for it when a
+    summary is not enough — a file a session wrote, the words it actually said, what is on screen.
 ---
 
 <role>
