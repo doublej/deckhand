@@ -556,7 +556,7 @@ inside a helper is not listed, so treat the column as the least a route can answ
 | `GET /sessions/{session_id}/space` | — | 200 | 401, 404, 422 | Where this session stands in the headset and what stands with it (`space/around.py`). |
 | `POST /space/sessions` | body: JSON object | 201 | 400, 401, 404, 422 | Start a session in `path` that stands beside the session `near` in the headset, in its group, until it is moved. The listing and the trust record gate it exactly as they gate `POST /projects/session`, which does the starting; a folder inside a listed repo is taken as that repo, since a session's own folder is the one an agent knows. |
 | `DELETE /space/planes/{plane_id}` | `?by`: string = "" | 204 | 401, 404, 422 | Close a page or window; its pose goes with it. No `by` is the person, and the session it stood beside is told. An agent passes its own name as `by`, as it does opening one, and nobody is told: what an agent closed is its own news. Never a session — none is kept here. |
-| `PUT /space/poses/{key}` | body: JSON object | 204 | 400, 401, 404, 422 | `{x, y, z, yaw, pitch?, roll?, scale?, group?, minimized?, pin?}` for `session:<id>`, `plane:<id>`, `manager`, `projects`, `launcher`, `monitor` or `camera`. The headset's to call. |
+| `PUT /space/poses/{key}` | body: JSON object | 204 | 400, 401, 404, 422 | `{x, y, z, yaw, pitch?, roll?, scale?, group?, minimized?, pin?}` for `session:<id>`, `plane:<id>`, `manager`, `projects`, `launcher`, `monitor`, `camera` or `why`. The headset's to call. |
 
 ### saying
 
