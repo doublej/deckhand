@@ -136,7 +136,7 @@ def test_closing_a_plane_drops_it_and_its_pose(client, head):
 
 
 @pytest.mark.parametrize(
-    "key", [f"session:{LIVE}", "manager", "projects", "launcher", "monitor", "camera"]
+    "key", [f"session:{LIVE}", "manager", "projects", "launcher", "monitor", "camera", "why"]
 )
 def test_every_kind_of_key_can_be_placed(client, head, key):
     pose = {"x": 0, "y": 1.2, "z": -1, "yaw": -3.1, "stray": True}

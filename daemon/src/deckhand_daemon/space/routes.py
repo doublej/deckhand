@@ -43,8 +43,8 @@ router.include_router(camera.router)
 LOOPBACK = {"localhost", "127.0.0.1", "0.0.0.0", "::1"}
 #: The fixed planes, which are neither a session nor a kept plane; `monitor` is the headset's
 #: own, what its camera sees, and kept here so it can stand in a group like any plane, and
-#: `camera` is where the camera itself stands.
-FIXED = {"manager", "projects", "launcher", "monitor", "camera"}
+#: `camera` is where the camera itself stands; `why` is the headset's own log plane.
+FIXED = {"manager", "projects", "launcher", "monitor", "camera", "why"}
 GROUP = re.compile(r"[A-Za-z0-9_-]{1,64}")
 MIN_SCALE, MAX_SCALE = 0.25, 4.0
 #: Further from the floor origin than this is a pose gone wrong, not a room.
@@ -179,13 +179,13 @@ async def close_plane(plane_id: str, by: str = "") -> Response:
 @router.put("/space/poses/{key}", status_code=204)
 async def place(key: str, sent: Annotated[dict, Body()]) -> Response:
     """`{x, y, z, yaw, pitch?, roll?, scale?, group?, minimized?, pin?}` for `session:<id>`,
-    `plane:<id>`, `manager`, `projects`, `launcher`, `monitor` or `camera`. The headset's to
+    `plane:<id>`, `manager`, `projects`, `launcher`, `monitor`, `camera` or `why`. The headset's to
     call."""
     kind, _, rest = key.partition(":")
     if not (key in FIXED or (kind in ("session", "plane") and rest)):
         raise HTTPException(
             status_code=400,
-            detail="key must be session:<id>, plane:<id>, manager, projects, launcher, monitor or camera",
+            detail="key must be session:<id>, plane:<id>, manager, projects, launcher, monitor, camera or why",
         )
     if kind == "plane" and not await asyncio.to_thread(stored.has_plane, rest):
         raise HTTPException(status_code=404, detail="no plane with that id")

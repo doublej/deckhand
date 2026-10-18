@@ -33,7 +33,7 @@ Every route needs `x-deckhand-token`.
   (`prompts/space-taken.md`); `close_plane` and `deckhand close` pass the calling session's name,
   so an agent closing a page is not reported as the person closing it.
 - `PUT /space/poses/{key}` `{x, y, z, yaw}` → 204. Keys are `session:<id>`, `plane:<id>`,
-  `manager`, `projects`, `launcher`, `monitor` and `camera` (below). Every number finite, and no further than 20 m from the floor
+  `manager`, `projects`, `launcher`, `monitor`, `camera` (below) and `why`, the headset's log plane. Every number finite, and no further than 20 m from the floor
   origin. A `plane:` key for a plane that is not open is a 404.
 - `GET /windows` → `[{id, app, title, w, h, cropped}]`, `GET /windows/{id}/frame` one JPEG,
   `GET /windows/{id}/stream?fps=&max=&q=` MJPEG, `GET /windows/{id}/hevc?…` the same window as HEVC
