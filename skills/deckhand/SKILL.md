@@ -126,18 +126,18 @@ tokens are injected, so use the custom properties. The page answers through six 
 
 ```js
 window.deckhand.respond(value)  // any JSON value. May be called more than once.
+window.deckhand.keep(value)     // the unsent draft, kept on the phone. keep(null) drops it.
 window.deckhand.close()         // dismiss the viewer
 window.deckhand.artifact        // { id, title }
 window.deckhand.answer          // what was answered last time, or null
+window.deckhand.draft           // what keep() last held, or null. Newer than answer.
 ```
 
-window.deckhand.keep(value)     // the unsent draft, kept on the phone. keep(null) drops it.
 **A reopened page must prefill from `window.deckhand.draft ?? window.deckhand.answer`.** The row
 that opened it says "answered"; an empty form under that is the page lying about its own state.
 **Call `keep` on every change** in a page that takes more than one tap to answer — the page has no
 storage of its own, so without it closing the screen loses everything not yet sent.
 
-window.deckhand.draft           // what keep() last held, or null. Newer than answer.
 ## Asking several things at once, out loud
 
 A phone dictates better than it types, so a page can **declare** its questions rather than only
@@ -215,6 +215,15 @@ and you are expected to say so rather than assume otherwise.
 A ` ```mermaid ` fence in what you **say** renders as a picture on the phone — transcript,
 briefing and report alike. It does **not** render inside a slip: that CSP sandboxes the page, and
 the renderer is injected into the transcript view rather than carried. Draw in a slip with SVG.
+
+## The project's header
+
+The phone draws `.deckhand/header.jpg` (or `.png`/`.webp`) faintly behind the session page's title.
+If it is missing and the project already has a picture that suits a wide banner — logo, hero,
+screenshot, cover art — make one once, **without asking**: about 1200×360, under 300 KB, calm
+enough for a title over it. `sips --resampleWidth 1200 SRC --out TMP`, then
+`sips --cropToHeightWidth 360 1200 TMP --out .deckhand/header.jpg -s format jpeg`; put `*` in
+`.deckhand/.gitignore` if it is not there. No suitable picture: skip it.
 
 ## What this never does
 

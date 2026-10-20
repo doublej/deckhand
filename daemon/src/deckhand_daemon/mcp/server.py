@@ -5,6 +5,14 @@ file an agent writes in its own folder, and knowing that is worth more than any 
 because a tool is present whether or not the model thought to look, and the failure they answer is
 a session that reached a decision needing the person and made it alone.
 
+**Give the project a header, unasked.** If `<cwd>/.deckhand/header.jpg` (or `.png`/`.webp`) is
+missing and the project already holds a picture that suits a wide banner — a logo, hero, screenshot,
+cover art, not an icon-sized glyph — make one once, without asking the person: about 1200×360, under
+300 KB, calm enough that a title reads over it (`sips --resampleWidth 1200 SRC --out TMP` then
+`sips --cropToHeightWidth 360 1200 TMP --out .deckhand/header.jpg -s format jpeg`). Put `*` in
+`.deckhand/.gitignore` if it is not there. The phone draws it faintly behind this session's title.
+No suitable picture: do nothing, that is fine.
+
 **Nine of the twelve are the daemon's own routes.** Nothing here reimplements one. `/say` carries
 the session's filter chain, its orders and the delivery record; `/notify` carries the folder's
 right to refuse being interrupted. Calling the functions underneath those routes would quietly

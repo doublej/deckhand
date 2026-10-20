@@ -9,6 +9,16 @@ public extension DeckhandClient {
     /// kilobytes over a LAN, and a picker that can only filter what it has already fetched is the
     /// one thing a picker must not be. The Mac caches this for a minute, so opening and closing
     /// the sheet twice costs it nothing.
+    /// The project's header picture, as the file's bytes — nil where it has none, which is the
+    /// ordinary answer and not an error.
+    func header(of sessionId: String) async throws -> Data? {
+        do {
+            return try await send(request(.get, "sessions/\(sessionId)/header"))
+        } catch DeckhandError.notLive {
+            return nil
+        }
+    }
+
     func projects() async throws -> Catalog {
         var req = request(.get, "projects")
         // Reading the catalogue can mean atlas has to answer first, and a cold atlas is slower

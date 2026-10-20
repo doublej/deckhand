@@ -489,6 +489,7 @@ inside a helper is not listed, so treat the column as the least a route can answ
 | `GET /presence` | — | 200 | 401 | `where` is `laptop`, `phone` or `headset`: where a session should reach the person. |
 | `POST /presence/phone` | — | 204 | 401 | The person just touched the app. It says so at most every ten seconds and on coming to the front, and from then until a key is pressed at the Mac, `where` is `phone`. |
 | `POST /presence/headset` | — | 204 | 401 | The headset is being worn: it beats every ten seconds while it is, and for `HEADSET_LIVE` after the last beat `where` is `headset`. |
+| `GET /sessions/{session_id}/header` | — | 200 | 401, 404, 422 | The picture itself. 404 is "this project has none", which the phone draws as nothing. |
 | `POST /pair/open` | — | 200 | 401 | A six-digit code, good once for `window.LASTS` seconds; replaces any code already open. |
 | `POST /pair/transcribe` | `?name`: string = "browser" | 200 | 401, 422 | A token that can call `POST /transcribe` and nothing else, for a web page's mic button. Minted here rather than paired: the person at the Mac asks for it, so there is no code. |
 | `POST /pair/manager` | `?name`: string = "mcp" | 200 | 401, 422 | A token that can reach `/mcp`, the manager's tools, and nothing else — for an MCP client off this Mac. Minted like the transcribe one: the person at the Mac asks for it. |

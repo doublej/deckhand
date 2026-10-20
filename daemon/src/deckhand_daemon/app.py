@@ -40,6 +40,7 @@ from .manager import routes as manager_routes
 from .mcp import remote as mcp_remote
 from .orders import routes as order_routes
 from .pairing import routes as pairing_routes
+from .projects import header as project_header
 from .projects import routes as project_routes
 from .reading import asked, commands, context, readable, transcripts
 from .reading import routes as reading_routes
@@ -105,6 +106,7 @@ app.include_router(reading_routes.router, dependencies=[Depends(require_token)])
 app.include_router(presence.router, dependencies=[Depends(require_token)])
 app.include_router(push.router, dependencies=[Depends(require_token)])
 app.include_router(project_routes.router, dependencies=[Depends(require_token)])
+app.include_router(project_header.router, dependencies=[Depends(require_token)])
 app.include_router(settings_routes.router, dependencies=[Depends(require_token)])
 app.include_router(space_routes.router, dependencies=[Depends(require_token)])
 app.include_router(saying.router, dependencies=[Depends(require_token)])

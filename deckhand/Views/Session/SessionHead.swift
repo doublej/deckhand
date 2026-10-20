@@ -45,6 +45,7 @@ struct SessionHead: View {
             header
             fullness
         }
+        .background { ProjectBanner(model: model, session: session) }
         .sheet(isPresented: $renaming) {
             Renaming(session: session, say: say) { wanted in
                 Task { await model.rename(session, to: wanted) }
