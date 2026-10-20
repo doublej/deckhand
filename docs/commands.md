@@ -535,6 +535,8 @@ inside a helper is not listed, so treat the column as the least a route can answ
 | `PUT /settings` | body: JSON object | 200 | 401, 422 | What was stored, which is not always what was sent — see `wants.save`. |
 | `GET /aliases` | — | 200 | 401 | Every word this Mac swaps on the way out of utt, as rows of two: heard, then meant. |
 | `PUT /aliases` | body `{aliases}` | 200 | 401, 422 | Replace the list whole, the way `/settings` and `/filters` are written. |
+| `GET /hints` | — | 200 | 401 | Every word utt is told to listen for in every clip — see `settings/hints.py`. |
+| `PUT /hints` | body `{hints}` | 200 | 401, 422 | Replace the list whole, and answer with what was stored: blanks and repeats are dropped. |
 | `GET /settings/project` | `?path`: string | 200 | 401, 422 | What actually applies in one folder, already resolved. |
 
 ### space

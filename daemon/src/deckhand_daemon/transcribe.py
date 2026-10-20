@@ -23,7 +23,7 @@ from pathlib import Path
 
 from . import plugin
 from .log import log, took
-from .settings import aliases
+from .settings import aliases, hints
 
 # utt loads its model on the first clip after launch, and that one is slow.
 TIMEOUT = 180
@@ -198,12 +198,6 @@ def _clean(job: Path) -> None:
 # this repo is built with, terms of art. A term only displaces text that is already nearly it
 # and starts with the same letter, so this list cannot rewrite a sentence — it can only catch
 # "cockwheel", "Tu Y", "deck hand". It cannot fix an ordinary word misheard as another.
-VOCABULARY = (
-    "deckhand", "utt", "launchd", "onenv", "XcodeGen", "SwiftLint", "SwiftUI", "FastAPI",
-    "iTerm", "TUI", "cogwheel", "JSONL", "daemon", "transcript", "socket", "Claude",
-)
-
-
 def hints_for(name: str, cwd: str) -> list[str]:
     """Every clip was dictated at a named session working in a known folder. Those are the
     words most likely to be in it and most likely to come back wrong, and we have them before
@@ -216,7 +210,7 @@ def hints_for(name: str, cwd: str) -> list[str]:
     when it does anyway. Only the swap can be relied on; a hint only displaces text already
     nearly it.
     """
-    words = {*VOCABULARY, *aliases.spoken(), *name.replace("-", " ").split()}
+    words = {*hints.load(), *aliases.spoken(), *name.replace("-", " ").split()}
     words.update(part for part in Path(cwd).parts[-2:] if part not in ("/", "Users"))
     return sorted(word for word in words if len(word) > 2)
 

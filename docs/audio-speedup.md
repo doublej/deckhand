@@ -202,7 +202,7 @@ spread across five length bands (1–3 s, 3–8 s, 8–15 s, 15–25 s, 25–60 
 each band so the same clips come back on a re-run.
 
 **The lane.** `deckhand_daemon.transcribe.transcribe()`, imported and used read-only — the same
-jobs-folder lane the daemon uses, with the daemon's own `VOCABULARY` passed as hints on every
+jobs-folder lane the daemon uses, with the daemon's own hint list (`settings/hints.py`) passed as hints on every
 job so hints are constant and cannot be what moved a number.
 
 **Re-encode.** AAC-LC, 16 kHz, mono, 24 kbps — matched to what the phone records:

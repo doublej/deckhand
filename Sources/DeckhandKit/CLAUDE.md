@@ -48,7 +48,7 @@ Design is its own packet (`Design/CLAUDE.md`).
   for the `convertFromSnakeCase` reason above: a stage name is data, and a key would be rewritten.
 - **`raw` is from before *everything*, hints included, so a rewrite is attributed off `stages`.**
   utt's pipeline runs `hints` between `raw` and `text`, and those hints are this repo's own
-  vocabulary (`transcribe.VOCABULARY`). Comparing the two strings and naming utt would tell
+  hint list (`daemon/…/settings/hints.py`). Comparing the two strings and naming utt would tell
   somebody utt's cleanup rewrote "deck hand" when the word came out of a list in this codebase.
   `Rewrites` therefore names the stages utt reported and nothing else, and `uttRewrote` is
   `raw != nil && !uttStages.isEmpty` — the same test as utt's own `ProcessedTranscript.changed`,

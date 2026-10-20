@@ -27,6 +27,8 @@ final class Switchboard {
     /// one terminal and this list belongs to the Mac. Empty until the Mac has answered, which on
     /// this one is honest — an empty list and an unasked question both swap nothing.
     var aliases: [Alias] = []
+    /// Every word utt is told to listen for in every clip. Empty until the Mac has answered.
+    var hints: [String] = []
 
     /// What applies in a folder right now, with nothing from the Mac yet standing in as the
     /// defaults — which are the daemon's own defaults, so the screen is not wrong, only early.
@@ -69,6 +71,25 @@ extension AppModel {
         Task {
             do {
                 wants.aliases = try await client.saveAliases(list)
+                wants.failed = nil
+            } catch {
+                wants.failed = reason(error)
+            }
+        }
+    }
+
+    /// The words utt listens for, read with the aliases and for the same reason.
+    func loadHints() async {
+        guard let client = settings.client(), let list = try? await client.hints() else { return }
+        wants.hints = list
+    }
+
+    /// Replace the list, and keep the Mac's own reading of it, as `storeAliases` does.
+    func storeHints(_ list: [String]) {
+        guard let client = settings.client() else { return }
+        Task {
+            do {
+                wants.hints = try await client.saveHints(list)
                 wants.failed = nil
             } catch {
                 wants.failed = reason(error)

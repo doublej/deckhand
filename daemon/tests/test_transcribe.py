@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from deckhand_daemon import plugin, transcribe
+from deckhand_daemon.settings import hints
 
 
 @pytest.fixture
@@ -134,9 +135,16 @@ def test_silence_from_utt_gives_up_rather_than_hanging(jobs, monkeypatch):
     assert "did not answer" in heard.error
 
 
-def test_the_hints_are_what_this_session_is_working_on(jobs):
+def test_the_hints_are_what_this_session_is_working_on(jobs, claude_home):
     hints = transcribe.hints_for("warm-okapi", "/Users/jj/dev/web/shop")
     assert {"deckhand", "warm", "okapi", "shop", "web"} <= set(hints)
+
+
+def test_a_word_taken_off_the_list_is_no_longer_hinted(jobs, claude_home):
+    """"Sonnet" came back as "socket" because "socket" was hinted; the phone took it off."""
+    hints.save(["deckhand", "Claude"])
+    assert "socket" not in transcribe.hints_for("warm-okapi", "/Users/jj/dev/web/shop")
+    assert "transcript" not in transcribe.hints_for("warm-okapi", "/Users/jj/dev/web/shop")
 
 
 def _clip(jobs):

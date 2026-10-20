@@ -15,6 +15,7 @@ struct SettingsView: View {
     /// out. Held here rather than bound straight through to `wants.aliases`, so that a row half
     /// typed is not a row the card behind this page is already swapping on.
     @State private var aliases: [Alias] = []
+    @State private var hints: [String] = []
 
     var body: some View {
         NavigationStack {
@@ -25,6 +26,7 @@ struct SettingsView: View {
                     models
                     talking
                     words
+                    listening
                     route
                     linking
                     hidden
@@ -36,11 +38,14 @@ struct SettingsView: View {
                 await model.loadSettings()
                 await model.loadAliases()
                 aliases = model.wants.aliases
+                await model.loadHints()
+                hints = model.wants.hints
             }
             // Both ways off this page come through here — Done and a swipe down — the same place
             // `SessionFilters` writes its chain, and for the same reason.
             .onDisappear {
                 if aliases != model.wants.aliases { model.storeAliases(aliases) }
+                if hints != model.wants.hints { model.storeHints(hints) }
             }
             .background(Palette.surfaceGround)
             .navigationTitle("Settings")
@@ -194,6 +199,14 @@ struct SettingsView: View {
             // This page writes on the way out too, so a row the Mac will not keep goes quietly
             // and is simply absent the next time the list is read. Same view as `Swapping`.
             NotKept(rows: aliases)
+        }
+    }
+
+    private var listening: some View {
+        SettingsGroup("Listened for") {
+            HintWords(label: "Words utt listens for",
+                      hint: "Sent with every clip. Each session's own name and folder are added to it.",
+                      words: $hints)
         }
     }
 

@@ -11,7 +11,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Body
 
-from . import aliases, wants
+from . import aliases, hints, wants
 
 router = APIRouter(tags=["settings"])
 
@@ -44,6 +44,18 @@ def write_aliases(aliases_sent: Annotated[list, Body(embed=True, alias="aliases"
     screen that followed its own copy would then be showing a list this Mac is not running.
     """
     return {"aliases": aliases.save(aliases_sent)}
+
+
+@router.get("/hints")
+def read_hints() -> dict:
+    """Every word utt is told to listen for in every clip — see `settings/hints.py`."""
+    return {"hints": hints.load()}
+
+
+@router.put("/hints")
+def write_hints(hints_sent: Annotated[list, Body(embed=True, alias="hints")]) -> dict:
+    """Replace the list whole, and answer with what was stored: blanks and repeats are dropped."""
+    return {"hints": hints.save(hints_sent)}
 
 
 @router.get("/settings/project")
