@@ -68,8 +68,8 @@ public enum ArtifactPage {
         return (String(text[...close]), String(text[text.index(after: close)...]))
     }
 
-    /// `window.deckhand`, as the page sees it: the two things it can do and the two things it
-    /// can know. Injected at document start, so it is there before the page's first line runs.
+    /// `window.deckhand`, as the page sees it: the three things it can do and the three things
+    /// it can know. Injected at document start, so it is there before the page's first line runs.
     ///
     /// Frozen and non-configurable, because a page that overwrites `window.deckhand.respond`
     /// with its own function has quietly broken the only way a person's answer gets off the
@@ -92,7 +92,14 @@ public enum ArtifactPage {
     /// own shape, because the page is the only thing that knows how to put its answer back into its
     /// own controls. It is not frozen, unlike `artifact`: a page prefills its controls from it and
     /// then the person edits, and a frozen object would throw the moment one did.
-    public static func bridge(for artifact: Artifact, answer: String = "null") -> String {
+    ///
+    /// `keep(value)` is the draft: what the person has done and not yet sent, held on the phone
+    /// so closing the screen, a call or a relaunch does not lose it. `draft` is it handed back,
+    /// or `null`. It is newer than `answer` whenever both exist, and a send clears it. `keep(null)`
+    /// drops it. Unlike `respond`, nothing reaches the Mac or the session.
+    public static func bridge(
+        for artifact: Artifact, answer: String = "null", draft: String = "null"
+    ) -> String {
         """
         (function () {
           const post = (payload) => window.webkit.messageHandlers.\(handlerName).postMessage(payload);
@@ -100,15 +107,15 @@ public enum ArtifactPage {
             value: Object.freeze({
               artifact: Object.freeze(\(described(artifact))),
               answer: \(literal(answer)),
+              draft: \(literal(draft)),
               respond: function (value) {
                 if (value === undefined || value === null) throw new TypeError('deckhand.respond(value) needs a value; null is not an answer');
                 post({ kind: 'respond', json: JSON.stringify(value) });
               },
+              keep: function (value) { post({ kind: 'keep', json: JSON.stringify(value ?? null) }); },
               close: function () { post({ kind: 'close' }); }
             }),
-            writable: false,
-            configurable: false,
-            enumerable: true
+            writable: false, configurable: false, enumerable: true
           });
         })();
         """

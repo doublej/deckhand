@@ -28,11 +28,18 @@ struct AloudCards: View {
     /// What the person answered last time, per question. Read into the fields once, at build
     /// time, so an answered slip that is reopened is already holding its answers.
     let was: [String: String]
+    /// What was said and not yet sent, from the last time this slip was open. Merged over `was`
+    /// at build time — it is the newer of the two — so backing out mid-slip and coming back
+    /// finds every card exactly as it was left.
+    let draft: [String: String]
     /// The answer, as the JSON text of it. Awaited, and it says whether the answer actually went:
     /// a web page answers and then calls `deckhand.close()` itself, and a card stack has no page
     /// to do that for it. Without the receipt this button fired, delivered, and looked dead —
     /// which is a button somebody presses again, and again, each press a fresh answer.
     let respond: (String) async -> Bool
+    /// Where every change to the cards is kept, so the next time this slip opens the draft is
+    /// this and not `was`.
+    let saveDraft: ([String: String]) -> Void
 
     @State private var said: [String: String]
     /// Which question the recorder is currently working for, or none. What makes one card's mark
@@ -49,12 +56,16 @@ struct AloudCards: View {
     init(aloud: Aloud,
          say: Dictation,
          was: [String: String],
-         respond: @escaping (String) async -> Bool) {
+         draft: [String: String] = [:],
+         respond: @escaping (String) async -> Bool,
+         saveDraft: @escaping ([String: String]) -> Void = { _ in }) {
         self.aloud = aloud
         self.say = say
         self.was = was
+        self.draft = draft
         self.respond = respond
-        _said = State(initialValue: was)
+        self.saveDraft = saveDraft
+        _said = State(initialValue: was.merging(draft) { _, said in said })
     }
 
     /// How many questions have something in them. What the send button counts, and it counts the
@@ -75,6 +86,9 @@ struct AloudCards: View {
             .padding(.bottom, Spacing.large)
         }
         .scrollDismissesKeyboard(.interactively)
+        // Every card's edit and every clip land here, whichever put the words in — so this is
+        // the one place that has to remember to save rather than each of them.
+        .onChange(of: said) { _, now in saveDraft(now) }
     }
 
     private func card(_ question: Aloud.Question, at index: Int) -> some View {

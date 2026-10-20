@@ -151,6 +151,11 @@ struct ArtifactTests {
         #expect(!said.contains(#"Object.freeze({"line""#))
         // Nobody has answered, and a page with no argument at all reads the same way.
         #expect(ArtifactPage.bridge(for: page, answer: "null").contains("answer: null,"))
+        // The draft rides beside it, and keep posts the page's own JSON back.
+        let kept = ArtifactPage.bridge(for: page, draft: "[12.5]")
+        #expect(kept.contains("draft: [12.5],"))
+        #expect(kept.contains("kind: 'keep', json: JSON.stringify(value ?? null)"))
+        #expect(ArtifactPage.bridge(for: page).contains("draft: null,"))
         #expect(ArtifactPage.bridge(for: page).contains("answer: null,"))
     }
 

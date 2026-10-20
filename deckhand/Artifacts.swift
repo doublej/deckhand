@@ -49,4 +49,25 @@ extension AppModel {
                                       valueJSON: valueJSON,
                                       route: preferences.route)
     }
+
+    /// What was said to this slip's questions and not yet sent — empty where nothing was.
+    func draft(for artifact: Artifact) -> [String: String] { drafts.draft(for: artifact.id) }
+
+    /// Every change to the cards, kept — so backing out mid-slip does not lose what was said.
+    func saveDraft(_ said: [String: String], for artifact: Artifact) {
+        drafts.set(said, for: artifact.id)
+        drafts.save()
+    }
+
+    /// A web slip's `deckhand.keep`, held as the page's own JSON text.
+    func savePageDraft(_ json: String, for artifact: Artifact) {
+        drafts.setPage(json, for: artifact.id)
+        drafts.save()
+    }
+
+    /// The draft is spent the moment a send actually reaches the Mac.
+    func clearDraft(for artifact: Artifact) {
+        drafts.clear(artifact.id)
+        drafts.save()
+    }
 }

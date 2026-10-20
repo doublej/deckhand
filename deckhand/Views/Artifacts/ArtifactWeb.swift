@@ -29,14 +29,19 @@ struct ArtifactWeb: UIViewRepresentable {
     /// rather than fetched after it: a page that draws blank and then repopulates is worse than
     /// one that was never told.
     let answer: String
+    /// What the page last kept with `deckhand.keep`, as JSON text, or `"null"`. Handed over with
+    /// the page for the same reason `answer` is.
+    let draft: String
     /// The screen's link to this page: what the page is holding goes in, and the two things the
     /// screen asks of the page come back out through it.
     let talk: PageTalk
     /// What the person answered, as the JSON text `JSON.stringify` made of it.
     let respond: (String) -> Void
+    /// What the page wants kept as its draft, as the JSON text `JSON.stringify` made of it.
+    let keep: (String) -> Void
     let close: () -> Void
 
-    func makeCoordinator() -> Pilot { Pilot(respond: respond, close: close, talk: talk) }
+    func makeCoordinator() -> Pilot { Pilot(respond: respond, keep: keep, close: close, talk: talk) }
 
     func makeUIView(context: Context) -> WKWebView {
         let web = WKWebView(frame: .zero, configuration: configured(with: context.coordinator))
@@ -64,6 +69,7 @@ struct ArtifactWeb: UIViewRepresentable {
         // The closures are rebuilt on every SwiftUI pass; the web view and the coordinator are
         // not. Without this the page would be answering into the first render's state.
         context.coordinator.respond = respond
+        context.coordinator.keep = keep
         context.coordinator.close = close
     }
 
@@ -75,7 +81,7 @@ struct ArtifactWeb: UIViewRepresentable {
         // A phone number or an address in the prose becoming a tappable callout is navigation
         // under another name, and every tap on one would be a way off this page.
         settings.dataDetectorTypes = []
-        for source in [ArtifactPage.bridge(for: artifact, answer: answer), ArtifactPage.watcher] {
+        for source in [ArtifactPage.bridge(for: artifact, answer: answer, draft: draft), ArtifactPage.watcher] {
             settings.userContentController.addUserScript(
                 WKUserScript(source: source, injectionTime: .atDocumentStart, forMainFrameOnly: true)
             )
@@ -91,10 +97,11 @@ struct ArtifactWeb: UIViewRepresentable {
     }
 }
 
-/// The one navigation this page is allowed, and the three messages it may send.
+/// The one navigation this page is allowed, and the four messages it may send.
 @MainActor
 final class Pilot: NSObject, WKNavigationDelegate {
     var respond: (String) -> Void
+    var keep: (String) -> Void
     var close: () -> Void
     /// Where a page's report of what it is holding lands. A class rather than a closure, so it does
     /// not have to be rebound on every SwiftUI pass the way the two above do.
@@ -103,8 +110,10 @@ final class Pilot: NSObject, WKNavigationDelegate {
     /// page decided to do, and the answer to all of it is no.
     private var arrived = false
 
-    init(respond: @escaping (String) -> Void, close: @escaping () -> Void, talk: PageTalk) {
+    init(respond: @escaping (String) -> Void, keep: @escaping (String) -> Void,
+         close: @escaping () -> Void, talk: PageTalk) {
         self.respond = respond
+        self.keep = keep
         self.close = close
         self.talk = talk
     }
@@ -131,7 +140,7 @@ final class Pilot: NSObject, WKNavigationDelegate {
         return .allow
     }
 
-    /// `window.deckhand`'s two messages, and the watcher's one. Anything else — a page probing what
+    /// `window.deckhand`'s three messages, and the watcher's one. Anything else — a page probing what
     /// else the handler will take — is dropped without a word, and so is a `holds` this app has
     /// never heard of.
     func heard(_ message: WKScriptMessage) {
@@ -141,6 +150,8 @@ final class Pilot: NSObject, WKNavigationDelegate {
         switch kind {
         case "respond":
             if let json = body["json"] as? String { respond(json) }
+        case "keep":
+            if let json = body["json"] as? String { keep(json) }
         case "close":
             close()
         case "holds":

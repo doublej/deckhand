@@ -88,9 +88,11 @@ One function, injected before the page runs:
 
 ```js
 window.deckhand.respond(value)   // any JSON value. May be called more than once.
+window.deckhand.keep(value)      // the unsent draft, kept on the phone. keep(null) drops it.
 window.deckhand.close()          // dismiss the viewer
 window.deckhand.artifact         // { id, title }
 window.deckhand.answer           // what was answered last time, or null
+window.deckhand.draft            // what keep() last held, or null
 ```
 
 `respond` hands the value to the app, which sends it to the Mac. The daemon then does two
@@ -127,6 +129,18 @@ GET /sessions/{session_id}/artifacts/{artifact_id}/answer   ->  {"value": <whate
 ```
 
 `{"value": null}` is "nobody has answered", not an error. A missing page is still a 404.
+
+## Drafts
+
+The web view keeps nothing (a non-persistent store), so whatever a page holds and has not sent
+dies with the screen: the close button, a call, the app relaunching. `window.deckhand.keep(value)`
+is the way out — the phone stores the value's JSON under the slip's id (`SlipDrafts`, up to
+256 KB) and hands it back as `window.deckhand.draft` the next time the slip opens. A send that
+went clears it. **Prefill from `draft ?? answer`**: a draft only exists when it is newer.
+
+On the phone and only there: a draft is what this phone has done, not something the session is
+owed, so nothing reaches the Mac or the session until `respond`. An aloud slip's cards keep their
+own draft the same way, with no page involved.
 
 ## How an agent uses one
 

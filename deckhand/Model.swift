@@ -53,6 +53,8 @@ enum Connection: Equatable {
 final class AppModel {
     var settings: ServerSettings
     var preferences: Preferences
+    /// What was said to a slip and not yet sent, cards and pages both (`Artifacts.swift`).
+    var drafts: SlipDrafts
     var sessions: [Session] = []
     /// Sessions that have been messaging each other lately, already folded into one thread per
     /// pair. Empty is the normal state and means the rail draws nothing at all. The rest of the
@@ -157,9 +159,11 @@ final class AppModel {
     /// thing in this app worth a line in the log whether or not it worked.
     let logger = Logger(subsystem: "dev.jurrejan.deckhand", category: "app")
 
-    init(settings: ServerSettings = .load(), preferences: Preferences = .load()) {
+    init(settings: ServerSettings = .load(), preferences: Preferences = .load(),
+         drafts: SlipDrafts = .load()) {
         self.settings = settings
         self.preferences = preferences
+        self.drafts = drafts
         // Launch arguments (`-deckhand.host`, `-deckhand.token`) land in the same defaults,
         // so an install that was handed the pairing details keeps them after a cold start.
         if settings.isComplete { settings.save() }

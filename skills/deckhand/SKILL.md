@@ -122,7 +122,7 @@ The `<title>` is the slip's name, the filename before `.html` its id:
 Inline HTML, CSS and JS **only**. The app injects `default-src 'none'` with inline style and
 script, `img-src data:`, no form action and no navigation — so a CDN, a font, a `fetch` or a
 remote image fails **silently**. Pictures are `data:` URIs or SVG, and Deckhand's own design
-tokens are injected, so use the custom properties. The page answers through four things:
+tokens are injected, so use the custom properties. The page answers through six things:
 
 ```js
 window.deckhand.respond(value)  // any JSON value. May be called more than once.
@@ -131,9 +131,13 @@ window.deckhand.artifact        // { id, title }
 window.deckhand.answer          // what was answered last time, or null
 ```
 
-**A reopened page must prefill from `window.deckhand.answer`.** The row that opened it says
-"answered"; an empty form under that is the page lying about its own state.
+window.deckhand.keep(value)     // the unsent draft, kept on the phone. keep(null) drops it.
+**A reopened page must prefill from `window.deckhand.draft ?? window.deckhand.answer`.** The row
+that opened it says "answered"; an empty form under that is the page lying about its own state.
+**Call `keep` on every change** in a page that takes more than one tap to answer — the page has no
+storage of its own, so without it closing the screen loses everything not yet sent.
 
+window.deckhand.draft           // what keep() last held, or null. Newer than answer.
 ## Asking several things at once, out loud
 
 A phone dictates better than it types, so a page can **declare** its questions rather than only

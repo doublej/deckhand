@@ -64,14 +64,18 @@ struct ArtifactView: View {
             AloudCards(aloud: aloud,
                        say: say,
                        was: Aloud.said(in: answer),
-                       respond: answering)
+                       draft: model.draft(for: artifact),
+                       respond: answering,
+                       saveDraft: { model.saveDraft($0, for: artifact) })
                 .accessibilityIdentifier("artifact-aloud")
         } else if let html {
             ArtifactWeb(artifact: artifact,
                         html: html,
                         answer: answer,
+                        draft: model.drafts.page(for: artifact.id),
                         talk: talk,
                         respond: respond,
+                        keep: { model.savePageDraft($0, for: artifact) },
                         close: { dismiss() })
                 .accessibilityIdentifier("artifact-page")
         } else {
@@ -202,7 +206,10 @@ struct ArtifactView: View {
         do {
             let sent = try await model.answer(artifact, in: session, valueJSON: json)
             said = sent.went ? .sent(sent.deliveredBy) : .refused(refusal(sent))
-            if sent.went { dismiss() }
+            if sent.went {
+                model.clearDraft(for: artifact)
+                dismiss()
+            }
             return sent.went
         } catch {
             said = .refused(reason(error))
