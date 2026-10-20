@@ -10,10 +10,12 @@ domain names — but only under a short list of endings. A transcript is mostly 
 ending, so the endings that collide with code are left to the URL pattern, which still finds
 them whenever a scheme is written.
 
-**What the session said beats what a tool printed.** A fetched docs page carries forty links
-nobody chose; the address a session typed into a command, or the person spoke, was chosen. Each
-row says whether it was ever *said* (an assistant entry, or the person's own words) and the
-list puts those first, newest first within each half.
+**How it was named is kept, because it is most of what makes one matter.** Three ways, from
+most to least chosen: *shared* (in prose — an agent telling the person, or the person's own
+words), *used* (in a tool call the session made: a `curl`, a `WebFetch`) and *printed* (in what
+a tool handed back, which is how a URL inside some old file arrives — or in a file the session
+wrote, a heredoc included, whose URLs are content rather than somewhere it went). `ranking.py` turns that,
+how recent it is and atlas's word into the order the phone shows.
 
 Read from the transcript's last 4 MB and each subagent's, the window the files tab reads, and
 kept per file until the file changes — the same deal `files._named` makes.
@@ -47,8 +49,9 @@ NOISE = re.compile(r"(^|\.)(example\.(com|org|net)|w3\.org|json-schema\.org|sche
 TEST_NETS = tuple(ipaddress.ip_network(n) for n in ("192.0.2.0/24", "198.51.100.0/24", "203.0.113.0/24"))
 LOOPBACK = {"localhost", "127.0.0.1", "0.0.0.0", "::1"}
 SUBAGENTS = 30
+WRITES = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
 PATHS = 5
-MAX_ROWS = 40
+MAX_ROWS = 60
 
 
 @dataclass(slots=True)
@@ -59,18 +62,26 @@ class Found:
     kind: str  # url | ip | domain — the most specific shape it was ever written in
     paths: list[str] = field(default_factory=list)
     mentions: int = 0
-    said: bool = False
-    in_agents: bool = False
+    #: The newest time it was named at all, and the newest time it was shared in prose / used in
+    #: a tool call — ISO timestamps, empty for never.
     last_at: str = ""
+    shared_at: str = ""
+    used_at: str = ""
+    in_agents: bool = False
+
+    @property
+    def said(self) -> bool:
+        return bool(self.shared_at or self.used_at)
 
     def to_json(self) -> dict:
         return {"origin": self.origin, "kind": self.kind, "paths": self.paths,
                 "mentions": self.mentions, "said": self.said, "in_agents": self.in_agents,
-                "last_at": self.last_at}
+                "last_at": self.last_at, "shared_at": self.shared_at}
 
 
-#: transcript -> ((size, mtime), what it names). One seen tuple: (origin, kind, path, at, said).
-_kept: dict[Path, tuple[tuple[int, int], list[tuple[str, str, str, str, bool]]]] = {}
+Seen = tuple[str, str, str, str, str]  # origin, kind, path, at, how: shared | used | printed
+#: transcript -> ((size, mtime), what it names).
+_kept: dict[Path, tuple[tuple[int, int], list[Seen]]] = {}
 
 
 def mentioned(session_id: str) -> list[Found]:
@@ -83,12 +94,15 @@ def mentioned(session_id: str) -> list[Found]:
                     reverse=True)[:SUBAGENTS]
     rows: dict[str, Found] = {}
     for source, in_agent in [(path, False), *((agent, True) for agent in agents)]:
-        for origin, kind, where, at, said in _seen(source):
+        for origin, kind, where, at, how in _seen(source):
             row = rows.setdefault(origin, Found(origin, kind))
             row.mentions += 1
-            row.said |= said
             row.in_agents |= in_agent
             row.last_at = max(row.last_at, at)
+            if how == "shared":
+                row.shared_at = max(row.shared_at, at)
+            elif how == "used":
+                row.used_at = max(row.used_at, at)
             if kind == "url":
                 row.kind = "url"
             if where and where not in row.paths:
@@ -99,6 +113,12 @@ def mentioned(session_id: str) -> list[Found]:
     return ordered[:MAX_ROWS]
 
 
+def active(session_id: str) -> float:
+    """When the session last wrote anything — what `ranking` measures "recent" from."""
+    path = transcript_path(session_id)
+    return _mtime(path) if path else 0.0
+
+
 def _mtime(path: Path) -> float:
     try:
         return path.stat().st_mtime
@@ -106,7 +126,7 @@ def _mtime(path: Path) -> float:
         return 0.0
 
 
-def _seen(path: Path) -> list[tuple[str, str, str, str, bool]]:
+def _seen(path: Path) -> list[Seen]:
     try:
         stat = path.stat()
     except OSError:
@@ -119,7 +139,7 @@ def _seen(path: Path) -> list[tuple[str, str, str, str, bool]]:
     return kept[1]
 
 
-def _in_entry(raw: bytes) -> list[tuple[str, str, str, str, bool]]:
+def _in_entry(raw: bytes) -> list[Seen]:
     """Every address in one transcript line, if the line is a conversation entry at all.
 
     Attachments, summaries and injected meta entries are left out: they are the same CLAUDE.md
@@ -132,12 +152,30 @@ def _in_entry(raw: bytes) -> list[tuple[str, str, str, str, bool]]:
     if not isinstance(entry, dict) or entry.get("type") not in ("user", "assistant") \
             or entry.get("isMeta"):
         return []
-    content = (entry.get("message") or {}).get("content")
-    printed = isinstance(content, list) and any(
-        isinstance(block, dict) and block.get("type") == "tool_result" for block in content)
-    said = entry["type"] == "assistant" or not printed
     at = str(entry.get("timestamp") or "")
-    return [(origin, kind, where, at, said) for origin, kind, where in found_in(raw.decode("utf-8", "replace"))]
+    return [(origin, kind, where, at, how) for how, text in _pieces(entry)
+            for origin, kind, where in found_in(text)]
+
+
+def _pieces(entry: dict) -> list[tuple[str, str]]:
+    """(how, text) for each part of an entry: prose is shared, a tool call used, a result printed.
+    A tool's input and output are scanned as JSON text, where a backslash ends a URL as in the raw line."""
+    content = (entry.get("message") or {}).get("content")
+    if isinstance(content, str):
+        return [("shared", content)]
+    out = []
+    for block in content if isinstance(content, list) else []:
+        kind = block.get("type") if isinstance(block, dict) else None
+        if kind == "text":
+            out.append(("shared", str(block.get("text") or "")))
+        elif kind == "tool_use":
+            body = json.dumps(block.get("input"))
+            # Writing a file is not going anywhere: the URLs in a test fixture are content.
+            wrote = block.get("name") in WRITES or (block.get("name") == "Bash" and "<<" in body)
+            out.append(("printed" if wrote else "used", body))
+        elif kind == "tool_result":
+            out.append(("printed", json.dumps(block.get("content"))))
+    return out
 
 
 def found_in(text: str) -> list[tuple[str, str, str]]:

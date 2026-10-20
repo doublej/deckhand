@@ -27,6 +27,12 @@ public struct Address: Decodable, Hashable, Sendable, Identifiable {
     /// The same address on the Mac's LAN address, where a loopback one also answers there.
     public var lanUrl: String
     public var atlas: Registered?
+    /// `important`, `recent` or `rest` — the Mac's call (`addresses/ranking.py`), never the phone's.
+    public var tier: String
+    /// The one reason it is in its tier: "Shared in the conversation", "Staging", "Atlas · eink".
+    public var why: String
+    /// When it was last named, ISO 8601.
+    public var lastAt: String
 
     public var id: String { origin }
 
@@ -36,7 +42,8 @@ public struct Address: Decodable, Hashable, Sendable, Identifiable {
     public init(origin: String, kind: String = "url", paths: [String] = [], mentions: Int = 1,
                 said: Bool = true, inAgents: Bool = false, state: String = "loads",
                 reach: String = "public", status: Int = 200, title: String = "", note: String = "",
-                lanUrl: String = "", atlas: Registered? = nil) {
+                lanUrl: String = "", atlas: Registered? = nil, tier: String = "important",
+                why: String = "", lastAt: String = "") {
         self.origin = origin
         self.kind = kind
         self.paths = paths
@@ -50,6 +57,9 @@ public struct Address: Decodable, Hashable, Sendable, Identifiable {
         self.note = note
         self.lanUrl = lanUrl
         self.atlas = atlas
+        self.tier = tier
+        self.why = why
+        self.lastAt = lastAt
     }
 
     public init(from decoder: Decoder) throws {
@@ -67,11 +77,15 @@ public struct Address: Decodable, Hashable, Sendable, Identifiable {
         note = try box.decodeIfPresent(String.self, forKey: .note) ?? ""
         lanUrl = try box.decodeIfPresent(String.self, forKey: .lanUrl) ?? ""
         atlas = try box.decodeIfPresent(Registered.self, forKey: .atlas)
+        // A Mac from before the tiers sent none: every row is then simply listed, none hidden.
+        tier = try box.decodeIfPresent(String.self, forKey: .tier) ?? "recent"
+        why = try box.decodeIfPresent(String.self, forKey: .why) ?? ""
+        lastAt = try box.decodeIfPresent(String.self, forKey: .lastAt) ?? ""
     }
 
     enum CodingKeys: String, CodingKey {
         case origin, kind, paths, mentions, said, inAgents, state, reach, status, title, note
-        case lanUrl, atlas
+        case lanUrl, atlas, tier, why, lastAt
     }
 }
 

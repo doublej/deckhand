@@ -413,7 +413,7 @@ inside a helper is not listed, so treat the column as the least a route can answ
 
 | Route | Arguments | Answers | Errors | What it does |
 |---|---|---|---|---|
-| `GET /sessions/{session_id}/addresses` | — | 200 | 401, 422 | Every URL, IP and domain the session and its subagents wrote, checked, with atlas's match. |
+| `GET /sessions/{session_id}/addresses` | — | 200 | 401, 422 | Every URL, IP and domain the session and its subagents wrote: checked, ranked, matched to atlas. |
 
 ### artifacts
 

@@ -17,18 +17,35 @@ import Testing
             "https://web-eink.atlas.local.jurrejan.com", "http://localhost:4109"])
     }
 
-    @Test("rows are grouped by where they open from, and an empty heading is not drawn")
-    func groupsByReach() {
-        let rows = [Address(origin: "https://a.nl"), Address(origin: "http://localhost:1", reach: "mac")]
-        #expect(Addresses.sections(rows).map(\.title) == ["Only on the Mac", "Internet"])
+    @Test("rows fall into the Mac's three tiers, an unknown word with the rest")
+    func splitsIntoTiers() {
+        let rows = [Address(origin: "https://a.nl", tier: "rest"), Address(origin: "https://b.nl"),
+                    Address(origin: "https://c.nl", tier: "recent"), Address(origin: "https://d.nl", tier: "odd")]
+        let tiers = Addresses.tiers(rows)
+        #expect(tiers.important.map(\.origin) == ["https://b.nl"])
+        #expect(tiers.recent.map(\.origin) == ["https://c.nl"])
+        #expect(tiers.rest.map(\.origin) == ["https://a.nl", "https://d.nl"])
     }
 
-    @Test("the square counts what answers, and says so in words when there is nothing")
-    func countsWhatAnswers() {
+    @Test("only a problem gets words, and the reason carries how long ago")
+    func saysOnlyWhatIsWrong() throws {
+        #expect(Addresses.problem(Address(origin: "https://a.nl")) == nil)
+        #expect(Addresses.problem(Address(origin: "https://a.nl", state: "fails", status: 502)) == "Error 502")
+        #expect(Addresses.problem(Address(origin: "https://a.nl", state: "locked", note: "asks for a password"))
+            == "Asks for a password")
+        let now = try #require(Addresses.date("2026-10-20T12:00:00.000Z"))
+        let shared = Address(origin: "https://a.nl", why: "Staging", lastAt: "2026-10-20T11:48:00.000Z")
+        #expect(Addresses.why(shared, now: now).hasPrefix("Staging · "))
+        #expect(Addresses.why(Address(origin: "https://a.nl", why: "Staging"), now: now) == "Staging")
+    }
+
+    @Test("the square counts what is worth a look, and says so in words when there is nothing")
+    func countsWhatMatters() {
         #expect(Addresses.count(nil) == "…")
         #expect(Addresses.count([]) == "None yet")
-        let rows = [Address(origin: "https://www.a.nl", state: "down"), Address(origin: "https://b.nl")]
-        #expect(Addresses.count(rows) == "1 live")
-        #expect(Addresses.worth(rows) == ["b.nl", "a.nl"])
+        let rows = [Address(origin: "https://www.a.nl"), Address(origin: "https://b.nl", tier: "rest")]
+        #expect(Addresses.count(rows) == "1 to look at")
+        #expect(Addresses.count([rows[1]]) == "1 found")
+        #expect(Addresses.worth(rows) == ["a.nl", "b.nl"])
     }
 }

@@ -40,6 +40,8 @@ def test_said_beats_printed_and_subagents_are_read(claude_home):
     (folder / f"{SESSION}.jsonl").write_text("\n".join([
         row("user", [{"type": "tool_result", "content": "docs at https://docs.python.org/3/"}], "2026-10-20T10:00:02Z"),
         row("assistant", [{"type": "text", "text": "server is up on http://localhost:5173"}], "2026-10-20T10:00:01Z"),
+        row("assistant", [{"type": "tool_use", "name": "Write", "input": {"content": "x = 'https://fixture.nl'"}}],
+            "2026-10-20T10:00:04Z"),
         json.dumps({"type": "attachment", "content": "https://claude.ai/everywhere"}),
     ]) + "\n")
     agents = folder / SESSION / "subagents"
@@ -49,6 +51,7 @@ def test_said_beats_printed_and_subagents_are_read(claude_home):
 
     rows = finding.mentioned(SESSION)
     assert [r.origin for r in rows] == ["https://shop.jurrejan.com", "http://localhost:5173",
-                                        "https://docs.python.org"]
+                                        "https://fixture.nl", "https://docs.python.org"]
+    assert not rows[2].said
     assert rows[0].in_agents and rows[0].said
     assert not rows[2].said

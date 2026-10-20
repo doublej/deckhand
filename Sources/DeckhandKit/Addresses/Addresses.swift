@@ -1,21 +1,20 @@
 import Foundation
 
 /// What the addresses page and its square say, and which URL a tap opens. Pure, so `just test`
-/// holds it down.
+/// holds it down. The order and the tiers are the Mac's (`addresses/ranking.py`); this only
+/// words them.
 public enum Addresses {
-    /// Where an address can be opened from, in the order the page reads them: what is running
-    /// here first, then the rest of the house, then the internet, then what never resolved.
-    public static let reaches: [(key: String, title: String)] = [
-        ("mac", "Only on the Mac"), ("home", "Home network"), ("public", "Internet"),
-        ("none", "Does not resolve"), ("", "Checking")
-    ]
+    /// The Mac's three tiers, each in the order it sent them: newest first.
+    public struct Tiers: Sendable {
+        public let important: [Address]
+        public let recent: [Address]
+        public let rest: [Address]
+        public var isEmpty: Bool { important.isEmpty && recent.isEmpty && rest.isEmpty }
+    }
 
-    /// The rows under each heading that has any, in the order the Mac sent them.
-    public static func sections(_ rows: [Address]) -> [(title: String, rows: [Address])] {
-        reaches.compactMap { reach in
-            let found = rows.filter { $0.reach == reach.key }
-            return found.isEmpty ? nil : (reach.title, found)
-        }
+    public static func tiers(_ rows: [Address]) -> Tiers {
+        Tiers(important: rows.filter { $0.tier == "important" }, recent: rows.filter { $0.tier == "recent" },
+              rest: rows.filter { $0.tier != "important" && $0.tier != "recent" })
     }
 
     /// The address as a person says it: no scheme, no `www.`.
@@ -25,15 +24,37 @@ public enum Addresses {
         return bare.hasPrefix("www.") ? String(bare.dropFirst(4)) : bare
     }
 
-    /// What the check found, in two words.
-    public static func verdict(_ address: Address) -> String {
+    /// What a row is called: the page's own title where it has one, else the address.
+    public static func name(_ address: Address) -> String {
+        address.title.isEmpty ? label(address) : address.title
+    }
+
+    /// Only what is wrong is said. A working address says nothing beside its dot, so the eye
+    /// stops on the rows that need it.
+    public static func problem(_ address: Address) -> String? {
         switch address.state {
-        case "loads": "Loads"
-        case "locked": "Locked"
+        case "locked": address.note.isEmpty ? "Needs a password" : address.note.capitalizedFirst
         case "fails": address.status > 0 ? "Error \(address.status)" : "Error"
-        case "down": "Not answering"
-        default: "Checking…"
+        case "down": address.note.isEmpty ? "Not answering" : address.note.capitalizedFirst
+        default: nil
         }
+    }
+
+    /// The reason it is here and how long ago it was named: "Staging · 12 min ago".
+    public static func why(_ address: Address, now: Date = .now) -> String {
+        let ago = date(address.lastAt).map { stamp in
+            let words = RelativeDateTimeFormatter()
+            words.unitsStyle = .abbreviated
+            return words.localizedString(for: stamp, relativeTo: now)
+        }
+        return [address.why, ago ?? ""].filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+
+    /// Claude Code writes `2026-10-20T10:00:00.123Z`; the plain parser refuses the fraction.
+    static func date(_ stamp: String) -> Date? {
+        let parse = ISO8601DateFormatter()
+        parse.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return parse.date(from: stamp) ?? ISO8601DateFormatter().date(from: stamp)
     }
 
     /// The URL a tap opens: the one that works from the phone, when the Mac found one.
@@ -60,16 +81,20 @@ public enum Addresses {
         return candidates.compactMap { $0 }.filter { seen.insert($0).inserted }
     }
 
-    /// The square's number: how many answer, else how many were found.
+    /// The square's number: how many matter, else how many were found.
     public static func count(_ rows: [Address]?) -> String {
         guard let rows else { return "…" }
         if rows.isEmpty { return "None yet" }
-        let live = rows.filter(\.answers).count
-        return live > 0 ? "\(live) live" : "\(rows.count) found"
+        let important = tiers(rows).important.count
+        return important > 0 ? "\(important) to look at" : "\(rows.count) found"
     }
 
-    /// The three under the number: ones that answer first, chosen ones before printed ones.
+    /// The three under the number, in the Mac's order — which is already most important first.
     public static func worth(_ rows: [Address]) -> [String] {
-        Dashboard.few(rows.filter(\.answers) + rows.filter { !$0.answers }).map(label)
+        Dashboard.few(rows).map(label)
     }
+}
+
+private extension String {
+    var capitalizedFirst: String { prefix(1).uppercased() + dropFirst() }
 }
