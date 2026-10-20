@@ -8,7 +8,10 @@ import SwiftUI
 /// connected to the project here (`ConnectedFoldersPane`) — so this is a window onto one
 /// session's work, not a file browser pointed at somebody's Mac.
 ///
-/// One row of suffixes across the top says what the list below it is, and the list is flat.
+/// Newest-first or folder by folder (`FolderBrowse`), switched at the top; the chips under the
+/// switch narrow either one, so drilling in and filtering by suffix combine in any order.
+///
+/// One row of suffixes across the top says what the list below it is.
 /// It was sections by suffix running down the list, each under its own 9pt uppercase header,
 /// and JJ called that unusable on a phone: the header was too small to read at arm's length and
 /// too small to hit, and a list mostly made of headers is one you scroll past rather than read.
@@ -32,6 +35,11 @@ struct FilesView: View {
     @State private var context = ContextDocs()
     /// The folders connected to this session's project, and the ones it wrote into.
     @State private var folders = ConnectedFolders()
+    /// Newest first in one flat list, or folder by folder. Remembered, unlike the chip: how somebody
+    /// likes to look through files is a habit, which file kind they want is a question per visit.
+    @AppStorage("files.byFolder") private var byFolder = false
+    /// Where the folder view has drilled to; nil is the top.
+    @State private var location: String?
 
     /// What this tab can be. A suffix or a connected folder narrows the list; the tree and the
     /// folder pane are not lists at all, which is why this is an enum rather than an optional.
@@ -64,6 +72,14 @@ struct FilesView: View {
             // Above the scroll view rather than inside it, so it is still there after you have
             // scrolled past eleven screenshots looking for the one note.
             // Always drawn: the folder pane is a choice every session has.
+            Picker("Arrange", selection: $byFolder) {
+                Text("Newest").tag(false)
+                Text("Folders").tag(true)
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, Spacing.medium)
+            .padding(.top, Spacing.extraSmall)
+            .accessibilityIdentifier("files-arrangement")
             selector
             switch only {
             case .context: ContextTree(context: context) { open = $0 }
@@ -88,10 +104,14 @@ struct FilesView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: Spacing.xxs) {
                 if shown.isEmpty { empty }
-                ForEach(shown) { asset in
-                    Button { open = asset } label: { AssetRow(asset: asset) }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("file-row")
+                if byFolder {
+                    FolderBrowse(files: shown, location: $location) { open = $0 }
+                } else {
+                    ForEach(shown) { asset in
+                        Button { open = asset } label: { AssetRow(asset: asset) }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("file-row")
+                    }
                 }
             }
             .padding(.horizontal, Spacing.medium)
@@ -172,7 +192,7 @@ struct FilesView: View {
 
 /// One file, said the way the rest of the app says a session: a glyph, a name, a quiet line
 /// of what it is underneath.
-private struct AssetRow: View {
+struct AssetRow: View {
     let asset: Asset
     @Environment(\.accent) private var accent
 
