@@ -431,6 +431,8 @@ whole of it is `docs/manager.md`; three things are worth having here.
   no way to widen it by accident — which is what keeps a file endpoint off the rest of the Mac.
   Source files and `node_modules`/`.build`/`.git` are left out on purpose: the tool trace
   already shows the code, and a phone listing 200 files shows nothing.
+- **A connected folder is the one way to widen it, and only the person makes one** — from the
+  phone, per project (`GET|PUT /sessions/{id}/folders`); see `settings/folders.py`.
 - **The same rule covers projects.** A folder this Mac's project list does not name is a 404, so
   `/projects/session` stays a way into work that already exists rather than a way to run Claude
   Code anywhere on the Mac.

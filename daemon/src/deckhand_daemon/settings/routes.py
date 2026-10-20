@@ -11,7 +11,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, Body
 
-from . import aliases, hints, wants
+from .. import files, saying
+from . import aliases, folders, hints, wants
 
 router = APIRouter(tags=["settings"])
 
@@ -80,3 +81,27 @@ def for_project(path: str) -> dict:
     come apart.
     """
     return {"path": path, "wants": wants.resolved(path).to_json()}
+
+
+@router.get("/sessions/{session_id}/folders")
+def read_folders(session_id: str) -> dict:
+    """The folders connected to this session's project, and the ones worth suggesting."""
+    return _folders(saying.session_or_404(session_id))
+
+
+@router.put("/sessions/{session_id}/folders")
+def write_folders(session_id: str,
+                  folders_sent: Annotated[list, Body(embed=True, alias="folders")]) -> dict:
+    """Replace the project's folders whole — see `settings/folders.py`. Answers with what was
+    kept: a relative path, the disk's root and the home folder itself are dropped."""
+    session = saying.session_or_404(session_id)
+    folders.save(session.cwd, folders_sent)
+    return _folders(session)
+
+
+def _folders(session) -> dict:
+    return {
+        "path": session.cwd,
+        "folders": folders.load(session.cwd),
+        "suggested": files.suggested(session.session_id, session.cwd, session.provider),
+    }

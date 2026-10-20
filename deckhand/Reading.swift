@@ -186,6 +186,32 @@ extension AppModel {
         }
     }
 
+    /// The folders connected to this session's project, and the ones it wrote into. Handed back
+    /// rather than kept, like `commands(for:)`: only the files tab's folder pane wants them.
+    func folders(for session: Session) async -> ConnectedFolders {
+        guard let client = settings.client() else { return ConnectedFolders() }
+        do {
+            return try await client.folders(of: session.sessionId)
+        } catch {
+            status = "Could not read \(session.name)'s folders"
+            return ConnectedFolders()
+        }
+    }
+
+    /// Replace the project's folders, then list the files again so what was connected shows.
+    /// Nil on a failure, with the reason in the status line, so the pane keeps what it had.
+    func saveFolders(_ folders: [String], for session: Session) async -> ConnectedFolders? {
+        guard let client = settings.client() else { return nil }
+        do {
+            let kept = try await client.saveFolders(folders, of: session.sessionId)
+            await loadFiles(for: session)
+            return kept
+        } catch {
+            status = "Could not connect that folder: \((error as? DeckhandError)?.detail ?? "\(error)")"
+            return nil
+        }
+    }
+
     /// The names this session answers to. Handed back rather than kept, and asked for only when
     /// a picker opens: there are getting on for two hundred on this Mac, they are files a person
     /// edits, and a copy on the phone would be a stale copy of something cheap to fetch.

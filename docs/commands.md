@@ -540,6 +540,8 @@ inside a helper is not listed, so treat the column as the least a route can answ
 | `GET /hints/folder` | `?path`: string | 200 | 401, 422 | Every list a session in `path` hears, outermost first — "" is the global one. |
 | `PUT /hints/folder` | body `{path, hints}` | 200 | 401, 422 | Replace one layer's own words, and answer with what was stored. |
 | `GET /settings/project` | `?path`: string | 200 | 401, 422 | What actually applies in one folder, already resolved. |
+| `GET /sessions/{session_id}/folders` | — | 200 | 401, 404, 422 | The folders connected to this session's project, and the ones worth suggesting. |
+| `PUT /sessions/{session_id}/folders` | body `{folders}` | 200 | 401, 404, 422 | Replace the project's folders whole — see `settings/folders.py`. Answers with what was kept: a relative path, the disk's root and the home folder itself are dropped. |
 
 ### space
 

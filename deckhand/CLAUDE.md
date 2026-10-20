@@ -26,6 +26,7 @@ The panel opens on the tray (`Tray*.swift`), the manager's conversation one tap 
 `Listening` is that player's transport, drawn for a sound file the Files tab opens,
 `Views/Talk/` the mark itself,
 `Views/Reading/` the one turn a hold opens and the text view that makes it selectable,
+`Views/Files/` the folders connected to a project, which the Files tab lists beside the transcript's,
 `Views/Settings/` the parts of the settings page that are more than a row — today the Macs
 found on this network.
 `Views/Artifacts/AloudCards.swift` is the other way a slip can be drawn — cards with the app's own

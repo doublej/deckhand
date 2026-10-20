@@ -4,8 +4,9 @@ import SwiftUI
 /// What the session actually made: the shot it took, the note it wrote, the clip it rendered.
 ///
 /// The Mac reads these out of the same transcript everything else here comes from, and it will
-/// only ever hand back a file that transcript named — so this is a window onto one session's
-/// work, not a file browser pointed at somebody's Mac.
+/// only ever hand back a file that transcript named — or one inside a folder the person
+/// connected to the project here (`ConnectedFoldersPane`) — so this is a window onto one
+/// session's work, not a file browser pointed at somebody's Mac.
 ///
 /// One row of suffixes across the top says what the list below it is, and the list is flat.
 /// It was sections by suffix running down the list, each under its own 9pt uppercase header,
@@ -29,10 +30,12 @@ struct FilesView: View {
     /// empty forever for a folder with no CLAUDE.md anywhere above or below it — in which case
     /// there is no choice to offer and none is drawn.
     @State private var context = ContextDocs()
+    /// The folders connected to this session's project, and the ones it wrote into.
+    @State private var folders = ConnectedFolders()
 
-    /// The three things this tab can be. A suffix narrows the list; the tree is not a list at
-    /// all, which is why this is an enum rather than one more optional string.
-    private enum Showing: Hashable { case all, context, suffix(String) }
+    /// What this tab can be. A suffix or a connected folder narrows the list; the tree and the
+    /// folder pane are not lists at all, which is why this is an enum rather than an optional.
+    private enum Showing: Hashable { case all, context, folders, connected(String), suffix(String) }
     /// This is a tab inside the session's page, not a surface of its own, so it goes orange with
     /// the rest of the page while the mark at the foot of it is open.
     @Environment(\.accent) private var accent
@@ -50,6 +53,7 @@ struct FilesView: View {
     /// falls back to all of them, which is what happens when the session's last PNG is renamed
     /// away while PNG is the one you are looking at.
     private var shown: [Asset] {
+        if case .connected(let folder) = only { return assets.filter { $0.connected == folder } }
         guard case .suffix(let suffix) = only,
               let group = groups.first(where: { $0.suffix == suffix }) else { return assets }
         return group.assets
@@ -59,11 +63,12 @@ struct FilesView: View {
         VStack(spacing: 0) {
             // Above the scroll view rather than inside it, so it is still there after you have
             // scrolled past eleven screenshots looking for the one note.
-            if groups.count > 1 || !context.documents.isEmpty { selector }
-            if only == .context {
-                ContextTree(context: context) { open = $0 }
-            } else {
-                list
+            // Always drawn: the folder pane is a choice every session has.
+            selector
+            switch only {
+            case .context: ContextTree(context: context) { open = $0 }
+            case .folders: ConnectedFoldersPane(model: model, session: session, folders: $folders)
+            default: list
             }
         }
         .frame(maxHeight: .infinity)
@@ -72,6 +77,7 @@ struct FilesView: View {
         .task {
             await model.loadFiles(for: session)
             context = await model.context(for: session)
+            folders = await model.folders(for: session)
         }
         .sheet(item: $open) { AssetView(model: model, session: session, asset: $0) }
     }
@@ -93,6 +99,8 @@ struct FilesView: View {
             .padding(.bottom, Spacing.extraLarge)
         }
         .fadingEdges()
+        // A render folder fills while you watch, so the list can be asked again by hand.
+        .refreshable { await model.loadFiles(for: session) }
         // Room at the end for the bar that floats over this.
         .contentMargins(.bottom, TalkMark.clearance, for: .scrollContent)
     }
@@ -102,8 +110,8 @@ struct FilesView: View {
     ///
     /// It scrolls sideways and never wraps: a second line would shove every row under it down
     /// the moment a session writes a new kind of file, and shrinking the type to fit is what was
-    /// wrong with the thing this replaces. A session whose files are all one kind gets no row at
-    /// all — one choice is not a choice, and the row would be furniture.
+    /// wrong with the thing this replaces. Every session gets the row, because every session can
+    /// have a folder connected to it.
     private var selector: some View {
         ScrollView(.horizontal) {
             HStack(spacing: Spacing.xxs) {
@@ -113,7 +121,14 @@ struct FilesView: View {
                 if !context.documents.isEmpty {
                     choice(.context, "CLAUDE", count: context.documents.count)
                 }
+                // A connected folder is where renders land, so it comes before the suffixes.
+                ForEach(folders.folders, id: \.self) { folder in
+                    choice(.connected(folder), (folder as NSString).lastPathComponent,
+                           count: assets.filter { $0.connected == folder }.count)
+                }
                 ForEach(groups) { choice(.suffix($0.suffix), $0.suffix, count: $0.assets.count) }
+                // Last: managing folders is done once, looking at what is in them every time.
+                choice(.folders, "Folders", count: folders.folders.count)
             }
             .padding(.horizontal, Spacing.medium)
             .padding(.vertical, Spacing.extraSmall)

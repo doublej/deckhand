@@ -38,6 +38,8 @@ FORWARDED = (
     "commands",
     "files",
     "file",
+    # Connected folders are that machine's disk, so they are kept and walked over there.
+    "folders",
     "artifacts",
     "queue/clear",
 )
