@@ -17,8 +17,8 @@ a tool handed back, which is how a URL inside some old file arrives — or in a 
 wrote, a heredoc included, whose URLs are content rather than somewhere it went). `ranking.py` turns that,
 how recent it is and atlas's word into the order the phone shows.
 
-Read from the transcript's last 4 MB and each subagent's, the window the files tab reads, and
-kept per file until the file changes — the same deal `files._named` makes.
+Read incrementally (`reading/increments.py`): a transcript's window once, then only what was
+appended, with megabyte-long lines skipped unread.
 """
 
 from __future__ import annotations
@@ -30,7 +30,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from ..reading.transcripts import TAIL_WINDOWS, tail_lines, transcript_path
+from ..reading.increments import Increments, subagents
+from ..reading.transcripts import TAIL_WINDOWS, transcript_path
 
 # A backslash ends a URL because the line is raw JSON: `\n`, `\"` and `<` are escapes.
 URL = re.compile(r"\bhttps?://[^\s\"'<>\\`{}|^\[\]]+", re.IGNORECASE)
@@ -80,8 +81,17 @@ class Found:
 
 
 Seen = tuple[str, str, str, str, str]  # origin, kind, path, at, how: shared | used | printed
-#: transcript -> ((size, mtime), what it names).
-_kept: dict[Path, tuple[tuple[int, int], list[Seen]]] = {}
+KEEP = 20_000
+
+
+def _scan(raw: bytes, _: object) -> list[Seen]:
+    return _in_entry(raw)
+
+
+#: The session's own transcript over the 4 MB window the files tab reads; a subagent's over
+#: 512 KB, since thirty of them at 4 MB would be the expensive half of every first open.
+_session: Increments[Seen] = Increments(_scan, TAIL_WINDOWS[1], KEEP)
+_agents: Increments[Seen] = Increments(_scan, TAIL_WINDOWS[0], KEEP)
 
 
 def mentioned(session_id: str) -> list[Found]:
@@ -89,12 +99,10 @@ def mentioned(session_id: str) -> list[Found]:
     path = transcript_path(session_id)
     if path is None:
         return []
-    # Where `reading/agents.py` finds them: a folder named after the transcript, beside it.
-    agents = sorted((path.with_suffix("") / "subagents").glob("*.jsonl"), key=_mtime,
-                    reverse=True)[:SUBAGENTS]
     rows: dict[str, Found] = {}
-    for source, in_agent in [(path, False), *((agent, True) for agent in agents)]:
-        for origin, kind, where, at, how in _seen(source):
+    seen = [(_session.read(path), False), *((_agents.read(agent), True) for agent in subagents(path, SUBAGENTS))]
+    for found, in_agent in seen:
+        for origin, kind, where, at, how in found:
             row = rows.setdefault(origin, Found(origin, kind))
             row.mentions += 1
             row.in_agents |= in_agent
@@ -124,19 +132,6 @@ def _mtime(path: Path) -> float:
         return path.stat().st_mtime
     except OSError:
         return 0.0
-
-
-def _seen(path: Path) -> list[Seen]:
-    try:
-        stat = path.stat()
-    except OSError:
-        return []
-    key = (stat.st_size, stat.st_mtime_ns)
-    kept = _kept.get(path)
-    if kept is None or kept[0] != key:
-        kept = _kept[path] = (key, [hit for raw in tail_lines(path, TAIL_WINDOWS[1])
-                                    for hit in _in_entry(raw)])
-    return kept[1]
 
 
 def _in_entry(raw: bytes) -> list[Seen]:

@@ -55,6 +55,12 @@ struct FilesView: View {
 
     private var assets: [Asset] { model.assets[session.sessionId] ?? [] }
     private var groups: [Asset.Group] { Asset.grouped(assets) }
+    /// The connected folders, then the work folders the Mac lists on its own — `.orchestrate`,
+    /// `tmp`, the session's scratchpad — each a chip, so the renders are one tap away either way.
+    private var chipFolders: [String] {
+        var seen = Set(folders.folders)
+        return folders.folders + assets.compactMap(\.connected).filter { seen.insert($0).inserted }
+    }
 
     /// What the list draws, newest first either way: the Mac sorts these and `Asset.grouped`
     /// leaves the order inside a group exactly as it arrived. A suffix that is no longer there
@@ -142,7 +148,7 @@ struct FilesView: View {
                     choice(.context, "CLAUDE", count: context.documents.count)
                 }
                 // A connected folder is where renders land, so it comes before the suffixes.
-                ForEach(folders.folders, id: \.self) { folder in
+                ForEach(chipFolders, id: \.self) { folder in
                     choice(.connected(folder), (folder as NSString).lastPathComponent,
                            count: assets.filter { $0.connected == folder }.count)
                 }

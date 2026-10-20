@@ -12,6 +12,17 @@ A folder the person connected to the project (`settings/folders.py`) is the seco
 openable file inside it is listed and served, whether the transcript named it or not — the
 person's choice to connect it is the permission, and nothing outside it gets through.
 
+The work folders `reading/places.py` finds — `.orchestrate/`, `tmp/`, the session's scratchpad —
+are a third door of the same kind, opened by habit rather than by a tap: they are where this
+session's own work lands.
+
+**Pictures and video outrank text of the same age, and logs sink** (`_rank`): the files tab is
+where a person looks at what was made, and a render is what was made far more often than a log.
+
+**Light on purpose.** The transcript and its newest subagents' are read incrementally
+(`reading/increments.py`), and a folder walk is capped in depth and count and kept for a few
+seconds rather than redone on every open of a dashboard.
+
 An OpenCode session has no transcript on disk; its recent history, read over OpenCode's API, is
 searched for paths in exactly the same way, so the rule is the same rule.
 """
@@ -20,12 +31,15 @@ from __future__ import annotations
 
 import os
 import re
+import time
 from collections.abc import Iterable, Iterator
 from dataclasses import asdict, dataclass
 from itertools import islice
 from pathlib import Path
 
-from .reading.transcripts import TAIL_WINDOWS, tail_lines, transcript_path
+from .reading import places
+from .reading.increments import Increments, subagents
+from .reading.transcripts import TAIL_WINDOWS, transcript_path
 from .sessions import opencode, opencode_turns
 from .settings import folders
 
@@ -57,12 +71,21 @@ MAX_CONNECTED = 120
 #: ponytail: a walk stops after this many files, so a folder of a million lists the first part.
 MAX_WALKED = 20_000
 MAX_SUGGESTED = 8
-#: transcript -> ((size, mtime, cwd), every path it names). The scan of a 4 MB tail is ~0.5-1 s
-#: and was paid on every dashboard open and every `/file` download, for a file that had not
-#: moved. Only the names are kept: each one is still stat-ed per call, so a file that changed
-#: or went is answered as it is now. One entry per transcript, replaced when it grows.
-# ponytail: never evicted; a session id's entry is a few KB and the daemon restarts often.
-_named: dict[Path, tuple[tuple[int, int, str], tuple[Path, ...]]] = {}
+#: A work folder is walked this deep and no further, and stops after this many files.
+PLACE_DEPTH = 3
+PLACE_WALKED = 2_000
+#: How long a walk is believed: long enough that a dashboard and its files tab share one, short
+#: enough that a render landing now is listed on the next pull.
+WALK_FRESH = 10.0
+#: ponytail: a picture counts as this much newer than it is, machine output (a log, a JSON
+#: dump) this much older — a build log written a minute ago is not what anybody opens the tab
+#: for. A report in markdown keeps its own age. Tune both if the wrong thing comes out on top.
+VISUAL_HEAD_START = 6 * 3600
+MACHINE_HANDICAP = 24 * 3600
+MACHINE = (".log", ".json", ".yaml", ".yml", ".toml", ".csv")
+#: The most distinct names stat-ed per listing, newest named first.
+MAX_NAMES = 3_000
+SUBAGENTS = 10
 
 
 @dataclass(slots=True)
@@ -74,7 +97,7 @@ class Asset:
     kind: str
     size: int
     modified: float
-    #: The connected folder it was found in; None for a file the transcript named.
+    #: The connected folder or work folder it was found in; None for a file the transcript named.
     connected: str | None = None
 
     def to_json(self) -> dict:
@@ -82,15 +105,15 @@ class Asset:
 
 
 def readable_files(session_id: str, cwd: str, provider: str = "claude") -> list[Asset]:
-    """Every openable file this session touched, and every one in a connected folder, newest first."""
-    inside = _connected(cwd)
+    """Every openable file this session touched, and every one in its folders, pictures first."""
+    inside = _in_folders(session_id, cwd)
     named = [a for key, a in _named_files(session_id, cwd, provider) if key not in inside]
-    return sorted([*named, *inside.values()], key=lambda a: a.modified, reverse=True)
+    return sorted([*named, *inside.values()], key=_rank, reverse=True)
 
 
 def allowed(session_id: str, cwd: str, wanted: str, provider: str = "claude") -> Path | None:
-    """The file at `wanted`, but only because it lies in a connected folder or the transcript named it."""
-    if found := _within(cwd, wanted):
+    """The file at `wanted`, but only because it lies in one of its folders or the transcript named it."""
+    if found := _within(session_id, cwd, wanted):
         return found
     for _, asset in _named_files(session_id, cwd, provider):
         if asset.path == wanted:
@@ -101,52 +124,77 @@ def allowed(session_id: str, cwd: str, wanted: str, provider: str = "claude") ->
 def suggested(session_id: str, cwd: str, provider: str = "claude") -> list[str]:
     """Folders this session wrote openable files into, newest first and not yet connected: what
     the phone offers to connect with a tap. The project's own folder is not one — the transcript
-    already covers it, and connecting it would list the whole project."""
-    connected = folders.load(cwd)
+    already covers it, and connecting it would list the whole project — and neither is a work
+    folder, which is listed without asking."""
+    covered = [*folders.load(cwd), *places.of(session_id, cwd)]
     home = folders.settled(cwd)
     found: dict[str, None] = {}
     for _, asset in _named_files(session_id, cwd, provider):
         parent = folders.settled(str(Path(asset.path).parent))
-        if parent and parent != home and not any(Path(parent).is_relative_to(f) for f in connected):
+        if parent and parent != home and not any(Path(parent).is_relative_to(f) for f in covered):
             found.setdefault(parent)
     return list(found)[:MAX_SUGGESTED]
 
 
+def _rank(asset: Asset) -> float:
+    """Newest first, a picture or a clip `VISUAL_HEAD_START` newer than it is, a log or a data
+    dump `MACHINE_HANDICAP` older."""
+    if asset.kind in ("image", "video"):
+        return asset.modified + VISUAL_HEAD_START
+    return asset.modified - (MACHINE_HANDICAP if asset.name.lower().endswith(MACHINE) else 0)
+
+
 def _named_files(session_id: str, cwd: str, provider: str) -> list[tuple[tuple[int, int], Asset]]:
-    """The newest openable files the transcript named, each with its identity on disk."""
+    """The openable files the transcript named that rank highest, each with its identity on disk."""
     found: dict[tuple[int, int], Asset] = {}
     for candidate in _names(session_id, cwd, provider):
         # Keyed on the file itself, not its name: `CLAUDE.md` and `claude.md` are one
         # file on this disk and would otherwise be two rows saying the same thing.
         if not SKIP & set(candidate.parts) and (pair := _asset(candidate)):
             found.setdefault(pair[0], pair[1])
-    newest = sorted(found.items(), key=lambda pair: pair[1].modified, reverse=True)
-    return newest[:MAX_FILES]
+    return sorted(found.items(), key=lambda pair: _rank(pair[1]), reverse=True)[:MAX_FILES]
 
 
-def _connected(cwd: str) -> dict[tuple[int, int], Asset]:
-    """The newest openable files inside every folder connected to this project."""
+def _in_folders(session_id: str, cwd: str) -> dict[tuple[int, int], Asset]:
+    """The top-ranked openable files in every connected folder and every work folder."""
     found: dict[tuple[int, int], Asset] = {}
-    for folder in folders.load(cwd):
-        for candidate in islice(_walk(Path(folder)), MAX_WALKED):
-            pair = _asset(candidate)
-            # A symlink inside the folder pointing out of it is not inside it.
-            if pair and Path(pair[1].path).is_relative_to(folder):
-                pair[1].connected = folder
-                found.setdefault(pair[0], pair[1])
-    newest = sorted(found.items(), key=lambda pair: pair[1].modified, reverse=True)
-    return dict(newest[:MAX_CONNECTED])
+    walks = [*((f, None, MAX_WALKED) for f in folders.load(cwd)),
+             *((f, PLACE_DEPTH, PLACE_WALKED) for f in places.of(session_id, cwd))]
+    for folder, depth, limit in walks:
+        for key, asset in _walked(folder, depth, limit):
+            found.setdefault(key, asset)
+    return dict(sorted(found.items(), key=lambda pair: _rank(pair[1]), reverse=True)[:MAX_CONNECTED])
 
 
-def _walk(root: Path) -> Iterator[Path]:
-    """Every file under `root` with a suffix worth showing, machinery folders left out."""
+#: folder -> (when walked, what it held). See `WALK_FRESH`.
+_walks: dict[str, tuple[float, list[tuple[tuple[int, int], Asset]]]] = {}
+
+
+def _walked(folder: str, depth: int | None, limit: int) -> list[tuple[tuple[int, int], Asset]]:
+    kept = _walks.get(folder)
+    if kept and time.monotonic() - kept[0] < WALK_FRESH:
+        return kept[1]
+    found = []
+    for candidate in islice(_walk(Path(folder), depth), limit):
+        # A symlink inside the folder pointing out of it is not inside it.
+        if (pair := _asset(candidate)) and Path(pair[1].path).is_relative_to(folder):
+            pair[1].connected = folder
+            found.append(pair)
+    _walks[folder] = (time.monotonic(), found)
+    return found
+
+
+def _walk(root: Path, depth: int | None = None) -> Iterator[Path]:
+    """Every file under `root` with a suffix worth showing, machinery folders left out, at most
+    `depth` folders down."""
     for parent, dirs, names in os.walk(root):
-        dirs[:] = [d for d in dirs if d not in SKIP]
+        below = len(Path(parent).relative_to(root).parts)
+        dirs[:] = [] if depth is not None and below >= depth else [d for d in dirs if d not in SKIP]
         yield from (Path(parent) / n for n in names if Path(n).suffix.lower() in SUFFIXES)
 
 
-def _within(cwd: str, wanted: str) -> Path | None:
-    """`wanted`, every symlink and `..` in it resolved, if it lies inside a connected folder."""
+def _within(session_id: str, cwd: str, wanted: str) -> Path | None:
+    """`wanted`, every symlink and `..` in it resolved, if it lies inside a connected or work folder."""
     if not Path(wanted).is_absolute():
         return None
     try:
@@ -155,15 +203,24 @@ def _within(cwd: str, wanted: str) -> Path | None:
         return None
     if not settled.is_file():
         return None
-    for folder in folders.load(cwd):
+    for folder in [*folders.load(cwd), *places.of(session_id, cwd)]:
         if settled.is_relative_to(folder) and not SKIP & set(settled.relative_to(folder).parts):
             return settled
     return None
 
 
+def _scan(raw: bytes, cwd: str) -> list[Path]:
+    return _candidates(raw.decode("utf-8", "replace"), cwd)
+
+
+#: Names found, per transcript and cwd: the session's own over 4 MB, each subagent's over 512 KB.
+_session_names: Increments[Path] = Increments(_scan, TAIL_WINDOWS[1], 20_000)
+_agent_names: Increments[Path] = Increments(_scan, TAIL_WINDOWS[0], 5_000)
+
+
 def _names(session_id: str, cwd: str, provider: str) -> tuple[Path, ...]:
-    """Every distinct path the session wrote down, in the order first named: off its
-    transcript's tail, kept in `_named` until the file moves, or off OpenCode's recent history."""
+    """Every distinct path the session and its newest subagents wrote down, newest named first
+    and at most `MAX_NAMES` of them — or off OpenCode's recent history."""
     if provider == "opencode":
         try:
             return _distinct(opencode_turns.texts(session_id), cwd)
@@ -172,16 +229,9 @@ def _names(session_id: str, cwd: str, provider: str) -> tuple[Path, ...]:
     path = transcript_path(session_id)
     if path is None:
         return ()
-    try:
-        stat = path.stat()
-    except OSError:
-        return ()
-    key = (stat.st_size, stat.st_mtime_ns, cwd)
-    kept = _named.get(path)
-    if kept is None or kept[0] != key:
-        lines = (raw.decode("utf-8", "replace") for raw in tail_lines(path, TAIL_WINDOWS[1]))
-        kept = _named[path] = (key, _distinct(lines, cwd))
-    return kept[1]
+    found = [*_session_names.read(path, cwd),
+             *(name for agent in subagents(path, SUBAGENTS) for name in _agent_names.read(agent, cwd))]
+    return tuple(islice(dict.fromkeys(reversed(found)), MAX_NAMES))
 
 
 def _distinct(lines: Iterable[str], cwd: str) -> tuple[Path, ...]:

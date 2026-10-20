@@ -1,6 +1,8 @@
 import json
+import os
 
 from deckhand_daemon import files
+from deckhand_daemon.reading import places
 
 SID = "aaaa1111-2222-3333-4444-555566667777"
 
@@ -85,8 +87,9 @@ def test_a_clip_the_session_talked_about_is_listed_as_audio(claude_home, tmp_pat
     ]
 
 
-def test_the_names_are_kept_until_the_transcript_moves(claude_home, tmp_path, monkeypatch):
-    """The scan is kept per transcript size and mtime; a file named after it must still show."""
+def test_only_what_the_transcript_grew_by_is_read_again(claude_home, tmp_path, monkeypatch):
+    """A transcript is read once, then only what was appended: an unchanged one costs no scan,
+    and one new line costs one line's scan, however long the window behind it."""
     first = tmp_path / "first.md"
     first.write_text("one")
     later = tmp_path / "later.md"
@@ -95,8 +98,8 @@ def test_the_names_are_kept_until_the_transcript_moves(claude_home, tmp_path, mo
     assert [a.name for a in files.readable_files(SID, str(tmp_path))] == ["first.md"]
 
     scans = []
-    scan = files._distinct
-    monkeypatch.setattr(files, "_distinct", lambda lines, cwd: scans.append(1) or scan(lines, cwd))
+    scan = files._candidates
+    monkeypatch.setattr(files, "_candidates", lambda text, cwd: scans.append(1) or scan(text, cwd))
     files.readable_files(SID, str(tmp_path))
     assert scans == []  # unchanged transcript, no second scan
 
@@ -104,3 +107,36 @@ def test_the_names_are_kept_until_the_transcript_moves(claude_home, tmp_path, mo
         grown.write(json.dumps(ran("Read", file_path=str(later))) + "\n")
     assert {a.name for a in files.readable_files(SID, str(tmp_path))} == {"first.md", "later.md"}
     assert scans == [1]
+
+
+def test_work_folders_and_the_scratchpad_are_listed_and_served_unasked(claude_home, tmp_path, monkeypatch):
+    """`.orchestrate/` and the session's scratchpad hold its work: listed without connecting."""
+    project = tmp_path / "shop"
+    (project / ".orchestrate").mkdir(parents=True)
+    (project / ".orchestrate" / "shot.png").write_bytes(b"\x89PNG")
+    monkeypatch.setattr(places, "SCRATCH", tmp_path / "tmp")
+    pad = tmp_path / "tmp" / f"claude-{os.getuid()}" / "-Users-jj-dev" / SID / "scratchpad"
+    pad.mkdir(parents=True)
+    (pad / "render.mp4").write_bytes(b"\x00")
+    write_transcript(claude_home, [ran("Read", file_path="/nowhere/x.md")])
+
+    found = {a.name: a.connected for a in files.readable_files(SID, str(project))}
+    assert found == {"shot.png": str((project / ".orchestrate").resolve()), "render.mp4": str(pad.resolve())}
+    assert files.allowed(SID, str(project), str(pad / "render.mp4")) is not None
+    assert files.allowed(SID, str(project), str(tmp_path / "elsewhere.png")) is None
+
+
+def test_a_picture_outranks_a_slightly_newer_note_and_a_deep_walk_stops(claude_home, tmp_path):
+    project = tmp_path / "shop"
+    work = project / "renders"
+    (work / "a" / "b" / "c" / "d").mkdir(parents=True)
+    shot, note, log = work / "frame.png", work / "notes.md", work / "build.log"
+    deep = work / "a" / "b" / "c" / "d" / "deep.png"
+    for path in (shot, note, log, deep):
+        path.write_bytes(b"x")
+    os.utime(shot, (100_000, 100_000))
+    os.utime(note, (100_000 + 3600, 100_000 + 3600))
+    os.utime(log, (100_000 + 7200, 100_000 + 7200))
+    write_transcript(claude_home, [ran("Read", file_path="/nowhere/x.md")])
+
+    assert [a.name for a in files.readable_files(SID, str(project))] == ["frame.png", "notes.md", "build.log"]
