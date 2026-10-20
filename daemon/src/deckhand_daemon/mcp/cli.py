@@ -137,7 +137,7 @@ def build_parser() -> Parser:
     sub = parser.add_subparsers(dest="command", parser_class=Parser)
     sub.add_parser("prime", help="the whole contract, as Markdown (--json for the model)")
     for command in COMMANDS:
-        sub.add_parser(command["name"], help=command["does"])
+        sub.add_parser(command["name"], help=command["does"].replace("%", "%%"))  # argparse formats help
     sub.choices["sessions"].add_argument("--fields", help=f"comma list of {','.join(SESSION_FIELDS)}")
     sub.choices["sessions"].add_argument("--limit", type=int, default=50)
     ask = sub.choices["ask"]
@@ -161,7 +161,7 @@ def build_parser() -> Parser:
                                        choices=("claude", "codex", "opencode"))
     arrange = sub.choices["arrange"]
     arrange.add_argument("action", choices=get_args(tmux.Action))
-    arrange.add_argument("target", help="session name, %pane, @window, session:index, window name")
+    arrange.add_argument("target", help="session name, %%pane, @window, session:index, window name")
     arrange.add_argument("--to")
     arrange.add_argument("--name")
     arrange.add_argument("--layout", choices=tmux.LAYOUTS)
