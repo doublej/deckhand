@@ -97,6 +97,28 @@ extension AppModel {
         }
     }
 
+    /// Every word list a session in this folder hears, outermost first — the CLAUDE.md way: the
+    /// global list, then each folder's own down to this one. Nil where the Mac would not say.
+    func hintLayers(for session: Session) async -> [HintLayer]? {
+        guard let client = settings.client() else { return nil }
+        return try? await client.hintLayers(for: session.cwd)
+    }
+
+    /// Write back each layer that was edited, and nothing else.
+    func storeHintLayers(_ layers: [HintLayer], over before: [HintLayer]) {
+        guard let client = settings.client() else { return }
+        let edited = layers.filter { !before.contains($0) }
+        guard !edited.isEmpty else { return }
+        Task {
+            do {
+                for layer in edited { try await client.saveHints(layer) }
+                wants.failed = nil
+            } catch {
+                wants.failed = reason(error)
+            }
+        }
+    }
+
     /// Write the whole document and keep what the Mac stored, which is not always what was sent:
     /// a model it does not offer is refused and a folder that overrides nothing is dropped. A
     /// screen that kept its own copy would show settings that are not the Mac's.

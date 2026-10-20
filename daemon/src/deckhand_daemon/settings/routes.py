@@ -58,6 +58,19 @@ def write_hints(hints_sent: Annotated[list, Body(embed=True, alias="hints")]) ->
     return {"hints": hints.save(hints_sent)}
 
 
+@router.get("/hints/folder")
+def read_folder_hints(path: str) -> dict:
+    """Every list a session in `path` hears, outermost first — "" is the global one."""
+    return {"path": path, "layers": hints.layers(path)}
+
+
+@router.put("/hints/folder")
+def write_folder_hints(path: Annotated[str, Body()],
+                       words: Annotated[list, Body(alias="hints")]) -> dict:
+    """Replace one layer's own words, and answer with what was stored."""
+    return {"path": path, "hints": hints.save_folder(path, words)}
+
+
 @router.get("/settings/project")
 def for_project(path: str) -> dict:
     """What actually applies in one folder, already resolved.

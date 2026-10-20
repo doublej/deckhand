@@ -210,7 +210,7 @@ def hints_for(name: str, cwd: str) -> list[str]:
     when it does anyway. Only the swap can be relied on; a hint only displaces text already
     nearly it.
     """
-    words = {*hints.load(), *aliases.spoken(), *name.replace("-", " ").split()}
+    words = {*hints.for_folder(cwd), *aliases.spoken(), *name.replace("-", " ").split()}
     words.update(part for part in Path(cwd).parts[-2:] if part not in ("/", "Users"))
     return sorted(word for word in words if len(word) > 2)
 

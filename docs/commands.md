@@ -537,6 +537,8 @@ inside a helper is not listed, so treat the column as the least a route can answ
 | `PUT /aliases` | body `{aliases}` | 200 | 401, 422 | Replace the list whole, the way `/settings` and `/filters` are written. |
 | `GET /hints` | — | 200 | 401 | Every word utt is told to listen for in every clip — see `settings/hints.py`. |
 | `PUT /hints` | body `{hints}` | 200 | 401, 422 | Replace the list whole, and answer with what was stored: blanks and repeats are dropped. |
+| `GET /hints/folder` | `?path`: string | 200 | 401, 422 | Every list a session in `path` hears, outermost first — "" is the global one. |
+| `PUT /hints/folder` | body `{path, hints}` | 200 | 401, 422 | Replace one layer's own words, and answer with what was stored. |
 | `GET /settings/project` | `?path`: string | 200 | 401, 422 | What actually applies in one folder, already resolved. |
 
 ### space

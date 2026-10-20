@@ -147,6 +147,12 @@ def test_a_word_taken_off_the_list_is_no_longer_hinted(jobs, claude_home):
     assert "transcript" not in transcribe.hints_for("warm-okapi", "/Users/jj/dev/web/shop")
 
 
+def test_a_clip_hears_the_words_of_the_folder_it_was_said_in(jobs, claude_home):
+    hints.save_folder("/Users/jj/dev/web", ["Shopify"])
+    assert "Shopify" in transcribe.hints_for("warm-okapi", "/Users/jj/dev/web/shop")
+    assert "Shopify" not in transcribe.hints_for("warm-okapi", "/Users/jj/dev/swift/app")
+
+
 def _clip(jobs):
     clip = jobs.parent / "clip.wav"
     clip.write_bytes(b"RIFF....WAVE")

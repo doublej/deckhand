@@ -23,3 +23,16 @@ extension ClientTests {
         #expect(String(bytes: body, encoding: .utf8)?.contains(#""hints""#) == true)
     }
 }
+
+extension ClientTests {
+    @Test("a folder's layers come back outermost first, and one layer is written back")
+    func readsAndWritesLayers() async throws {
+        StubProtocol.respond(with: Data(#"{"path":"/a/b","layers":[{"path":"","hints":["Claude"]},{"path":"/a/b","hints":["Shopify"]}]}"#.utf8))
+        let layers = try await client().hintLayers(for: "/a/b")
+        #expect(layers == [HintLayer(path: "", hints: ["Claude"]), HintLayer(path: "/a/b", hints: ["Shopify"])])
+        #expect(StubProtocol.lastRequest?.url?.query == "path=/a/b")
+        StubProtocol.respond(with: Data(#"{"path":"/a/b","hints":["Shopify"]}"#.utf8))
+        #expect(try await client().saveHints(HintLayer(path: "/a/b", hints: ["Shopify", ""])).hints == ["Shopify"])
+        #expect(StubProtocol.lastRequest?.httpMethod == "PUT")
+    }
+}

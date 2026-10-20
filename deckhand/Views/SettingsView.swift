@@ -205,7 +205,7 @@ struct SettingsView: View {
     private var listening: some View {
         SettingsGroup("Listened for") {
             HintWords(label: "Words utt listens for",
-                      hint: "Sent with every clip. Each session's own name and folder are added to it.",
+                      hint: "Every session hears these. A folder adds its own under a session's On the way in.",
                       words: $hints)
         }
     }

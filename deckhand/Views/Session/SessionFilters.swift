@@ -17,6 +17,9 @@ struct SessionFilters: View {
     /// Nil where there is nothing to lend, and then the fields are typed the way they always were.
     var say: Dictation?
     @Environment(\.dismiss) private var dismiss
+    /// The word lists this session hears, as edited here and as the Mac last had them.
+    @State private var layers: [HintLayer] = []
+    @State private var stored: [HintLayer] = []
 
     var body: some View {
         NavigationStack {
@@ -24,6 +27,7 @@ struct SessionFilters: View {
                 VStack(alignment: .leading, spacing: Spacing.medium) {
                     chain
                     footline
+                    listening
                 }
                 .padding(Spacing.medium)
             }
@@ -36,10 +40,17 @@ struct SessionFilters: View {
                 }
             }
         }
-        .task { await model.loadFilters(for: session) }
+        .task {
+            await model.loadFilters(for: session)
+            stored = await model.hintLayers(for: session) ?? []
+            layers = stored
+        }
         // Both ways off this page come through here — Done and a swipe down — and a save per
         // keystroke is what the Mac's own plugin page learned not to do.
-        .onDisappear { Task { await model.saveFilters() } }
+        .onDisappear {
+            Task { await model.saveFilters() }
+            model.storeHintLayers(layers, over: stored)
+        }
     }
 
     private var chain: some View {
@@ -61,6 +72,26 @@ struct SessionFilters: View {
             .font(Typography.hint)
             .foregroundStyle(Palette.textTertiary)
             .padding(.horizontal, Spacing.xxs)
+    }
+
+    /// The words utt listens for, layered like CLAUDE.md files: the global list, then each folder's
+    /// own from home down to this session's, every one heard and every one editable here.
+    private var listening: some View {
+        SettingsGroup("Listened for") {
+            ForEach(layers.indices, id: \.self) { spot in
+                HintWords(label: Self.title(of: layers[spot].path),
+                          hint: layers[spot].path.isEmpty ? "Every session hears these." : "Added for sessions in here.",
+                          words: $layers[spot].hints)
+            }
+        }
+    }
+
+    /// The global list by what it does, a folder by its path with the home folder as `~`.
+    private static func title(of path: String) -> String {
+        guard !path.isEmpty else { return "Every session" }
+        let parts = path.split(separator: "/")
+        guard parts.count >= 2, parts[0] == "Users" else { return path }
+        return (["~"] + parts.dropFirst(2)).joined(separator: "/")
     }
 
     /// One filter: what it is, whether it runs, where it sits, and the fields it takes. The
