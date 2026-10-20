@@ -1,5 +1,6 @@
 """The queue: what is owed a briefing, in what order, and what costs nothing at all."""
 
+import asyncio
 import json
 import time
 
@@ -320,6 +321,22 @@ def test_the_model_is_told_whether_the_session_is_working(claude_home):
         "stop_reason": "end_turn", "content": [{"type": "text", "text": "Done."}]}}])
     assert briefings._state(SID).startswith("turn ended at ")
     assert "<state>\nworking now" in briefings.summarize._prompt(SID, "x", "", "working now")
+
+
+def test_a_failed_run_keeps_the_last_briefing_and_is_owed_again(claude_home, monkeypatch):
+    """A timeout used to blank the briefing and stamp it current, so a quiet session kept the error."""
+    transcript(claude_home, SID, [said("build it"), did("built")])
+    briefings.save(SID, {"summary": "Built it", "hash": "old", "mtime": 1.0, "written_at": 0})
+
+    async def fails(*_):
+        return None, "timed out"
+    monkeypatch.setattr(briefings.summarize, "summarize", fails)
+    asyncio.run(briefings._write(SID))
+
+    kept = briefings.load(SID)
+    assert (kept["summary"], kept["error"], kept["hash"], kept["mtime"]) == ("Built it", "timed out", "old", 1.0)
+    monkeypatch.setattr(briefings, "_too_soon", lambda _: False)
+    assert briefings._due(SID) is True
 
 
 def test_an_agent_sdk_run_is_never_briefed(claude_home):

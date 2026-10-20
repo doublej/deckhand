@@ -35,12 +35,64 @@ public enum Links {
         var out = attributed
         let plain = String(attributed.characters)
         guard !plain.isEmpty, let detector else { return out }
-        for match in detector.matches(in: plain, range: NSRange(plain.startIndex..., in: plain)) {
-            guard let url = match.url, let span = range(of: match.range, in: out, plain: plain),
-                  out[span].link == nil else { continue }
+        let whole = NSRange(plain.startIndex..., in: plain)
+        // Addresses first, then what the detector cannot see: a `localhost:5173` with no scheme
+        // and a file path. A path inside an address is already linked by then and left alone.
+        let found = detector.matches(in: plain, range: whole).compactMap { match in
+            match.url.map { (trimmed(match.range, in: plain), $0) }
+        } + (bare?.matches(in: plain, range: whole) ?? []).compactMap { match in
+            URL(string: "http://" + (plain as NSString).substring(with: match.range)).map { (match.range, $0) }
+        } + (paths?.matches(in: plain, range: whole) ?? []).compactMap { match in
+            file((plain as NSString).substring(with: match.range)).map { (match.range, $0) }
+        }
+        for (found, url) in found {
+            guard let span = range(of: found, in: out, plain: plain),
+                  out[span].runs.allSatisfy({ $0.link == nil }) else { continue }
             out[span].link = url
             out[span].underlineStyle = .single
             out[span].foregroundColor = tint
+        }
+        return out
+    }
+
+    /// A host and port with no scheme in front — `localhost:5173`, `mac.local:4180` — which is
+    /// how a dev server announces itself and the one shape the detector does not call an address.
+    private nonisolated(unsafe) static let bare = try? NSRegularExpression(
+        pattern: #"(?<![\w./:@-])(?:localhost|127\.0\.0\.1|0\.0\.0\.0|[A-Za-z0-9-]+\.local):\d{2,5}(?:/[^\s`'"<>()\[\]]*)?"#
+    )
+
+    /// A path ending in a kind of file the Mac will open (`files.py`'s `KINDS`), the way the
+    /// daemon finds one: a run of path characters, cut at the suffix. A `:12` line number after
+    /// it is not path characters, so it stays out.
+    private nonisolated(unsafe) static let paths = try? NSRegularExpression(
+        pattern: #"(?<![\w./~:@-])[\w./~-]*\.(?:"# + Asset.openable.keys.joined(separator: "|") + #")(?![\w-])"#,
+        options: .caseInsensitive
+    )
+
+    /// The scheme a path in a transcript is linked with. Not `file:`, because the file is on the
+    /// Mac and the tap has to ask the Mac for it (`LocalLinks`).
+    public static let fileScheme = "deckhand-file"
+
+    private static func file(_ path: String) -> URL? {
+        var parts = URLComponents()
+        parts.scheme = fileScheme
+        parts.path = path
+        return parts.url
+    }
+
+    /// The path a tapped link names on the Mac, for a path in a transcript or a `file://` address.
+    public static func macPath(of url: URL) -> String? {
+        guard url.scheme == fileScheme || url.isFileURL else { return nil }
+        let path = URLComponents(url: url, resolvingAgainstBaseURL: false)?.path ?? ""
+        return path.isEmpty ? nil : path
+    }
+
+    /// The detector takes a closing backtick or quote as part of an address that sits in one.
+    private static func trimmed(_ found: NSRange, in plain: String) -> NSRange {
+        var out = found
+        let text = plain as NSString
+        while out.length > 0, "`'\"".contains(text.substring(with: NSRange(location: NSMaxRange(out) - 1, length: 1))) {
+            out.length -= 1
         }
         return out
     }

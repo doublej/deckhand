@@ -8,23 +8,18 @@ import SwiftUI
 /// machine was meant, so the tap offers the ones it could have been — the Mac as it reports
 /// itself, and the address this phone already reaches it on — rather than picking one and
 /// opening something that is not there.
+///
+/// A path the session wrote is a file on the Mac, so it opens in the same viewer the files square
+/// uses, fetched from the Mac — which serves it only if this session's transcript named it.
 struct LocalLinks: ViewModifier {
-    /// The Mac's own address on the network, from `/health`. Absent until the first listing.
-    let mac: String?
-    /// Whatever was typed in Settings to reach the Mac. Proven to work, by definition.
-    let paired: String
+    @Bindable var model: AppModel
+    let session: Session
     @State private var choices: [URL] = []
+    @State private var file: Asset?
 
     func body(content: Content) -> some View {
         content
-            .environment(\.openURL, OpenURLAction { url in
-                guard Links.isLocal(url) else { return .systemAction }
-                let elsewhere = Links.choices(for: url, mac: mac, paired: paired)
-                // Nowhere else it could be: no question worth asking.
-                guard elsewhere.count > 1 else { return .systemAction }
-                choices = elsewhere
-                return .handled
-            })
+            .environment(\.openURL, OpenURLAction(handler: open))
             .confirmationDialog("Open where?", isPresented: .init(
                 get: { !choices.isEmpty }, set: { if !$0 { choices = [] } }
             ), titleVisibility: .visible) {
@@ -36,5 +31,19 @@ struct LocalLinks: ViewModifier {
             } message: {
                 Text("The session wrote this address for the Mac it is running on.")
             }
+            .sheet(item: $file) { AssetView(model: model, session: session, asset: $0) }
+    }
+
+    private func open(_ url: URL) -> OpenURLAction.Result {
+        if let path = Links.macPath(of: url) {
+            file = Asset(named: path)
+            return .handled
+        }
+        guard Links.isLocal(url) else { return .systemAction }
+        let elsewhere = Links.choices(for: url, mac: model.macAddress, paired: model.settings.host)
+        // Nowhere else it could be: no question worth asking.
+        guard elsewhere.count > 1 else { return .systemAction }
+        choices = elsewhere
+        return .handled
     }
 }

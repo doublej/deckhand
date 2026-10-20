@@ -112,9 +112,15 @@ def readable_files(session_id: str, cwd: str, provider: str = "claude") -> list[
 
 
 def allowed(session_id: str, cwd: str, wanted: str, provider: str = "claude") -> Path | None:
-    """The file at `wanted`, but only because it lies in one of its folders or the transcript named it."""
-    if found := _within(session_id, cwd, wanted):
+    """The file at `wanted`, but only because it lies in one of its folders or the transcript named it.
+
+    `wanted` is a listed path, or a path as a turn wrote it — `~/…` or relative to `cwd` — which
+    the phone links and the files list may have ranked out of its top `MAX_FILES`."""
+    meant = _meant(wanted, cwd)
+    if found := _within(session_id, cwd, str(meant)):
         return found
+    if not SKIP & set(meant.parts) and meant in _names(session_id, cwd, provider) and (pair := _asset(meant)):
+        return Path(pair[1].path)
     for _, asset in _named_files(session_id, cwd, provider):
         if asset.path == wanted:
             return Path(asset.path)
@@ -249,16 +255,13 @@ def _runs(text: str) -> list[str]:
 
 def _candidates(text: str, cwd: str) -> list[Path]:
     """Every path-shaped run in one line, resolved the way the session would have meant it."""
-    out = []
-    for raw in _runs(text):
-        if raw.startswith("~"):
-            found = Path.home() / raw[2:] if raw.startswith("~/") else Path(raw)
-        else:
-            found = Path(raw)
-        if not found.is_absolute():
-            found = Path(cwd) / found
-        out.append(found)
-    return out
+    return [_meant(raw, cwd) for raw in _runs(text)]
+
+
+def _meant(raw: str, cwd: str) -> Path:
+    """One path as written, with `~/` and a relative path read the way the session meant them."""
+    found = Path.home() / raw[2:] if raw.startswith("~/") else Path(raw)
+    return found if found.is_absolute() else Path(cwd) / found
 
 
 def _asset(path: Path) -> tuple[tuple[int, int], Asset] | None:

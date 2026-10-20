@@ -23,23 +23,22 @@ final class DeckLoopTests: XCTestCase {
         add(screenshot(app, named: "session"))
         XCTAssertTrue(appeared, "the talk button never appeared")
 
-        // A session opens on its dashboard, and a square is what says so: the grid carries its
-        // own counts, so the page has something true on it before anything is opened.
+        // A session opens on its transcript; the dashboard is one swipe along, and a square is
+        // what says so: the grid carries its own counts.
         let slips = app.descendants(matching: .any).matching(identifier: "tile-slips").firstMatch
-        XCTAssertTrue(slips.waitForExistence(timeout: 15), "the session did not open on its dashboard")
+        add(screenshot(app, named: "transcript"))
+        app.swipeLeft()
+        XCTAssertTrue(slips.waitForExistence(timeout: 15), "the dashboard is not one swipe along")
         add(screenshot(app, named: "dashboard"))
 
-        // The other two panes are their own screens and are worth seeing on their own. Swiped to,
-        // not tapped: the bar of tabs at the foot is gone and the three panes sit side by side,
-        // which is the one thing this test can prove still works.
-        for pane in ["summary", "transcript"] {
-            app.swipeLeft()
-            add(screenshot(app, named: pane))
-        }
+        // Swiped to, not tapped: the bar of tabs at the foot is gone and the three panes sit side
+        // by side, which is the one thing this test can prove still works.
+        app.swipeLeft()
+        add(screenshot(app, named: "summary"))
         // A swipe in the content pages and does not leave: the mark is still here, and the
         // dashboard is behind us rather than under us.
         XCTAssertTrue(talk.exists, "the mark went away while paging")
-        XCTAssertFalse(slips.exists, "two swipes did not leave the dashboard")
+        XCTAssertFalse(slips.exists, "a swipe did not leave the dashboard")
         // And the one control the way out must never take a touch from. The mark floats over
         // the panes and does not reach into the leading 20 points the edge strip lives in.
         XCTAssertGreaterThan(talk.frame.minX, 20, "the talk mark reaches into the edge strip")
@@ -53,6 +52,7 @@ final class DeckLoopTests: XCTestCase {
         XCTAssertTrue(firstSession.waitForExistence(timeout: 20), "the deck stayed empty")
         firstSession.tap()
         let files = app.descendants(matching: .any).matching(identifier: "tile-files").firstMatch
+        app.swipeLeft()
         XCTAssertTrue(files.waitForExistence(timeout: 15), "no files square on the dashboard")
         files.tap()
         // The sheet's own title, not the suffix row inside the pane: that row is only drawn for a
@@ -89,17 +89,16 @@ final class DeckLoopTests: XCTestCase {
         let firstSession = app.descendants(matching: .any).matching(identifier: "session-row").firstMatch
         XCTAssertTrue(firstSession.waitForExistence(timeout: 20), "the deck stayed empty")
         firstSession.tap()
-        // One pane along from the dashboard, which is where a leading-edge drag has something to
-        // page *back* to. On the first pane there is nothing behind it and this proves nothing.
+        // The dashboard is one pane along from the transcript, which is where a leading-edge drag
+        // has something to page *back* to. On the first pane there is nothing behind it.
         let slips = app.descendants(matching: .any).matching(identifier: "tile-slips").firstMatch
-        XCTAssertTrue(slips.waitForExistence(timeout: 15), "the session did not open on its dashboard")
         app.swipeLeft()
-        XCTAssertFalse(slips.waitForExistence(timeout: 2), "a swipe did not leave the dashboard")
+        XCTAssertTrue(slips.waitForExistence(timeout: 15), "the dashboard is not one swipe along")
 
         drag(app, from: 0.01, to: 0.14)
         let talk = app.descendants(matching: .any).matching(identifier: "talk-mark").firstMatch
         XCTAssertTrue(talk.exists, "a short edge drag left the session")
-        XCTAssertFalse(slips.exists, "a short edge drag paged back to the dashboard")
+        XCTAssertTrue(slips.exists, "a short edge drag paged back to the transcript")
     }
 
     /// A drag across the middle of the page, from one fraction of the width to another.

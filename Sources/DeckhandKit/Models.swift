@@ -177,6 +177,22 @@ public struct Asset: Codable, Hashable, Sendable, Identifiable {
 
     public enum Kind: Sendable { case image, video, audio, text }
 
+    /// Every suffix the Mac will open, and its kind — `files.py`'s `KINDS`, copied.
+    static let openable: [String: String] = Dictionary(uniqueKeysWithValues: [
+        ("image", ["png", "jpg", "jpeg", "gif", "heic", "webp", "bmp", "tiff"]),
+        ("video", ["mp4", "mov", "m4v"]),
+        ("audio", ["mp3", "wav", "m4a", "aac", "flac", "opus", "ogg", "aiff", "caf"]),
+        ("text", ["md", "txt", "log", "csv", "json", "yaml", "yml", "toml"])
+    ].flatMap { kind, suffixes in suffixes.map { ($0, kind) } })
+
+    /// A path a transcript named, as the files tab would list it before the Mac says its size.
+    public init(named path: String) {
+        let name = (path as NSString).lastPathComponent
+        self.init(path: path, name: name,
+                  kind: Self.openable[(name as NSString).pathExtension.lowercased()] ?? "text",
+                  size: 0, modified: 0)
+    }
+
     public var sort: Kind {
         switch kind {
         case "image": .image

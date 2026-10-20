@@ -204,9 +204,12 @@ struct AssetView: View {
                 ProgressView()
                 // A rendered clip takes a moment over the LAN, and a spinner with no number
                 // beside it is how a working download reads as a hung one.
-                Text("\(asset.size.formatted(.byteCount(style: .file))) from the Mac")
-                    .font(Typography.hint)
-                    .foregroundStyle(Palette.textTertiary)
+                // A path tapped in a turn arrives with no size: the Mac has not been asked yet.
+                if asset.size > 0 {
+                    Text("\(asset.size.formatted(.byteCount(style: .file))) from the Mac")
+                        .font(Typography.hint)
+                        .foregroundStyle(Palette.textTertiary)
+                }
             }
         }
     }

@@ -189,9 +189,11 @@ async def session_summary(session_id: str) -> dict:
     exactly when there is least patience for a blank page, so the answer is the last true thing
     said about it and the reading is what promotes it to be written about next.
     """
-    await saying.live_session(session_id)
-    briefings.bump(session_id)
-    return await asyncio.to_thread(briefings.of, session_id)
+    # By the id the lookup answers with: after a `/clear` the page still asks by the old one,
+    # which the worker no longer walks, so its briefing would stay frozen at the clear.
+    live = (await saying.live_session(session_id)).session_id
+    briefings.bump(live)
+    return await asyncio.to_thread(briefings.of, live)
 
 
 @app.get("/briefings", dependencies=[Depends(require_token)])

@@ -64,6 +64,18 @@ def test_a_path_the_transcript_never_named_cannot_be_read(claude_home, tmp_path)
     assert files.allowed(SID, str(tmp_path), str(secret.resolve())) is None
 
 
+def test_a_path_as_a_turn_wrote_it_opens(claude_home, tmp_path):
+    """The phone links a path exactly as the turn wrote it, relative and all."""
+    (tmp_path / "docs").mkdir()
+    plan = tmp_path / "docs" / "plan.md"
+    plan.write_text("the plan")
+    write_transcript(claude_home, [ran("Read", file_path="docs/plan.md")])
+
+    assert files.allowed(SID, str(tmp_path), "docs/plan.md") == plan.resolve()
+    assert files.allowed(SID, str(tmp_path), "./docs/plan.md") == plan.resolve()
+    assert files.allowed(SID, str(tmp_path), "docs/other.md") is None
+
+
 def test_one_file_named_two_ways_is_one_row(claude_home, tmp_path):
     note = tmp_path / "notes.md"
     note.write_text("once")

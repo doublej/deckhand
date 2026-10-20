@@ -294,7 +294,14 @@ async def _write(session_id: str) -> None:
     state = await asyncio.to_thread(_state, session_id)
     fingerprint = hashlib.sha256(f"{asks}\n\n{activity}".encode()).hexdigest()
     summary, error = await summarize.summarize(session_id, activity, asks, state)
-    if summary is None and error is None:
+    if error is not None:
+        # The last good briefing, hash and mtime stay: stamping them current would tell `_due`
+        # nothing is owed, and a session gone quiet would keep the error and lose its briefing.
+        # `written_at` moves, so the floor spaces out the retry.
+        save(session_id, load(session_id) | {"written_at": time.time(), "error": error})
+        log.info("briefing for %s: %s", session_id[:8], error)
+        return
+    if summary is None:
         # Nothing said and nothing wrong: the session has done nothing since they last spoke.
         # Still worth recording, or it is asked again on every sweep for the rest of the day.
         summary = load(session_id).get("summary")

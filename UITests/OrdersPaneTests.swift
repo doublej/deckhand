@@ -15,14 +15,14 @@ final class OrdersPaneTests: XCTestCase {
         let firstSession = app.descendants(matching: .any).matching(identifier: "session-row").firstMatch
         XCTAssertTrue(firstSession.waitForExistence(timeout: 30), "the deck stayed empty")
         firstSession.tap()
-        let talk = app.descendants(matching: .any).matching(identifier: "talk-mark").firstMatch
-        XCTAssertTrue(talk.waitForExistence(timeout: 20), "the session page never opened")
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "talk-mark").firstMatch
+            .waitForExistence(timeout: 20), "the session page never opened")
 
         // A square on the dashboard rather than four swipes to the end of a carousel. The tile
         // says what is standing before anything is opened, which is the whole reason it is one.
         let tile = app.descendants(matching: .any).matching(identifier: "tile-orders").firstMatch
+        app.swipeLeft()
         XCTAssertTrue(tile.waitForExistence(timeout: 15), "no orders square on the dashboard")
-        add(screenshot(app, named: "dashboard"))
         tile.tap()
 
         let card = app.descendants(matching: .any).matching(identifier: "orders-card").firstMatch

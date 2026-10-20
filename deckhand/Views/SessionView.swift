@@ -9,7 +9,7 @@ struct SessionView: View {
     /// which is still refreshing behind this page.
     let opened: Session
     @State private var recorder = Recorder()
-    @State private var showing: Pane = .dashboard
+    @State private var showing: Pane = .transcript
     /// Set while something that asks first waits to be confirmed — the menu's two controls, the
     /// dashboard's Compact square, or its Clear inbox square. One slot, one dialog, whichever
     /// surface the press came from. It is a `Confirmation` rather than a `Control` because the
@@ -39,13 +39,14 @@ struct SessionView: View {
     /// It was five. Slips, files and orders were three swipes of them, and each was a screen you
     /// had to arrive at before you could find out whether it had anything on it — so they are
     /// squares on the dashboard now, carrying their own counts, and the pane itself opens on a
-    /// sheet from the square. What is left is a carousel of reading: where you are, what it did,
-    /// and what it said, in that order and in one direction.
+    /// sheet from the square. What is left is a carousel of reading: what it said, where you are,
+    /// and what it did, in that order and in one direction.
     ///
-    /// The dashboard is first because it is where a session opens. The order here is the swipe
-    /// order, so the leading edge you leave the page from is still the first pane's.
+    /// The transcript is first because it is what a session is opened to read — JJ's call. The
+    /// order here is the swipe order, so the leading edge you leave the page from is still the
+    /// first pane's.
     enum Pane: String, CaseIterable {
-        case dashboard = "Dashboard", summary = "Summary", transcript = "Transcript"
+        case transcript = "Transcript", dashboard = "Dashboard", summary = "Summary"
     }
 
     /// The session as the Mac last described it, not as it was when the page opened. A compact,
@@ -134,7 +135,7 @@ struct SessionView: View {
         // that already named the page — two rows of chrome before a word of content. The
         // chevron moved into the header and the band went with it.
         .toolbar(.hidden, for: .navigationBar)
-        .modifier(LocalLinks(mac: model.macAddress, paired: model.settings.host))
+        .modifier(LocalLinks(model: model, session: session))
         // The one sheet still opened from the menu. Renaming, the filter chain and the project's
         // settings moved onto the dashboard with everything else the menu used to carry, and they
         // are presented from there — a sheet belongs to whatever triggers it, and what triggers
@@ -281,6 +282,7 @@ struct SessionView: View {
     /// which is the one place on this page something must not be drawn.
     private var pane: some View {
         TabView(selection: $showing) {
+            TranscriptView(model: model, session: session, earlier: $earlier).tag(Pane.transcript)
             DashboardView(model: model,
                           session: session,
                           say: say,
@@ -288,7 +290,6 @@ struct SessionView: View {
                           confirming: $confirming)
                 .tag(Pane.dashboard)
             BriefingView(model: model, session: session).tag(Pane.summary)
-            TranscriptView(model: model, session: session, earlier: $earlier).tag(Pane.transcript)
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
         .animation(Motion.opening, value: showing)

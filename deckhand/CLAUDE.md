@@ -229,12 +229,12 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   try to hit — and the page's own edge-swipe-to-leave has to be arbitrated against the paging
   rather than restricted to the first pane. It fires from **every** pane, and the strip that
   catches it wins by being drawn over them.
-- **There are three panes and all three are things you read: the dashboard, the briefing, the
-  transcript.** It was five. Slips, files and orders were three swipes each of which had to be
+- **There are three panes and all three are things you read: the transcript, the dashboard, the
+  briefing.** It was five. Slips, files and orders were three swipes each of which had to be
   *arrived* at before you could learn whether it had anything on it, and a carousel you page past
   on the way to the transcript is the wrong home for something you do once. They are squares now.
-  The dashboard opens first because it is where a session starts, and the order here is the swipe
-  order, so the leading edge that leaves the page is still the first pane's.
+  The transcript opens first because it is what a session is opened to read, and the order here is
+  the swipe order, so the leading edge that leaves the page is still the first pane's.
 - **A square that cannot carry a number is not a square.** `Views/Dashboard/` is a grid, and every
   tile carries the count it is about — slips waiting, files touched, the first written line of the
   standing orders, how many filters run out of how many this Mac offers, what the CLAUDE.md tree
