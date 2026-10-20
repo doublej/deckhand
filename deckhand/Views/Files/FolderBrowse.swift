@@ -28,6 +28,16 @@ struct FolderBrowse: View {
                     .accessibilityIdentifier("file-row")
             }
         }
+        .contentShape(.rect)
+        // A swipe to the right is one folder up, the way a navigation stack goes back. Mostly
+        // sideways, so a scroll that drifts a little never climbs out of a folder.
+        .simultaneousGesture(DragGesture(minimumDistance: 24).onEnded { drag in
+            let across = drag.translation.width
+            guard across > 80, abs(drag.translation.height) < across / 2, let above = tree.above else { return }
+            withAnimation(.snappy) { location = above }
+        })
+        .sensoryFeedback(.selection, trigger: location)
+        .accessibilityAction(named: "Up one folder") { if let above = tree.above { location = above } }
     }
 
     /// Every folder from the top down to here; each one a tap back to it.

@@ -44,6 +44,11 @@ public struct FileTree: Equatable, Sendable {
         folders = Self.children(of: here, in: assets)
     }
 
+    /// One folder up, or nil at the top — where a swipe back goes.
+    public var above: String? {
+        here == root ? nil : trail.dropLast().last?.path
+    }
+
     /// From the root down to here, each one tappable.
     public var trail: [Crumb] {
         let below = here.dropFirst(root.count).split(separator: "/").map(String.init)

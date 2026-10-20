@@ -27,6 +27,9 @@ import Testing
         #expect(tree.files.map(\.name) == ["one.png"])
         #expect(tree.trail.map(\.name) == ["p", "a", "b"])
         #expect(tree.trail.map(\.path) == ["/p", "/p/a", "/p/a/b"])
+        #expect(tree.above == "/p/a")
+        #expect(FileTree(files, at: "/p/a").above == "/p")
+        #expect(FileTree(files).above == nil)
     }
 
     @Test("a place the narrowed list no longer reaches starts again at its root")
