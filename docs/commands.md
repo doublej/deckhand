@@ -538,6 +538,8 @@ inside a helper is not listed, so treat the column as the least a route can answ
 | `GET /hints` | — | 200 | 401 | Every word utt is told to listen for in every clip — see `settings/hints.py`. |
 | `PUT /hints` | body `{hints}` | 200 | 401, 422 | Replace the list whole, and answer with what was stored: blanks and repeats are dropped. |
 | `GET /settings/project` | `?path`: string | 200 | 401, 422 | What actually applies in one folder, already resolved. |
+| `GET /sessions/{session_id}/folders` | — | 200 | 401, 404, 422 | The folders connected to this session's project, and the ones worth suggesting. |
+| `PUT /sessions/{session_id}/folders` | body `{folders}` | 200 | 401, 404, 422 | Replace the project's folders whole — see `settings/folders.py`. Answers with what was kept: a relative path, the disk's root and the home folder itself are dropped. |
 
 ### space
 

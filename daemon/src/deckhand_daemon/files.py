@@ -8,19 +8,26 @@ The same list bounds serving one back. A path that never appeared in this sessio
 is not readable through the daemon, which is what keeps a file endpoint from being a file
 browser on someone's Mac.
 
+A folder the person connected to the project (`settings/folders.py`) is the second door: every
+openable file inside it is listed and served, whether the transcript named it or not — the
+person's choice to connect it is the permission, and nothing outside it gets through.
+
 An OpenCode session has no transcript on disk; its recent history, read over OpenCode's API, is
 searched for paths in exactly the same way, so the rule is the same rule.
 """
 
 from __future__ import annotations
 
+import os
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from dataclasses import asdict, dataclass
+from itertools import islice
 from pathlib import Path
 
 from .reading.transcripts import TAIL_WINDOWS, tail_lines, transcript_path
 from .sessions import opencode, opencode_turns
+from .settings import folders
 
 KINDS = {
     "image": (".png", ".jpg", ".jpeg", ".gif", ".heic", ".webp", ".bmp", ".tiff"),
@@ -45,6 +52,11 @@ ENDING = re.compile(r"\.(?:" + "|".join(s[1:] for s in SUFFIXES) + r")\b", re.IG
 # Machinery, not work. A phone showing 200 files out of node_modules shows nothing.
 SKIP = {".git", "node_modules", ".venv", "__pycache__", ".build", ".mypy_cache", "DerivedData"}
 MAX_FILES = 60
+#: A connected folder is where renders pile up, so it gets its own, larger share of the list.
+MAX_CONNECTED = 120
+#: ponytail: a walk stops after this many files, so a folder of a million lists the first part.
+MAX_WALKED = 20_000
+MAX_SUGGESTED = 8
 #: transcript -> ((size, mtime, cwd), every path it names). The scan of a 4 MB tail is ~0.5-1 s
 #: and was paid on every dashboard open and every `/file` download, for a file that had not
 #: moved. Only the names are kept: each one is still stat-ed per call, so a file that changed
@@ -62,28 +74,90 @@ class Asset:
     kind: str
     size: int
     modified: float
+    #: The connected folder it was found in; None for a file the transcript named.
+    connected: str | None = None
 
     def to_json(self) -> dict:
         return asdict(self)
 
 
 def readable_files(session_id: str, cwd: str, provider: str = "claude") -> list[Asset]:
-    """Every openable file this session touched, newest first."""
+    """Every openable file this session touched, and every one in a connected folder, newest first."""
+    inside = _connected(cwd)
+    named = [a for key, a in _named_files(session_id, cwd, provider) if key not in inside]
+    return sorted([*named, *inside.values()], key=lambda a: a.modified, reverse=True)
+
+
+def allowed(session_id: str, cwd: str, wanted: str, provider: str = "claude") -> Path | None:
+    """The file at `wanted`, but only because it lies in a connected folder or the transcript named it."""
+    if found := _within(cwd, wanted):
+        return found
+    for _, asset in _named_files(session_id, cwd, provider):
+        if asset.path == wanted:
+            return Path(asset.path)
+    return None
+
+
+def suggested(session_id: str, cwd: str, provider: str = "claude") -> list[str]:
+    """Folders this session wrote openable files into, newest first and not yet connected: what
+    the phone offers to connect with a tap. The project's own folder is not one — the transcript
+    already covers it, and connecting it would list the whole project."""
+    connected = folders.load(cwd)
+    home = folders.settled(cwd)
+    found: dict[str, None] = {}
+    for _, asset in _named_files(session_id, cwd, provider):
+        parent = folders.settled(str(Path(asset.path).parent))
+        if parent and parent != home and not any(Path(parent).is_relative_to(f) for f in connected):
+            found.setdefault(parent)
+    return list(found)[:MAX_SUGGESTED]
+
+
+def _named_files(session_id: str, cwd: str, provider: str) -> list[tuple[tuple[int, int], Asset]]:
+    """The newest openable files the transcript named, each with its identity on disk."""
     found: dict[tuple[int, int], Asset] = {}
     for candidate in _names(session_id, cwd, provider):
         # Keyed on the file itself, not its name: `CLAUDE.md` and `claude.md` are one
         # file on this disk and would otherwise be two rows saying the same thing.
-        if pair := _asset(candidate):
+        if not SKIP & set(candidate.parts) and (pair := _asset(candidate)):
             found.setdefault(pair[0], pair[1])
-    newest = sorted(found.values(), key=lambda a: a.modified, reverse=True)
+    newest = sorted(found.items(), key=lambda pair: pair[1].modified, reverse=True)
     return newest[:MAX_FILES]
 
 
-def allowed(session_id: str, cwd: str, wanted: str, provider: str = "claude") -> Path | None:
-    """The file at `wanted`, but only because this session's transcript named it."""
-    for asset in readable_files(session_id, cwd, provider):
-        if asset.path == wanted:
-            return Path(asset.path)
+def _connected(cwd: str) -> dict[tuple[int, int], Asset]:
+    """The newest openable files inside every folder connected to this project."""
+    found: dict[tuple[int, int], Asset] = {}
+    for folder in folders.load(cwd):
+        for candidate in islice(_walk(Path(folder)), MAX_WALKED):
+            pair = _asset(candidate)
+            # A symlink inside the folder pointing out of it is not inside it.
+            if pair and Path(pair[1].path).is_relative_to(folder):
+                pair[1].connected = folder
+                found.setdefault(pair[0], pair[1])
+    newest = sorted(found.items(), key=lambda pair: pair[1].modified, reverse=True)
+    return dict(newest[:MAX_CONNECTED])
+
+
+def _walk(root: Path) -> Iterator[Path]:
+    """Every file under `root` with a suffix worth showing, machinery folders left out."""
+    for parent, dirs, names in os.walk(root):
+        dirs[:] = [d for d in dirs if d not in SKIP]
+        yield from (Path(parent) / n for n in names if Path(n).suffix.lower() in SUFFIXES)
+
+
+def _within(cwd: str, wanted: str) -> Path | None:
+    """`wanted`, every symlink and `..` in it resolved, if it lies inside a connected folder."""
+    if not Path(wanted).is_absolute():
+        return None
+    try:
+        settled = Path(wanted).resolve(strict=True)
+    except OSError:
+        return None
+    if not settled.is_file():
+        return None
+    for folder in folders.load(cwd):
+        if settled.is_relative_to(folder) and not SKIP & set(settled.relative_to(folder).parts):
+            return settled
     return None
 
 
@@ -139,8 +213,6 @@ def _candidates(text: str, cwd: str) -> list[Path]:
 
 def _asset(path: Path) -> tuple[tuple[int, int], Asset] | None:
     """The file's identity and how to list it. None for anything not worth showing."""
-    if SKIP & set(path.parts):
-        return None
     try:
         settled = path.resolve()
         stat = settled.stat()
