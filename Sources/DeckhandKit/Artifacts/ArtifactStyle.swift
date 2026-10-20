@@ -30,7 +30,8 @@ public enum ArtifactStyle {
        below set display, which would otherwise win and show it anyway. */
     [hidden] { display: none !important; }
 
-    html { -webkit-text-size-adjust: 100%; }
+    /* manipulation: a double tap is two taps, never a zoom. Pinch is left alone. */
+    html { -webkit-text-size-adjust: 100%; touch-action: manipulation; }
 
     body {
       margin: 0;
