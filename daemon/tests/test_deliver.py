@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from deckhand_daemon import deliver
-from deckhand_daemon.sessions import Pane, Session
+from deckhand_daemon.sessions import Pane, Session, panes
 
 
 @pytest.fixture
@@ -60,12 +60,12 @@ def test_a_session_with_a_pane_is_typed_into(inbox, claude_home, monkeypatch):
         typed.append(argv)
         return subprocess.CompletedProcess(argv, 0, "", "")
 
-    monkeypatch.setattr(deliver.subprocess, "run", run)
+    monkeypatch.setattr(panes.subprocess, "run", run)
     session = session_for(inbox.getsockname())
     session.pane = a_pane()
     assert deliver.deliver(session, "  run  the tests  ") == ("keyboard", None)
     assert typed == [
-        ["tmux", "send-keys", "-t", "PANE-1", "-l", deliver.CLEAR_LINE],
+        ["tmux", "send-keys", "-t", "PANE-1", "-l", deliver.CLEAR_BOX],
         ["tmux", "send-keys", "-t", "PANE-1", "-l", "run the tests"],
         ["tmux", "send-keys", "-t", "PANE-1", "-l", deliver.RETURN],
     ]
@@ -74,7 +74,7 @@ def test_a_session_with_a_pane_is_typed_into(inbox, claude_home, monkeypatch):
 def test_a_pane_that_will_not_take_it_falls_back_to_the_socket(inbox, claude_home, monkeypatch):
     """tmux is not always answering: a session outside it has no pane, and a server can be gone."""
     monkeypatch.setattr(
-        deliver.subprocess,
+        panes.subprocess,
         "run",
         lambda argv, **_k: subprocess.CompletedProcess(argv, 1, "", "no such session"),
     )
@@ -87,7 +87,7 @@ def test_a_pane_that_will_not_take_it_falls_back_to_the_socket(inbox, claude_hom
 def test_the_keyboard_route_does_not_quietly_use_the_socket(inbox, claude_home, monkeypatch):
     """Choosing the keyboard is choosing whose authority the words carry. Never substitute."""
     monkeypatch.setattr(
-        deliver.subprocess,
+        panes.subprocess,
         "run",
         lambda argv, **_k: subprocess.CompletedProcess(argv, 1, "", "no such session"),
     )
@@ -106,7 +106,7 @@ def test_the_keyboard_route_says_so_when_there_is_no_pane(inbox, claude_home):
 
 def test_the_socket_route_ignores_a_perfectly_good_pane(inbox, claude_home, monkeypatch):
     monkeypatch.setattr(
-        deliver.subprocess,
+        panes.subprocess,
         "run",
         lambda *_a, **_k: pytest.fail("the socket route must not touch tmux"),
     )
@@ -182,7 +182,7 @@ def test_the_controls_are_keystrokes_in_the_pane(inbox, claude_home, monkeypatch
     """Escape stops a run; the rest are slash commands typed like any other line."""
     typed: list[list[str]] = []
     monkeypatch.setattr(
-        deliver.subprocess,
+        panes.subprocess,
         "run",
         lambda argv, **_k: (typed.append(argv), subprocess.CompletedProcess(argv, 0, "", ""))[1],
     )
@@ -194,7 +194,7 @@ def test_the_controls_are_keystrokes_in_the_pane(inbox, claude_home, monkeypatch
 
     assert typed == [
         ["tmux", "send-keys", "-t", "PANE-1", "-l", deliver.ESCAPE],
-        ["tmux", "send-keys", "-t", "PANE-1", "-l", deliver.CLEAR_LINE],
+        ["tmux", "send-keys", "-t", "PANE-1", "-l", deliver.CLEAR_BOX],
         ["tmux", "send-keys", "-t", "PANE-1", "-l", "/compact"],
         ["tmux", "send-keys", "-t", "PANE-1", "-l", deliver.RETURN],
     ]
@@ -214,7 +214,7 @@ def test_exit_is_typed_and_returned_like_any_other_slash_command(inbox, claude_h
     """It quits Claude Code, and it is still only two bursts into the pane."""
     typed: list[list[str]] = []
     monkeypatch.setattr(
-        deliver.subprocess,
+        panes.subprocess,
         "run",
         lambda argv, **_k: (typed.append(argv), subprocess.CompletedProcess(argv, 0, "", ""))[1],
     )
@@ -223,7 +223,7 @@ def test_exit_is_typed_and_returned_like_any_other_slash_command(inbox, claude_h
 
     assert deliver.control(session, "exit") is None
     assert typed == [
-        ["tmux", "send-keys", "-t", "PANE-1", "-l", deliver.CLEAR_LINE],
+        ["tmux", "send-keys", "-t", "PANE-1", "-l", deliver.CLEAR_BOX],
         ["tmux", "send-keys", "-t", "PANE-1", "-l", "/exit"],
         ["tmux", "send-keys", "-t", "PANE-1", "-l", deliver.RETURN],
     ]
@@ -269,7 +269,7 @@ def test_a_control_needs_a_pane_and_says_so(inbox, claude_home):
 
 
 def test_an_unknown_control_is_refused_rather_than_typed(inbox, claude_home, monkeypatch):
-    monkeypatch.setattr(deliver.subprocess, "run", lambda *_a, **_k: pytest.fail("typed anyway"))
+    monkeypatch.setattr(panes.subprocess, "run", lambda *_a, **_k: pytest.fail("typed anyway"))
     session = session_for(inbox.getsockname())
     session.pane = a_pane()
 
@@ -280,7 +280,7 @@ def test_a_rename_runs_claude_code_s_own_command(inbox, claude_home, monkeypatch
     """`/rename` takes the name as an argument, so it is typed like any other line."""
     typed: list[list[str]] = []
     monkeypatch.setattr(
-        deliver.subprocess,
+        panes.subprocess,
         "run",
         lambda argv, **_k: (typed.append(argv), subprocess.CompletedProcess(argv, 0, "", ""))[1],
     )
@@ -289,7 +289,7 @@ def test_a_rename_runs_claude_code_s_own_command(inbox, claude_home, monkeypatch
 
     assert deliver.rename(session, "  the   promo  edit \n") is None
     assert typed == [
-        ["tmux", "send-keys", "-t", "PANE-1", "-l", deliver.CLEAR_LINE],
+        ["tmux", "send-keys", "-t", "PANE-1", "-l", deliver.CLEAR_BOX],
         ["tmux", "send-keys", "-t", "PANE-1", "-l", "/rename the promo edit"],
         ["tmux", "send-keys", "-t", "PANE-1", "-l", deliver.RETURN],
     ]
@@ -304,7 +304,7 @@ def test_a_name_is_flattened_before_it_is_typed():
 
 
 def test_an_empty_name_is_refused_rather_than_typed(inbox, claude_home, monkeypatch):
-    monkeypatch.setattr(deliver.subprocess, "run", lambda *_a, **_k: pytest.fail("typed anyway"))
+    monkeypatch.setattr(panes.subprocess, "run", lambda *_a, **_k: pytest.fail("typed anyway"))
     session = session_for(inbox.getsockname())
     session.pane = a_pane()
 
@@ -326,7 +326,7 @@ def recording_tmux(monkeypatch) -> list[str]:
         bursts.append(argv[-1])
         return subprocess.CompletedProcess(argv, 0, "", "")
 
-    monkeypatch.setattr(deliver.subprocess, "run", run)
+    monkeypatch.setattr(panes.subprocess, "run", run)
     return bursts
 
 
@@ -360,7 +360,7 @@ def test_a_long_prompt_with_pictures_submits_even_read_as_one_chunk(inbox, claud
 
     one_chunk = "".join(typed)
     assert len(one_chunk) > 64, "the shape under test is the long one"
-    assert keys_pressed(one_chunk) == [deliver.CLEAR_LINE, deliver.RETURN]
+    assert keys_pressed(one_chunk) == [deliver.CLEAR_LINE] * 100 + [deliver.RETURN]
 
 
 def test_a_control_byte_in_the_words_is_never_typed(inbox, claude_home, monkeypatch):
@@ -371,14 +371,14 @@ def test_a_control_byte_in_the_words_is_never_typed(inbox, claude_home, monkeypa
 
     assert deliver.deliver(session, "run \x1b\x07the \x15tests", route="keyboard")[0] == "keyboard"
 
-    assert typed[:2] == [deliver.CLEAR_LINE, "run the tests"]
+    assert typed[:2] == [deliver.CLEAR_BOX, "run the tests"]
 
 
 def test_auto_keeps_off_a_keyboard_the_person_is_at(inbox, claude_home, monkeypatch):
     """Two things typing into one pane interleave. A slash command still types: down the socket
     it would arrive as words."""
     typed: list[list[str]] = []
-    monkeypatch.setattr(deliver.subprocess, "run",
+    monkeypatch.setattr(panes.subprocess, "run",
                         lambda argv, **_: typed.append(argv) or subprocess.CompletedProcess(argv, 0))
     monkeypatch.setattr(deliver.presence, "where", lambda: "laptop")
     session = session_for(inbox.getsockname())

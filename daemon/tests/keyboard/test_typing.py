@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from deckhand_daemon import deliver
-from deckhand_daemon.sessions import Pane, Session
+from deckhand_daemon.sessions import Pane, Session, panes
 
 SID = "dddd1111-2222-3333-4444-555566667777"
 
@@ -53,18 +53,18 @@ def recording_tmux(monkeypatch) -> list[str]:
         bursts.append(argv[-1])
         return subprocess.CompletedProcess(argv, 0, "", "")
 
-    monkeypatch.setattr(deliver.subprocess, "run", run)
+    monkeypatch.setattr(panes.subprocess, "run", run)
     return bursts
 
 
 def taking(transcript: Path, monkeypatch, keep=slice(None)):
     """A tmux whose session writes what it was typed into its transcript, as one would."""
     def run(argv, **_kwargs):
-        if argv[-1] not in (deliver.CLEAR_LINE, deliver.RETURN):
+        if argv[-1] not in (deliver.CLEAR_BOX, deliver.RETURN):
             transcript.write_text(json.dumps({"message": {"content": argv[-1][keep]}}) + "\n")
         return subprocess.CompletedProcess(argv, 0, "", "")
 
-    monkeypatch.setattr(deliver.subprocess, "run", run)
+    monkeypatch.setattr(panes.subprocess, "run", run)
 
 
 def test_a_message_longer_than_one_read_is_typed_in_pieces(inbox, claude_home, monkeypatch):
@@ -79,7 +79,7 @@ def test_a_message_longer_than_one_read_is_typed_in_pieces(inbox, claude_home, m
 
     deliver.deliver(session, said, route="keyboard")
 
-    assert "".join(typed).startswith(deliver.CLEAR_LINE + said.strip() + deliver.RETURN)
+    assert "".join(typed).startswith(deliver.CLEAR_BOX + said.strip() + deliver.RETURN)
     assert max(len(burst.encode()) for burst in typed) <= deliver.BURST
 
 
@@ -127,3 +127,23 @@ def test_a_prompt_that_arrived_with_its_front_missing_is_not_called_delivered(in
     taking(transcript, monkeypatch, keep=slice(-20, None))
 
     assert deliver.deliver(session, "run the tests and then say what broke")[0] is None
+
+
+def test_a_long_prompt_a_busy_session_took_as_separate_pastes_is_called_delivered(
+        inbox, claude_home, monkeypatch):
+    """Each piece of a long message is a paste of its own to a session mid-run: wrapped, and an
+    entry apiece. The words are all there and never in one place — and calling that unsent put the
+    card back on the phone, so the person sent a prompt that had already arrived."""
+    session, transcript = watched(claude_home, inbox.getsockname())
+
+    def run(argv, **_kwargs):
+        if argv[-1] not in (deliver.CLEAR_BOX, deliver.RETURN):
+            entry = {"operation": "enqueue", "content": f'<pasted_content id="1"> {argv[-1]}'}
+            with transcript.open("a") as file:
+                file.write(json.dumps(entry) + "\n")
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    monkeypatch.setattr(panes.subprocess, "run", run)
+
+    assert deliver.deliver(session, "another sentence about the rail. " * 100,
+                           route="keyboard") == ("keyboard", None)

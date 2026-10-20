@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import json
 import socket
-import subprocess
 import sys
 import time
 import uuid
@@ -29,10 +28,9 @@ from . import config, presence
 from .fleet import here, remote
 from .log import log
 from .reading.transcripts import transcript_path
-from .sessions import Session, codex, opencode_input
+from .sessions import Session, codex, opencode_input, panes, teammates
 
 TIMEOUT = 5.0
-TYPE_TIMEOUT = 15
 MSG_VERSION = 1
 # Both keys are spelled as CSI-u escape sequences rather than as the bare control bytes they
 # stand for, and that spelling is the whole reason a long prompt submits. Claude Code's input
@@ -45,6 +43,9 @@ MSG_VERSION = 1
 # `\x1b[13u` decodes to `return` and `\x1b[117;5u` to ctrl-U, the same keys with no length to
 # be wrong about.
 CLEAR_LINE = "\x1b[117;5u"  # ctrl-U: a half-typed line is not part of what was said
+# Ctrl-U clears back to the start of the *wrapped* line only, and one more takes the line break:
+# a prompt Escape pulled back out of the queue kept all but its last line glued to the next one.
+CLEAR_BOX = CLEAR_LINE * 100  # fifty wrapped lines, in one write under the tty's read
 RETURN = "\x1b[13u"
 # A pane's tty hands Claude Code at most 1022 bytes per read, so one `send-keys` longer
 # than that arrives as two reads a fraction of a millisecond apart — and Claude Code keeps only
@@ -79,11 +80,11 @@ ESCAPE = "\x1b"
 # there is no other way to interrupt a run, and a slash command is typed like any other line.
 CONTROLS = {
     "cancel": (ESCAPE,),
-    "compact": (CLEAR_LINE, "/compact", RETURN),
-    "clear": (CLEAR_LINE, "/clear", RETURN),
+    "compact": (CLEAR_BOX, "/compact", RETURN),
+    "clear": (CLEAR_BOX, "/clear", RETURN),
     # Quits Claude Code. Nothing on the phone can start one again, so this is the one control
     # whose cost is the session itself rather than what is in it.
-    "exit": (CLEAR_LINE, "/exit", RETURN),
+    "exit": (CLEAR_BOX, "/exit", RETURN),
 }
 
 
@@ -100,8 +101,10 @@ def control(session: Session, action: str) -> str | None:
         return opencode_input.control(session, action)
     if not session.pane:
         return f"{session.name} is not in a tmux pane — nothing to press keys in"
+    if aimed := teammates.bring_back(session, CLEAR_BOX):  # Escape there would interrupt the teammate
+        return aimed
     for burst in bursts:
-        if not _keystrokes(session.pane.iterm_session_id, burst):
+        if not panes.press(session.pane.iterm_session_id, burst):
             return f"tmux would not send {action} to {session.name}"
     log.info("sent %s to %s", action, session.name)
     return None
@@ -125,8 +128,10 @@ def rename(session: Session, name: str) -> str | None:
         return opencode_input.rename(session, wanted)
     if not session.pane:
         return f"{session.name} is not in a tmux pane — nothing to type the rename into"
-    for burst in (CLEAR_LINE, f"/rename {wanted}", RETURN):
-        if not _keystrokes(session.pane.iterm_session_id, burst):
+    if aimed := teammates.bring_back(session, CLEAR_BOX):
+        return aimed
+    for burst in (CLEAR_BOX, f"/rename {wanted}", RETURN):
+        if not panes.press(session.pane.iterm_session_id, burst):
             return f"tmux would not rename {session.name}"
     log.info("renamed %s to %s", session.name, wanted)
     return None
@@ -186,6 +191,10 @@ def deliver(session: Session, text: str, route: str = "auto") -> tuple[str | Non
     # turn it into words, and the person asked for the one thing only the pane can do.
     if route == "auto" and not message.startswith("/") and presence.where() == "laptop":
         route = "socket"
+    if route != "socket" and session.pane and (aimed := teammates.bring_back(session, CLEAR_BOX)):
+        if route == "keyboard" or message.startswith("/"):
+            return None, aimed
+        route = "socket"  # still a teammate's box: `auto` takes the lead's own inbox instead
     if route != "socket" and session.pane:
         failed = _type_into_pane(session.pane.iterm_session_id, message, session.session_id)
         if failed is None:
@@ -231,8 +240,8 @@ def _type_into_pane(pane_id: str, message: str, session_id: str) -> str | None:
     instead, which is the log of what arrived rather than of what was written at it.
     """
     watch = _watch(session_id)
-    for burst in (CLEAR_LINE, *_pieces(message), RETURN):
-        if not _keystrokes(pane_id, burst):
+    for burst in (CLEAR_BOX, *_pieces(message), RETURN):
+        if not panes.press(pane_id, burst):
             return REFUSED
     if watch is None or _arrived(session_id, watch, message):
         return None
@@ -240,7 +249,7 @@ def _type_into_pane(pane_id: str, message: str, session_id: str) -> str | None:
     # first one already emptied this does nothing at all, so it cannot send anything twice.
     # A shorter window this time: the words are already typed, so there is nothing left to wait
     # for but the submit, and the phone is holding a clip open the whole while.
-    _keystrokes(pane_id, RETURN)
+    panes.press(pane_id, RETURN)
     return None if _arrived(session_id, watch, message, SUBMITTED / 3) else STAGED
 
 
@@ -277,37 +286,23 @@ def _arrived(session_id: str, watch: int, message: str, budget: float = SUBMITTE
     message is looked for rather than its opening, because the failure this catches is a prompt
     arriving with its front missing — an opening that matched would be the half that was lost.
     """
-    wanted = json.dumps(message, ensure_ascii=False)[1:-1]
+    # Piece by piece, because that is how a long message is typed — and a pane that is busy takes
+    # each piece as a paste of its own, wrapping it and writing it as its own entry. The whole
+    # message is then in the transcript but never in one place, and looking for it whole reported
+    # a delivered prompt as unsent: the card came back on the phone and the person sent it again.
+    wanted = [json.dumps(piece, ensure_ascii=False)[1:-1] for piece in _pieces(message)]
     end = time.monotonic() + budget
     while True:
         path = transcript_path(session_id)
         if path is not None:
             with path.open("rb") as file:
                 file.seek(watch)
-                if wanted in file.read().decode(errors="replace"):
-                    return True
+                seen = file.read().decode(errors="replace")
+            if all(piece in seen for piece in wanted):
+                return True
         if time.monotonic() >= end:
             return False
         time.sleep(POLL)
-
-
-def _keystrokes(pane_id: str, burst: str) -> bool:
-    try:
-        done = subprocess.run(
-            # `-l`: every byte as it is, so the CSI-u keys reach the pane exactly as spelled.
-            ["tmux", "send-keys", "-t", pane_id, "-l", burst],
-            capture_output=True,
-            text=True,
-            timeout=TYPE_TIMEOUT,
-            check=False,
-        )
-    except (OSError, subprocess.SubprocessError) as error:
-        log.warning("could not type into pane %s: %s", pane_id, error)
-        return False
-    if done.returncode != 0:
-        log.warning("tmux refused to type into %s: %s", pane_id, done.stderr.strip()[:120])
-        return False
-    return True
 
 
 def _through_socket(session: Session, message: str) -> tuple[bool, str | None]:

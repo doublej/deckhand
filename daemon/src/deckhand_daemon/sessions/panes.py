@@ -25,6 +25,7 @@ PANE_TTL = 3.0  # seconds; the phone polls every few
 # When tmux will not answer, nothing about the answer changes in the next minute either.
 PANE_RETRY_AFTER = 60.0
 PANE_TIMEOUT = 12
+TYPE_TIMEOUT = 15
 #: One pane per line, tab-separated: tty, pane id, window id, `session:window`, and the title the
 #: program in it set, which is what iTerm showed as a session's name.
 FORMAT = "#{pane_tty}\t#{pane_id}\t#{window_id}\t#{session_name}:#{window_index}\t#{pane_title}"
@@ -106,3 +107,23 @@ def parse(listing: str) -> dict[str, Pane]:
                 iterm_session_id=pane, window_id=window, tab_id=place, title=title.strip()
             )
     return panes
+
+
+def press(pane_id: str, burst: str) -> bool:
+    """Type one burst into the pane, every byte as it is. False when tmux would not."""
+    try:
+        done = subprocess.run(
+            # `-l`: every byte as it is, so the CSI-u keys reach the pane exactly as spelled.
+            ["tmux", "send-keys", "-t", pane_id, "-l", burst],
+            capture_output=True,
+            text=True,
+            timeout=TYPE_TIMEOUT,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as error:
+        log.warning("could not type into pane %s: %s", pane_id, error)
+        return False
+    if done.returncode != 0:
+        log.warning("tmux refused to type into %s: %s", pane_id, done.stderr.strip()[:120])
+        return False
+    return True

@@ -32,6 +32,15 @@ def the_person_is_on_the_phone(monkeypatch):
     monkeypatch.setattr(presence, "_facts", (float("-inf"), None, False))
 
 
+@pytest.fixture(autouse=True)
+def every_box_is_the_leads(monkeypatch):
+    """A pane's screen is read before typing, to see whether its box talks to a teammate. Every
+    test written before that fakes tmux's typing and not its reading, so the screen is blank."""
+    from deckhand_daemon.sessions import teammates
+
+    monkeypatch.setattr(teammates, "_screen", lambda pane_id: "")
+
+
 @pytest.fixture
 def no_hands(monkeypatch):
     """No other machine answers. Every route that merges the fleet asks all of them at once, and

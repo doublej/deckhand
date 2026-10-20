@@ -184,6 +184,9 @@ the words carry, so it fails and says why instead. The receipt names the route t
   already in that session's box and saying them again down another route leaves it holding both.
   One hazard this cannot see: if that pane happens to be showing a permission prompt, dictated
   words go to the prompt, not to a new message.
+- **Ctrl-U clears one wrapped line, so the box is cleared with a hundred** (`deliver.CLEAR_BOX`).
+- **A box set to a teammate (`─ @name ─` over it) is taken back to the lead before anything is
+  typed**, one checked key at a time, or the words take the inbox — `sessions/teammates.py`.
 - **A session on another machine takes the same last step, one machine over.** `deliver.deliver`
   is the one branch, because every caller in this daemon already routes through it — the filter
   chain, the standing orders and the delivery record have all run here by then, and running any
