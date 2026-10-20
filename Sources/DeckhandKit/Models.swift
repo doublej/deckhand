@@ -159,13 +159,17 @@ public struct Asset: Codable, Hashable, Sendable, Identifiable {
     public let kind: String
     public let size: Int
     public let modified: Double
+    /// The connected folder it was found in, or nil for a file the transcript named.
+    public var connected: String?
 
-    public init(path: String, name: String, kind: String, size: Int, modified: Double) {
+    public init(path: String, name: String, kind: String, size: Int, modified: Double,
+                connected: String? = nil) {
         self.path = path
         self.name = name
         self.kind = kind
         self.size = size
         self.modified = modified
+        self.connected = connected
     }
 
     public var id: String { path }
