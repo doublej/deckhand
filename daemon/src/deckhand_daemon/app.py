@@ -28,6 +28,7 @@ from . import (
     sessions,
     summarize,
 )
+from .addresses import routes as address_routes
 from .bindings import routes as binding_routes
 from .browser import routes as browser_routes
 from .filters import routes as filter_routes
@@ -92,6 +93,7 @@ app.middleware("http")(sessions.answer_for_codex)
 app.middleware("http")(sessions.answer_for_opencode)
 # Last, so it runs first: a browser's preflight is answered before anything asks for a token.
 app.middleware("http")(browser_routes.cors)
+app.include_router(address_routes.router, dependencies=[Depends(require_token)])
 app.include_router(artifacts.router, dependencies=[Depends(require_token)])
 app.include_router(binding_routes.router, dependencies=[Depends(require_token)])
 app.include_router(filter_routes.router, dependencies=[Depends(require_token)])

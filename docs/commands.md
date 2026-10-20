@@ -409,6 +409,12 @@ inside a helper is not listed, so treat the column as the least a route can answ
 `CLAUDE.md` under *The wire*, `docs/space.md`, and `skills/deckhand/reference/wire.md`.
 
 <!-- generated:http -->
+### addresses
+
+| Route | Arguments | Answers | Errors | What it does |
+|---|---|---|---|---|
+| `GET /sessions/{session_id}/addresses` | — | 200 | 401, 422 | Every URL, IP and domain the session and its subagents wrote, checked, with atlas's match. |
+
 ### artifacts
 
 | Route | Arguments | Answers | Errors | What it does |

@@ -30,6 +30,7 @@ extension DashboardView {
     @ViewBuilder var tiles: some View {
         slipsTile
         agentsTile
+        addressesTile
         filesTile
         ordersTile
         chainTile
@@ -173,6 +174,18 @@ extension DashboardView {
                       lit: session.context.map { Palette.pressure($0.pressure) },
                       ready: session.compacts,
                       spoken: Control.compact.label) { run(.compact) }
+    }
+
+    /// The addresses the session wrote down — dev servers, the NAS, sites — and how many answer.
+    /// The Mac scans and checks them; this names the first three worth opening.
+    var addressesTile: some View {
+        DashboardTile(glyph: "link",
+                      title: "Addresses",
+                      value: Addresses.count(addresses),
+                      preview: Addresses.worth(addresses ?? []),
+                      look: .terminal,
+                      ready: addresses != [],
+                      spoken: "Addresses the session wrote down") { opened = .addresses }
     }
 
     /// The folder, and everything this Mac has been told it may do about the work in it. Keyed
