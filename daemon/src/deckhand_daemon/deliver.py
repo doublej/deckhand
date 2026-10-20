@@ -250,7 +250,10 @@ def _type_into_pane(pane_id: str, message: str, session_id: str) -> str | None:
     # A shorter window this time: the words are already typed, so there is nothing left to wait
     # for but the submit, and the phone is holding a clip open the whole while.
     panes.press(pane_id, RETURN)
-    return None if _arrived(session_id, watch, message, SUBMITTED / 3) else STAGED
+    if _arrived(session_id, watch, message, SUBMITTED / 3):
+        return None
+    # A prompt-submit hook can hold the transcript back for seconds; the box cannot lie about it.
+    return STAGED if panes.holds(pane_id, message) is not False else None
 
 
 def _pieces(message: str) -> list[str]:

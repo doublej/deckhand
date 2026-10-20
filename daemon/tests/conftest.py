@@ -34,11 +34,11 @@ def the_person_is_on_the_phone(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def every_box_is_the_leads(monkeypatch):
-    """A pane's screen is read before typing, to see whether its box talks to a teammate. Every
+    """A pane's screen is read around typing: whose box it is, and whether the words left it. Every
     test written before that fakes tmux's typing and not its reading, so the screen is blank."""
-    from deckhand_daemon.sessions import teammates
+    from deckhand_daemon.sessions import panes
 
-    monkeypatch.setattr(teammates, "_screen", lambda pane_id: "")
+    monkeypatch.setattr(panes, "screen", lambda pane_id: "")
 
 
 @pytest.fixture

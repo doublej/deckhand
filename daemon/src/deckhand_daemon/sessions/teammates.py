@@ -17,12 +17,11 @@ is not always drawn, either: collapsed to "← 1 agent", Down reaches nothing an
 from __future__ import annotations
 
 import re
-import subprocess
 import time
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-from .panes import PANE_TIMEOUT, press
+from . import panes
 
 if TYPE_CHECKING:
     from .live import Session
@@ -40,7 +39,7 @@ POLL = 0.1
 
 def addressed_to(pane_id: str) -> str | None:
     """The teammate this pane's box is talking to, or None while it talks to the lead."""
-    found = TEAMMATE.findall(_screen(pane_id))
+    found = TEAMMATE.findall(panes.screen(pane_id))
     return found[-1] if found else None
 
 
@@ -62,27 +61,18 @@ def bring_back(session: Session, clear: str) -> str | None:
         (ESCAPE, lambda screen: not TEAMMATE.search(screen) and not ON_MAIN.search(screen)),
     )
     # Down in a box holding words moves through the words, not into the list.
-    if not press(pane, clear):
+    if not panes.press(pane, clear):
         return f"{why}, and tmux would not clear its box"
     for key, shows in steps:
-        if not (press(pane, key) and _waits_for(pane, shows)):
+        if not (panes.press(pane, key) and _waits_for(pane, shows)):
             return f"{why}, and taking it back to {session.name} did not go as measured"
     return None
 
 
 def _waits_for(pane_id: str, shows: Callable[[str], bool]) -> bool:
     end = time.monotonic() + SETTLE
-    while not shows(_screen(pane_id)):
+    while not shows(panes.screen(pane_id)):
         if time.monotonic() >= end:
             return False
         time.sleep(POLL)
     return True
-
-
-def _screen(pane_id: str) -> str:
-    try:
-        out = subprocess.run(["tmux", "capture-pane", "-p", "-t", pane_id], capture_output=True,
-                             text=True, timeout=PANE_TIMEOUT, check=False)
-    except (OSError, subprocess.SubprocessError):
-        return ""  # typing will meet the same tmux and say so itself
-    return out.stdout

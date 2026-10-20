@@ -108,6 +108,26 @@ def test_a_prompt_the_session_never_took_is_not_called_delivered(inbox, claude_h
     assert typed.count(deliver.RETURN) == 2, "the return is pressed once more before giving up"
 
 
+RULE = "─" * 40
+
+
+@pytest.mark.parametrize(("box", "taken"), [
+    ("❯ \n", "keyboard"),
+    ("❯ run the tests and\n  then say what broke\n", None),
+])
+def test_the_box_decides_when_the_transcript_is_late(inbox, claude_home, monkeypatch, box, taken):
+    """A prompt-submit hook held a delivered prompt out of the transcript past the wait, so it
+    was called unsent, the card came back and the person sent it again. Words gone from the box
+    were submitted; words still in it, wrapped however it likes, were not."""
+    monkeypatch.setattr(deliver, "SUBMITTED", 0.1)
+    recording_tmux(monkeypatch)
+    monkeypatch.setattr(panes, "screen",
+                        lambda pane_id: f"{RULE} warm-okapi ─\n{box}{RULE}\n  [ status ]\n")
+    session, _ = watched(claude_home, inbox.getsockname())
+
+    assert deliver.deliver(session, "run the tests and then say what broke")[0] == taken
+
+
 def test_a_prompt_the_transcript_records_is_the_one_called_delivered(inbox, claude_home,
                                                                      monkeypatch):
     """An idle session writes the prompt as a turn and a busy one writes a `queue-operation` for

@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from deckhand_daemon import deliver
-from deckhand_daemon.sessions import Pane, Session, teammates
+from deckhand_daemon.sessions import Pane, Session, panes, teammates
 
 RULE = "─" * 40
 TEAMMATE_BOX = f"{RULE} @book-builder ─\n❯ Message @book-builder…\n{RULE}\n  ◯ main\n  ⏺ book-builder\n"
@@ -45,8 +45,8 @@ def pane(monkeypatch):
         state["screen"] = state["answers"].get(key, state["screen"])
         return True
 
-    monkeypatch.setattr(teammates, "press", press)
-    monkeypatch.setattr(teammates, "_screen", lambda pane_id: state["screen"])
+    monkeypatch.setattr(panes, "press", press)
+    monkeypatch.setattr(panes, "screen", lambda pane_id: state["screen"])
     monkeypatch.setattr(teammates, "SETTLE", 0.05)
     return state
 

@@ -185,6 +185,8 @@ the words carry, so it fails and says why instead. The receipt names the route t
   One hazard this cannot see: if that pane happens to be showing a permission prompt, dictated
   words go to the prompt, not to a new message.
 - **Ctrl-U clears one wrapped line, so the box is cleared with a hundred** (`deliver.CLEAR_BOX`).
+- **A transcript that is late is not a prompt left unsent**: a prompt-submit hook can hold it back
+  for seconds, so before saying "unsent" the box itself is read (`panes.holds`).
 - **A box set to a teammate (`─ @name ─` over it) is taken back to the lead before anything is
   typed**, one checked key at a time, or the words take the inbox — `sessions/teammates.py`.
 - **A session on another machine takes the same last step, one machine over.** `deliver.deliver`

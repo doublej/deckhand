@@ -15,6 +15,7 @@ rather than a failure — `live.live_sessions` already keeps every session when 
 
 from __future__ import annotations
 
+import re
 import subprocess
 import time
 from dataclasses import dataclass
@@ -127,3 +128,30 @@ def press(pane_id: str, burst: str) -> bool:
         log.warning("tmux refused to type into %s: %s", pane_id, done.stderr.strip()[:120])
         return False
     return True
+
+
+#: Claude Code's prompt box: a rule with a name in it over the box, a bare rule under it.
+BOX = re.compile(r"^─+ \S.* ─ *\n((?:.*\n)*?)─+ *$", re.MULTILINE)
+
+
+def screen(pane_id: str) -> str:
+    """The pane's visible rows as plain text, or nothing where tmux would not read it."""
+    try:
+        out = subprocess.run(["tmux", "capture-pane", "-p", "-t", pane_id], capture_output=True,
+                             text=True, timeout=PANE_TIMEOUT, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return out.stdout
+
+
+def holds(pane_id: str, words: str) -> bool | None:
+    """Whether the prompt box still holds the end of `words`; None where no box is drawn.
+
+    The end, because that is what was typed last and what a submit takes with it. Compared with
+    every space taken out, because the box wraps a line wherever it likes.
+    """
+    found = BOX.findall(screen(pane_id))
+    if not found:
+        return None
+    tail = "".join(words.split())[-40:]
+    return tail in "".join(found[-1].replace("❯", " ").split())
