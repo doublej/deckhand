@@ -55,6 +55,7 @@ def test_the_card_names_each_session_and_ends_nothing(token, pushed, listed, end
 
 
 def test_allow_ends_each_where_it_runs(token, pushed, listed, ended, phone, key):  # noqa: F811
+    listed.append(dict(AWAY))  # the same session, listed twice, is still one
     nid = asked(token, ["velvet-pika", "cold-otter"]).json()["id"]
     answered = tapped(phone, key, nid)
     assert answered.status_code == 200, answered.text

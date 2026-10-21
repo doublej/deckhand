@@ -29,6 +29,8 @@ def chosen(wanted: list[str], rows: list[dict]) -> list[dict]:
     is not exactly one, so the alert never names a session other than the one meant."""
     if not 0 < len(wanted) <= MAX:
         raise _bad(f"name 1 to {MAX} sessions")
+    # One id is one session, however many listings carry it: a machine can answer twice.
+    rows = list({r.get("session_id"): r for r in rows}.values())
     picked = []
     for one in dict.fromkeys(wanted):
         found = [r for r in rows if r.get("session_id") == one] or [
