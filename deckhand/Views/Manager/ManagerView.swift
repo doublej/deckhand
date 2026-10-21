@@ -31,10 +31,7 @@ struct ManagerView: View {
     var body: some View {
         VStack(spacing: 0) {
             tabs
-            switch desk.tab {
-            case .tray: TrayView(model: model)
-            case .manager: conversation
-            }
+            halves
             foot
         }
         .padding(.horizontal, Spacing.small)
@@ -71,6 +68,22 @@ struct ManagerView: View {
         }
     }
 
+    /// The two halves side by side, swiped between as well as tapped — the session page's panes
+    /// do the same (`SessionView.pane`), and the words above stay the indicator.
+    ///
+    /// A page view rather than a drag of our own, because UIKit already settles what a drag inside
+    /// it is: a starter row scrolling sideways (`ManagerStarters`) keeps its drag until it hits its
+    /// end, and a held line selecting text is never a page turn. The drawer's own swipe out stands
+    /// down on the manager's half (`ManagerShell.mine`), so that drag turns back to the tray first.
+    private var halves: some View {
+        TabView(selection: Bindable(desk).tab) {
+            TrayView(model: model).tag(ManagerTab.tray)
+            conversation.tag(ManagerTab.manager)
+        }
+        .tabViewStyle(.page(indexDisplayMode: .never))
+        .animation(Motion.opening, value: desk.tab)
+    }
+
     private func tab(_ word: String, _ which: ManagerTab, count: Int, unread: Bool) -> some View {
         Button { desk.tab = which } label: {
             HStack(spacing: Spacing.xxs) {
@@ -85,6 +98,7 @@ struct ManagerView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(desk.tab == which ? .isSelected : [])
         .accessibilityIdentifier(which == .tray ? "manager-tab-tray" : "manager-tab-manager")
     }
 

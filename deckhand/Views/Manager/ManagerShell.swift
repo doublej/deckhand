@@ -163,11 +163,13 @@ struct ManagerShell<Content: View>: View {
     }
 
     /// Whether this drag is the one that moves the drawer: sideways rather than up the page, and
-    /// pointing the way there is something to move. Closed, only on the rail; open, anywhere on it.
+    /// pointing the way there is something to move. Closed, only on the rail; open, anywhere on it
+    /// while the tray shows. On the manager's half that drag is the halves' (`ManagerView.halves`):
+    /// it turns back to the tray, and only from there does the same drag put the drawer away.
     private func mine(_ value: DragGesture.Value) -> Bool {
         guard abs(value.translation.width) > abs(value.translation.height) else { return false }
         let inward = -sign * value.translation.width > 0
-        return desk.open ? !inward : inward && !desk.covered
+        return desk.open ? !inward && desk.tab == .tray : inward && !desk.covered
     }
 
     /// In or out, decided on where it was let go *and* where it was going: a flick that covered a

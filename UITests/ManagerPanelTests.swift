@@ -37,9 +37,34 @@ final class ManagerPanelTests: XCTestCase {
         drag(app, from: 0.5, to: 0.05)
         waitForPanel(app, onScreen: true)
 
-        // And back out the same way, from the middle of the panel rather than its edge.
+        // And back out the same way, from the middle of the panel rather than its edge — from the
+        // tray, because on the manager's half that drag turns the page instead.
+        app.buttons["manager-tab-tray"].tap()
         drag(app, from: 0.5, to: 0.95)
         XCTAssertTrue(row.waitForExistence(timeout: 5), "the panel would not go away again")
+    }
+
+    /// The halves are swiped between, and the drag out is the halves' until the tray shows: one
+    /// sideways drag must never turn the page and put the drawer away at once.
+    func testASwipeTurnsBetweenTheHalvesBeforeItLeaves() throws {
+        let app = try launch()
+        let opener = app.buttons["open-manager"]
+        XCTAssertTrue(opener.waitForExistence(timeout: 20), "the rail's foot has no way in")
+        opener.tap()
+        waitForPanel(app, onScreen: true)
+        let tray = app.buttons["manager-tab-tray"]
+        let manager = app.buttons["manager-tab-manager"]
+
+        tray.tap()
+        drag(app, from: 0.7, to: 0.2)
+        XCTAssertTrue(manager.waitForSelection(), "a swipe on the tray did not turn to the manager")
+
+        drag(app, from: 0.3, to: 0.8)
+        XCTAssertTrue(tray.waitForSelection(), "a swipe on the manager did not turn to the tray")
+        waitForPanel(app, onScreen: true)
+
+        drag(app, from: 0.3, to: 0.95)
+        waitForPanel(app, onScreen: false)
     }
 
     /// The edge still works. "Anywhere" has to include the place it used to be the only place.
@@ -149,5 +174,14 @@ final class ManagerPanelTests: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         return attachment
+    }
+}
+
+private extension XCUIElement {
+    /// Whether this tab comes to say it is the one showing, within a page turn's time.
+    func waitForSelection(timeout: TimeInterval = 3) -> Bool {
+        let selected = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "isSelected == true"), object: self)
+        return XCTWaiter().wait(for: [selected], timeout: timeout) == .completed
     }
 }
