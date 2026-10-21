@@ -139,11 +139,10 @@ struct ArtifactView: View {
         .padding(Spacing.large)
     }
 
-    /// Say something about a passage, or into a field — and nothing at all the rest of the time.
+    /// Say something about a passage, into a field, or — the rest of the time — about the slip.
     ///
-    /// Only once the page is up: a control offering to comment on a selection in a page that has not
-    /// arrived has nothing to select, and one over the failure message would be furniture on a dead
-    /// end. Commenting closes this screen, because what it makes is a card at the foot of the
+    /// Only once the page is up: a control offering to talk about a page that has not arrived has
+    /// nothing to talk about, and one over the failure message would be furniture on a dead end. Commenting closes this screen, because what it makes is a card at the foot of the
     /// session's own page and that card is behind this one.
     @ViewBuilder private var saying: some View {
         if html != nil, aloud == nil {

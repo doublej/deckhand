@@ -1,13 +1,14 @@
 import DeckhandKit
 import SwiftUI
 
-/// One slot under a slip, and two things that can be in it: say something about the passage you
-/// picked out, or say what goes in the field you are standing in. Never both — a selection inside a
-/// field is the field's, and WebKit reports no document selection for one, so the page can only ever
-/// be holding one of the two.
+/// One slot under a slip, and three things that can be in it: say something about the passage you
+/// picked out, say what goes in the field you are standing in, or — the rest of the time — ask the
+/// agent about the slip as a whole. Never two at once — a selection inside a field is the field's,
+/// and WebKit reports no document selection for one, so the page can only ever be holding one.
 ///
-/// Empty the rest of the time, and that is the point. The viewer has no browser chrome and is not
-/// getting any: this appears because the page is holding something, and goes when it is not.
+/// Asking is always there because a slip's answers are absolute: two buttons, and nothing for
+/// "neither, because I don't follow". Without it the person goes back to the session, names the
+/// slip they were just looking at, and asks there. It is not an answer — a decision stays open.
 ///
 /// Its own file rather than a third job for `ArtifactView`, which is about the page arriving and what
 /// became of an answer. This is about talking at one.
@@ -36,32 +37,33 @@ struct SayOnPage: View {
     var body: some View {
         Group {
             switch talk.holds {
-            case .quote: quoting
+            case .quote: talking("Comment on what you selected", quoting: true)
             case .field: filling
-            case .none: EmptyView()
+            case .none: talking("Unclear? Hold and ask about this slip", quoting: false)
             }
         }
-        // Nothing, not an empty row: the padding and the width belong to the two things that can be
-        // in the slot, or a page holding neither would still lose a strip off its bottom edge to an
-        // inset with nothing in it.
         .animation(Motion.arriving, value: talk.holds)
         .onChange(of: talk.holds) { nothing = nil }
     }
 
     /// The mark, because this is the same gesture as talking to the session — hold it, say the
     /// remark, let go. The words do not go to the session though: they go on the review card with
-    /// the passage quoted above them, which is what `PREVIEW` on its wing honestly says whatever the
-    /// person's send-straight-away setting is. A quote nobody has read is not a thing to fire off.
-    private var quoting: some View {
+    /// the passage quoted above them, or with only the slip named when asking about all of it,
+    /// which is what `PREVIEW` on its wing honestly says whatever the person's send-straight-away
+    /// setting is. A remark about a slip nobody has read back is not a thing to fire off.
+    private func talking(_ words: String, quoting: Bool) -> some View {
         VStack(spacing: Spacing.xxs) {
-            caption("Comment on what you selected")
+            caption(words)
             TalkControl(
                 recorder: say.recorder,
                 mode: say.mode,
                 isMine: true,
-                onStart: { Task { passage = await talk.passage() } },
+                onStart: { Task { passage = quoting ? await talk.passage() : "" } },
                 onClip: { await comment(on: $0) },
-                content: { TalkMark(state: $0, level: say.recorder.level) }
+                content: {
+                    TalkMark(state: $0, level: say.recorder.level,
+                             saying: quoting ? "Comment on the selection" : "Ask about this slip")
+                }
             )
             // The mark goes utt orange while it listens and the screen behind it stays teal, which
             // is what `SayInto` does on every sheet in this app: a cover keeps the tint, and the

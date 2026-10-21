@@ -241,6 +241,11 @@ appears instead, and what the person says lands on the review card with the sele
 above it and the slip named by title and slug. That is a remark about your page on its way to the
 session, not an answer: it never goes through `respond`, and a page neither sees it nor can stop it.
 
+**A slip can always be asked about.** With nothing selected or focused, the same mark sits under
+every page captioned *Unclear? Hold and ask about this slip*, and what the person says lands on the
+review card as `About "<title>" (`slug`): …`. A question for the agent, not an answer: a decision
+stays open, so answer the question and let them tap.
+
 Both are driven by a small script the app injects alongside the bridge, which listens for
 `selectionchange`, `focusin` and `focusout` and reports only *whether* the page is holding a
 selection or a focused field — never the text. A page that tears those listeners off loses itself
