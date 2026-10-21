@@ -76,20 +76,30 @@ python3 ~/.claude/skills/deckhand/scripts/slip.py --kind pick \
   --option develop --option main
 ```
 
-It prints the path it wrote. Tell the person, then read the answer:
+It prints the path it wrote. Tell the person, then **end your turn**: a decision's answer arrives as
+their next message, typed in by the daemon —
+`Decision which-branch — "Which branch should this land on?": main. This covers exactly: …`.
+Act on exactly what that line covers. To look at it yourself:
 
 ```bash
 python3 ~/.claude/skills/deckhand/scripts/answer.py which-branch --wait 300
 ```
 
-`--kind` is `confirm`, `pick`, `text` or `aloud`. A `confirm` is the one the person can answer
-from the Lock Screen without opening the app: keep its question under 80 characters, since the card
-shows nothing else, and put the rest in `--note`. Its buttons say Yes and No unless two `--option`
-name them; the answer is `{"answer": true}` or `{"answer": false}`. `answer.py` prints the answered JSON, or exits 1
-while nothing has answered; `--wait` blocks, bounded by the tool call's own timeout — though the
-daemon also messages this session when an answer lands, so a stopped session is woken rather than
-polling. Run both from the session's own folder: nothing walks upward, so a slip written from a
-subdirectory is one the phone never lists.
+`--kind` is `confirm`, `pick`, `text` or `aloud`. **Confirm, pick and text are decisions**: the
+phone answers one only with a signature from its own key. A confirm needs `--action`, exactly what a
+yes allows in one line (`--action "tag 0.4.0 and push the tag, nothing else"`); a pick or text
+defaults it to the question. `--expires-hours` (24) is how long it stands, `--key` names it. Asking
+an answered decision again under the same key prints its answer instead of asking twice.
+
+A `confirm` is answered from the Lock Screen without opening the app: keep its question under 80
+characters, since the notification shows nothing else, and put the rest in `--note`. Its buttons say
+Yes and No unless two `--option` name them; the answer is `{"answer": true}`, `{"answer": false}`,
+or `{"reply": "…"}` typed on the notification. `answer.py` prints
+`{"value", "verified", "device", "fingerprint"}`, or exits 1 while nothing has answered. **`verified`
+is true only where the phone's signature holds** — a file written by hand, or a slip that is not a
+decision, reads false; never treat an unverified answer as the person's approval. Run both from the
+session's own folder: nothing walks upward, so a slip written from a subdirectory is one the phone
+never lists.
 
 ## Whose slip it is
 

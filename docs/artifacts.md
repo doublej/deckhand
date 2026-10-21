@@ -103,7 +103,59 @@ things, and both matter:
 2. Delivers a message into the session by the person's configured route, the same path
    speaking takes. An agent that has stopped is woken by it rather than having to poll.
 
-The answer is the person's own, so it travels as the person's words, not as a peer agent's.
+The answer goes by the route the person chose in Settings, and is written `"verified": false`:
+nothing about a page's `respond` proves a person tapped it. **A decision is the exception**, below.
+
+## Decisions
+
+A `confirm`, `pick` or `text` slip written by `slip.py` is a **decision**: its head carries
+
+```html
+<meta name="deckhand-decision" content="confirm">           <!-- confirm | pick | text -->
+<meta name="deckhand-choices"  content="[&quot;Ship&quot;,&quot;Hold&quot;]">  <!-- JSON array -->
+<meta name="deckhand-action"   content="push the tag, nothing else">
+<meta name="deckhand-expires"  content="1761148800">           <!-- unix seconds -->
+```
+
+Choices are the labels the person sees: yes then no for a confirm, the rows of a pick, the field's
+label for a text. `--action` is required for a confirm; `--expires-hours` defaults to 24; `--key`
+names the slip. Asking an answered decision again under the same key **does not rewrite it** — the
+existing answer is printed instead. `aloud`, `form`, `tweak` and notes are not decisions.
+
+**Only the phone's key answers one.** This Mac's token is a file every agent can read, and the
+phone holds the same token, so the token cannot say who tapped. The phone files a P-256 public key
+once with its own device token (`PUT /devices/key`; the Mac token and scoped tokens get 403, the
+first key wins, a different one is 409 — re-pair to change it). An answer is a **proof**:
+
+```json
+{"proof": {"payload": "<base64 of the exact UTF-8 JSON>", "signature": "<base64 DER ECDSA-P256-SHA256>"}}
+payload: {"v":1,"session":"<sid>","artifact":"<aid>","hash":"<sha256 hex of the page file>","value":<value>,"at":<unix s>}
+```
+
+Refusals are `{"detail": {"code", "error", …}}`, checked in this order: no proof 403 `UNSIGNED`
+(so a page's own `respond` cannot answer a decision), not a keyed device 403 `NO_KEY`, bad
+signature 403 `BAD_SIGNATURE`, another session or slip 400 `MISMATCH`, `at` more than 300 s off 403
+`OLD_PROOF`, page gone 404, page rewritten since 409 `STALE` (+ `hash`), lapsed 410 `EXPIRED`,
+already answered 409 `ANSWERED` (+ `answer`: first answer wins). The answer file is written
+atomically: `{id, answeredAt, value, verified: true, device, fingerprint, hash, delivered, session,
+proof}`.
+
+**It is typed into the asker as the person**: the keyboard route whatever the Settings route,
+addressed by the exact session id (a cleared or closed asker is `"the asker is gone"`), never into a
+pane showing a permission prompt (`"the asker is blocked…"`). Undelivered answers are retried by the
+push sweep until they land or the decision lapses. The line is `prompts/decision-answer.md`:
+`Decision <id> — "<question>": <choice>. This covers exactly: <action>.`
+
+**One notification.** The sweep sends one APNs alert per `<sid>:<aid>:<hash>` (kept in
+`decisions-announced.json`, so a restart neither misses nor repeats one) with category
+`DECISION_CONFIRM|PICK|TEXT`, `apns-collapse-id: <sid>:<aid>`, and top-level `session`, `link`
+(`deckhand://sessions/<sid>/slips/<aid>`) and `decision {session, artifact, hash, kind, choices,
+question}`. The Live Activity moves silently and gains `hash`; `/notify` for a session with an open
+decision moves it silently too; the Mac's `/alerts` leaves decisions out.
+
+Listing rows carry `decision`, `choices`, `action`, `expires`, `hash`, `verified`, `answered_by`
+and `expired` — all null for a page that is not a decision. `verified` is re-checked against the
+kept proof every time, never read off the file; `answer.py` and `read_answer` do the same.
 
 ## Reading back what was answered
 
@@ -155,6 +207,10 @@ Write the file, tell the person it is there, then read the answer:
 `CLAUDE_CODE_SESSION_ID` is in every Bash call Claude Code makes and is the session id the daemon
 knows, so an agent needs no discovery step to find its own folder. Drop the segment to write a
 slip that belongs to the project instead.
+
+For a decision, use `slip.py` (or `ask_on_phone`) rather than `Write`, then **end the turn**: the
+answer arrives as the person's next message. An answer file the agent reads itself proves nothing —
+`answer.py` says `verified` only where the phone's signature holds.
 
 Nothing registers an artifact and nothing cleans one up. A slip with no answer file beside it
 is open; one with an answer beside it has been answered, and can be asked again by deleting the

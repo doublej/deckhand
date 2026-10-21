@@ -37,6 +37,7 @@ tasks.py        # the person's list of asks, and the only three tools that may c
 nudge.py        # asks a session that stopped about the asks still open on its list
 files.py        # what the session touched that a person could open, and the permission
 artifacts.py    # slips: what a session left for the phone to answer
+decisions/      # a decision slip: the phone's signed answer, typed into the asker as the person
 transcribe.py   # utt turns a clip into text, through its jobs folder
 plugin.py       # Deckhand's page inside utt: the manifest, its settings, its buttons
 beacon.py       # saying on the LAN where this Mac answers, so the phone need not be told
@@ -184,6 +185,8 @@ the words carry, so it fails and says why instead. The receipt names the route t
   already in that session's box and saying them again down another route leaves it holding both.
   One hazard this cannot see: if that pane happens to be showing a permission prompt, dictated
   words go to the prompt, not to a new message.
+- **A decision's answer is accepted only with the phone's signature, and goes in by keyboard to the
+  exact asker, never into a permission prompt** — `decisions/__init__.py`, `docs/artifacts.md`.
 - **Ctrl-U clears one wrapped line, so the box is cleared with a hundred** (`deliver.CLEAR_BOX`).
 - **A transcript that is late is not a prompt left unsent**: a prompt-submit hook can hold it back
   for seconds, so before saying "unsent" the box itself is read (`panes.holds`).
