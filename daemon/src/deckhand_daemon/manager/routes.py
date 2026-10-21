@@ -58,6 +58,17 @@ def read_manager(
     }
 
 
+@router.get("/manager/session")
+def manager_session() -> dict:
+    """The manager's own live session, so an agent can say something to it down its inbox as to
+    any other (`say_to_session`) — labelled as an agent, never as `/manager/say`'s person. 404
+    while the daemon holds none open. Newest first, should a second daemon be holding one too."""
+    held = next((s for s in sessions.live_sessions(paned_only=False) if s.name == agent.NAME), None)
+    if held is None:
+        raise HTTPException(status_code=404, detail="the manager is not running on this Mac")
+    return {"session_id": held.session_id, "name": held.name, "provider": held.provider}
+
+
 @router.post("/manager/away", status_code=204)
 def leave_manager() -> None:
     """The panel went off screen. Everything the manager says from here is pushed."""

@@ -116,7 +116,8 @@ Each command is one MCP tool, and each tool is the route or script it reaches.
 | `deckhand ask` | `ask_on_phone` | `skills/deckhand/scripts/slip.py` | no |
 | `deckhand answer` | `read_answer` | `skills/deckhand/scripts/answer.py` | yes |
 | `deckhand notify` | `call_for_attention` | `POST /sessions/{id}/notify` | no |
-| `deckhand say` | `say_to_session` | `GET /sessions`, `POST /sessions/{id}/say` | no |
+| `deckhand say` | `say_to_session` | `GET /sessions`, `GET /manager/session`, `POST /sessions/{id}/say` | no |
+| `deckhand end` | `ask_to_end` | `POST /end-requests` | no |
 | `deckhand open` | `open_plane` | `POST /space/planes` | no |
 | `deckhand space` | `space` | `GET /space`, `GET /sessions/{id}/space` | yes |
 | `deckhand start` | `start_session` | `POST /space/sessions`, `GET /projects` | no |
@@ -141,7 +142,7 @@ one table, `daemon/src/deckhand_daemon/mcp/refused.py`.
 <!-- generated:refused -->
 | Verbs | What does it for the person | Why no tool or command |
 |---|---|---|
-| `cancel`, `stop`, `compact`, `clear`, `exit`, `kill` | `POST /sessions/{id}/control` | keystrokes the person presses on a session's own pane. `clear` cannot be undone, and closing a session is theirs alone |
+| `cancel`, `stop`, `compact`, `clear`, `exit`, `kill` | `POST /sessions/{id}/control` | keystrokes the person presses on a session's own pane. `clear` cannot be undone, and closing a session is theirs alone: `ask_to_end` asks them, and only their Allow ends one |
 | `rename` | `POST /sessions/{id}/name` | it types `/rename` into the pane, which is the keyboard route and arrives as the person |
 | `type`, `keyboard` | `POST /sessions/{id}/say?route=keyboard` | the keyboard route arrives as the person at the machine; `say` goes down the socket labelled as an agent, and is the only way an agent speaks to a session |
 | `respond`, `reply` | `POST /sessions/{id}/artifacts/{aid}/answer` | a slip is answered by the person; an agent answering one is asking and answering itself |
@@ -149,7 +150,7 @@ one table, `daemon/src/deckhand_daemon/mcp/refused.py`.
 | `settings`, `filters`, `orders` | `PUT /settings, PUT /sessions/{id}/filters, PUT /sessions/{id}/orders` | what this Mac and a session are set to do is the person's; an agent that can rewrite a filter chain can remove the filter that would have stopped it |
 | `pair`, `devices`, `forget` | `POST /pair/open, DELETE /devices/{id}` | pairing hands a device everything this Mac's token can do, so it is opened by the person standing at the Mac (`just pair`), never on someone's behalf |
 | `send-keys`, `kill-pane`, `kill-window`, `respawn` | `tmux send-keys, kill-pane, kill-window, respawn-pane` | typing into a pane is the keyboard route, and killing or respawning one ends the session in it — the person's own press. `tmux_arrange` moves panes, never into them |
-| `manager` | `POST /manager/say` | it speaks into the manager's conversation as the person. The manager is a session too: Claude Code's own SendMessage to `deckhand-manager` reaches it as an agent |
+| `manager` | `POST /manager/say` | it speaks into the manager's conversation as the person. The manager is a session too: `say_to_session manager`, or Claude Code's own SendMessage to `deckhand-manager`, reaches it as an agent |
 <!-- /generated:refused -->
 
 ## The `deckhand` command
@@ -167,7 +168,8 @@ command takes `--json`; `-` for a question, line or text reads it from stdin.
 | `deckhand ask` | `QUESTION\|- [--kind confirm\|pick\|text\|aloud] [--option LABEL]... [--note TEXT] [--question id:text]... [--action TEXT] [--expires-hours H] [--key ID]` | `ask_on_phone` | `BAD_KIND`, `REFUSED` | put a slip on the phone; answers with its id. confirm: two --option, yes then no, and --action. pick: one --option per choice. text: --option is the field label. aloud: --question per spoken answer. Then end the turn: a decision's answer arrives |
 | `deckhand answer` | `ID [--wait SECONDS]` | `read_answer` | `PENDING` | the answer, `verified` if their phone signed it; exit 4 while none. --wait max 600 |
 | `deckhand notify` | `LINE\|-` | `call_for_attention` | `BAD_ANSWER`, `DAEMON_DOWN`, `NO_SESSION`, `REFUSED`, `NOT_PUSHED` | a Lock Screen card asking for the person; exit 4 when the folder refuses |
-| `deckhand say` | `SESSION TEXT\|-` | `say_to_session` | `BAD_ANSWER`, `CODEX_THREAD`, `DAEMON_DOWN`, `NO_SUCH_SESSION`, `REFUSED`, `NOT_DELIVERED` | message another session down its inbox, as an agent; exit 4 when it was not said |
+| `deckhand say` | `SESSION TEXT\|-` | `say_to_session` | `BAD_ANSWER`, `CODEX_THREAD`, `DAEMON_DOWN`, `NO_SUCH_SESSION`, `REFUSED`, `NOT_DELIVERED` | message another session down its inbox, as an agent — `manager` is the manager; exit 4 when it was not said |
+| `deckhand end` | `SESSION... --why TEXT` | `ask_to_end` | `BAD_ANSWER`, `DAEMON_DOWN`, `REFUSED` | ask the person, on their phone, to end these sessions on any machine; ends nothing itself — only their Allow does |
 | `deckhand open` | `[URL] [--window ID] [--title TEXT]` | `open_plane` | `BAD_ANSWER`, `BAD_PLANE`, `DAEMON_DOWN`, `REFUSED` | put a web page, or a Mac window by id, beside this session in the person's headset; the URL must be reachable from the headset on the LAN |
 | `deckhand space` | `[--full]` | `space` | `BAD_ANSWER`, `DAEMON_DOWN`, `REFUSED` | where this session is in the headset, what is beside it, and every page and window open; --full adds every kept pose |
 | `deckhand start` | `[FOLDER] [--provider claude\|codex\|opencode]` | `start_session` | `BAD_ANSWER`, `DAEMON_DOWN`, `NOT_STARTABLE`, `NO_SESSION`, `REFUSED` | start a session beside this one in the headset; brief it with `say` |
@@ -337,16 +339,32 @@ whether it is busy, how many slips it has left waiting for the person, and its `
 ### `say_to_session` — writes
 
 Arguments: `session`: string, `text`: string  
-Reaches: `GET /sessions`, `POST /sessions/{id}/say`  
+Reaches: `GET /sessions`, `GET /manager/session`, `POST /sessions/{id}/say`  
 Fails with: `BAD_ANSWER`, `CODEX_THREAD`, `DAEMON_DOWN`, `NO_SUCH_SESSION`, `REFUSED`
 
-Say something to another session on this Mac, by name or by id.
+Say something to another session on this Mac, by name or by id — `manager` is the
+manager, the agent behind the person's phone panel.
 
 It arrives down that session's peer inbox — or, for an OpenCode session, as OpenCode's
 synthetic input — labelled as coming from another agent and carrying none of your user's
 authority, which is the only way an agent may speak to one. It
 can be stopped by that session's filters, so read the receipt: `went: false` means it was not
-said, whatever the reason beside it.
+said, whatever the reason beside it. Nothing comes back down this tool: the manager answers
+in its panel, so say who you are and, if you need a reply, how to reach you.
+
+### `ask_to_end` — writes
+
+Arguments: `names`: string[], `why`: string  
+Reaches: `POST /end-requests`  
+Fails with: `BAD_ANSWER`, `DAEMON_DOWN`, `REFUSED`
+
+Ask the person to end sessions — on any machine, by name or id — with one Allow/Deny alert
+on their phone naming each one and your `why`. **This ends nothing.** Their Allow ends them,
+by SIGTERM to each process on its own machine; Deny or no tap and nothing happens, and
+nothing tells you which: look at `sessions` later rather than waiting on it.
+
+For cleanup the person asked for, with the sessions you judged idle or orphaned. Refused
+unless each name is exactly one Claude session with a process. Returns the alert's `id`.
 
 ### `open_plane` — writes
 
@@ -473,6 +491,7 @@ inside a helper is not listed, so treat the column as the least a route can answ
 | Route | Arguments | Answers | Errors | What it does |
 |---|---|---|---|---|
 | `GET /manager` | `?since`: integer = 0 (the last entry id this phone has seen), `?watching`: boolean = true (false for a poll with no panel on screen) | 200 | 401, 422 | What has been said, after the id the phone already has, and whether more is coming. |
+| `GET /manager/session` | — | 200 | 401, 404 | The manager's own live session, so an agent can say something to it down its inbox as to any other (`say_to_session`) — labelled as an agent, never as `/manager/say`'s person. 404 while the daemon holds none open. Newest first, should a second daemon be holding one too. |
 | `POST /manager/away` | — | 204 | 401 | The panel went off screen. Everything the manager says from here is pushed. |
 | `POST /manager/say` | body `{text, viewing?, viewing_name?}` | 201 | 400, 401, 422 | Say something to the manager. Answers with the entry, not with the reply. |
 | `POST /manager/audio` | `?say`: boolean = true (false to transcribe only, for the review card), `?viewing`: string = "" (the session on screen behind the panel), `?viewing_name`: string = "" (that session's name), form `{file}` | 201 | 400, 401, 413, 415, 422 | A clip for the manager: utt turns it into text and the manager is asked with it. |
@@ -542,6 +561,7 @@ inside a helper is not listed, so treat the column as the least a route can answ
 | `POST /sessions/{session_id}/notify` | body `{line}` | 200 | 400, 401, 404, 422 | An agent asking for the person outright, in its own words. |
 | `POST /notify` | — | 202 | 401 | A Lock Screen card with two buttons and no session, whose tap this Mac answers to a loopback caller. One alert instead, on a phone that cannot take a card yet. |
 | `POST /notify/{notify_id}/answer` | body `{proof?}` | 200 | 401, 422 | The phone's tap, signed like a decision's answer with the session `notify` and the notify id as its slip, and the action id as its value. Calls back once: a second tap is answered from the first. 410 once the notify is a day old, 502 when the caller did not take it. |
+| `POST /end-requests` | body `{sessions, why, asker?}` | 202 | 401, 422 | An agent asking the person to end sessions, on any machine, by name or id. Ends nothing: the person's signed Allow on the alert does (`end_requests.py`), through `/notify/{id}/answer`. |
 
 ### projects
 

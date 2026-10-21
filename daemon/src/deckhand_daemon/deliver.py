@@ -28,7 +28,7 @@ from . import config, presence
 from .fleet import here, remote
 from .log import log
 from .reading.transcripts import transcript_path
-from .sessions import Session, codex, opencode_input, panes, teammates
+from .sessions import Session, codex, ending, opencode_input, panes, teammates
 
 TIMEOUT = 5.0
 MSG_VERSION = 1
@@ -90,10 +90,10 @@ CONTROLS = {
 
 
 def control(session: Session, action: str) -> str | None:
-    """Interrupt, compact or clear. Returns None on success, or why not.
+    """Interrupt, compact, clear or exit. Returns None on success, or why not.
 
-    The peer socket is no help here — it delivers a message, and none of these is a message.
-    A session with no pane simply cannot be controlled from the phone, and says so.
+    The peer socket is no help here — none of these is a message. A session with no pane cannot
+    be pressed keys into and says so, except on `exit`, which ends its process (`ending.py`).
     """
     bursts = CONTROLS.get(action)
     if bursts is None:
@@ -101,7 +101,8 @@ def control(session: Session, action: str) -> str | None:
     if session.provider == "opencode":  # its own API stops and compacts, with no pane
         return opencode_input.control(session, action)
     if not session.pane:
-        return f"{session.name} is not in a tmux pane — nothing to press keys in"
+        return ending.end(session) if action == "exit" else (
+            f"{session.name} is not in a tmux pane — nothing to press keys in")
     if aimed := teammates.bring_back(session, CLEAR_BOX):  # Escape there would interrupt the teammate
         return aimed
     for burst in bursts:

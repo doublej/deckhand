@@ -116,7 +116,8 @@ public extension Session {
     var compacts: Bool { isOpenCode || (isClaude && pane != nil) }
     /// Give it a new name: `/rename` in a pane, or OpenCode's title.
     var renames: Bool { isOpenCode || (isClaude && pane != nil) }
-    /// Clear or exit — the two that cannot be undone. Claude Code's commands, typed into a pane.
+    /// Clear or exit — the two that cannot be undone. Claude Code's commands, typed into a pane;
+    /// exit without one stops the process.
     var endsByKeys: Bool { isClaude }
     /// Has slash commands and skills the phone can offer by name.
     var takesCommands: Bool { !isCodex }

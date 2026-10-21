@@ -36,6 +36,7 @@ from ..log import log
 from ..projects import starting, tmux
 from ..reading import asked, commands, context, readable, transcripts
 from ..reading import routes as agent_routes
+from ..sessions import ending
 from ..tray import routes as tray_routes
 from . import registry
 
@@ -163,6 +164,17 @@ def deliver_text(session_id: str, text: str = Body(embed=True),
     session = session_or_404(session_id)
     delivered_by, error = deliver.deliver(session, text, route="socket", person=person)
     return {"delivered": delivered_by is not None, "delivered_by": delivered_by, "error": error}
+
+
+@app.post("/sessions/{session_id}/end", dependencies=[Depends(require_token)])
+def end_session(session_id: str) -> dict:
+    """SIGTERM to that session's process, looked up again here first (`sessions/ending.py`).
+
+    The person's press, made on the Mac — the phone's exit on a session with no pane, or their
+    signed Allow on an agent's request. 200 with an `error`, matching `deliver` above. Not
+    `/control`: a hand has no pane, and nothing else here takes a keystroke.
+    """
+    return {"error": ending.end_here(session_id)}
 
 
 @app.get("/projects/trusted", dependencies=[Depends(require_token)])

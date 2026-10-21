@@ -1,4 +1,4 @@
-"""The `deckhand` command: the same fourteen tools as the MCP server, and how it says no."""
+"""The `deckhand` command: the same fifteen tools as the MCP server, and how it says no."""
 
 import asyncio
 import json

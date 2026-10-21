@@ -45,7 +45,9 @@ def found_session(session_id: str) -> sessions.Session | None:
     or None, for a caller to whom a session that has gone is news rather than a 404."""
     # ponytail: every lookup re-lists sessions (one `tmux` call). Cache it if the
     # phone ever polls harder than every few seconds.
-    live = sessions.live_sessions()
+    # Every live session, paned or not: the rail hides the ones tmux has no pane for, but an id
+    # still names them — the manager is one, and so is a session whose pane went.
+    live = sessions.live_sessions(paned_only=False)
     for s in live:
         if s.session_id == session_id:
             return s

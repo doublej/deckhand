@@ -138,15 +138,15 @@ struct SessionHead: View {
             // the same set and is not any more: compacting asks first too, and it belongs on
             // the dashboard where the window figure that decides it is printed — not in here,
             // drawn red among the two nothing brings back.
-            // Claude Code's alone: both are its own command typed into a pane, and neither Codex
-            // nor OpenCode has one or an equivalent.
+            // Claude Code's alone: neither Codex nor OpenCode has either. Clear is typed into a
+            // pane; exit needs none, because the Mac stops a paneless session's process instead.
             if session.endsByKeys {
                 Section("Run") {
                     ForEach(Control.allCases.filter(\.isIrreversible), id: \.self) { action in
                         Button(action.label, systemImage: action.symbol, role: .destructive) {
                             ask(action)
                         }
-                        .disabled(hasNoPane)
+                        .disabled(hasNoPane && action != .exit)
                     }
                 }
             }

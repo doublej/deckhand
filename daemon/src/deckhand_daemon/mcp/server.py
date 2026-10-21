@@ -1,4 +1,4 @@
-"""The fourteen tools a session gets so it can reach the person, wherever they are.
+"""The fifteen tools a session gets so it can reach the person, wherever they are.
 
 The skill said all of this in prose first, and the prose is still the better half: a slip is a
 file an agent writes in its own folder, and knowing that is worth more than any tool. These exist
@@ -24,7 +24,8 @@ skill's own `slip.py` and `answer.py` rather than talking to the daemon. One cop
 and the tool and the shell command an agent might type produce the same file.
 
 **What it refuses, and how.** By absence: there is no route argument, no `/control`, no `PUT`, and
-no way to close a session — the whole list, with a reason each, closes these instructions. `say_to_session` is socket-only, because an agent choosing the keyboard
+no way to close a session (`ask_to_end` asks the person to, and only their Allow ends one) — the
+whole list, with a reason each, closes these instructions. `say_to_session` is socket-only, because an agent choosing the keyboard
 route is an agent claiming to be the person. None of this is a fence — the agent keeps `Bash` and
 the token is a readable file — it is there so an agent does not *drift* into speaking as the
 person because that route was the convenient one. `docs/agent-surface.md` says which token would
@@ -152,19 +153,24 @@ async def sessions() -> dict:
 
 @server.tool(annotations=WRITES)
 async def say_to_session(session: str, text: str) -> dict:
-    """Say something to another session on this Mac, by name or by id.
+    """Say something to another session on this Mac, by name or by id — `manager` is the
+    manager, the agent behind the person's phone panel.
 
     It arrives down that session's peer inbox — or, for an OpenCode session, as OpenCode's
     synthetic input — labelled as coming from another agent and carrying none of your user's
     authority, which is the only way an agent may speak to one. It
     can be stopped by that session's filters, so read the receipt: `went: false` means it was not
-    said, whatever the reason beside it.
+    said, whatever the reason beside it. Nothing comes back down this tool: the manager answers
+    in its panel, so say who you are and, if you need a reply, how to reach you.
     """
     listed = await here.reach("GET", "/sessions")
     if "error" in listed:
         return listed
     live = listed.get("sessions", [])
-    match = _match(session, live)
+    if (match := _match(session, live)) is None:  # the manager has no pane, so it is not listed
+        manager = await here.reach("GET", "/manager/session")
+        live += [] if "error" in manager else [manager]
+        match = _match(session, live)
     if match is None:
         return {"went": False, "code": "NO_SUCH_SESSION",
                 "why": f"no one live session called {session!r} — "
@@ -181,6 +187,21 @@ async def say_to_session(session: str, text: str) -> dict:
     return {"went": bool(answered.get("delivered")), "by": answered.get("delivered_by"),
             "why": answered.get("delivery_error")
             or (f"the {stopped} filter stopped it" if stopped else None)}
+
+
+@server.tool(annotations=WRITES)
+async def ask_to_end(names: list[str], why: str) -> dict:
+    """Ask the person to end sessions — on any machine, by name or id — with one Allow/Deny alert
+    on their phone naming each one and your `why`. **This ends nothing.** Their Allow ends them,
+    by SIGTERM to each process on its own machine; Deny or no tap and nothing happens, and
+    nothing tells you which: look at `sessions` later rather than waiting on it.
+
+    For cleanup the person asked for, with the sessions you judged idle or orphaned. Refused
+    unless each name is exactly one Claude session with a process. Returns the alert's `id`.
+    """
+    held, _ = _folder()
+    return await here.reach("POST", "/end-requests", json={
+        "sessions": names, "why": why, "asker": (held or {}).get("name", "")})
 
 
 @server.tool(annotations=WRITES)

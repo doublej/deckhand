@@ -1,5 +1,6 @@
 """The routes that feed the Lock Screen: the phone's tokens, an agent calling for you, and a
-caller on this Mac asking you something with no session behind it (`callbacks.py`).
+caller on this Mac asking you something with no session behind it (`callbacks.py`), and an agent
+asking you to end sessions (`end_requests.py`).
 
 Out of `app.py` when that file reached its line budget; they belong with the push they feed. A
 module of their own rather than `push/__init__.py`, because `/notify` looks a session up through
@@ -13,8 +14,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, Body, Header, HTTPException, Request
 
-from .. import push, saying
-from . import callbacks
+from .. import fleet, push, saying, sessions
+from . import callbacks, end_requests
 
 router = APIRouter(tags=["push"])
 
@@ -85,3 +86,19 @@ def answer_notify(notify_id: str, proof: Annotated[dict | None, Body(embed=True)
     from the first. 410 once the notify is a day old, 502 when the caller did not take it.
     """
     return callbacks.answered(notify_id, proof, x_deckhand_token)
+
+
+@router.post("/end-requests", status_code=202)
+async def ask_to_end(wanted: Annotated[list[str], Body(alias="sessions", embed=True)],
+                     why: Annotated[str, Body(embed=True)],
+                     asker: Annotated[str, Body(embed=True)] = "") -> dict:
+    """An agent asking the person to end sessions, on any machine, by name or id. Ends nothing:
+    the person's signed Allow on the alert does (`end_requests.py`), through `/notify/{id}/answer`.
+
+    Resolved against a fresh listing of every machine, paneless sessions included, and refused
+    with 400 unless each names exactly one Claude session with a process. `asker` is who the
+    alert says is asking. 202 `{id, sessions}`; 502 when APNs refused, 503 when this Mac cannot send.
+    """
+    local = [s.to_json() for s in await asyncio.to_thread(sessions.live_sessions, False)]
+    rows = await fleet.listings(local)
+    return await asyncio.to_thread(end_requests.asked, wanted, why, asker, rows)

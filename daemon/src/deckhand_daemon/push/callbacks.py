@@ -160,8 +160,14 @@ def notify(raw: bytes) -> str:
     """Keep the callback, raise the card — or send the alert when the card cannot go up. The
     notify id; 400, 502 (APNs) or 503 (this Mac)."""
     asked = parsed(raw)
+    return sent(asked, {key: asked[key] for key in ("url", "body", "actions")})
+
+
+def sent(asked: dict, row: dict) -> str:
+    """Keep `row` by a new notify id and send the alert `asked` describes. A row with `ends`
+    instead of `url` is answered in this daemon (`end_requests.py`), never posted."""
     nid = secrets.token_hex(8)
-    row = {key: asked[key] for key in ("url", "body", "actions")} | {"at": time.time()}
+    row = row | {"at": time.time()}
     with _lock:
         _keep(_kept() | {nid: row})
     # The Mac's own name, as `push.announce` writes it for a session on this machine.
@@ -191,8 +197,7 @@ def answered(nid: str, proof: object, token: str) -> dict:
         if "result" not in row:
             if said["value"] not in row["actions"]:
                 raise answering.refusal(400, "MISMATCH", "that action is not one this offered")
-            row["result"] = _called(row["url"], filled(row["body"], said["value"])) | {
-                "action": said["value"]}
+            row["result"] = _answered_to(row, said["value"]) | {"action": said["value"]}
             _keep(held | {nid: row})
             sending.end(f"{SIGNED_AS}:{nid}")
             log.info("notify %s: %s, the caller answered %s", nid, said["value"],
@@ -201,6 +206,15 @@ def answered(nid: str, proof: object, token: str) -> dict:
     if result["error"]:
         raise HTTPException(status_code=502, detail=result["error"])
     return {"action": result["action"], "status": result["status"]}
+
+
+def _answered_to(row: dict, action: str) -> dict:
+    """The caller told which button was tapped: over loopback HTTP, or here for an end request."""
+    if "ends" in row:
+        from . import end_requests  # it imports this module to send its alert
+
+        return end_requests.tapped(row["ends"], action)
+    return _called(row["url"], filled(row["body"], action))
 
 
 def _called(url: str, body: object) -> dict:

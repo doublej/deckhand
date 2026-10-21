@@ -81,3 +81,33 @@ def test_a_filter_stopping_a_prompt_is_not_a_delivery(monkeypatch):
     monkeypatch.setattr(server.here, "reach", reach)
     said = run(server.say_to_session("s2", "hello"))
     assert said["went"] is False and "quiet-hours" in said["why"]
+
+
+def test_the_manager_is_said_to_down_its_inbox_though_it_is_not_listed(monkeypatch):
+    sent = []
+
+    async def reach(method, path, **kw):
+        if path == "/sessions":
+            return {"sessions": [{"session_id": "s2", "name": "utt"}]}
+        if path == "/manager/session":
+            return {"session_id": "m1", "name": "deckhand-manager", "provider": "claude"}
+        sent.append((path, kw["params"]))
+        return {"delivered": True, "delivered_by": "socket"}
+
+    monkeypatch.setattr(server.here, "reach", reach)
+    assert run(server.say_to_session("manager", "could not close three"))["went"] is True
+    assert sent == [("/sessions/m1/say", {"route": "socket"})]
+
+
+def test_the_managers_session_is_found_by_its_name(claude_home, token, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from deckhand_daemon.app import app
+    from deckhand_daemon.manager import agent
+
+    client = TestClient(app)
+    headers = {"x-deckhand-token": token}
+    assert client.get("/manager/session", headers=headers).status_code == 404
+    monkeypatch.setattr(agent, "NAME", "cold-otter")
+    assert client.get("/manager/session", headers=headers).json()["session_id"] == (
+        "bbbb1111-2222-3333-4444-555566667777")

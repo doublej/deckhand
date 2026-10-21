@@ -63,6 +63,26 @@ def deliver_to(machine_id: str, session_id: str, message: str,
     return True, None
 
 
+def end_on(machine_id: str, session_id: str) -> str | None:
+    """End a session on another machine: its hand re-lists and signals the pid there
+    (`sessions/ending.py`). None once it did, or why not."""
+    base = _base(machine_id)
+    if base is None:
+        return f"{machine_id} is not reachable"
+    try:
+        r = httpx.post(f"{base}/sessions/{session_id}/end", headers={TOKEN_HEADER: token()},
+                       timeout=TIMEOUT)
+    except (httpx.HTTPError, OSError) as error:
+        if link := links.links().get(machine_id):
+            links.went_down(link, f"{error.__class__.__name__}: {error}")
+        return f"could not reach {machine_id}: {error}"
+    if r.status_code == 404:
+        return f"{machine_id}'s hand is too old to end a session — restart it"
+    if r.status_code >= 400:
+        return f"{machine_id} answered {r.status_code}"
+    return r.json().get("error")
+
+
 def forward(machine_id: str, method: str, path: str, query: str = "", body: bytes = b"",
             content_type: str = "") -> httpx.Response | None:
     """Hand a request straight to the machine that has the disk, and answer with what it says.

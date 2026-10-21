@@ -50,7 +50,7 @@ struct ControlTests {
         #expect(ending?.title == "End deckhand?")
         #expect(ending?.verb == "End the session")
         // What a person needs to know before pressing it: this phone cannot undo it.
-        #expect(ending?.because.contains("Only the Mac") == true)
+        #expect(ending?.because.contains("Only its own machine") == true)
 
         // What compacting costs, in the words somebody needs before pressing it. Not "there is
         // no undo", which is `clear`'s sentence and would read as the same thing happening.

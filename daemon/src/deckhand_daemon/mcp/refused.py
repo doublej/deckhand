@@ -12,7 +12,8 @@ from __future__ import annotations
 REFUSED: list[dict[str, str]] = [
     {"verbs": "cancel stop compact clear exit kill", "route": "POST /sessions/{id}/control",
      "why": "keystrokes the person presses on a session's own pane. `clear` cannot be undone, "
-            "and closing a session is theirs alone"},
+            "and closing a session is theirs alone: `ask_to_end` asks them, and only their "
+            "Allow ends one"},
     {"verbs": "rename", "route": "POST /sessions/{id}/name",
      "why": "it types `/rename` into the pane, which is the keyboard route and arrives as the "
             "person"},
@@ -37,7 +38,8 @@ REFUSED: list[dict[str, str]] = [
             "session in it — the person's own press. `tmux_arrange` moves panes, never into them"},
     {"verbs": "manager", "route": "POST /manager/say",
      "why": "it speaks into the manager's conversation as the person. The manager is a session "
-            "too: Claude Code's own SendMessage to `deckhand-manager` reaches it as an agent"},
+            "too: `say_to_session manager`, or Claude Code's own SendMessage to "
+            "`deckhand-manager`, reaches it as an agent"},
 ]
 
 #: verb → why, for the command line.

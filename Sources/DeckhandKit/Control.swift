@@ -19,8 +19,9 @@ public enum Control: String, CaseIterable, Sendable {
     case compact
     /// `/clear`: throw the conversation away. There is no undo, so the phone asks first.
     case clear
-    /// `/exit`: quit Claude Code. The session is gone from the rail the moment its process is,
-    /// and nothing on this phone can start it again — the Mac has to. So the phone asks first.
+    /// `/exit`: quit Claude Code — typed into its pane, or for a session with no pane its process
+    /// told to stop on its own machine. The session is gone from the rail the moment its process
+    /// is, and nothing on this phone can start it again. So the phone asks first.
     case exit
 
     public var label: String {
@@ -89,7 +90,7 @@ public enum Control: String, CaseIterable, Sendable {
             Caution(title: "End \(name)?",
                     verb: "End the session",
                     because: "Claude Code quits and the session leaves the rail. "
-                        + "Only the Mac can start it again.")
+                        + "Only its own machine can start it again.")
         }
     }
 }
