@@ -188,6 +188,7 @@ def test_an_answer_lands_beside_the_page_and_the_listing_says_so(session, asking
         "id": "which-branch",
         "answeredAt": written["answeredAt"],
         "value": {"branch": "develop", "tag": True},
+        "verified": False,
     }
     assert written["file"] == str(beside)
     assert artifacts.listing(session)[0]["answered"] is True

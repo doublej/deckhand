@@ -27,7 +27,7 @@ def said(monkeypatch):
     seen: dict = {}
     monkeypatch.setattr(
         deliver_module, "deliver",
-        lambda session, text, route: (seen.update(text=text, route=route), ("keyboard", None))[1],
+        lambda session, text, route, *_: (seen.update(text=text, route=route), ("keyboard", None))[1],
     )
     return seen
 

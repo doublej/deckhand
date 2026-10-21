@@ -11,6 +11,7 @@ is — and the body is the prompt verbatim.
 __init__.py     # frontmatter and body, out of one markdown file
 briefing.md     # the briefing agent: what it writes, its model, its three tools
 crafting.md     # the prompt-crafting filter's agent
+decision-answer.md # the person's signed answer to a decision, typed into the asker
 idle-check.md   # what a session that has gone quiet is asked
 manager.md      # the manager: its voice, its authority, its twelve tool descriptions
 manager-away.md # put in front of what is said when the run is read off the Lock Screen

@@ -16,6 +16,8 @@ MAX_UPLOAD_BYTES = 32 * 1024 * 1024
 # is streamed from disk rather than held in memory at either end.
 MAX_FILE_BYTES = 512 * 1024 * 1024
 TOKEN_HEADER = "x-deckhand-token"
+#: `agent` on every call an agent's tools make, so `/say` does not dress its words as the person's.
+CALLER_HEADER = "x-deckhand-caller"
 
 
 def data_dir() -> Path:

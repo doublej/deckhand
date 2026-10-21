@@ -66,7 +66,8 @@ REFUSED = "tmux would not type into {name}"
 STAGED = "{name} took the words but not the return — they are sitting unsent in its box"
 # The receiver already wraps a socket message in its own "another Claude session sent this"
 # framing, so this only has to say who is actually speaking — and it has to be short, because
-# it sits in JJ's pane taking up room he wanted for the message.
+# it sits in JJ's pane taking up room he wanted for the message. Only on words that came from JJ
+# (`person=True`): the manager, the idle check and an agent's say are not him.
 PREAMBLE = "JJ, spoken:"
 
 
@@ -158,7 +159,8 @@ def with_images(text: str, paths: list[str]) -> str:
     return f"{text}\n\n{label}: {named}" if text.strip() else f"{label}: {named}"
 
 
-def deliver(session: Session, text: str, route: str = "auto") -> tuple[str | None, str | None]:
+def deliver(session: Session, text: str, route: str = "auto",
+            person: bool = False) -> tuple[str | None, str | None]:
     """Returns (route taken, error). Never raises: a session that has gone is not an exception.
 
     The route is the person's choice, because the two are not interchangeable. The keyboard
@@ -214,9 +216,9 @@ def deliver(session: Session, text: str, route: str = "auto") -> tuple[str | Non
     # five places to forget. Above this line nothing changes: the keyboard route has already
     # refused (a remote session has no pane) and so has a slash command, for the same reason.
     if session.machine and session.machine != here():
-        delivered, error = remote.deliver_to(session.machine, session.session_id, message)
+        delivered, error = remote.deliver_to(session.machine, session.session_id, message, person)
     else:
-        delivered, error = _through_socket(session, message)
+        delivered, error = _through_socket(session, f"{PREAMBLE} {message}" if person else message)
     return ("socket" if delivered else None), error
 
 
@@ -319,7 +321,7 @@ def _through_socket(session: Session, message: str) -> tuple[bool, str | None]:
     path = session.socket_path
     if not path:
         return False, f"{session.name} has no inbox socket"
-    payload = _frames(_peer_token(session.pid), f"{PREAMBLE} {message}")
+    payload = _frames(_peer_token(session.pid), message)
     sent, error = (
         _write_pipe(path, payload) if sys.platform == "win32" else _write_unix(path, payload)
     )

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
-from typing import Annotated
 
 from fastapi import Body, Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import FileResponse
@@ -31,6 +30,7 @@ from . import (
 from .addresses import routes as address_routes
 from .bindings import routes as binding_routes
 from .browser import routes as browser_routes
+from .decisions import routes as decision_routes
 from .filters import routes as filter_routes
 from .fleet import routing as fleet_routing
 from .links import routes as link_routes
@@ -42,6 +42,7 @@ from .orders import routes as order_routes
 from .pairing import routes as pairing_routes
 from .projects import header as project_header
 from .projects import routes as project_routes
+from .push import routes as push_routes
 from .reading import asked, commands, context, readable, transcripts
 from .reading import routes as reading_routes
 from .settings import routes as settings_routes
@@ -97,6 +98,7 @@ app.middleware("http")(browser_routes.cors)
 app.include_router(address_routes.router, dependencies=[Depends(require_token)])
 app.include_router(artifacts.router, dependencies=[Depends(require_token)])
 app.include_router(binding_routes.router, dependencies=[Depends(require_token)])
+app.include_router(decision_routes.router, dependencies=[Depends(require_token)])
 app.include_router(filter_routes.router, dependencies=[Depends(require_token)])
 app.include_router(tray_routes.router, dependencies=[Depends(require_token)])
 app.include_router(link_routes.router, dependencies=[Depends(require_token)])
@@ -105,6 +107,7 @@ app.include_router(order_routes.router, dependencies=[Depends(require_token)])
 app.include_router(reading_routes.router, dependencies=[Depends(require_token)])
 app.include_router(presence.router, dependencies=[Depends(require_token)])
 app.include_router(push.router, dependencies=[Depends(require_token)])
+app.include_router(push_routes.router, dependencies=[Depends(require_token)])
 app.include_router(project_routes.router, dependencies=[Depends(require_token)])
 app.include_router(project_header.router, dependencies=[Depends(require_token)])
 app.include_router(settings_routes.router, dependencies=[Depends(require_token)])
@@ -357,45 +360,3 @@ async def rename_session(session_id: str, name: str = Body(embed=True)) -> dict:
         filters.key(session.machine, deliver.clean_name(name)),
     )
     return {"renamed": deliver.clean_name(name), "was": session.name, "carried_filters": carried}
-
-@app.post("/live/token", dependencies=[Depends(require_token)])
-def live_token(token: str = Body(embed=True), kind: str = Body(embed=True),
-               session: str = Body(embed=True, default="")) -> dict:
-    """The phone hands over what the Mac needs to reach its Lock Screen.
-
-    Sent on every launch, because these change without warning and a stale one is a card that
-    silently stops updating.
-
-    One card is one session, so an *activity* token says which one it addresses. A phone that
-    sends none is a build from before that — taken rather than refused, and dropped, because a
-    token that cannot say which card it is could only ever end the wrong one.
-
-    A *device* token is the app's own, for plain notifications — the manager's messages, pushed
-    while its panel is not on screen. One per phone, like *start*.
-    """
-    if kind not in ("activity", "start", "device"):
-        raise HTTPException(status_code=400, detail=f"no such token kind {kind!r}")
-    push.remember(token, kind, session)
-    return {"registered": kind}
-
-
-@app.post("/sessions/{session_id}/notify", dependencies=[Depends(require_token)])
-def ask_for_attention(session_id: str, line: Annotated[str, Body(embed=True)]) -> dict:
-    """An agent asking for the person outright, in its own words.
-
-    The only thing on the Lock Screen a session raises for itself — everything else there is the
-    Mac noticing something. So it is the one that a folder can refuse outright rather than merely
-    keep quiet about, and the refusal comes back rather than being swallowed: an agent that
-    thinks it has your attention and has not is worse than one that knows it has not.
-
-    Empty words are refused here rather than pushed as a blank card. There is no useful default:
-    the whole point of this route over the ones that fire on their own is that somebody had
-    something specific to say.
-    """
-    session = saying.session_or_404(session_id)
-    said = " ".join(line.split())
-    if not said:
-        raise HTTPException(status_code=400, detail="nothing to say")
-    if error := push.called(session, said):
-        return {"pushed": False, "why": error}
-    return {"pushed": True}

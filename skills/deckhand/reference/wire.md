@@ -66,17 +66,18 @@ these routes look first — or flat in `.deckhand/artifacts/` when it belongs to
 
 | Route | Answers | The trap |
 |---|---|---|
-| `GET /sessions/{id}/artifacts` | `{artifacts: [{id, title, modified, answered, shared}]}` | Newest first, this session's own **and** the folder's. `shared` is true for the folder's, which every session working there also lists. `answered` is the whole state: a page with no `.answer.json` beside it is open. |
+| `GET /sessions/{id}/artifacts` | `{artifacts: [{id, title, modified, answered, shared, decision, choices, action, expires, hash, verified, answered_by, expired}]}` | Newest first, this session's own **and** the folder's. `shared` is true for the folder's, which every session working there also lists. `answered` is the whole state: a page with no `.answer.json` beside it is open. The decision fields are null for a page that is not one; `verified` is re-checked against the phone's signature, never read off the file. |
 | `GET /sessions/{id}/artifacts/{aid}` | `text/html` | 404 if there is no such id in either scope, no `.deckhand/artifacts/` folder, or the page is over 4 MB. An id in both scopes resolves to the session's own. |
 | `GET /sessions/{id}/artifacts/{aid}/answer` | `{value}` | **`{"value": null}` means nobody has answered** — it is not an error. A missing page is still a 404. |
-| `POST /sessions/{id}/artifacts/{aid}/answer` | `{answer, delivered, delivered_by, delivery_error}` | The phone's route in. `value` is required JSON and **cannot be `null`** (FastAPI cannot tell an omitted field from an explicit null); `false`, `0`, `""` and `[]` all arrive intact. Do not answer your own slip. |
+| `POST /sessions/{id}/artifacts/{aid}/answer` | `{answer, delivered, delivered_by, delivery_error}` | The phone's route in. `value` is required JSON and **cannot be `null`**; `false`, `0`, `""` and `[]` all arrive intact. **A decision takes only `{proof}`**, signed by the phone's own key — anything else is 403 `UNSIGNED`/`NO_KEY`/`BAD_SIGNATURE`. Do not answer your own slip. |
+| `PUT /devices/key` `{publicKey}` · `GET /devices/key` | `{registered, fingerprint}` | The phone files its signing key, with its own device token only: this Mac's token is 403. Nothing an agent has. |
 
 ## Speaking, and asking for the person
 
 | Route | Answers | The trap |
 |---|---|---|
 | `POST /sessions/{id}/notify` `{line}` | `{pushed: true}` or `{pushed: false, why}` | The one Lock Screen card a session raises **for itself**, in its own words. Empty text is a 400, not a blank card. Gated by the `called` setting, which a folder may refuse outright — and the refusal comes back rather than being swallowed. Say so when it does. |
-| `POST /sessions/{id}/say` `{text, images?}` | `{delivered, delivered_by, delivery_error, notes, stopped_by}` | **Never pass `route`.** See "What this refuses". `delivered: true` is not "it was said" — check `delivered && stopped_by == null`. A leading `/` is refused on the socket route and where there is no pane. |
+| `POST /sessions/{id}/say` `{text, images?}` | `{delivered, delivered_by, delivery_error, notes, stopped_by}` | **Never pass `route`; always send `x-deckhand-caller: agent`** (the tools and `deckhand` do), so your words carry no "JJ, spoken:" and no standing orders. See "What this refuses". `delivered: true` is not "it was said" — check `delivered && stopped_by == null`. A leading `/` is refused on the socket route and where there is no pane. |
 | `POST /sessions/{id}/audio?deliver=` | `{path, bytes, received_at, transcript, transcript_error, prepared, delivered, delivered_by, delivery_error, notes, stopped_by}` | 201. The phone's lane, not yours. `deliver=false` transcribes only but still runs the chain once, so `prepared` shows what would really be sent; sending those words on with `/say` needs `prepared=true` or a non-idempotent filter runs on its own output. |
 | `POST /sessions/{id}/image` | `{path}` | Multipart, image suffixes only, 32 MB. The path only works while it stays in that session's own `images/<id>/` folder; anything else is dropped silently from `/say`. |
 | `POST /sessions/{id}/focus` | `{focused: true}` | 409 when there is no iTerm pane. |

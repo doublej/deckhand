@@ -88,7 +88,7 @@ def test_the_words_that_reach_a_session_are_the_filtered_ones(token, monkeypatch
     seen = {}
     monkeypatch.setattr(
         deliver_module, "deliver",
-        lambda session, text, route: (seen.update(text=text), ("keyboard", None))[1],
+        lambda session, text, route, *_: (seen.update(text=text), ("keyboard", None))[1],
     )
     c = client(token)
     c.put(f"/sessions/{SID}/filters", json={"steps": [
@@ -209,7 +209,7 @@ def test_a_clip_is_filtered_too_and_the_transcript_still_says_what_was_heard(tok
     seen = {}
     monkeypatch.setattr(
         deliver_module, "deliver",
-        lambda session, text, route: (seen.update(text=text), ("socket", None))[1],
+        lambda session, text, route, *_: (seen.update(text=text), ("socket", None))[1],
     )
     c = client(token)
     c.put(f"/sessions/{SID}/filters", json={"steps": [
@@ -235,7 +235,7 @@ def test_words_the_person_has_already_read_are_not_filtered_again(token, monkeyp
     seen = {}
     monkeypatch.setattr(
         deliver_module, "deliver",
-        lambda session, text, route: (seen.update(text=text), ("keyboard", None))[1],
+        lambda session, text, route, *_: (seen.update(text=text), ("keyboard", None))[1],
     )
     c = client(token)
     c.put(f"/sessions/{SID}/filters", json={"steps": [

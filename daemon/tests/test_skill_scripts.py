@@ -61,7 +61,7 @@ def test_a_pick_carries_its_options_and_nothing_of_the_demo(tmp_path):
 
 def test_a_confirm_says_back_the_words_on_its_own_buttons(tmp_path):
     _, said, _ = slip(tmp_path, "--kind", "confirm", "--title", "Tag 0.4.0 and push it?",
-                      "--option", "Tag and push", "--option", "Hold")
+                      "--option", "Tag and push", "--option", "Hold", "--action", "tag and push")
 
     assert '<button id="yes" class="primary">Tag and push</button>' in said
     assert '<button id="no">Hold</button>' in said
@@ -87,11 +87,13 @@ def test_an_aloud_slip_declares_its_questions_and_the_app_reads_that_block(tmp_p
 
 
 def test_rewriting_a_slip_takes_the_old_answer_with_it(tmp_path):
-    page, _, _ = slip(tmp_path, "--kind", "text", "--title", "Name it")
+    """Any slip but a decision: an aloud slip asked again is asked afresh."""
+    asked = ("--kind", "aloud", "--title", "Name it", "--question", "name:What is it called?")
+    page, _, _ = slip(tmp_path, *asked)
     beside = page.with_name("name-it.answer.json")
     beside.write_text(json.dumps({"id": "name-it", "answeredAt": 1.0, "value": {"answer": "a"}}))
 
-    slip(tmp_path, "--kind", "text", "--title", "Name it")
+    slip(tmp_path, *asked)
 
     assert not beside.exists()
 
@@ -111,7 +113,7 @@ def test_a_slip_is_filed_under_the_session_that_wrote_it(tmp_path):
     page.with_name("name-it.answer.json").write_text(json.dumps({"value": {"answer": "ok"}}))
     code, out, _ = run("answer.py", "--dir", str(tmp_path), "name-it", session=SID)
 
-    assert code == 0 and json.loads(out) == {"answer": "ok"}
+    assert code == 0 and json.loads(out)["value"] == {"answer": "ok"}
 
 
 def test_a_session_reads_back_a_slip_belonging_to_the_folder(tmp_path):
@@ -121,7 +123,7 @@ def test_a_session_reads_back_a_slip_belonging_to_the_folder(tmp_path):
 
     code, out, _ = run("answer.py", "--dir", str(tmp_path), "name-it", session=SID)
 
-    assert code == 0 and json.loads(out) == {"answer": "ours"}
+    assert code == 0 and json.loads(out)["value"] == {"answer": "ours"}
 
 
 def test_a_session_id_that_could_be_a_path_is_refused(tmp_path):
@@ -134,7 +136,7 @@ def test_a_session_id_that_could_be_a_path_is_refused(tmp_path):
 
 
 def test_the_answer_is_printed_once_it_lands_and_a_false_one_counts(tmp_path):
-    page, _, _ = slip(tmp_path, "--kind", "confirm", "--title", "Ship it")
+    page, _, _ = slip(tmp_path, "--kind", "confirm", "--title", "Ship it", "--action", "ship")
     code, _, _ = run("answer.py", "--dir", str(tmp_path), "ship-it")
     assert code == 1
 
@@ -142,11 +144,12 @@ def test_the_answer_is_printed_once_it_lands_and_a_false_one_counts(tmp_path):
         json.dumps({"id": "ship-it", "answeredAt": 1.0, "value": {"answer": False}}))
     code, out, _ = run("answer.py", "--dir", str(tmp_path), "ship-it")
 
-    assert code == 0 and json.loads(out) == {"answer": False}
+    assert code == 0 and json.loads(out) == {"value": {"answer": False}, "verified": False,
+                                            "device": None, "fingerprint": None}
 
 
 def test_half_a_written_answer_is_not_an_answer(tmp_path):
-    page, _, _ = slip(tmp_path, "--kind", "confirm", "--title", "Ship it")
+    page, _, _ = slip(tmp_path, "--kind", "confirm", "--title", "Ship it", "--action", "ship")
     page.with_name("ship-it.answer.json").write_text('{"id": "ship-it", "value": {"an')
 
     code, _, err = run("answer.py", "--dir", str(tmp_path), "ship-it")

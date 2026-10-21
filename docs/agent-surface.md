@@ -264,6 +264,19 @@ tool surface merely agrees with them, and `control-surface.md`'s second token is
 Until it exists, every refusal in this section is a default rather than a guarantee, and the
 skill should say so where it documents them.
 
+**One thing is now a fence: a decision's answer** ([`artifacts.md`](artifacts.md#decisions)). It
+is proven by the phone's own key, filed once with a device token only a phone paired by code holds,
+and the daemon refuses any decision answer that is not signed by it — so an agent holding the
+shared token can no longer write, curl or `respond` its way to the person's approval. `answer.py`
+and `read_answer` re-check the signature themselves, so a hand-written answer file reads
+`verified: false`. This closes the forged-approval gap without the agent token.
+
+**`x-deckhand-caller: agent` is a drift guard, not a fence.** `mcp/here.py` and the `deckhand`
+command send it on every call; `/say` then adds no "JJ, spoken:", carries no standing orders and
+leaves the card up, and `POST /presence/phone` answers 403. An agent with `Bash` can leave the
+header off, exactly as it can `curl` past every other refusal here — the point is that the tools
+an agent is given never dress its words as the person's.
+
 ## The bill
 
 About two days, and the first half-day is worth more than the rest together.

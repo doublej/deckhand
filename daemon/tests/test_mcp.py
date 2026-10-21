@@ -39,12 +39,14 @@ def test_no_session_above_is_said_rather_than_guessed_at(monkeypatch):
 
 def test_a_slip_lands_in_the_session_folder_and_reads_back(in_session):
     """Written where the record says, not where this process happens to be running."""
-    made = run(server.ask_on_phone("Ship it?", kind="confirm", options=["Ship", "Wait"]))
+    made = run(server.ask_on_phone("Ship it?", kind="confirm", options=["Ship", "Wait"],
+                                    action="ship"))
     page = in_session / ".deckhand" / "artifacts" / "sess-1" / "ship-it.html"
     assert page.exists() and made["id"] == "ship-it" and made["waiting"] is True
     assert run(server.read_answer("ship-it"))["answered"] is False
     (page.parent / "ship-it.answer.json").write_text(json.dumps({"value": True}))
-    assert run(server.read_answer("ship-it")) == {"answered": True, "value": True}
+    assert run(server.read_answer("ship-it")) == {
+        "answered": True, "value": True, "verified": False, "device": None, "fingerprint": None}
 
 
 def test_an_unknown_kind_is_refused_before_anything_is_written(in_session):

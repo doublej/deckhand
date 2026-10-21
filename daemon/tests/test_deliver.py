@@ -124,7 +124,8 @@ def test_an_unknown_route_is_refused(inbox, claude_home):
 
 def test_a_message_arrives_as_a_user_frame(inbox, claude_home):
     (claude_home / "sessions" / "4242.abc123.key").write_text(json.dumps({"peerToken": "beef" * 8}))
-    assert deliver.deliver(session_for(inbox.getsockname()), "  run the tests  ") == ("socket", None)
+    assert deliver.deliver(session_for(inbox.getsockname()), "  run the tests  ",
+                           person=True) == ("socket", None)
     frames = read_frames(inbox)
     assert [f["type"] for f in frames] == ["auth", "user"]
     assert frames[1]["message"] == {

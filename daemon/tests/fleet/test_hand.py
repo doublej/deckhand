@@ -99,7 +99,7 @@ def test_deliver_takes_the_socket_and_is_never_asked_which(client, monkeypatch):
     absent, so an agent cannot ask to arrive as the person and be told no."""
     seen: dict = {}
 
-    def fake(session, text, route="auto"):
+    def fake(session, text, route="auto", person=False):
         seen.update(text=text, route=route)
         return "socket", None
 
@@ -122,7 +122,7 @@ def test_deliver_passes_the_words_through_untouched(client, monkeypatch):
     and running either twice is the shape of bug that looks like it works."""
     seen: dict = {}
     monkeypatch.setattr(
-        hand.deliver, "deliver", lambda s, t, route="auto": (seen.update(text=t), "socket", None)[1:]
+        hand.deliver, "deliver", lambda s, t, route="auto", person=False: (seen.update(text=t), "socket", None)[1:]
     )
     sid = client.get("/sessions", headers={config.TOKEN_HEADER: config.token()}).json()["sessions"][
         0

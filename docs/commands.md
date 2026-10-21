@@ -164,8 +164,8 @@ command takes `--json`; `-` for a question, line or text reads it from stdin.
 | `deckhand presence` | `[--json]` | `presence` | `BAD_ANSWER`, `DAEMON_DOWN`, `REFUSED` | where the person is: `laptop`, `headset` or `phone`, one word; --json adds idle seconds, screen lock and when the phone was last heard from |
 | `deckhand whoami` | — | `whoami` | `NO_SESSION` | this session's id, name and folder |
 | `deckhand sessions` | `[--fields name,status] [--limit 50]` | `sessions` | `BAD_ANSWER`, `DAEMON_DOWN`, `REFUSED` | every live session on this Mac, with how many slips each has waiting |
-| `deckhand ask` | `QUESTION\|- [--kind confirm\|pick\|text\|aloud] [--option LABEL]... [--note TEXT] [--question id:text]...` | `ask_on_phone` | `BAD_KIND`, `NO_SESSION`, `REFUSED` | put a slip on the phone; answers with its id. confirm: two --option, yes then no. pick: one --option per choice. text: --option is the field label. aloud: --question per spoken answer |
-| `deckhand answer` | `ID [--wait SECONDS]` | `read_answer` | `NO_SESSION`, `PENDING` | the person's answer to a slip; exit 4 while there is none. --wait blocks up to 600 |
+| `deckhand ask` | `QUESTION\|- [--kind confirm\|pick\|text\|aloud] [--option LABEL]... [--note TEXT] [--question id:text]... [--action TEXT] [--expires-hours H] [--key ID]` | `ask_on_phone` | `BAD_KIND`, `REFUSED` | put a slip on the phone; answers with its id. confirm: two --option, yes then no, and --action. pick: one --option per choice. text: --option is the field label. aloud: --question per spoken answer. Then end the turn: a decision's answer arrives |
+| `deckhand answer` | `ID [--wait SECONDS]` | `read_answer` | `PENDING` | the answer, `verified` if their phone signed it; exit 4 while none. --wait max 600 |
 | `deckhand notify` | `LINE\|-` | `call_for_attention` | `BAD_ANSWER`, `DAEMON_DOWN`, `NO_SESSION`, `REFUSED`, `NOT_PUSHED` | a Lock Screen card asking for the person; exit 4 when the folder refuses |
 | `deckhand say` | `SESSION TEXT\|-` | `say_to_session` | `BAD_ANSWER`, `CODEX_THREAD`, `DAEMON_DOWN`, `NO_SUCH_SESSION`, `REFUSED`, `NOT_DELIVERED` | message another session down its inbox, as an agent; exit 4 when it was not said |
 | `deckhand open` | `[URL] [--window ID] [--title TEXT]` | `open_plane` | `BAD_ANSWER`, `BAD_PLANE`, `DAEMON_DOWN`, `REFUSED` | put a web page, or a Mac window by id, beside this session in the person's headset; the URL must be reachable from the headset on the LAN |
@@ -260,33 +260,43 @@ Which session this is: its id, its name, the folder it is working in.
 
 ### `ask_on_phone` — writes
 
-Arguments: `question`: string, `kind`: confirm|pick|text|aloud = "confirm", `options`: string[] = null, `note`: string = "", `questions`: string[] = null  
+Arguments: `question`: string, `kind`: confirm|pick|text|aloud = "confirm", `options`: string[] = null, `note`: string = "", `questions`: string[] = null, `action`: string = "", `expires_hours`: number = 24.0, `key`: string = ""  
 Reaches: `skills/deckhand/scripts/slip.py`  
-Fails with: `BAD_KIND`, `NO_SESSION`, `REFUSED`
+Fails with: `BAD_KIND`, `REFUSED`
 
-Ask the person a question on their phone. Returns the slip's id, to read the answer by.
+Ask the person a question on their phone. Returns the slip's id. **Then end your turn.**
 
-A yes-or-no question is the default and the fastest to answer: a confirm is answered straight
-from the Lock Screen card, without opening the app. Keep it under 80 characters — the card
-shows the question and nothing else — and put any detail in `note`, which the page shows.
-The answer is `{"answer": true}` or `{"answer": false}`.
+Confirm, pick and text are **decisions**: the phone answers one only with a signature from its
+own key, and the daemon types that answer into this session as the person's next message —
+`Decision <id> — "<question>": <their choice>. This covers exactly: <action>.` So do not wait
+on `read_answer`: ask, stop, and act on that message when it arrives. It covers exactly the
+`action` line and nothing more.
+
+`action` is required for a confirm: exactly what a yes allows, in one line. Keep the question
+under 80 characters — the card shows it and nothing else — and put detail in `note`. The answer
+is `{"answer": true}` or `{"answer": false}`, or `{"reply": "<text>"}` typed on the Lock
+Screen. `expires_hours` (default 24) is how long the question stands.
 
 `kind` is one of confirm, pick, text, aloud. `options` is the yes label then the no label for
 a confirm, one row per choice for a pick, and the field's label for a text. `questions` is for
-an aloud slip only, each one `id:the question`, and the person answers by speaking.
+an aloud slip only, each one `id:the question`, and the person answers by speaking — an aloud
+slip is not a decision.
 
-The page is written into this session's own folder and appears on the phone within seconds.
-Asking the same question again replaces the page and drops any answer already given to it.
+`key` is the slip's id, which makes re-asking explicit. Asking an answered decision again under
+the same key returns its answer instead of asking twice; any other slip is replaced.
 
 ### `read_answer` — reads only
 
 Arguments: `id`: string, `wait_seconds`: number = 0.0  
 Reaches: `skills/deckhand/scripts/answer.py`  
-Fails with: `NO_SESSION`
+Fails with: —
 
-What the person answered on a slip, if they have. `wait_seconds` blocks for up to ten
-minutes; left out it looks once, which is usually right because the daemon messages this
-session the moment an answer lands.
+What the person answered on a slip, if they have, and whether their phone proved it.
+
+`verified` is true only for a decision answered with the phone's signature over this very
+page; a file written by hand, or any non-decision slip, reads false. `device` and
+`fingerprint` say which phone. `wait_seconds` blocks for up to ten minutes; left out it looks
+once, which is usually right because the daemon types a decision's answer into this session.
 
 ### `presence` — reads only
 
@@ -422,7 +432,7 @@ inside a helper is not listed, so treat the column as the least a route can answ
 | `GET /sessions/{session_id}/artifacts` | — | 200 | 401, 404, 422 | What this project is currently asking, and which of it has been answered. |
 | `GET /sessions/{session_id}/artifacts/{artifact_id}` | — | 200 | 401, 404, 422 | The page, as HTML. The app injects the tokens and the policy around it; this only serves. |
 | `GET /sessions/{session_id}/artifacts/{artifact_id}/answer` | — | 200 | 401, 404, 422 | What was answered last time. `{"value": null}` when nobody has, which is not an error. |
-| `POST /sessions/{session_id}/artifacts/{artifact_id}/answer` | `?route`: string (auto, keyboard or socket), body `{value}` | 200 | 401, 404, 422 | Take the answer, write it down, then tell the session — in that order, and it matters. |
+| `POST /sessions/{session_id}/artifacts/{artifact_id}/answer` | `?route`: string (auto, keyboard or socket; not a decision), body `{value?, proof?}` | 200 | 401, 404, 422 | Take the answer, write it down, then tell the session — in that order, and it matters. |
 
 ### bindings
 
@@ -487,7 +497,7 @@ inside a helper is not listed, so treat the column as the least a route can answ
 | Route | Arguments | Answers | Errors | What it does |
 |---|---|---|---|---|
 | `GET /presence` | — | 200 | 401 | `where` is `laptop`, `phone` or `headset`: where a session should reach the person. |
-| `POST /presence/phone` | — | 204 | 401 | The person just touched the app. It says so at most every ten seconds and on coming to the front, and from then until a key is pressed at the Mac, `where` is `phone`. |
+| `POST /presence/phone` | — | 204 | 401, 403, 422 | The person just touched the app. It says so at most every ten seconds and on coming to the front, and from then until a key is pressed at the Mac, `where` is `phone`. |
 | `POST /presence/headset` | — | 204 | 401 | The headset is being worn: it beats every ten seconds while it is, and for `HEADSET_LIVE` after the last beat `where` is `headset`. |
 | `GET /sessions/{session_id}/header` | — | 200 | 401, 404, 422 | The picture itself. 404 is "this project has none", which the phone draws as nothing. |
 | `POST /pair/open` | — | 200 | 401 | A six-digit code, good once for `window.LASTS` seconds; replaces any code already open. |
@@ -496,6 +506,8 @@ inside a helper is not listed, so treat the column as the least a route can answ
 | `POST /pair` | body `{code, name?, kind?}` | 200 | 422 | Trade the code on the Mac's screen for a token of this device's own. |
 | `GET /pair/check` | — | 200 | 401 | 200 for any token this Mac accepts, 401 for anything else. For the NAS Caddy's `forward_auth`, so a device token works off the home network without the edge holding a literal of its own. |
 | `GET /devices` | — | 200 | 401 | Every device paired with a code: id, name, kind, when it paired, when it was last heard. |
+| `PUT /devices/key` | body `{publicKey}` | 200 | 400, 401, 409, 422 | The phone's public signing key, filed on its own row. First key wins. |
+| `GET /devices/key` | — | 200 | 401 | Whether the calling device has filed a key, and its fingerprint. |
 | `DELETE /devices/{device_id}` | — | 204 | 401, 404, 422 | Take one device's token away. It stops working on its next request; no other changes. |
 | `GET /health` | — | 200 | — | Open on purpose: the app pings it to tell 'wrong host' from 'wrong token'. |
 | `POST /transcribe` | form `{file}` | 200 | 400, 401, 413, 415, 422 | A clip in, its words out. No session, no delivery, and the clip is not kept. |
@@ -514,14 +526,19 @@ inside a helper is not listed, so treat the column as the least a route can answ
 | `GET /sessions/{session_id}/commands` | — | 200 | 401, 404, 422 | The slash commands and skills this session could be handed by name. |
 | `POST /sessions/{session_id}/control` | `?action`: string (cancel, compact, clear or exit) | 200 | 400, 401, 404, 409, 422 | The four things you do to a session rather than say to it. |
 | `POST /sessions/{session_id}/name` | body `{name}` | 200 | 401, 404, 409, 422 | Give a session a new display name, by running Claude Code's own `/rename` in its pane. |
-| `POST /live/token` | body `{token, kind, session?}` | 200 | 400, 401, 422 | The phone hands over what the Mac needs to reach its Lock Screen. |
-| `POST /sessions/{session_id}/notify` | body `{line}` | 200 | 400, 401, 404, 422 | An agent asking for the person outright, in its own words. |
 
 ### alerts
 
 | Route | Arguments | Answers | Errors | What it does |
 |---|---|---|---|---|
 | `GET /alerts` | `?since`: integer = 0 (the last alert id this asker has seen) | 200 | 401, 422 | Every card announced after the id the asker has, and the newest id there is. |
+
+### push
+
+| Route | Arguments | Answers | Errors | What it does |
+|---|---|---|---|---|
+| `POST /live/token` | body `{token, kind, session?}` | 200 | 400, 401, 422 | The phone hands over what the Mac needs to reach its Lock Screen. |
+| `POST /sessions/{session_id}/notify` | body `{line}` | 200 | 400, 401, 404, 422 | An agent asking for the person outright, in its own words. |
 
 ### projects
 
