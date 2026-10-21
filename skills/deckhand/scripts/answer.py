@@ -36,6 +36,8 @@ import time
 from pathlib import Path
 
 LOOK = 2.0
+#: The exit code for an id no slip here has, so nobody waits on one that will never be answered.
+MISSING = 3
 DECISION = b'<meta name="deckhand-decision"'
 
 
@@ -153,6 +155,10 @@ def main() -> int:
                 page = path.with_name(f"{said.slug}.html")
                 print(json.dumps(reading(record, page), ensure_ascii=False, indent=2))
                 return 0
+        if not any(path.with_name(f"{said.slug}.html").exists() for path in paths):
+            print(f"no slip is called {said.slug!r} here ({base}) — the id is what slip.py "
+                  "printed", file=sys.stderr)
+            return MISSING
         left = until - time.monotonic()
         if left <= 0:
             print(f"{said.slug} has not been answered yet ({paths[0]})", file=sys.stderr)

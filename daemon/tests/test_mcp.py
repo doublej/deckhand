@@ -49,6 +49,19 @@ def test_a_slip_lands_in_the_session_folder_and_reads_back(in_session):
         "answered": True, "value": True, "verified": False, "device": None, "fingerprint": None}
 
 
+def test_an_id_no_slip_has_is_told_apart_from_one_not_answered_yet(in_session):
+    """Or an agent waits on a slip that was never written."""
+    missed = run(server.read_answer("nope-123"))
+    assert missed["answered"] is False and missed["code"] == "NO_SUCH_SLIP"
+
+
+def test_an_answer_goes_out_as_compact_json(in_session):
+    """The SDK indents by two; the whitespace is tokens the model rereads every turn."""
+    answered = run(server.server.call_tool("whoami", {}))
+    assert answered.content[0].text == (
+        f'{{"session":"sess-1","name":"deckhand","folder":"{in_session}","status":"idle"}}')
+
+
 def test_an_unknown_kind_is_refused_before_anything_is_written(in_session):
     made = run(server.ask_on_phone("Ship it?", kind="wizard"))
     assert "wizard" in made["error"]

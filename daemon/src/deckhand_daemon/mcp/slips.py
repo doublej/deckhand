@@ -25,12 +25,14 @@ SCRIPTS = Path(__file__).resolve().parents[4] / "skills" / "deckhand" / "scripts
 # timeout is well under this anyway — so the default is to look once and let the daemon's message
 # wake the session when the answer lands.
 MAX_WAIT = 600.0
+#: `answer.py`'s exit code for an id no slip in this folder has, apart from one not answered yet.
+NO_SUCH_SLIP = 3
 NO_SESSION = ("this is not running inside a Claude Code or OpenCode session, so there is no folder "
               "to write a slip in and no session to speak as")
 
 
-async def _script(name: str, *args: str) -> tuple[bool, str]:
-    """Run one of the skill's scripts. Returns (it worked, what it printed).
+async def _script(name: str, *args: str) -> tuple[int, str]:
+    """Run one of the skill's scripts. Returns (its exit code, what it printed).
 
     In a subprocess rather than imported: both scripts end an argument they dislike with
     `sys.exit(sentence)`, which is right for a command and would take this server down with it.
@@ -39,7 +41,7 @@ async def _script(name: str, *args: str) -> tuple[bool, str]:
         subprocess.run, [sys.executable, str(SCRIPTS / name), *args],
         capture_output=True, text=True, check=False, timeout=MAX_WAIT + 30,
     )
-    return done.returncode == 0, (done.stdout or done.stderr).strip()
+    return done.returncode, (done.stdout or done.stderr).strip()
 
 
 def folder() -> tuple[dict, str] | tuple[None, str]:
@@ -86,8 +88,8 @@ async def ask_on_phone(question: str,
         args += ["--option", choice]
     for asked in questions or []:
         args += ["--question", asked]
-    worked, said = await _script("slip.py", *args)
-    if not worked:
+    failed, said = await _script("slip.py", *args)
+    if failed:
         return {"error": said, "code": "REFUSED"}
     if said.startswith("{"):
         return json.loads(said) | {"title": question}
@@ -106,8 +108,10 @@ async def read_answer(id: str, wait_seconds: float = 0.0) -> dict:
     if held is None:
         return nobody(why)
     waited = max(0.0, min(float(wait_seconds), MAX_WAIT))
-    worked, said = await _script("answer.py", id, "--wait", str(waited), "--dir", why,
+    failed, said = await _script("answer.py", id, "--wait", str(waited), "--dir", why,
                                  "--session", held["sessionId"])
-    if not worked:
+    if failed == NO_SUCH_SLIP:
+        return {"answered": False, "code": "NO_SUCH_SLIP", "why": said}
+    if failed:
         return {"answered": False, "why": said}
     return {"answered": True} | json.loads(said)

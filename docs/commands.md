@@ -166,7 +166,7 @@ command takes `--json`; `-` for a question, line or text reads it from stdin.
 | `deckhand whoami` | — | `whoami` | `NO_SESSION` | this session's id, name and folder |
 | `deckhand sessions` | `[--fields name,status] [--limit 50]` | `sessions` | `BAD_ANSWER`, `DAEMON_DOWN`, `REFUSED` | every live session on this Mac, with how many slips each has waiting |
 | `deckhand ask` | `QUESTION\|- [--kind confirm\|pick\|text\|aloud] [--option LABEL]... [--note TEXT] [--question id:text]... [--action TEXT] [--expires-hours H] [--key ID]` | `ask_on_phone` | `BAD_KIND`, `REFUSED` | put a slip on the phone; answers with its id. confirm: two --option, yes then no, and --action. pick: one --option per choice. text: --option is the field label. aloud: --question per spoken answer. Then end the turn: a decision's answer arrives |
-| `deckhand answer` | `ID [--wait SECONDS]` | `read_answer` | `PENDING` | the answer, `verified` if their phone signed it; exit 4 while none. --wait max 600 |
+| `deckhand answer` | `ID [--wait SECONDS]` | `read_answer` | `NO_SUCH_SLIP`, `PENDING` | the answer, `verified` if their phone signed it; exit 4 while none. --wait max 600 |
 | `deckhand notify` | `LINE\|-` | `call_for_attention` | `BAD_ANSWER`, `DAEMON_DOWN`, `NO_SESSION`, `REFUSED`, `NOT_PUSHED` | a Lock Screen card asking for the person; exit 4 when the folder refuses |
 | `deckhand say` | `SESSION TEXT\|-` | `say_to_session` | `BAD_ANSWER`, `CODEX_THREAD`, `DAEMON_DOWN`, `NO_SUCH_SESSION`, `REFUSED`, `NOT_DELIVERED` | message another session down its inbox, as an agent — `manager` is the manager; exit 4 when it was not said |
 | `deckhand end` | `SESSION... --why TEXT` | `ask_to_end` | `BAD_ANSWER`, `DAEMON_DOWN`, `REFUSED` | ask the person, on their phone, to end these sessions on any machine; ends nothing itself — only their Allow does |
@@ -199,6 +199,7 @@ command takes `--json`; `-` for a question, line or text reads it from stdin.
 | `NOT_DELIVERED` | negative | no | it was not said — `message` says why; a filter on that session may have stopped it |
 | `NOT_PUSHED` | negative | no | the person has not seen it: this folder refuses interruptions — say it in the conversation instead |
 | `PENDING` | negative | yes | no answer yet; the daemon messages this session when one lands, or block on it: `deckhand answer <id> --wait 300` |
+| `NO_SUCH_SLIP` | user_error | no | no slip has that id in this session's folder: the id is what `deckhand ask` printed |
 | `NO_SUCH_PLANE` | user_error | no | `message` lists the planes open, by id prefix; `deckhand space` shows them whole |
 | `NOT_STARTABLE` | user_error | no | `message` says why and lists folders a session can start in, nearest first; pass one to `deckhand start` |
 | `NO_TMUX` | user_error | no | no tmux server answers here: this session is not in tmux |
@@ -274,7 +275,7 @@ decision returns its answer.
 
 Arguments: `id`: string, `wait_seconds`: number = 0.0  
 Reaches: `skills/deckhand/scripts/answer.py`  
-Fails with: —
+Fails with: `NO_SUCH_SLIP`
 
 What the person answered on a slip, if they have, and whether their phone proved it.
 

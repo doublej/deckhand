@@ -51,6 +51,7 @@ shell command (`mcp/cli.py`, `deckhand prime`), so a session without these tools
 
 from __future__ import annotations
 
+import json
 import os
 from typing import Literal
 from urllib.parse import quote
@@ -69,10 +70,12 @@ READ_ONLY = ToolAnnotations(read_only_hint=True, open_world_hint=False)
 WRITES = ToolAnnotations(open_world_hint=False)
 
 class _Server(MCPServer):
-    """The SDK's server, with the calling OpenCode session lifted out of each call's `_meta`.
+    """The SDK's server, with the calling OpenCode session lifted out of each call's `_meta`, and
+    every answer sent as compact JSON.
 
     One override rather than a `Context` parameter on every tool: `here.mine()` is the one place
-    a tool asks who it is, and it already sits under a dozen of them.
+    a tool asks who it is, and it already sits under a dozen of them. The SDK indents a returned
+    dict by two, which is half of `tmux_tree`'s tokens spent on spaces the model reads every turn.
     """
 
     async def call_tool(self, name: str, arguments: dict, context: Context | None = None):
@@ -84,9 +87,14 @@ class _Server(MCPServer):
         asked = (meta or {}).get(here.OPENCODE_META)
         held = here.calling.set(asked if isinstance(asked, str) else "")
         try:
-            return await super().call_tool(name, arguments, context)
+            answered = await super().call_tool(name, arguments, context)
         finally:
             here.calling.reset(held)
+        for block in answered.content:
+            if block.type == "text" and block.text[:1] in ("{", "["):
+                block.text = json.dumps(json.loads(block.text), ensure_ascii=False,
+                                        separators=(",", ":"))
+        return answered
 
 
 #: What a session is told. The docstring above is for whoever edits this file, not for the model:

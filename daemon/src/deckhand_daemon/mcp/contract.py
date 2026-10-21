@@ -31,6 +31,8 @@ ERRORS: dict[str, tuple[str, bool, str]] = {
                    "interruptions — say it in the conversation instead")),
     "PENDING": ("negative", True, ("no answer yet; the daemon messages this session when one "
                 "lands, or block on it: `deckhand answer <id> --wait 300`")),
+    "NO_SUCH_SLIP": ("user_error", False, ("no slip has that id in this session's folder: the id "
+                     "is what `deckhand ask` printed")),
     "NO_SUCH_PLANE": ("user_error", False, ("`message` lists the planes open, by id prefix; "
                       "`deckhand space` shows them whole")),
     "NOT_STARTABLE": ("user_error", False, ("`message` says why and lists folders a session can "
