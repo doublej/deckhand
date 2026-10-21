@@ -116,10 +116,11 @@ Each command is one MCP tool, and each tool is the route or script it reaches.
 | `deckhand ask` | `ask_on_phone` | `skills/deckhand/scripts/slip.py` | no |
 | `deckhand answer` | `read_answer` | `skills/deckhand/scripts/answer.py` | yes |
 | `deckhand notify` | `call_for_attention` | `POST /sessions/{id}/notify` | no |
+| `deckhand read` | `read_session` | `GET /sessions`, `GET /sessions/{id}/turns` | yes |
 | `deckhand say` | `say_to_session` | `GET /sessions`, `GET /manager/session`, `POST /sessions/{id}/say` | no |
 | `deckhand end` | `ask_to_end` | `POST /end-requests` | no |
 | `deckhand open` | `open_plane` | `POST /space/planes` | no |
-| `deckhand space` | `space` | `GET /space`, `GET /sessions/{id}/space` | yes |
+| `deckhand space` | `space` | `GET /space`, `GET /windows`, `GET /sessions/{id}/space` | yes |
 | `deckhand start` | `start_session` | `POST /space/sessions`, `GET /projects` | no |
 | `deckhand close` | `close_plane` | `GET /space`, `DELETE /space/planes/{id}` | no |
 | `deckhand windows` | `mac_windows` | `GET /windows` | yes |
@@ -168,6 +169,7 @@ command takes `--json`; `-` for a question, line or text reads it from stdin.
 | `deckhand ask` | `QUESTION\|- [--kind confirm\|pick\|text\|aloud] [--option LABEL]... [--note TEXT] [--question id:text]... [--action TEXT] [--expires-hours H] [--key ID]` | `ask_on_phone` | `BAD_KIND`, `REFUSED` | put a slip on the phone; answers with its id. confirm: two --option, yes then no, and --action. pick: one --option per choice. text: --option is the field label. aloud: --question per spoken answer. Then end the turn: a decision's answer arrives |
 | `deckhand answer` | `ID [--wait SECONDS]` | `read_answer` | `NO_SUCH_SLIP`, `PENDING` | the answer, `verified` if their phone signed it; exit 4 while none. --wait max 600 |
 | `deckhand notify` | `LINE\|-` | `call_for_attention` | `BAD_ANSWER`, `DAEMON_DOWN`, `NO_SESSION`, `REFUSED`, `NOT_PUSHED` | a Lock Screen card asking for the person; exit 4 when the folder refuses |
+| `deckhand read` | `SESSION [--turns N] [--before N]` | `read_session` | `BAD_ANSWER`, `DAEMON_DOWN`, `NO_SUCH_SESSION`, `REFUSED` | another session's conversation, text only: the last N turns (default 1, 0 for the whole transcript); pass the answer's `older` as --before for the page before |
 | `deckhand say` | `SESSION TEXT\|-` | `say_to_session` | `BAD_ANSWER`, `CODEX_THREAD`, `DAEMON_DOWN`, `NO_SUCH_SESSION`, `REFUSED`, `NOT_DELIVERED` | message another session down its inbox, as an agent — `manager` is the manager; exit 4 when it was not said |
 | `deckhand end` | `SESSION... --why TEXT` | `ask_to_end` | `BAD_ANSWER`, `DAEMON_DOWN`, `REFUSED` | ask the person, on their phone, to end these sessions on any machine; ends nothing itself — only their Allow does |
 | `deckhand open` | `[URL] [--window ID] [--title TEXT]` | `open_plane` | `BAD_ANSWER`, `BAD_PLANE`, `DAEMON_DOWN`, `REFUSED` | put a web page, or a Mac window by id, beside this session in the person's headset; the URL must be reachable from the headset on the LAN |
@@ -175,7 +177,7 @@ command takes `--json`; `-` for a question, line or text reads it from stdin.
 | `deckhand start` | `[FOLDER] [--provider claude\|codex\|opencode]` | `start_session` | `BAD_ANSWER`, `DAEMON_DOWN`, `NOT_STARTABLE`, `NO_SESSION`, `REFUSED` | start a session beside this one in the headset; brief it with `say` |
 | `deckhand close` | `ID\|PREFIX` | `close_plane` | `BAD_ANSWER`, `DAEMON_DOWN`, `NO_SUCH_PLANE`, `REFUSED` | close a plane by its id or a unique prefix — a page or a window, never a session |
 | `deckhand windows` | — | `mac_windows` | `BAD_ANSWER`, `DAEMON_DOWN`, `REFUSED` | this Mac's windows, with the ids `open --window` takes |
-| `deckhand tmux` | — | `tmux_tree` | `BAD_ANSWER`, `DAEMON_DOWN`, `NO_TMUX`, `REFUSED` | every tmux session, window and pane, with the Claude session in each; `you` is this one's pane |
+| `deckhand tmux` | `[MATCH]` | `tmux_tree` | `BAD_ANSWER`, `DAEMON_DOWN`, `NO_TMUX`, `REFUSED` | every tmux session, window and pane, with the Claude session in each; `you` is this one's pane |
 | `deckhand arrange` | `ACTION TARGET [--to TARGET] [--name TEXT] [--layout LAYOUT] [--split right\|below]` | `tmux_arrange` | `BAD_ANSWER`, `BAD_ARRANGE`, `DAEMON_DOWN`, `NO_SUCH_TARGET`, `NO_TMUX`, `REFUSED`, `TMUX_REFUSED` | move tmux's furniture: rename, group, ungroup, move, swap, join, break, layout, zoom, focus. TARGET is a session name, %pane, @window, session:index or window name |
 
 | Exit | Categories |
@@ -219,14 +221,15 @@ into exit 4.
 <!-- generated:mcp -->
 ### `tmux_tree` — reads only
 
-Arguments: —  
+Arguments: `match`: string = ""  
 Reaches: `GET /sessions`, `tmux list-panes`  
 Fails with: `BAD_ANSWER`, `DAEMON_DOWN`, `NO_TMUX`, `REFUSED`
 
 The person's whole tmux, to organise it with `tmux_arrange`: every tmux session, its
 windows (id, index, name, `group`, active, zoomed) and their panes (id, size, the command
 running, its folder, and the Claude session in it by name, id and status). `you` is the pane
-this session is in.
+this session is in. `match` keeps only the panes whose tmux session, window name, folder or
+Claude session contains it.
 
 ### `tmux_arrange` — writes
 
@@ -283,6 +286,17 @@ What the person answered on a slip, if they have, and whether their phone proved
 page; a file written by hand, or any non-decision slip, reads false. `device` and
 `fingerprint` say which phone. `wait_seconds` blocks for up to ten minutes; left out it looks
 once, which is usually right because the daemon types a decision's answer into this session.
+
+### `read_session` — reads only
+
+Arguments: `session`: string, `turns`: integer = 1, `before`: integer = 0  
+Reaches: `GET /sessions`, `GET /sessions/{id}/turns`  
+Fails with: `BAD_ANSWER`, `DAEMON_DOWN`, `NO_SUCH_SESSION`, `REFUSED`
+
+Another session on this Mac's conversation, by name or id: who spoke, what they said,
+when — text only: no tool calls, thinking or turns without words. The last `turns`; `0` is
+the whole transcript. `older` is the `before` that reads the page before this one, null at
+the start.
 
 ### `presence` — reads only
 
@@ -370,14 +384,15 @@ plane with `reused: true` rather than a second copy, so a retry is safe.
 ### `space` — reads only
 
 Arguments: `full`: boolean = false  
-Reaches: `GET /space`, `GET /sessions/{id}/space`  
+Reaches: `GET /space`, `GET /windows`, `GET /sessions/{id}/space`  
 Fails with: `BAD_ANSWER`, `DAEMON_DOWN`, `REFUSED`
 
 Where you are in the person's headset and what is around you. `around_you` is your pose,
 your group, and every session, page and window `beside` you — in your group or opened near
 you. `planes` is every page and window open: id, kind, url or window, title, the session it is
-`near` and who opened it (`by` null is the person). `full` adds every kept pose, which is
-room coordinates and rarely what you need.
+`near` and who opened it (`by` null is the person); `missing: true` is a window plane whose
+window `mac_windows` no longer lists. `full` adds every kept pose, which is room coordinates
+and rarely what you need.
 
 ### `start_session` — writes
 

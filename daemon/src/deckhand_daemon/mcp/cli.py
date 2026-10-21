@@ -1,4 +1,4 @@
-"""`deckhand` — the MCP server's fifteen tools as one shell command.
+"""`deckhand` — the MCP server's sixteen tools as one shell command.
 
 **One surface, three doors.** The daemon's routes are the API; `server.py` turns nine of them and
 the skill's two slip scripts into tools, and two more over tmux; this file calls *those same functions*, so the command
@@ -66,6 +66,11 @@ def build_parser() -> Parser:
     sub.choices["answer"].add_argument("id")
     sub.choices["answer"].add_argument("--wait", type=float, default=0.0)
     sub.choices["notify"].add_argument("line", help="what to say, or - to read it from stdin")
+    sub.choices["read"].add_argument("session", help="name, id, unique id prefix or part of a name")
+    sub.choices["read"].add_argument("--turns", type=int, default=1, help="0 for the whole transcript")
+    sub.choices["read"].add_argument("--before", type=int, default=0, help="an answer's `older`, to page back")
+    sub.choices["tmux"].add_argument("match", nargs="?", default="",
+                                     help="only panes whose session, window, folder or Claude session holds it")
     sub.choices["say"].add_argument("session", help="name, id, unique id prefix or part of a name")
     sub.choices["say"].add_argument("text", help="what to say, or - to read it from stdin")
     sub.choices["end"].add_argument("sessions", nargs="+", help="names or ids, on any machine")
@@ -110,6 +115,9 @@ async def _call(a: argparse.Namespace) -> dict[str, Any]:
             return await server.read_answer(a.id, wait_seconds=a.wait)
         case "notify":
             return await server.call_for_attention(_text(a.line))
+        case "read":
+            return await server.read_session(a.session, turns=a.turns,
+                                             before=a.before)
         case "say":
             return await server.say_to_session(a.session, _text(a.text))
         case "end":
@@ -125,7 +133,7 @@ async def _call(a: argparse.Namespace) -> dict[str, Any]:
         case "start":
             return await server.start_session(a.folder, provider=a.provider)
         case "tmux":
-            return await server.tmux_tree()
+            return await server.tmux_tree(a.match)
         case "arrange":
             return await server.tmux_arrange(a.action, a.target, to=a.to, name=a.name,
                                              layout=a.layout, split=a.split)

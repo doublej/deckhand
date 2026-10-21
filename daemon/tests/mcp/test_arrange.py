@@ -61,6 +61,14 @@ def test_the_tree_names_the_session_in_each_pane(box):
     assert work["windows"][1]["panes"][0]["status"] == "busy"
 
 
+def test_match_keeps_only_the_panes_it_names(box):
+    """By a Claude session's name, or by tmux's own; anything else is left out of the answer."""
+    seen = run(tmux.tmux_tree("UTT"))
+    assert [(s["name"], [w["name"] for w in s["windows"]]) for s in seen["sessions"]] == [
+        ("work", ["one"])]
+    assert [s["name"] for s in run(tmux.tmux_tree("side"))["sessions"]] == ["side"]
+
+
 def test_a_group_is_set_on_the_window_and_dropped_again(box):
     assert run(tmux.tmux_arrange("group", "utt", name="review"))["done"] == "group"
     assert box("show-options", "-wv", "-t", "work:one", "@group") == "review"

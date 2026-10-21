@@ -107,18 +107,24 @@ def tree(rows: list[dict], labels: dict[str, dict]) -> list[dict]:
     return [place | {"windows": list(place["windows"].values())} for place in sessions.values()]
 
 
-async def tmux_tree() -> dict:
+async def tmux_tree(match: str = "") -> dict:
     """The person's whole tmux, to organise it with `tmux_arrange`: every tmux session, its
     windows (id, index, name, `group`, active, zoomed) and their panes (id, size, the command
     running, its folder, and the Claude session in it by name, id and status). `you` is the pane
-    this session is in."""
+    this session is in. `match` keeps only the panes whose tmux session, window name, folder or
+    Claude session contains it."""
     rows = await _rows()
     if isinstance(rows, dict):
         return rows
+    labels = await _labels()
+    if wanted := match.lower():
+        rows = [r for r in rows if wanted in " ".join((
+            r["session_name"], r["window_name"], r["pane_current_path"],
+            labels.get(r["pane_id"], {}).get("name") or "")).lower()]
     # Under OpenCode this server is the service's child, not a pane's: the `TMUX_PANE` it
     # inherited is whichever pane started `opencode serve`, and naming it would be a lie.
     you = None if here.calling.get() else os.environ.get("TMUX_PANE")
-    return {"you": you, "sessions": tree(rows, await _labels())}
+    return {"you": you, "sessions": tree(rows, labels)}
 
 
 async def tmux_arrange(action: Action, target: str, to: str | None = None,

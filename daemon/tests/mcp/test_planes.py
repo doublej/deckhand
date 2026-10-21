@@ -101,6 +101,20 @@ def test_space_leaves_the_poses_out_unless_asked(monkeypatch, daemon):
     assert run(server.space(full=True))["poses"] == OPEN["poses"]
 
 
+def test_a_window_plane_whose_window_is_gone_says_so(daemon):
+    """Or an agent looks it up in `mac_windows` and finds nothing it can explain."""
+    _, answers = daemon
+    answers["/space"] = {"planes": [{"id": "p1", "kind": "window", "window": 7},
+                                    {"id": "p2", "kind": "window", "window": 8},
+                                    {"id": "p3", "kind": "web", "url": "https://x"}]}
+    answers["/windows"] = [{"id": 8}]
+    planes = run(server.space())["planes"]
+    assert [p.get("missing") for p in planes] == [True, None, None]
+    answers["/windows"] = {"error": "helper down", "code": "REFUSED"}
+    answers["/space"]["planes"][0].pop("missing")
+    assert not any("missing" in p for p in run(server.space())["planes"])
+
+
 def test_a_folder_no_session_can_start_in_lists_the_ones_that_can(monkeypatch, daemon):
     _, answers = daemon
     monkeypatch.setattr(server.here, "mine", lambda: {"sessionId": "s1", "cwd": "/dev/web/shop/x"})

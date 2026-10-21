@@ -85,6 +85,34 @@ def test_speaking_to_a_session_matches_by_name_and_never_picks_a_route(monkeypat
     assert missed["went"] is False and "nobody" in missed["why"]
 
 
+def test_a_session_is_read_by_name_in_pages_or_whole_and_text_only(monkeypatch):
+    """Five turns behind a route that hands out two at a time, newest page first; the newest
+    only ran a tool, so it has no words and is not one."""
+    said = [{"role": "user", "text": f"t{i}", "timestamp": str(i), "written_by": "",
+             "tools": [{"name": "Bash"}], "thoughts": ["hm"]} for i in range(5)]
+    said.append({"role": "assistant", "text": "", "timestamp": "5", "tools": [{"name": "Bash"}]})
+    asked = []
+
+    async def reach(method, path, **kw):
+        if path == "/sessions":
+            return {"sessions": [{"session_id": "s2", "name": "utt"}]}
+        limit, before = min(kw["params"]["limit"], 2), kw["params"]["before"]
+        asked.append((limit, before))
+        end = len(said) - before
+        return {"turns": said[max(0, end - limit):end], "more": end - limit > 0}
+
+    monkeypatch.setattr(server.here, "reach", reach)
+    last = run(server.read_session("utt"))
+    assert last == {"session": "s2", "name": "utt", "older": 2,
+                    "turns": [{"role": "user", "text": "t4", "timestamp": "4"}]}
+    page = run(server.read_session("utt", 2, before=last["older"]))
+    assert [t["text"] for t in page["turns"]] == ["t2", "t3"] and page["older"] == 4
+    whole = run(server.read_session("utt", 0))
+    assert [t["text"] for t in whole["turns"]] == ["t0", "t1", "t2", "t3", "t4"]
+    assert whole["older"] is None
+    assert run(server.read_session("nobody"))["code"] == "NO_SUCH_SESSION"
+
+
 def test_a_filter_stopping_a_prompt_is_not_a_delivery(monkeypatch):
     async def reach(method, path, **kw):
         if path == "/sessions":

@@ -68,6 +68,9 @@ COMMANDS: list[dict[str, str]] = [
      "does": "the answer, `verified` if their phone signed it; exit 4 while none. --wait max 600"},
     {"name": "notify", "tool": "call_for_attention", "args": "LINE|-",
      "does": "a Lock Screen card asking for the person; exit 4 when the folder refuses"},
+    {"name": "read", "tool": "read_session", "args": "SESSION [--turns N] [--before N]",
+     "does": "another session's conversation, text only: the last N turns (default 1, 0 for the "
+             "whole transcript); pass the answer's `older` as --before for the page before"},
     {"name": "say", "tool": "say_to_session", "args": "SESSION TEXT|-",
      "does": "message another session down its inbox, as an agent — `manager` is the manager; "
              "exit 4 when it was not said"},
@@ -86,7 +89,7 @@ COMMANDS: list[dict[str, str]] = [
      "does": "close a plane by its id or a unique prefix — a page or a window, never a session"},
     {"name": "windows", "tool": "mac_windows", "args": "",
      "does": "this Mac's windows, with the ids `open --window` takes"},
-    {"name": "tmux", "tool": "tmux_tree", "args": "",
+    {"name": "tmux", "tool": "tmux_tree", "args": "[MATCH]",
      "does": "every tmux session, window and pane, with the Claude session in each; `you` is "
              "this one's pane"},
     {"name": "arrange", "tool": "tmux_arrange",

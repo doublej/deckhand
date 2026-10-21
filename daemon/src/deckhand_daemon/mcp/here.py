@@ -112,6 +112,12 @@ def match(wanted: str, live: list[dict]) -> dict | None:
     return near[0] if len(near) == 1 else None
 
 
+def no_such(session: str, live: list[dict]) -> str:
+    """What a name `match` found nothing for says: the names there are."""
+    return (f"no one live session called {session!r} — "
+            f"there is {', '.join(s.get('name', '?') for s in live)}")
+
+
 def _said(answered: httpx.Response) -> str:
     """The daemon's own sentence: FastAPI's `detail`, not the JSON it is wrapped in."""
     try:

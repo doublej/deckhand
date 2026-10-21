@@ -1,4 +1,4 @@
-"""The fifteen tools a session gets so it can reach the person, wherever they are.
+"""The sixteen tools a session gets so it can reach the person, wherever they are.
 
 The skill said all of this in prose first, and the prose is still the better half: a slip is a
 file an agent writes in its own folder, and knowing that is worth more than any tool. These exist
@@ -61,6 +61,7 @@ from mcp.types import ToolAnnotations
 
 from . import here, refused
 from .here import match as _match
+from .reading import read_session
 from .slips import ask_on_phone, read_answer
 from .slips import folder as _folder
 from .slips import nobody as _nobody
@@ -132,6 +133,7 @@ async def whoami() -> dict:
 
 server.tool(annotations=WRITES)(ask_on_phone)
 server.tool(annotations=READ_ONLY)(read_answer)
+server.tool(annotations=READ_ONLY)(read_session)
 
 
 @server.tool(annotations=READ_ONLY)
@@ -196,9 +198,7 @@ async def say_to_session(session: str, text: str) -> dict:
         live += [] if "error" in manager else [manager]
         match = _match(session, live)
     if match is None:
-        return {"went": False, "code": "NO_SUCH_SESSION",
-                "why": f"no one live session called {session!r} — "
-                       f"there is {', '.join(s.get('name', '?') for s in live)}"}
+        return {"went": False, "code": "NO_SUCH_SESSION", "why": here.no_such(session, live)}
     if match.get("provider") == "codex":
         return {"went": False, "code": "CODEX_THREAD", "why": f"{match.get('name')} is a Codex thread: its only way in "
                                       f"carries the person's own authority, so no agent speaks "
@@ -264,11 +264,18 @@ async def space(full: bool = False) -> dict:
     """Where you are in the person's headset and what is around you. `around_you` is your pose,
     your group, and every session, page and window `beside` you — in your group or opened near
     you. `planes` is every page and window open: id, kind, url or window, title, the session it is
-    `near` and who opened it (`by` null is the person). `full` adds every kept pose, which is
-    room coordinates and rarely what you need."""
+    `near` and who opened it (`by` null is the person); `missing: true` is a window plane whose
+    window `mac_windows` no longer lists. `full` adds every kept pose, which is room coordinates
+    and rarely what you need."""
     whole = await here.reach("GET", "/space")
     if "error" in whole:
         return whole
+    shown = await here.reach("GET", "/windows")
+    if isinstance(shown, list):  # a helper that is down says nothing about which windows exist
+        ids = {w.get("id") for w in shown}
+        for plane in whole["planes"]:
+            if plane.get("kind") == "window" and plane.get("window") not in ids:
+                plane["missing"] = True
     seen = {"planes": whole["planes"]} | ({"poses": whole["poses"], "rev": whole["rev"]} if full else {})
     if held := here.mine():
         seen = {"around_you": await here.reach("GET", f"/sessions/{held['sessionId']}/space")} | seen
