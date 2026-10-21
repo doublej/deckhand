@@ -223,7 +223,7 @@ def test_a_utt_that_measures_nothing_leaves_the_span_whole(token, monkeypatch):
 def test_say_puts_the_words_in_and_names_the_route(token, monkeypatch):
     seen = {}
 
-    def deliver(session, text, route):
+    def deliver(session, text, route, *_):
         seen.update(text=text, route=route)
         return "keyboard", None
 
@@ -242,7 +242,7 @@ def test_a_picture_is_kept_and_the_message_names_it(token, monkeypatch):
     seen = {}
     monkeypatch.setattr(
         deliver_module, "deliver",
-        lambda session, text, route: (seen.update(text=text), ("keyboard", None))[1],
+        lambda session, text, route, *_: (seen.update(text=text), ("keyboard", None))[1],
     )
     kept = client(token).post(
         f"/sessions/{SID}/image", files={"file": ("shot.png", b"\x89PNG" + b"x" * 40, "image/png")}
@@ -262,7 +262,7 @@ def test_only_this_sessions_own_pictures_can_be_named(token, monkeypatch):
     seen = {}
     monkeypatch.setattr(
         deliver_module, "deliver",
-        lambda session, text, route: (seen.update(text=text), ("keyboard", None))[1],
+        lambda session, text, route, *_: (seen.update(text=text), ("keyboard", None))[1],
     )
     elsewhere = config.data_dir() / "escape.png"
     elsewhere.write_bytes(b"x")

@@ -22,7 +22,7 @@ import uuid
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Body, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Body, Header, HTTPException, Query, UploadFile
 
 from . import config, deliver, filters, fleet, orders, plugin, push, sessions, transcribe
 from .log import log, took
@@ -179,11 +179,13 @@ async def _handled(
         if checked.delivered:
             with took(ms, "deliver"):
                 taken, delivery_error = await asyncio.to_thread(
-                    deliver.deliver, session, _with_orders(session, checked.text), chosen)
+                    deliver.deliver, session, _with_orders(session, checked.text), chosen, True)
             log.info("delivery to %s: %s", session.name, delivery_error or f"{taken} took it")
             # Ending a card is an APNs round trip with a ten-second timeout on it, so it goes
-            # off the event loop the same way the delivery above it does.
-            await asyncio.to_thread(push.spoke_to, session.session_id)
+            # off the event loop the same way the delivery above it does. A clip is always the
+            # person's own voice; only words that arrived end the card.
+            if taken is not None:
+                await asyncio.to_thread(push.spoke_to, session.session_id)
         else:
             delivery_error = checked.reason
             log.info("%s refused a clip for %s: %s",
@@ -344,8 +346,14 @@ async def say(
         default=False,
         description="true when these words were already shown on the card, chain included",
     ),
+    x_deckhand_caller: str = Header(default=""),
 ) -> dict:
-    """Put words into a session. The other half of an upload the person asked to read first."""
+    """Put words into a session. The other half of an upload the person asked to read first.
+
+    `x-deckhand-caller: agent` (sent by `mcp/here.py` and the `deckhand` command) says these are
+    not the person's words: no "JJ, spoken:", no standing orders, and the card stays up. A drift
+    guard, not a fence — an agent with Bash can leave the header off — `docs/agent-surface.md`.
+    """
     session = await live_session(session_id)
     chosen = route or plugin.route()
     kept = _kept_images(session_id, images or [])
@@ -358,11 +366,14 @@ async def say(
     checked = (filters.Outcome(text=text) if prepared
                else await _filtered(session, text, chosen, "typed", kept))
     taken, error = None, checked.reason or None
+    person = x_deckhand_caller != "agent"
     if checked.delivered:
-        said = deliver.with_images(_with_orders(session, checked.text), kept)
-        taken, error = await asyncio.to_thread(deliver.deliver, session, said, chosen)
+        words = _with_orders(session, checked.text) if person else checked.text
+        said = deliver.with_images(words, kept)
+        taken, error = await asyncio.to_thread(deliver.deliver, session, said, chosen, person)
         log.info("delivery to %s: %s", session.name, error or f"{taken} took it")
-        await asyncio.to_thread(push.spoke_to, session_id)
+        if person and taken is not None:
+            await asyncio.to_thread(push.spoke_to, session_id)
     else:
         log.info("%s refused a prompt for %s: %s", checked.stopped_by, session.name, checked.reason)
     return {"delivered": taken is not None, "delivered_by": taken, "delivery_error": error,

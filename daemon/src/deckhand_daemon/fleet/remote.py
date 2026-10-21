@@ -26,7 +26,8 @@ def _base(machine_id: str) -> str | None:
     return link.base_url
 
 
-def deliver_to(machine_id: str, session_id: str, message: str) -> tuple[bool, str | None]:
+def deliver_to(machine_id: str, session_id: str, message: str,
+               person: bool = False) -> tuple[bool, str | None]:
     """Put words into a session on another machine, down that machine's own inbox socket.
 
     **The daemon has already run everything that decides** — the filter chain, the standing
@@ -43,7 +44,7 @@ def deliver_to(machine_id: str, session_id: str, message: str) -> tuple[bool, st
     try:
         r = httpx.post(
             f"{base}/sessions/{session_id}/deliver",
-            json={"text": message},
+            json={"text": message, "person": person},
             headers={TOKEN_HEADER: token()},
             timeout=TIMEOUT,
         )

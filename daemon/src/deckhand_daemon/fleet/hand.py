@@ -148,7 +148,8 @@ def clear_queue(session_id: str) -> dict:
 
 
 @app.post("/sessions/{session_id}/deliver", dependencies=[Depends(require_token)])
-def deliver_text(session_id: str, text: str = Body(embed=True)) -> dict:
+def deliver_text(session_id: str, text: str = Body(embed=True),
+                 person: bool = Body(embed=True, default=False)) -> dict:
     """The primitive, and the only thing a hand writes.
 
     Exact bytes into that session's own inbox socket. **No filter chain, no standing orders, no
@@ -156,10 +157,11 @@ def deliver_text(session_id: str, text: str = Body(embed=True)) -> dict:
     twice would be the shape of bug that looks like it works.
 
     Socket only, never a route argument. There is no pane on this machine to type into, so the
-    keyboard route is not a thing this can be asked for and then refuse: it is absent.
+    keyboard route is not a thing this can be asked for and then refuse: it is absent. `person`
+    says the words are the person's own, which is what earns them "JJ, spoken:".
     """
     session = session_or_404(session_id)
-    delivered_by, error = deliver.deliver(session, text, route="socket")
+    delivered_by, error = deliver.deliver(session, text, route="socket", person=person)
     return {"delivered": delivered_by is not None, "delivered_by": delivered_by, "error": error}
 
 

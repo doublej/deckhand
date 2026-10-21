@@ -29,7 +29,7 @@ from __future__ import annotations
 import subprocess
 import time
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Header, HTTPException
 
 #: No keyboard or mouse for this long and the Mac counts as unattended. Deliberately asymmetric
 #: with the way back: any input at all sets `HIDIdleTime` to zero, so the person takes the Mac
@@ -189,9 +189,14 @@ def where_the_person_is() -> dict:
 
 
 @router.post("/presence/phone", status_code=204)
-def phone_in_hand() -> None:
+def phone_in_hand(x_deckhand_caller: str = Header(default="")) -> None:
     """The person just touched the app. It says so at most every ten seconds and on coming to
-    the front, and from then until a key is pressed at the Mac, `where` is `phone`."""
+    the front, and from then until a key is pressed at the Mac, `where` is `phone`.
+
+    Refused to a caller that says it is an agent: `phone` is what turns `auto` into the keyboard,
+    and an agent claiming the person is away is an agent choosing to type as them."""
+    if x_deckhand_caller == "agent":
+        raise HTTPException(status_code=403, detail="only the phone says it is in a hand")
     global _phone_touched
     _phone_touched = time.time()
 
