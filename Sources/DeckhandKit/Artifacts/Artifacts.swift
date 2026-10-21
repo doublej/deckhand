@@ -25,14 +25,34 @@ public struct Artifact: Codable, Hashable, Identifiable, Sendable {
     /// same page. It matters when you answer: the answer goes back into the session you have
     /// open, which for a shared one need not be the session that asked.
     public let shared: Bool
+    /// What makes a slip a **decision** — `confirm`, `pick` or `text` — and nil for everything
+    /// else. A decision is answered by the phone's native buttons, signed with the phone's key,
+    /// and never by the page's own script (`docs/artifacts.md`).
+    public var decision: String?
+    /// The words on its buttons: a confirm's yes and no, a pick's rows, a text's field label.
+    public var choices: [String]?
+    /// What a yes allows, in one line.
+    public var action: String?
+    /// Unix seconds after which the Mac takes no answer.
+    public var expires: Double?
+    /// The page as the Mac has it now; a proof for any other version is refused as stale.
+    public var hash: String?
+    /// The Mac checked the answer's signature, and which device made it.
+    public var verified: Bool?
+    public var answeredBy: String?
+    public var expired: Bool?
 
     public init(id: String, title: String, modified: Double, answered: Bool,
-                shared: Bool = false) {
+                shared: Bool = false, decision: String? = nil, choices: [String]? = nil,
+                hash: String? = nil) {
         self.id = id
         self.title = title
         self.modified = modified
         self.answered = answered
         self.shared = shared
+        self.decision = decision
+        self.choices = choices
+        self.hash = hash
     }
 
     /// Spelled out for `shared` alone, for the reason `ArtifactList` is: a Mac whose daemon
@@ -46,7 +66,19 @@ public struct Artifact: Codable, Hashable, Identifiable, Sendable {
         modified = try box.decode(Double.self, forKey: .modified)
         answered = try box.decode(Bool.self, forKey: .answered)
         shared = try box.decodeIfPresent(Bool.self, forKey: .shared) ?? false
+        decision = try box.decodeIfPresent(String.self, forKey: .decision)
+        choices = try box.decodeIfPresent([String].self, forKey: .choices)
+        action = try box.decodeIfPresent(String.self, forKey: .action)
+        expires = try box.decodeIfPresent(Double.self, forKey: .expires)
+        hash = try box.decodeIfPresent(String.self, forKey: .hash)
+        verified = try box.decodeIfPresent(Bool.self, forKey: .verified)
+        answeredBy = try box.decodeIfPresent(String.self, forKey: .answeredBy)
+        expired = try box.decodeIfPresent(Bool.self, forKey: .expired)
     }
+
+    /// Answered only by native buttons and a signature. Whether there is a hash to sign over is
+    /// the signer's question; the page's own script is refused either way.
+    public var isDecision: Bool { decision != nil }
 
     public var changed: Date { Date(timeIntervalSince1970: modified) }
 }

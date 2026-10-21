@@ -52,10 +52,16 @@ public struct TraySlip: Codable, Hashable, Identifiable, Sendable {
     public let modified: Double
     public var shared: Bool?
     public let ask: SlipAsk
+    /// A decision's kind, buttons and hash — a tray slip is a listing row, so these are the
+    /// listing's fields, nil for a slip that is not a decision.
+    public var decision: String?
+    public var choices: [String]?
+    public var hash: String?
 
     /// The listing's own row, for the viewer that opens a page.
     public var artifact: Artifact {
-        Artifact(id: id, title: title, modified: modified, answered: false, shared: shared ?? false)
+        Artifact(id: id, title: title, modified: modified, answered: false, shared: shared ?? false,
+                 decision: decision, choices: choices, hash: hash)
     }
 }
 
