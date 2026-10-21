@@ -20,10 +20,11 @@ ASKED = {"title": "Access request: shop", "line": "Ann from 10.0.0.7",
 
 @pytest.fixture
 def pushed(monkeypatch):
-    """Every alert sent, and APNs taking each one."""
+    """Every card raised and every card ended, with APNs taking each; no alert unless asked."""
     seen = []
-    monkeypatch.setattr(sending, "alert", lambda payload, collapse="": seen.append(
-        (payload, collapse)))
+    monkeypatch.setattr(sending, "show", lambda card, mac, loud=True: seen.append(card))
+    monkeypatch.setattr(sending, "end", lambda session: seen.append(("end", session)))
+    monkeypatch.setattr(sending, "alert", lambda *a: pytest.fail("the card went up"))
     return seen
 
 
@@ -56,11 +57,24 @@ def tapped(phone, key, nid, action="approve", **fields):
                                 headers={config.TOKEN_HEADER: phone[0]})
 
 
-def test_the_alert_names_its_category_and_carries_no_callback(token, pushed):
+def test_the_card_carries_the_callers_labels_and_no_callback(token, pushed):
     answered = sent(token)
     assert answered.status_code == 202, answered.text
     nid = answered.json()["id"]
-    payload, collapse = pushed[0]
+    card = pushed[0]
+    assert card.session == f"notify:{nid}" and card.name == "Access request: shop"
+    assert card.state() | {"when": 0} == {"kind": "asking", "line": "Ann from 10.0.0.7", "when": 0,
+                                          "notify": nid, "accept": "Allow", "decline": "Deny"}
+    assert "47891" not in str(sending._start(card, "m2"))
+
+
+def test_no_card_falls_back_to_the_alert(token, monkeypatch):
+    alerts = []
+    monkeypatch.setattr(sending, "show", lambda *a, **k: "no start token")
+    monkeypatch.setattr(sending, "alert", lambda payload, collapse="": alerts.append(
+        (payload, collapse)))
+    nid = sent(token).json()["id"]
+    payload, collapse = alerts[0]
     assert collapse == f"notify:{nid}"
     assert payload["aps"]["category"] == "CALLBACK_ALLOW_DENY"
     assert payload["aps"]["alert"] == {"title": "Access request: shop", "body": "Ann from 10.0.0.7"}
@@ -87,6 +101,7 @@ def test_what_is_refused(token, pushed, change):
 
 
 def test_no_device_token_is_503_and_apns_refusing_is_502(token, monkeypatch):
+    monkeypatch.setattr(sending, "show", lambda *a, **k: "no start token")
     monkeypatch.setattr(sending, "alert", lambda *a: "the phone has not allowed notifications yet")
     assert sent(token).status_code == 503
     monkeypatch.setattr(sending, "alert", lambda *a: "APNs refused the notification (400): Bad")
@@ -105,6 +120,7 @@ def test_a_tap_calls_back_once_with_the_action_filled_in(token, pushed, called, 
     assert kwargs["follow_redirects"] is False and kwargs["trust_env"] is False
     assert tapped(phone, key, nid, "deny").json() == {"action": "approve", "status": 200}
     assert len(called[0]) == 1
+    assert pushed[1:] == [("end", f"notify:{nid}")]
 
 
 def test_a_404_is_decided_elsewhere_and_not_retried(token, pushed, called, phone, key):

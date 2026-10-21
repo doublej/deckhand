@@ -368,7 +368,7 @@ def test_the_card_is_the_shape_the_swift_type_decodes():
     """`attributes-type`, the field names and the kinds are the whole contract, and there is no
     Swift on the sending side to keep them in step — so read the Swift."""
     swift = (Path(__file__).parents[3] / "Sources/DeckhandKit/LiveActivity.swift").read_text()
-    payload = push.sending._start(card(slip="s0", accept="Yes", decline="No", hash="h"), "m2-2")["aps"]
+    payload = push.sending._start(card(slip="s0", accept="Yes", decline="No", hash="h", notify="n0"), "m2-2")["aps"]
     assert f"public struct {payload['attributes-type']}: ActivityAttributes" in swift
     state = swift.split("struct ContentState")[1].split("public init")[0]
     assert set(re.findall(r"public var (\w+):", state)) == set(payload["content-state"])

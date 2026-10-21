@@ -79,11 +79,17 @@ class Card:
     decline: str = ""
     #: A decision's page hash, which the card's buttons sign over. Only with a slip.
     hash: str = ""
+    #: A notify's id (`callbacks.py`): its buttons answer that instead of a slip.
+    notify: str = ""
 
     def state(self) -> dict:
         said = {"kind": self.kind, "line": self.line, "when": self.when}
         if self.slip:
-            said |= {"slip": self.slip, "accept": self.accept, "decline": self.decline}
+            said["slip"] = self.slip
+        if self.notify:
+            said["notify"] = self.notify
+        if self.slip or self.notify:
+            said |= {"accept": self.accept, "decline": self.decline}
         if self.slip and self.hash:
             said["hash"] = self.hash
         return said

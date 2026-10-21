@@ -1,20 +1,26 @@
 import DeckhandKit
 import SwiftUI
 
-/// A confirm slip this card can answer: which one, and the words on its two buttons.
+/// A confirm slip or a notify this card can answer: which one, and the words on its two buttons.
 struct Answerable {
+    /// The slip's id, or the notify's when `notify` is set.
     let slip: String
     let accept: String
     let decline: String
     /// Set when the slip is a decision, which the card's Yes then signs for.
     let hash: String?
+    let notify: Bool
 }
 
 extension Deck.ContentState {
-    /// The slip this card can answer, when the Mac sent all three of its parts.
+    /// What this card can answer, when the Mac sent its id and both labels.
     var answerable: Answerable? {
-        guard let slip, let accept, let decline else { return nil }
-        return Answerable(slip: slip, accept: accept, decline: decline, hash: hash)
+        guard let accept, let decline else { return nil }
+        if let notify {
+            return Answerable(slip: notify, accept: accept, decline: decline, hash: nil, notify: true)
+        }
+        guard let slip else { return nil }
+        return Answerable(slip: slip, accept: accept, decline: decline, hash: hash, notify: false)
     }
 }
 
@@ -39,22 +45,32 @@ struct Answers: View {
         .layoutPriority(1)
     }
 
+    @ViewBuilder
     private func choice(_ label: String, yes: Bool, fill: Color, ink: Color) -> some View {
-        Button(intent: AnswerSlip(session: deck.session, slip: ask.slip, hash: ask.hash, yes: yes)) {
-            Text(label)
-                .font(Typography.primaryRow)
-                .foregroundStyle(ink)
-                .lineLimit(1)
-                .padding(.horizontal, Spacing.small)
-                .padding(.vertical, Spacing.extraSmall)
-                .background(
-                    RoundedRectangle(cornerRadius: Radius.small, style: .continuous).fill(fill)
-                )
-                // The pill draws at ~31pt; Apple's floor for anything you tap is 44. The extra
-                // points are hit area and nothing else, which is why `contentShape` makes them count.
-                .frame(minHeight: 44)
-                .contentShape(Rectangle())
+        if ask.notify {
+            Button(intent: AnswerNotify(id: ask.slip, yes: yes)) { face(label, fill: fill, ink: ink) }
+                .buttonStyle(.plain)
+        } else {
+            Button(intent: AnswerSlip(session: deck.session, slip: ask.slip, hash: ask.hash, yes: yes)) {
+                face(label, fill: fill, ink: ink)
+            }
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
+    }
+
+    private func face(_ label: String, fill: Color, ink: Color) -> some View {
+        Text(label)
+            .font(Typography.primaryRow)
+            .foregroundStyle(ink)
+            .lineLimit(1)
+            .padding(.horizontal, Spacing.small)
+            .padding(.vertical, Spacing.extraSmall)
+            .background(
+                RoundedRectangle(cornerRadius: Radius.small, style: .continuous).fill(fill)
+            )
+            // The pill draws at ~31pt; Apple's floor for anything you tap is 44. The extra
+            // points are hit area and nothing else, which is why `contentShape` makes them count.
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
     }
 }

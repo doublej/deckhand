@@ -42,10 +42,13 @@ public struct Deck: ActivityAttributes {
         /// the phone's key over exactly this version of the page. Nil for anything else, and for
         /// a Mac older than decisions, whose cards answer the way they always did.
         public var hash: String?
+        /// A notify's id (`POST /notify`): no session behind this card, and `accept` and
+        /// `decline` answer the caller on the Mac instead of a slip.
+        public var notify: String?
 
         public init(kind: Kind, line: String, when: Double,
                     slip: String? = nil, accept: String? = nil, decline: String? = nil,
-                    hash: String? = nil) {
+                    hash: String? = nil, notify: String? = nil) {
             self.kind = kind
             self.line = line
             self.when = when
@@ -53,6 +56,7 @@ public struct Deck: ActivityAttributes {
             self.accept = accept
             self.decline = decline
             self.hash = hash
+            self.notify = notify
         }
 
         public var moment: Date { Date(timeIntervalSince1970: when) }

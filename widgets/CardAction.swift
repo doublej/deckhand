@@ -3,7 +3,7 @@ import AppIntents
 import DeckhandKit
 import Foundation
 
-/// The one thing a Lock Screen card may do: answer a yes-or-no slip.
+/// The one thing a Lock Screen card may do: answer a yes-or-no slip, or a notify (`AnswerNotify`).
 ///
 /// **A card answers only the question it shows.** The daemon puts a slip's id and buttons on a
 /// card only for a confirm, and then the card's line *is* that slip's question — so a Yes is
@@ -92,6 +92,50 @@ struct AnswerSlip: LiveActivityIntent {
         } catch let refused as DecisionRefusal {
             throw Trouble.refused(refused.errorDescription ?? "The Mac refused it")
         }
+    }
+}
+
+/// A notify's card (`POST /notify`): Yes is `approve` and No is `deny`, signed like a decision's
+/// answer, and the Mac calls back whoever asked. The card has nothing left to say after that, so
+/// it goes — the Mac's own end lands later and finds it gone.
+struct AnswerNotify: LiveActivityIntent {
+    static var title: LocalizedStringResource { "Answer this request" }
+    static var description: IntentDescription? {
+        IntentDescription("Allows or denies a request a program on the Mac sent the phone.")
+    }
+    static var authenticationPolicy: IntentAuthenticationPolicy { .requiresLocalDeviceAuthentication }
+
+    @Parameter(title: "Request")
+    var id: String
+
+    @Parameter(title: "Yes")
+    var yes: Bool
+
+    init() {}
+
+    init(id: String, yes: Bool) {
+        self.id = id
+        self.yes = yes
+    }
+
+    func perform() async throws -> some IntentResult {
+        guard let client = ServerSettings.load().client() else { throw Trouble.noMac }
+        do {
+            try await PhoneKey.answerNotify(with: client, id: id, action: yes ? "approve" : "deny")
+        } catch let refused as DecisionRefusal {
+            throw Trouble.refused(refused.errorDescription ?? "The Mac refused it")
+        } catch let refused as DeckhandError {
+            throw Trouble.refused(refused.detail ?? "The Mac refused it")
+        }
+        for card in Activity<Deck>.activities where card.attributes.session == "notify:\(id)" {
+            var state = card.content.state
+            state.line = "You said \((yes ? state.accept : state.decline) ?? (yes ? "Yes" : "No"))."
+            state.kind = .finished
+            state.notify = nil
+            await card.end(ActivityContent(state: state, staleDate: nil),
+                           dismissalPolicy: .after(.now + 4))
+        }
+        return .result()
     }
 }
 

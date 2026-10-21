@@ -65,12 +65,14 @@ def ask_for_attention(session_id: str, line: Annotated[str, Body(embed=True)]) -
 
 @router.post("/notify", status_code=202)
 async def notify(request: Request) -> dict:
-    """An alert with buttons and no session, whose tap this Mac answers to a loopback caller.
+    """A Lock Screen card with two buttons and no session, whose tap this Mac answers to a loopback
+    caller. One alert instead, on a phone that cannot take a card yet.
 
     `{title, line, actions: [{id, label}], callback: {url, body}}`, 4 KB at most. The action ids
     name a category the app already has (`approve`, `deny`); `callback.url` is http on
     127.0.0.1 or localhost only; every `"$action"` value in `callback.body` becomes the tapped
-    id. 202 `{id}` once APNs took it, 502 when APNs refused, 503 when this Mac cannot send.
+    id; the two labels are the card's buttons. 202 `{id}` once APNs took it, 502 when APNs
+    refused, 503 when this Mac cannot send.
     """
     return {"id": await asyncio.to_thread(callbacks.notify, await request.body())}
 

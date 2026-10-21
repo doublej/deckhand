@@ -1,10 +1,13 @@
 """`POST /notify`: an alert with no session behind it, whose buttons answer a caller on this Mac.
 
 atlas asks the person something that is no session's — a visitor wanting into a dev hostname —
-and wants the answer back. One alert goes out under a category the app registered at launch
-(buttons cannot ride in a payload, so the action set has to be one it knows), and the tap comes
-back signed by the phone's key and checked exactly as a decision's is (`answering.proven`). Only
-then does this Mac POST the caller's own body to the caller's own URL.
+and wants the answer back. It goes up as a **Lock Screen card** with the caller's two labels on
+inline buttons, filed as the session `notify:<id>`, which no session id is spelled like. A phone
+that cannot take a card yet (no start token) gets one alert instead, under a category the app
+registered at launch — an alert cannot carry buttons, so the action set has to be one it knows.
+Either tap comes back signed by the phone's key and checked exactly as a decision's is
+(`answering.proven`). Only then does this Mac POST the caller's own body to the caller's own URL,
+and the card comes down.
 
 **The callback never leaves this Mac.** URL and body are kept here by notify id and never go into
 the APNs payload, so neither a caller nor a phone can redirect where the daemon posts. The URL must
@@ -81,6 +84,7 @@ def parsed(raw: bytes) -> dict:
     if not isinstance(callback, dict) or not isinstance(callback.get("body"), dict):
         raise _bad("callback must be {url, body} with body a JSON object")
     return {"title": title, "line": line, "category": category, "actions": ids,
+            "labels": {one["id"]: one["label"].strip() for one in actions},
             "url": _loopback(callback.get("url")), "body": callback["body"]}
 
 
@@ -141,14 +145,32 @@ def payload(nid: str, asked: dict) -> dict:
             "notify": {"id": nid, "question": asked["title"]}}
 
 
+def card(nid: str, asked: dict) -> sending.Card:
+    """The card: the title as its name, the line under it, Yes as `approve` and No as `deny`.
+
+    ponytail: one action set, so the two buttons are those two ids; a second category needs the
+    pair carried in `CATEGORIES`."""
+    labels = asked["labels"]
+    return sending.Card(session=f"{SIGNED_AS}:{nid}", name=asked["title"], kind=sending.ASKING,
+                        line=asked["line"], when=time.time(), notify=nid,
+                        accept=labels["approve"], decline=labels["deny"])
+
+
 def notify(raw: bytes) -> str:
-    """Keep the callback, send the alert. The notify id; 400, 502 (APNs) or 503 (this Mac)."""
+    """Keep the callback, raise the card — or send the alert when the card cannot go up. The
+    notify id; 400, 502 (APNs) or 503 (this Mac)."""
     asked = parsed(raw)
     nid = secrets.token_hex(8)
     row = {key: asked[key] for key in ("url", "body", "actions")} | {"at": time.time()}
     with _lock:
         _keep(_kept() | {nid: row})
-    error = sending.alert(payload(nid, asked), f"notify:{nid}")
+    # The Mac's own name, as `push.announce` writes it for a session on this machine.
+    mac = config.base_url().removeprefix("http://").split(":")[0]
+    if (missed := sending.show(card(nid, asked), mac)) is None:
+        log.info("notify %s: a card for %r", nid, asked["title"])
+        return nid
+    log.info("notify %s: no card (%s), sending the alert", nid, missed)
+    error = sending.alert(payload(nid, asked), f"{SIGNED_AS}:{nid}")
     if error is None:
         log.info("notify %s: the phone was told %r", nid, asked["title"])
         return nid
@@ -172,6 +194,7 @@ def answered(nid: str, proof: object, token: str) -> dict:
             row["result"] = _called(row["url"], filled(row["body"], said["value"])) | {
                 "action": said["value"]}
             _keep(held | {nid: row})
+            sending.end(f"{SIGNED_AS}:{nid}")
             log.info("notify %s: %s, the caller answered %s", nid, said["value"],
                      row["result"]["status"] or row["result"]["error"])
     result = row["result"]
