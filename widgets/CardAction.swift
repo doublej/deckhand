@@ -47,11 +47,17 @@ struct AnswerSlip: LiveActivityIntent {
     @Parameter(title: "Yes")
     var yes: Bool
 
+    /// The page's hash when the slip is a decision — the card's state carries it — and the Yes is
+    /// then signed with the phone's key over exactly that page. Nil for a Mac older than decisions.
+    @Parameter(title: "Page")
+    var hash: String?
+
     init() {}
 
-    init(session: String, slip: String, yes: Bool) {
+    init(session: String, slip: String, hash: String?, yes: Bool) {
         self.session = session
         self.slip = slip
+        self.hash = hash
         self.yes = yes
     }
 
@@ -59,18 +65,33 @@ struct AnswerSlip: LiveActivityIntent {
     /// takes the card down, or moves it on to the next slip, a few seconds later.
     func perform() async throws -> some IntentResult {
         guard let client = ServerSettings.load().client() else { throw Trouble.noMac }
-        let sent = try await client.answer(slip, in: session,
-                                           valueJSON: yes ? #"{"answer":true}"# : #"{"answer":false}"#,
-                                           route: Preferences.load().route)
+        let sent = try await answer(with: client)
         for card in Activity<Deck>.activities where card.attributes.session == session {
             var state = card.content.state
             let said = (yes ? state.accept : state.decline) ?? (yes ? "Yes" : "No")
             state.line = sent.went ? "You said \(said)." : "You said \(said) — the session was not told."
             state.kind = .finished
             state.slip = nil
+            state.hash = nil
             await card.update(ActivityContent(state: state, staleDate: nil))
         }
         return .result()
+    }
+
+    /// A decision is signed with the phone's key; a slip from a Mac older than decisions goes the
+    /// way it always did, by the route the person chose.
+    private func answer(with client: DeckhandClient) async throws -> Delivery {
+        guard let hash else {
+            return try await client.answer(slip, in: session,
+                                           valueJSON: yes ? #"{"answer":true}"# : #"{"answer":false}"#,
+                                           route: Preferences.load().route)
+        }
+        do {
+            return try await PhoneKey.answer(with: client, artifact: slip, in: session, hash: hash,
+                                             value: .object(["answer": .bool(yes)]))
+        } catch let refused as DecisionRefusal {
+            throw Trouble.refused(refused.errorDescription ?? "The Mac refused it")
+        }
     }
 }
 
@@ -79,10 +100,13 @@ struct AnswerSlip: LiveActivityIntent {
 /// from "the Mac is asleep" without this.
 enum Trouble: Error, CustomLocalizedStringResourceConvertible {
     case noMac
+    /// A decision the Mac would not take: stale, expired, already answered, or a phone not paired.
+    case refused(String)
 
     var localizedStringResource: LocalizedStringResource {
         switch self {
         case .noMac: "Deckhand has no Mac to reach — open the app and pair it."
+        case .refused(let why): "\(why)"
         }
     }
 }

@@ -44,8 +44,11 @@ struct PairCode: View {
             model.settings.mac = paired.mac.id
             model.saveSettings()
             code = ""
-            said = "Paired with \(paired.mac.name)."
             await model.checkConnection()
+            // The key that answers decisions, registered now so a refusal is read here.
+            said = await model.registerDecisionKey().map {
+                "Paired with \(paired.mac.name), but not for decisions: \($0)"
+            } ?? "Paired with \(paired.mac.name)."
         } catch {
             said = model.reason(error)
         }

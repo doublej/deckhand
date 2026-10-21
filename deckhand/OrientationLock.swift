@@ -69,6 +69,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
                      didFinishLaunchingWithOptions options: [UIApplication.LaunchOptionsKey: Any]?)
         -> Bool {
         MainActor.assumeIsolated { Notifier.shared.listen() }
+        // A decision's buttons have to exist before the first one can be delivered.
+        DecisionNotes.register()
         return true
     }
 

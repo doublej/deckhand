@@ -85,6 +85,8 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse
     ) async {
+        // A decision's own button is answered where it was pressed (`DecisionNotes`).
+        if await DecisionNotes.answered(response) { return }
         guard let target = Target(response.notification.request.content.userInfo) else { return }
         await MainActor.run { tapped(target) }
     }

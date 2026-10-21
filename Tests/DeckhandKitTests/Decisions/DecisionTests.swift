@@ -116,6 +116,19 @@ struct DecisionTests {
         #expect(DecisionRefusal.notPaired.errorDescription == "Pair this phone by code to answer decisions")
     }
 
+    @Test("a decision row becomes the controls its page would have drawn")
+    func decisionControls() {
+        func row(_ kind: String?, _ choices: [String]) -> SlipAsk? {
+            Artifact(id: "a", title: "A", modified: 1, answered: false, decision: kind,
+                     choices: choices, hash: "h").decisionAsk
+        }
+        #expect(row("confirm", ["Tag", "Not yet"])
+            == SlipAsk(kind: .confirm, accept: "Tag", decline: "Not yet"))
+        #expect(row("pick", ["main", "dev"]) == SlipAsk(kind: .pick, options: ["main", "dev"], other: true))
+        #expect(row("text", ["Name"]) == SlipAsk(kind: .text, label: "Name"))
+        #expect(row(nil, []) == nil)
+    }
+
     @Test("a decision page's respond throws; any other page's does not")
     func bridgeRefusesDecisions() {
         let decision = Artifact(id: "tag-it", title: "Tag?", modified: 1, answered: false,

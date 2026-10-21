@@ -52,3 +52,19 @@ public struct DecisionNote: Decodable, Equatable, Sendable {
         }
     }
 }
+
+public extension Artifact {
+    /// A decision as the app's own controls ask it — the bar under its page. Its choices are the
+    /// page's own words; a pick also takes an answer typed in, as the page's last row does. Nil
+    /// for a slip that is not a decision.
+    var decisionAsk: SlipAsk? {
+        let words = choices ?? []
+        switch decision {
+        case "confirm":
+            return SlipAsk(kind: .confirm, accept: words.first, decline: words.dropFirst().first)
+        case "pick": return SlipAsk(kind: .pick, options: words, other: true)
+        case "text": return SlipAsk(kind: .text, label: words.first)
+        default: return nil
+        }
+    }
+}

@@ -91,6 +91,9 @@ targets:
     platform: iOS
     sources:
       - widgets
+      # The phone's decision key, which the card's `AnswerSlip` signs with. Compiled here only so
+      # the intent type builds; the system performs it in the app's process, where the key is.
+      - deckhand/Decisions/PhoneKey.swift
     dependencies:
       - package: DeckhandKit
         product: DeckhandKit

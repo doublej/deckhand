@@ -530,6 +530,12 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   for each — a refused local network permission finds nothing *silently* on iOS, so collapsing
   them would print "no Mac here" at somebody whose phone simply would not look. Turning that
   permission on is Settings › Deckhand › Local Network, and the row says so.
+- **A decision is answered only by native buttons, signed with the phone's Secure Enclave key.**
+  `Decisions/` holds the key (`PhoneKey`), the notification actions (`DecisionNotes`) and the
+  model's half (`Deciding`). The slip's bar, the tray, the Lock Screen card and the notification
+  all sign through `PhoneKey.answer`; a decision page's own `respond` is refused twice, in the
+  bridge and in `ArtifactView.respond`. The key registers with a device token only — a phone on
+  the Mac's token is told to pair by code. See `docs/artifacts.md`.
 - **ATS:** the app talks plain HTTP to a `.local` name, which needs `NSAllowsLocalNetworking` plus
   `NSLocalNetworkUsageDescription` — both in `project.yml`, not a checked-in plist.
 
