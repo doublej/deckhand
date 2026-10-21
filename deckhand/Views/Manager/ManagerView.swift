@@ -19,7 +19,10 @@ struct ManagerView: View {
     @Bindable var model: AppModel
     @State private var recorder = Recorder()
     @State private var clearing = false
-    @FocusState private var typing: Bool
+    @State private var reaching = false
+    @State private var typing = false
+    @State private var browsing = false
+    @State private var prefill = ""
     @Environment(\.scenePhase) private var phase
 
     private var desk: ManagerDesk { model.manager }
@@ -43,10 +46,7 @@ struct ManagerView: View {
         // than after whatever is left of a four-second rest.
         .task(id: [desk.open, desk.working]) { await poll() }
         .onChange(of: desk.open) { _, now in
-            if !now {
-                typing = false
-                Task { await model.leaveManager() }
-            }
+            if !now { Task { await model.leaveManager() } }
         }
         // Leaving the app is leaving the panel, and it is the case notifications exist for.
         .onChange(of: phase) { _, now in
@@ -63,7 +63,6 @@ struct ManagerView: View {
             tab("MANAGER", .manager, count: 0,
                 unread: desk.unread || desk.working)
         }
-        .padding(.top, Spacing.extraSmall)
         .onChange(of: desk.entries.last?.id) { _, last in
             if desk.tab == .manager { desk.readEntry = last ?? 0 }
         }
@@ -130,7 +129,7 @@ struct ManagerView: View {
                             .padding(.horizontal, Spacing.extraSmall)
                     }
                 }
-                .padding(.top, Spacing.large)
+                .padding(.top, Spacing.small)
                 .padding(.bottom, Spacing.small)
             }
             .scrollIndicators(.hidden)
@@ -164,9 +163,9 @@ struct ManagerView: View {
         .padding(.bottom, Spacing.small)
     }
 
-    /// The one line you write on, and the mark under it. Both send to the same place, so unlike
-    /// the orders pane there is no second meaning to keep them apart — a clip goes to the
-    /// manager and so does the field.
+    /// The mark and nothing else, the session foot's own: hold to talk, and the press that is
+    /// not talking opens what a field and three starter buttons used to spend a third of the
+    /// drawer on. A reply that never reached the Mac waits in `draft` for the next Type.
     @ViewBuilder private var foot: some View {
         if let heard = desk.review {
             ReviewCard(text: heard, target: "the manager",
@@ -174,64 +173,43 @@ struct ManagerView: View {
                        discard: { model.manager.review = nil })
                 .padding(.bottom, Spacing.extraSmall)
         } else {
-            writing
-        }
-    }
-
-    private var writing: some View {
-        VStack(spacing: Spacing.extraSmall) {
-            if desk.draft.isEmpty && !desk.working { ManagerStarters { send($0) } }
-            HStack(spacing: Spacing.extraSmall) {
-                field
-                if desk.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    if !desk.entries.isEmpty {
-                        Button("Start over", systemImage: "arrow.counterclockwise") {
-                            clearing = true
-                        }
-                        .accessibilityIdentifier("manager-clear")
-                    }
-                } else {
-                    Button("Send", systemImage: "arrow.up") { send() }
-                        .accessibilityIdentifier("manager-send")
-                }
-            }
-            .labelStyle(.iconOnly)
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(Palette.textSecondary)
-            .frame(minWidth: 44, minHeight: 44)
-            .contentShape(Rectangle())
             mark
-        }
-        .padding(.bottom, Spacing.extraSmall)
-        .confirmationDialog("Start over?", isPresented: $clearing, titleVisibility: .visible) {
-            Button("Start over", role: .destructive) { Task { await model.clearManager() } }
-        } message: {
-            Text("The manager forgets this conversation and everything in it.")
+                // Into the safe area, inside `SessionFoot.talk`'s 22pt ceiling.
+                .offset(y: Spacing.medium)
+                .padding(.bottom, Spacing.extraSmall)
+                .confirmationDialog("", isPresented: $reaching, titleVisibility: .hidden) { reach }
+                .confirmationDialog("Start over?", isPresented: $clearing,
+                                    titleVisibility: .visible) {
+                    Button("Start over", role: .destructive) {
+                        Task { await model.clearManager() }
+                    }
+                } message: {
+                    Text("The manager forgets this conversation and everything in it.")
+                }
+                .sheet(isPresented: $typing) {
+                    Editor(words: prefill, target: "the manager") { typed in
+                        typing = false
+                        send(typed)
+                    }
+                }
+                .sheet(isPresented: $browsing) { ArchiveSheet(model: model) }
         }
     }
 
-    private var field: some View {
-        TextField("Ask the manager", text: $model.manager.draft, axis: .vertical)
-            .font(Typography.prose)
-            .foregroundStyle(Palette.textPrimary)
-            .lineLimit(1...4)
-            .focused($typing)
-            .submitLabel(.send)
-            .onSubmit { send() }
-            .padding(.horizontal, Spacing.extraSmall)
-            .padding(.vertical, Spacing.xxs + 2)
-            .background(
-                // Tighter than the cards above it, never wider: a control inside a page of
-                // Radius.medium cards is the smaller corner, which is the rule this app fixed
-                // once already on the review card's buttons.
-                RoundedRectangle(cornerRadius: Radius.small, style: .continuous)
-                    .fill(Palette.textPrimary.opacity(0.06))
-            )
-            // Also what a UI test asks for to know the panel is open. An identifier on the
-            // panel's own container looked tidier and was wrong: SwiftUI pushes a container's
-            // identifier down onto every descendant, so the field, both buttons and the mark
-            // all came back called `manager-panel` and nothing could be addressed at all.
-            .accessibilityIdentifier("manager-field")
+    /// `SessionFoot.reach`, less Photos: the manager takes words, not pictures. Clipboard opens
+    /// the editor on what was copied, so it is read before it becomes an instruction.
+    @ViewBuilder private var reach: some View {
+        if !desk.entries.isEmpty {
+            Button("Start over", role: .destructive) { clearing = true }
+        }
+        Button("Clipboard") { edit(UIPasteboard.general.string ?? "") }
+        Button("Type") { edit(desk.draft) }
+        Button("Clips") { browsing = true }
+    }
+
+    private func edit(_ words: String) {
+        prefill = words
+        typing = true
     }
 
     /// Hold to talk, exactly as everywhere else. `isMine` is true because this recorder is this
@@ -241,7 +219,8 @@ struct ManagerView: View {
             recorder: recorder,
             mode: model.preferences.talkMode,
             isMine: true,
-            onStart: { typing = false },
+            onReach: { reaching = true },
+            onStart: {},
             onClip: {
                 desk.tab = .manager
                 await model.askManager(clip: $0)
@@ -257,8 +236,6 @@ struct ManagerView: View {
             }
         )
     }
-
-    private func send() { send(desk.draft) }
 
     private func send(_ words: String) {
         desk.tab = .manager

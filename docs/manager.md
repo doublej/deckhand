@@ -205,7 +205,7 @@ replaces it as an entry on the same poll. The poll loop restarts when `working` 
 is followed by a one-second pace at once rather than after a four-second rest.
 
 **What is said is drawn before the Mac has it.** A typed send is on screen, dimmed, the moment
-it is sent, and goes back into the field if the Mac never took it. A clip shows *Hearing…* while
+it is sent, and waits behind the mark's Type if the Mac never took it. A clip shows *Hearing…* while
 utt works and, under the same `confirms` preference a session's clip uses, lands on the review
 card rather than going straight in — a mishearing here is an instruction to every session.
 

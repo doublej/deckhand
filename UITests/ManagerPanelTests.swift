@@ -14,12 +14,12 @@ import XCTest
 ///
 /// Needs `DECKHAND_HOST` and `DECKHAND_TOKEN` in the environment (see `just ui-test`).
 final class ManagerPanelTests: XCTestCase {
-    /// The panel is recognised by its field, which is on this screen and on no other. Not by an
+    /// The panel is recognised by its mark, `manager-talk-mark`, which is on this screen and on no other. Not by an
     /// identifier on the panel's own container: SwiftUI pushes one of those down onto every
     /// descendant, so the field and both buttons came back wearing the container's name.
     func testTheGlyphOpensThePanel() throws {
         let app = try launch()
-        let panel = app.textFields["manager-field"]
+        let panel = app.descendants(matching: .any)["manager-talk-mark"]
         let opener = app.buttons["open-manager"]
         XCTAssertTrue(opener.waitForExistence(timeout: 20), "the rail's foot has no way in")
         opener.tap()
@@ -92,14 +92,15 @@ final class ManagerPanelTests: XCTestCase {
         XCTAssertTrue(opener.waitForExistence(timeout: 20), "the rail's foot has no way in")
         opener.tap()
 
-        // Not `app.textFields`: a `TextField(axis: .vertical)` is a text *view* to the
-        // accessibility hierarchy, so asking for the wrong kind finds nothing and reads as a
-        // panel with no field on it.
-        let field = app.textFields["manager-field"]
-        XCTAssertTrue(field.waitForExistence(timeout: 5), "the panel has nothing to type into")
-        field.tap()
+        // Typing is behind the mark's long press, as on a session's page.
+        let mark = app.descendants(matching: .any)["manager-talk-mark"]
+        XCTAssertTrue(mark.waitForExistence(timeout: 5), "the panel has no mark")
+        mark.press(forDuration: 1.0)
+        app.buttons["Type"].tap()
+        let field = app.textViews.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "Type opened nothing to type into")
         field.typeText("say ok")
-        app.buttons["manager-send"].tap()
+        app.buttons["Done"].tap()
 
         let card = app.descendants(matching: .staticText)
             .matching(NSPredicate(format: "label CONTAINS[c] 'say ok'")).firstMatch
@@ -111,10 +112,10 @@ final class ManagerPanelTests: XCTestCase {
     /// On screen, not merely in the hierarchy.
     ///
     /// Both halves of the shell are mounted the whole time — the panel is one screen's width off
-    /// to the side — so its field `exists` whether or not it has been pulled in, and a test that
+    /// to the side — so its mark `exists` whether or not it has been pulled in, and a test that
     /// asked would pass without the gesture ever working. Hittability is what tells them apart.
     private func waitForPanel(_ app: XCUIApplication, onScreen: Bool, timeout: TimeInterval = 5) {
-        let field = app.textFields["manager-field"]
+        let field = app.descendants(matching: .any)["manager-talk-mark"]
         let wanted = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "isHittable == %@", NSNumber(value: onScreen)),
             object: field
