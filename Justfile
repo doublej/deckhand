@@ -191,8 +191,10 @@ sim: generate
 device: generate
     xcodebuild {{ project }} -destination 'generic/platform=iOS' -allowProvisioningUpdates -derivedDataPath .build/device build
     xcrun devicectl device install app --device '{{ phone }}' .build/device/Build/Products/Debug-iphoneos/Deckhand.app
+    # The host only. A `-deckhand.token` here is the Mac's own token, and launch arguments outrank
+    # what the app saves, so it would hide a paired phone's own token — the one that signs decisions.
     xcrun devicectl device process launch --device '{{ phone }}' dev.jurrejan.deckhand \
-        -- -deckhand.host "$(scutil --get LocalHostName).local" -deckhand.token "$(just token)"
+        -- -deckhand.host "$(scutil --get LocalHostName).local"
 
 # The manager and the session cards for the person at the Mac (`mac/App.swift`). It asks to send
 # notifications on its first run. Stopped by path, not `pkill -x Deckhand`, which would also take
