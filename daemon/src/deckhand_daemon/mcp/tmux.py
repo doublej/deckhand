@@ -124,22 +124,14 @@ async def tmux_tree() -> dict:
 async def tmux_arrange(action: Action, target: str, to: str | None = None,
                        name: str | None = None, layout: str | None = None,
                        split: Literal["right", "below"] = "right") -> dict:
-    """Move the furniture of the person's tmux — never what runs in it. `target` and `to` are a
-    Claude session's name or id (its pane), a pane `%3`, a window `@2`, `session:index`,
-    `session:name` or a window name; `tmux_tree` shows them all.
+    """Move the person's tmux furniture, never what runs in it. `target`/`to`: a Claude session
+    name or id, `%3`, `@2`, `session:index`, `session:name` or a window name (`tmux_tree`).
 
-    - `rename` the target's window to `name`.
-    - `group` its window under `name` (tmux's `@group`, which the headset follows within
-      seconds: grouped sessions stand together there); `ungroup` drops it.
-    - `move` its window to just after `to`'s, or to the end of tmux session `to`.
-    - `swap` its window with `to`'s.
-    - `join` its pane into `to`'s window, `split` to the right or below — two sessions side by
-      side. `break` takes a pane out into a window of its own, called `name` if given, keeping
-      its group.
-    - `layout` the target's window: tiled, even-horizontal, even-vertical, main-horizontal or
-      main-vertical. `zoom` toggles its pane filling the window.
-    - `focus` shows the target in the person's terminal: it moves what they are looking at, so
-      only when they asked.
+    `rename`/`group` the window as `name` (the headset follows groups); `ungroup`. `move` it
+    after `to`'s, or to the end of tmux session `to`; `swap` with `to`'s. `join` the pane into
+    `to`'s window, `split` right or below; `break` it into its own window (`name`). `layout`:
+    tiled, even-horizontal, even-vertical, main-horizontal, main-vertical. `zoom` toggles.
+    `focus` moves the person's view: only when asked.
 
     Nothing here types into a pane or closes one; those are the person's.
     """

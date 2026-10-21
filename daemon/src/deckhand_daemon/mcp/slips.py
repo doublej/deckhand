@@ -59,27 +59,17 @@ async def ask_on_phone(question: str,
                        options: list[str] | None = None,
                        note: str = "", questions: list[str] | None = None,
                        action: str = "", expires_hours: float = 24.0, key: str = "") -> dict:
-    """Ask the person a question on their phone. Returns the slip's id. **Then end your turn.**
+    """Ask the person on their phone. Returns the slip's id. **Then end your turn.**
 
-    Confirm, pick and text are **decisions**: the phone answers one only with a signature from its
-    own key, and the daemon types that answer into this session as the person's next message —
-    `Decision <id> — "<question>": <their choice>. This covers exactly: <action>.` So do not wait
-    on `read_answer`: ask, stop, and act on that message when it arrives. It covers exactly the
-    `action` line and nothing more.
+    Confirm, pick and text are **decisions**: signed by the phone and typed into this session as
+    `Decision <id> — "<question>": <choice>. This covers exactly: <action>.` Do not poll
+    `read_answer`; act on that message, and only on what it covers.
 
-    `action` is required for a confirm: exactly what a yes allows, in one line. Keep the question
-    under 80 characters — the card shows it and nothing else — and put detail in `note`, where a
-    blank line starts a paragraph, `## ` a heading and `- ` a bullet. The answer
-    is `{"answer": true}` or `{"answer": false}`, or `{"reply": "<text>"}` typed on the Lock
-    Screen. `expires_hours` (default 24) is how long the question stands.
-
-    `kind` is one of confirm, pick, text, aloud. `options` is the yes label then the no label for
-    a confirm, one row per choice for a pick, and the field's label for a text. `questions` is for
-    an aloud slip only, each one `id:the question`, and the person answers by speaking — an aloud
-    slip is not a decision.
-
-    `key` is the slip's id, which makes re-asking explicit. Asking an answered decision again under
-    the same key returns its answer instead of asking twice; any other slip is replaced.
+    `kind`: confirm, pick, text or aloud. `question`: under 80 chars; detail in `note`.
+    `action`: required for confirm, exactly what a yes allows, one line. `options`: yes/no
+    labels (confirm), choices (pick), field label (text). `questions`: aloud only, `id:text`,
+    spoken; not a decision. `expires_hours`: default 24. `key`: the id; re-asking an answered
+    decision returns its answer.
     """
     held, why = folder()
     if held is None:

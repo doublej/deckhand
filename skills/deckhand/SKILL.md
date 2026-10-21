@@ -8,67 +8,37 @@ metadata:
 
 # Deckhand
 
-There is a phone in the person's pocket that can see this session, and it can be asked a question.
-Most of what follows is a file in this folder, not a call.
-
-**Say slip to the person, write artifact in code, paths and endpoints.** Same thing, two audiences:
-"I have put a slip on your phone", never "an artifact".
+**Say slip to the person, write artifact in code, paths and endpoints**: "I have put a slip on
+your phone", never "an artifact".
 
 <presentation>
 Reference skill: no banner, no report. Slips and logbooks stay free of any signature. When invoked
 directly and the answer is the main output, end with: — deckhand · github.com/doublej
 </presentation>
 
-## Where the person is
+## Where the person is, and when a slip beats a sentence
 
-`deckhand presence` answers `laptop`, `headset` or `phone` (the `presence` tool says the same).
-At the laptop or in the headset they are reading this conversation: ask here, in a sentence, and
-stop. On the phone, a
-sentence here is unread — use a slip or a card. Ask again before each question; it moves the
-moment they sit down or walk off.
+`deckhand presence` answers `laptop`, `headset` or `phone`; ask before each question. At the
+laptop or in the headset, ask here in a sentence and stop. A slip when the answer has
+**structure** (one of these four, yes or no to this exact thing) or they are on the phone, where a
+sentence here is unread; then also say in one line that the slip is there.
 
-## When a slip beats a sentence
+## Tools and the `deckhand` command
 
-Say it in a sentence when the answer is prose and you can wait for the person to come back to the
-keyboard. Write a slip when the answer has **structure** — one of these four, these six fields,
-yes or no to this exact thing — or when the person is away, and a sentence in a terminal nobody
-is looking at is the same as saying nothing. Then do both: a phone in a pocket announces nothing
-itself, so say in one line that the slip is there.
+With the `deckhand` MCP server, use its tools. Without it, each is a `deckhand` command
+(`just install-cli`): `presence`, `whoami`, `sessions`, `ask`, `answer`, `notify`, `say`, `open`,
+`space`, `close`, `windows`, `start`, `tmux`, `arrange`. JSON when piped, a structured error on
+stderr, exit 4 means "no" (not said, not pushed, not answered yet). `deckhand prime` prints the whole contract. A URL opened in the headset
+must be reachable from it: prefer `https://<slug>.atlas.local.jurrejan.com` over localhost.
 
-## The same things as tools, and as one command
-
-Where the `deckhand` MCP server is installed, fifteen tools arrive with it and are the shorter path.
-`presence` says where the person is; `ask_on_phone` and `read_answer` write and read exactly the
-file the scripts below do; `call_for_attention` puts a card on the Lock Screen; `whoami` says
-which session this is; and `sessions` and `say_to_session` reach the other sessions on this Mac.
-`open_plane` puts a web page or a Mac window beside this session in the person's headset, and
-`close_plane`, `space` and `mac_windows` go with it — a URL there must be reachable from the
-headset, so prefer `https://<slug>.atlas.local.jurrejan.com` over localhost. `start_session`
-starts another session beside this one, in a folder the Mac lists and trusts; brief it with
-`say_to_session`. `tmux_tree` reads the person's whole tmux — every window and pane, with the
-Claude session in each — and `tmux_arrange` renames, groups, moves, swaps, joins, breaks, lays
-out, zooms and focuses them; a window's group is the headset's group too.
-They work from any directory, because they take this session's folder out of its own record
-rather than out of `cwd`.
-
-Every one of them is also a `deckhand` shell command (`just install-cli` puts it on PATH):
-`presence`, `whoami`, `sessions`, `ask`, `answer`, `notify`, `say`, `open`, `space`, `close`,
-`windows`, `start`, `tmux`, `arrange`. JSON when piped, a structured
-error on stderr, and an exit status to branch on — 4 means "no": not said, not pushed, not
-answered yet. `deckhand prime` prints the whole contract.
-
-`say_to_session` goes down the peer socket and takes no route. There is no tool for the keyboard,
-for stopping, compacting, clearing, closing or renaming a session, for answering a slip, for
-input into a Mac window, or for a session's settings, filters or orders — those belong to the
-person, and an agent choosing them is an agent claiming to be the person. `deckhand prime` lists
-each with its reason, and `deckhand <verb>` for one answers `PERSON_ONLY`. `curl` still performs
-what a tool declines, so treat that as a boundary rather than a fence.
-
-Nothing below needs the tools. With none present it all still works.
+`say` goes down the peer socket and takes no route. There is nothing for the keyboard, for
+stopping, compacting, clearing, closing or renaming a session, answering a slip, input into a Mac
+window, or a session's settings, filters or orders — those are the person's, and `deckhand <verb>`
+for one answers `PERSON_ONLY`. Nothing below needs the tools.
 
 ## Writing one
 
-A slip is one HTML page in this session's own folder, and there is a script for the common shapes:
+A slip is one HTML page in this session's own folder; the script covers the common shapes:
 
 ```bash
 python3 ~/.claude/skills/deckhand/scripts/slip.py --kind pick \
@@ -76,54 +46,42 @@ python3 ~/.claude/skills/deckhand/scripts/slip.py --kind pick \
   --option develop --option main
 ```
 
-It prints the path it wrote. Tell the person, then **end your turn**: a decision's answer arrives as
-their next message, typed in by the daemon —
+Tell the person, then **end your turn**: a decision's answer arrives as their next message —
 `Decision which-branch — "Which branch should this land on?": main. This covers exactly: …`.
-Act on exactly what that line covers. To look at it yourself:
+Act on exactly what that line covers. To look yourself:
 
 ```bash
 python3 ~/.claude/skills/deckhand/scripts/answer.py which-branch --wait 300
 ```
 
-**Show a picture, never only name it.** A path to a screenshot or crop in a sentence is useless on
-a phone. `--image PATH` attaches one to the page, and any image path in `--title` or `--note` is
-attached on its own (a path that does not exist stops the script). Write a slip by hand and you
-embed the picture as a `data:` URI yourself, so use the script.
+**Show a picture, never only name it.** `--image PATH` attaches one; an image path in `--title`
+or `--note` is attached on its own (a missing path stops the script).
 
 `--kind` is `confirm`, `pick`, `text` or `aloud`. **Confirm, pick and text are decisions**: the
-phone answers one only with a signature from its own key. A confirm needs `--action`, exactly what a
-yes allows in one line (`--action "tag 0.4.0 and push the tag, nothing else"`); a pick or text
-defaults it to the question. `--expires-hours` (24) is how long it stands, `--key` names it. Asking
-an answered decision again under the same key prints its answer instead of asking twice.
+phone answers one only with a signature from its own key. A confirm needs `--action`, exactly what
+a yes allows in one line (`--action "tag 0.4.0 and push the tag, nothing else"`); pick and text
+default it to the question. `--expires-hours` (24) is how long it stands, `--key` names it;
+re-asking an answered decision under the same key prints its answer.
 
-A `confirm` is answered from the Lock Screen without opening the app: keep its question under 80
-characters, since the notification shows nothing else, and put the rest in `--note`. Its buttons say
-Yes and No unless two `--option` name them; the answer is `{"answer": true}`, `{"answer": false}`,
-or `{"reply": "…"}` typed on the notification. `answer.py` prints
-`{"value", "verified", "device", "fingerprint"}`, or exits 1 while nothing has answered. **`verified`
-is true only where the phone's signature holds** — a file written by hand, or a slip that is not a
-decision, reads false; never treat an unverified answer as the person's approval. Run both from the
-session's own folder: nothing walks upward, so a slip written from a subdirectory is one the phone
-never lists.
+A `confirm` is answered from the Lock Screen: keep its question under 80 characters, the rest in
+`--note`. Buttons say Yes and No unless two `--option` name them; the answer is
+`{"answer": true}`, `{"answer": false}`, or `{"reply": "…"}`. `answer.py` prints
+`{"value", "verified", "device", "fingerprint"}`, or exits 1 while unanswered. **`verified` is true
+only where the phone's signature holds** — a hand-written file or a non-decision slip reads false;
+never treat an unverified answer as approval. Run both from the session's own folder: nothing
+walks upward, so a slip written from a subdirectory never shows.
 
 ## Whose slip it is
 
-A slip goes in **this session's own folder**, `.deckhand/artifacts/$CLAUDE_CODE_SESSION_ID/`, and
-both scripts do that without being told — that variable is in every Bash call and is the id the
-daemon knows this session by. Only the session that asked lists it, and the answer comes back to
-the session that asked; two sessions in one repo no longer read each other's questions or take
-each other's answers.
-
-A slip written **flat** in `.deckhand/artifacts/` belongs to the folder instead, and every session
-working there lists it and can answer it. Write one there for a question about the project rather
-than about the work in hand — pass `--session ""` to either script. The phone marks those rows
-`project`, because answering one sends the answer into whichever session is open.
+A slip goes in `.deckhand/artifacts/$CLAUDE_CODE_SESSION_ID/` (the scripts do this); only the
+asking session lists it and gets the answer. A slip written **flat** in `.deckhand/artifacts/`
+(`--session ""`) belongs to the folder: every session there lists and can answer it. Use that for
+questions about the project, not the work in hand; the phone marks those rows `project`.
 
 ## Writing one by hand
 
-For a wizard, sliders, or anything those four miss, copy a template out of
-`~/.claude/skills/deckhand/templates/` — all four plus `form` and `tweak`, as working pages
-(`logbook` is in there as well, but a script writes that one):
+For a wizard, sliders, or anything the four kinds miss, copy a template from
+`~/.claude/skills/deckhand/templates/` (the four plus `form` and `tweak`):
 
 ```bash
 mkdir -p .deckhand/artifacts/$CLAUDE_CODE_SESSION_ID
@@ -131,13 +89,11 @@ cp ~/.claude/skills/deckhand/templates/form.html \
    .deckhand/artifacts/$CLAUDE_CODE_SESSION_ID/release-check.html
 ```
 
-The `<title>` is the slip's name, the filename before `.html` its id:
-`[A-Za-z0-9][A-Za-z0-9_-]{0,63}`.
+`<title>` is the slip's name, the filename before `.html` its id: `[A-Za-z0-9][A-Za-z0-9_-]{0,63}`.
 
-Inline HTML, CSS and JS **only**. The app injects `default-src 'none'` with inline style and
-script, `img-src data:`, no form action and no navigation — so a CDN, a font, a `fetch` or a
-remote image fails **silently**. Pictures are `data:` URIs or SVG, and Deckhand's own design
-tokens are injected, so use the custom properties. The page answers through six things:
+Inline HTML, CSS and JS **only**. The CSP is `default-src 'none'` with inline style and script,
+`img-src data:`, no form action, no navigation — a CDN, font, `fetch` or remote image fails
+**silently**. Pictures are `data:` URIs or SVG; use Deckhand's injected design custom properties.
 
 ```js
 window.deckhand.respond(value)  // any JSON value. May be called more than once.
@@ -148,15 +104,12 @@ window.deckhand.answer          // what was answered last time, or null
 window.deckhand.draft           // what keep() last held, or null. Newer than answer.
 ```
 
-**A reopened page must prefill from `window.deckhand.draft ?? window.deckhand.answer`.** The row
-that opened it says "answered"; an empty form under that is the page lying about its own state.
-**Call `keep` on every change** in a page that takes more than one tap to answer — the page has no
-storage of its own, so without it closing the screen loses everything not yet sent.
+**A reopened page must prefill from `window.deckhand.draft ?? window.deckhand.answer`.** **Call
+`keep` on every change** in a page needing more than one tap — the page has no storage of its own.
 
 ## Asking several things at once, out loud
 
-A phone dictates better than it types, so a page can **declare** its questions rather than only
-draw them — the app then renders one card per question with its own talk mark:
+A page can **declare** its questions; the app renders one card per question with a talk mark:
 
 ```html
 <script type="application/json" id="deckhand-aloud">
@@ -167,53 +120,37 @@ draw them — the app then renders one card per question with its own talk mark:
 </script>
 ```
 
-That block is the whole of what you edit — `aloud.html` renders itself from it, so the questions
-exist once. The answer arrives as `{"answer": {id: words}, "completedCount": n}`, an unanswered
-question left out rather than sent empty; every way the block can be wrong renders as plain HTML.
+That block is all you edit — `aloud.html` renders from it. The answer is
+`{"answer": {id: words}, "completedCount": n}`, unanswered questions left out.
 
 ## Saying where a long job has got to
 
-Some work is too long to report in a sentence and too slow to be worth interrupting for: a
-migration, a port, a release, anything that crosses a compaction. A **logbook** is a slip that
-asks nothing — one page the person can look at whenever they wonder how it is going, so they
-never have to ask.
+A **logbook** is a slip that asks nothing: one page showing how a long job is going.
 
 ```bash
 LOG=~/.claude/skills/deckhand/scripts/logbook.py
 python3 $LOG start "Moving the reader onto the new store" --standing "Porting first, cutover last."
 python3 $LOG add done "Read every caller" "Nine, and two of them are in the manager."
-python3 $LOG add blocked "Export needs an Apple account" "There is no token on this Mac."
 python3 $LOG standing "Everything but the cutover is done."
 python3 $LOG finish "Cut over at 16:40, no session lost its place."
 ```
 
-`add` takes a state — `done`, `doing`, `blocked` or `note` — a heading of at most 80 characters,
-and one line of at most 300 saying what happened. Flags go **after** the verb. Each command
-rewrites the whole page, so an entry costs one command and no thought; that cheapness is the
-design, because a logbook that costs a page rewrite per entry stops getting entries by the third
-one. A longer line is refused rather than cut, so nothing you thought you recorded is missing.
+`add` takes a state (`done`, `doing`, `blocked`, `note`), a heading of at most 80 characters and
+one line of at most 300; a longer one is refused, not cut. Flags go **after** the verb.
 
-**Reach for one** when the job has more than a handful of steps, when it will outlive this
-session, or when it has a part the person will want to see coming — a cutover, a deletion, the
-thing that will need them. Start it as you start the job: a logbook written at the end is a
-report, and they already get those. **Do not** write one for work you will finish in a few
-minutes, or to narrate what you are about to say in the session anyway.
+**Reach for one** when the job has more than a handful of steps, will outlive this session, or has
+a part the person will want to see coming. Start it with the job, not at the end. **Do not** write
+one for work done in a few minutes, or to narrate what you say in the session anyway.
 
-**A logbook belongs to the folder, not to this session**, which is the one place it differs from
-every other slip. It is written flat, so another session working here appends to the same book
-with the same command and a compaction, a `/clear` or a handover loses none of it. Its state is
-`.deckhand/artifacts/<slug>.log.json`, beside the page; `--slug` gives a second job its own book
-and `--session "$CLAUDE_CODE_SESSION_ID"` pins one to this session if you really want that.
-
-Say once that it is there; after that it is theirs to open. The page carries a single field as
-well — a note back, so someone reading "blocked on X" on a train can say what to do instead. It
-arrives like any other answer, so `answer.py logbook` reads it, and rewriting the page does not
-take it away.
+**A logbook belongs to the folder**: written flat, so another session here appends to the same
+book and a compaction, `/clear` or handover loses nothing. State is
+`.deckhand/artifacts/<slug>.log.json`; `--slug` gives a second job its own book,
+`--session "$CLAUDE_CODE_SESSION_ID"` pins one to this session. Say once that it is there. Its one
+field is a note back, read with `answer.py logbook`.
 
 ## Asking for the person outright
 
-When what is needed is not an answer but attention — `deckhand notify "The migration is done,
-tests green."`, or by hand:
+For attention rather than an answer: `deckhand notify "The migration is done, tests green."`, or
 
 ```bash
 curl -s -X POST "http://127.0.0.1:4180/sessions/$CLAUDE_CODE_SESSION_ID/notify" \
@@ -221,42 +158,33 @@ curl -s -X POST "http://127.0.0.1:4180/sessions/$CLAUDE_CODE_SESSION_ID/notify" 
   -H 'content-type: application/json' -d '{"line":"The migration is done, tests green."}'
 ```
 
-`{"pushed": true}`, or `{"pushed": false, "why": …}` — the one Lock Screen card a session raises
-for itself, so the one a folder may refuse outright. A refusal means the person does **not** know,
-and you are expected to say so rather than assume otherwise.
+`{"pushed": false, "why": …}` means a folder refused and the person does **not** know; say so.
 
-## Mermaid, both halves
+## Mermaid
 
-A ` ```mermaid ` fence in what you **say** renders as a picture on the phone — transcript,
-briefing and report alike. It does **not** render inside a slip: that CSP sandboxes the page, and
-the renderer is injected into the transcript view rather than carried. Draw in a slip with SVG.
+A ` ```mermaid ` fence in what you **say** renders on the phone; inside a slip it does not — use SVG.
 
 ## The project's header
 
-The phone draws `.deckhand/header.jpg` (or `.png`/`.webp`) faintly behind the session page's title.
-If it is missing and the project already has a picture that suits a wide banner — logo, hero,
-screenshot, cover art — make one once, **without asking**: about 1200×360, under 300 KB, calm
-enough for a title over it. `sips --resampleWidth 1200 SRC --out TMP`, then
+The phone draws `.deckhand/header.jpg` (or `.png`/`.webp`) faintly behind the session's title. If
+missing and the project has a picture that suits a wide banner — logo, hero, screenshot, cover art
+— make one once, **without asking**: about 1200×360, under 300 KB, calm enough for a title.
+`sips --resampleWidth 1200 SRC --out TMP`, then
 `sips --cropToHeightWidth 360 1200 TMP --out .deckhand/header.jpg -s format jpeg`; put `*` in
-`.deckhand/.gitignore` if it is not there. No suitable picture: skip it.
+`.deckhand/.gitignore` if not there. No suitable picture: skip it.
 
 ## What this never does
 
-The route is an authority choice, not a transport choice: the keyboard arrives as the person at
-the machine, the socket as another Claude session carrying none of their authority — and this
-surface is exactly what that wrapper exists to constrain.
+The socket arrives as another Claude session, carrying none of the person's authority.
 
-- **Never pass `route`.** It is the person's own setting, never your parameter.
-- **Never `POST /sessions/{id}/control`** — those are keystrokes the person presses, and `clear`
-  is the only irreversible thing in the app.
-- **Never `PUT /settings` or `PUT /sessions/{id}/filters`** — an agent that can rewrite a filter
-  chain can remove the filter that would have stopped it, quietly.
-- **Never `POST /projects/session`** — a process on a launch line nobody approved, in a folder
-  whose trust dialog was answered for a person. `start_session` (`POST /space/sessions`) is the
-  agent's door: the same two gates, and the new session stands beside the one that asked.
+- **Never pass `route`.** It is the person's setting, never your parameter.
+- **Never `POST /sessions/{id}/control`** — keystrokes the person presses; `clear` is irreversible.
+- **Never `PUT /settings` or `PUT /sessions/{id}/filters`** — an agent rewriting a filter chain can
+  remove the filter that would have stopped it.
+- **Never `POST /projects/session`** — `start_session` (`POST /space/sessions`) is the agent's
+  door: the same two gates, and the new session stands beside the one that asked.
 
-**None of this is enforced today.** One shared token means the daemon cannot tell an agent from a
-phone, and anything refused here `curl` still performs. These are rules kept, not rules held to.
+**None of this is enforced today** (one shared token; `curl` still does it). Rules kept, not held.
 
 ## More
 
