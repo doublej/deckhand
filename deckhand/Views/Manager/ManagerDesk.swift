@@ -15,29 +15,20 @@ final class ManagerDesk {
     var entries: [ManagerEntry] = []
     /// The Mac says a run is in flight. What draws the working line and what makes the poll fast.
     var working = false
-    /// Which of the three screens is showing: 0 the rail, 1 the manager, 2 the machines.
-    /// `ManagerShell` owns the gesture; this is the state it moves, so the rail's own foot can
-    /// reach either page without knowing about the drag.
-    var page = 0
+    /// Whether the drawer is pulled in. `ManagerShell` owns the gesture; this is the state it
+    /// moves, so anything — the rail's foot, a notification, the handle — can open it.
+    var open = false
 
-    /// Whether the manager panel is on screen.
-    ///
-    /// Kept as a name of its own rather than replaced by `page == 1` at every call site: the
-    /// panel's poll keys on it, and "the manager is showing" is what those places actually mean
-    /// — on the machines page the manager is not showing and must not be polling.
-    var open: Bool {
-        get { page == 1 }
-        set { page = newValue ? 1 : 0 }
-    }
+    /// The session whose page is under the drawer, if one is. Set by `SessionView`, which is
+    /// pushed from exactly one place, and sent with what is said so "this one" means it.
+    var viewing: String?
 
     /// Whether a session's own page is sitting on top of the rail.
     ///
-    /// The shell's swipe belongs to the rail and to the deck. Inside a session a sideways drag
-    /// already pages between that session's panes and a leading one already leaves it, so a
-    /// gesture that watched the whole screen there would be a third meaning for a drag that has
-    /// two — it took the pane swipes and the way out with them. Set by `SessionView`, which is
-    /// pushed from exactly one place.
-    var covered = false
+    /// The shell's whole-screen swipe belongs to the rail and to the deck. Inside a session a
+    /// sideways drag already pages between that session's panes and a leading one already leaves
+    /// it, so the drawer comes in there by its handle alone.
+    var covered: Bool { viewing != nil }
     /// What is typed but not sent.
     var draft = ""
     var sending = false
@@ -69,10 +60,12 @@ final class ManagerDesk {
     /// what "open deckhand and show me its slips" is. Each is cleared by whoever acts on it.
     var route: ManagerRoute?
     var pane: String?
+    /// One slip a link named, opened by that session's page (`Viewing`) once it is up.
+    var slip: LinkedSlip?
 
-    /// Which half of the panel is showing. The tray first: the panel is where you come to see
-    /// what needs you, and the manager is who you ask about it.
-    var tab: ManagerTab = .tray
+    /// Which half of the panel is showing. The conversation first: the drawer is pulled in to
+    /// say something, and the tray is one tap over. `pullIn` picks the tray when it has news.
+    var tab: ManagerTab = .manager
     /// Every session that needs the person, and what happened to the ones that did.
     var tray = TrayState()
     /// An answer that landed but did not reach its session, said once at the top of the tray.
@@ -84,6 +77,16 @@ final class ManagerDesk {
     /// The newest manager entry read on its own tab, so a reply landing on the tray says so.
     var readEntry = 0
     private static let seenKey = "deckhand.tray.seen"
+
+    /// The manager has said something since its half was last on screen.
+    var unread: Bool { (entries.last?.id ?? 0) > readEntry }
+
+    /// Open the drawer on whichever half has news: the tray when slips wait and the manager has
+    /// said nothing new, the conversation otherwise.
+    func pullIn(waiting: Int) {
+        tab = waiting > 0 && !unread ? .tray : .manager
+        open = true
+    }
 
     func markSeen() {
         seen = tray.cursor
@@ -165,10 +168,12 @@ extension AppModel {
     /// The Mac never makes this wait for a model — a run in flight comes back as `working` and
     /// the answer arrives on a later poll — so this is a cheap call whatever the manager is
     /// doing, and it is why the panel can poll at a second while it is thinking.
-    func pollManager() async {
+    /// `watching: false` is the drawer's own slow look while it is closed, which keeps the
+    /// handle's unread dot honest without telling the Mac anybody is reading.
+    func pollManager(watching: Bool = true) async {
         guard let client = settings.client() else { return }
         do {
-            let feed = try await client.manager(since: manager.cursor)
+            let feed = try await client.manager(since: manager.cursor, watching: watching)
             for command in manager.absorb(feed) {
                 if command.action == "open_pane" {
                     manager.pane = command.target
@@ -201,7 +206,7 @@ extension AppModel {
         manager.working = true
         defer { manager.sending = false }
         do {
-            manager.landed(try await client.askManager(words), from: words)
+            manager.landed(try await client.askManager(words, viewing: viewed), from: words)
         } catch {
             manager.pending.removeAll { $0 == words }
             manager.draft = words
@@ -222,7 +227,7 @@ extension AppModel {
         defer { manager.hearing = false }
         if !confirms { manager.working = true }
         await run {
-            let heard = try await client.upload(clip: clip, say: !confirms)
+            let heard = try await client.upload(clip: clip, say: !confirms, viewing: viewed)
             if let error = heard.error {
                 self.manager.working = false
                 self.manager.failure = error
@@ -237,24 +242,29 @@ extension AppModel {
         if !confirms { await pollManager() }
     }
 
+    /// The session under the drawer, as the listing last described it.
+    private var viewed: Session? {
+        manager.viewing.flatMap { id in sessions.first { $0.sessionId == id } }
+    }
+
     /// The review card's Send, with the words as they stand on it.
     func sendReviewed(_ words: String) async {
         manager.review = nil
         await askManager(words)
     }
 
-    /// Where a tapped notification goes. The manager pops any session page first, so the panel
-    /// is not opened underneath one with its swipe switched off; a session is found in a fresh
-    /// listing, for the cold-launch reason `onOpenURL` gives.
+    /// Where a tapped notification goes. The manager's drawer comes in over whatever is on
+    /// screen; a session is found in a fresh listing, for the cold-launch reason `onOpenURL` gives.
     func open(_ target: Notifier.Target) async {
         switch target {
         case .manager:
-            manager.route = .list
             manager.tab = .manager
             manager.open = true
         case .session(let id):
             await refreshSessions()
             manager.route = .session(id)
+        case .link(let link):
+            await follow(link)
         }
     }
 
@@ -280,4 +290,11 @@ extension AppModel {
         if route != .refresh { manager.open = false }
         manager.route = route
     }
+}
+
+/// A slip a `deckhand://` link named, and the session it belongs to — a slip id is only unique
+/// within its session's folder.
+struct LinkedSlip: Equatable {
+    let session: String
+    let id: String
 }

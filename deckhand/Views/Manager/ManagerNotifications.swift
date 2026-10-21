@@ -12,14 +12,20 @@ import UserNotifications
 final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     static let shared = Notifier()
 
-    /// What a tapped notification is about: the manager's chat, or one session's.
+    /// What a tapped notification is about: the manager's chat, one session's, or anywhere a
+    /// `deckhand://` link names.
     enum Target: Equatable {
         case manager
         case session(String)
+        case link(DeepLink)
 
+        /// `link: deckhand://…` first, so a notification can open a pane or one slip; then
         /// `deckhand: manager` from the manager, `session: <id>` from anything about one session.
         init?(_ info: [AnyHashable: Any]) {
-            if let session = info["session"] as? String, !session.isEmpty {
+            if let text = info["link"] as? String, let url = URL(string: text),
+               let link = DeepLink(url) {
+                self = .link(link)
+            } else if let session = info["session"] as? String, !session.isEmpty {
                 self = .session(session)
             } else if info["deckhand"] as? String == "manager" {
                 self = .manager

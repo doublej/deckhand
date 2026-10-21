@@ -36,6 +36,9 @@ MANAGER = prompts.load("manager")
 #: Added to the system prompt for a run nobody is watching the panel for: every word of it is
 #: going to be read off a Lock Screen, so it is written for one.
 AWAY = prompts.load("manager-away")
+#: Put in front of what is said with the panel pulled over a session's page, so "this one" has a
+#: referent. The entry the panel draws stays the person's own words.
+VIEWING = prompts.load("manager-viewing")
 MODEL = MANAGER.settings["model"]
 TIMEOUT = MANAGER.settings["timeout"]
 MAX_TURNS = MANAGER.settings["max_turns"]
@@ -106,11 +109,17 @@ def speak(role: str, text: str) -> dict:
     return entry
 
 
-def ask(text: str) -> dict:
-    """Say something to the manager. Returns the entry it was written as, at once."""
+def ask(text: str, viewing: str = "", viewing_name: str = "") -> dict:
+    """Say something to the manager. Returns the entry it was written as, at once.
+
+    `viewing` is the session the phone had on screen behind the panel, if any.
+    """
     entry = talk.say("person", text)
     if entry:
-        _queue.append(entry["text"])
+        said = entry["text"]
+        if viewing:
+            said = f"{VIEWING.filled(id=viewing, name=viewing_name or viewing)}\n\n{said}"
+        _queue.append(said)
         _wake.set()
     return entry
 

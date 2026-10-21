@@ -39,14 +39,14 @@ struct SessionView: View {
     /// It was five. Slips, files and orders were three swipes of them, and each was a screen you
     /// had to arrive at before you could find out whether it had anything on it — so they are
     /// squares on the dashboard now, carrying their own counts, and the pane itself opens on a
-    /// sheet from the square. What is left is a carousel of reading: what it said, where you are,
-    /// and what it did, in that order and in one direction.
+    /// sheet from the square. What is left is a carousel: what it said, what it did, and where
+    /// you are — the two reads first, so the summary is one swipe away rather than two.
     ///
     /// The transcript is first because it is what a session is opened to read — JJ's call. The
     /// order here is the swipe order, so the leading edge you leave the page from is still the
     /// first pane's.
     enum Pane: String, CaseIterable {
-        case transcript = "Transcript", dashboard = "Dashboard", summary = "Summary"
+        case transcript = "Transcript", summary = "Summary", dashboard = "Dashboard"
     }
 
     /// The session as the Mac last described it, not as it was when the page opened. A compact,
@@ -129,8 +129,7 @@ struct SessionView: View {
         .background(Palette.surfaceGround)
         // A sideways drag in here is already the panes' and the leading edge is already the way
         // out. The manager's swipe stands down for as long as this page is up — see `ManagerShell`.
-        .onAppear { model.manager.covered = true }
-        .onDisappear { model.manager.covered = false }
+        .modifier(Viewing(model: model, session: session, say: say))
         // No navigation bar. It was a whole band holding one chevron, stacked above a header
         // that already named the page — two rows of chrome before a word of content. The
         // chevron moved into the header and the band went with it.
@@ -283,13 +282,13 @@ struct SessionView: View {
     private var pane: some View {
         TabView(selection: $showing) {
             TranscriptView(model: model, session: session, earlier: $earlier).tag(Pane.transcript)
+            BriefingView(model: model, session: session).tag(Pane.summary)
             DashboardView(model: model,
                           session: session,
                           say: say,
                           opened: $square,
                           confirming: $confirming)
                 .tag(Pane.dashboard)
-            BriefingView(model: model, session: session).tag(Pane.summary)
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
         .animation(Motion.opening, value: showing)

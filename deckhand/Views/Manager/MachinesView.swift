@@ -1,7 +1,7 @@
 import DeckhandKit
 import SwiftUI
 
-/// Every machine the Mac can reach, one swipe past the manager.
+/// Every machine the Mac can reach, on a sheet from the rail's foot.
 ///
 /// **What this page is for.** The rail answers "what can I talk to" — a machine that is asleep
 /// simply contributes nothing to it, which is right, and which is exactly why a person needs
@@ -14,6 +14,7 @@ import SwiftUI
 /// this app already says one way.
 struct MachinesView: View {
     @Bindable var model: AppModel
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -52,7 +53,7 @@ struct MachinesView: View {
     private func row(_ machine: Machine) -> some View {
         Button {
             model.show(only: machine)
-            withAnimation(Motion.opening) { model.manager.page = 0 }
+            dismiss()
         } label: {
             slab(machine)
         }
@@ -111,7 +112,7 @@ struct MachinesView: View {
         if model.onlyMachine != nil {
             Button("Show every machine") {
                 model.show(only: nil)
-                withAnimation(Motion.opening) { model.manager.page = 0 }
+                dismiss()
             }
             .font(Typography.hint)
             .foregroundStyle(Palette.tint)

@@ -66,7 +66,7 @@ is a field on a row and a way to slice the list, never an address it dials.
 | Word | Means | Not |
 |---|---|---|
 | **manager** | The one Claude session living inside the daemon that the phone's panel talks to. Always "the manager" — there is one. | agent, assistant, bot, copilot |
-| **panel** | The screen it is talked to on, one swipe left of the rail. | chat, console, tab |
+| **panel** | The drawer it is talked to in, pulled in from the trailing edge of any screen. | chat, console, tab |
 | **entry** | One line of that conversation, numbered. Five kinds: person, manager, act, command, note. | message, event |
 | **act** | One tool the manager ran, drawn as a line rather than a card. | action, tool call (in the UI) |
 | **command** | Something the manager asked the phone to do. | instruction, deep link |

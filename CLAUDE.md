@@ -13,7 +13,7 @@ the Mac stores the clip, transcribes it with utt, and writes the text straight i
 own inbox socket, the way one Claude session messages another. The daemon is controlled from its
 own page inside utt.
 
-One swipe left of the sessions list is **the manager** — a Claude Agent SDK conversation living
+A drawer pulled in from any screen's edge is **the manager** — a Claude Agent SDK conversation living
 inside the daemon that reads every session, speaks into them, starts new ones, changes this Mac's
 switches and moves the phone's own screen. What it may not do is one sentence and it is
 load-bearing: it never types into a pane. See [docs/manager.md](docs/manager.md).

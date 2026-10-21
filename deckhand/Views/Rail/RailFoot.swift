@@ -15,6 +15,8 @@ struct RailFoot: View {
     @Bindable var model: AppModel
     @Binding var showSettings: Bool
     @Binding var showProjects: Bool
+    /// The machines, on a sheet: the page you visit when something is missing, not one you live on.
+    @State private var showMachines = false
 
     /// Two centred rows: what the rail can tell you and what you can do with it, and under
     /// them the app's own name.
@@ -41,6 +43,7 @@ struct RailFoot: View {
         // The room the mark takes comes out of the bottom margin rather than pushing the
         // controls up the screen. The home indicator is still the safe area's job.
         .padding(.top, Spacing.small)
+        .sheet(isPresented: $showMachines) { MachinesView(model: model) }
     }
 
     /// What remains of the line once the mark has left it, as a cluster in the middle rather
@@ -77,11 +80,10 @@ struct RailFoot: View {
                 model.showsHidden.toggle()
             }
             Button("Settings", systemImage: "gearshape") { showSettings = true }
-            // The panel is reached by swiping the screen left, and a gesture nobody is told
-            // about is not a way in for somebody using VoiceOver. Last in the row because it
-            // is the one thing here that is a place rather than a switch.
+            // The drawer has its handle and the rail's swipe; this is the third way in, kept
+            // because it carries the count where the rest of the rail's state already is.
             Button {
-                withAnimation(Motion.opening) { model.manager.page = 1 }
+                withAnimation(Motion.opening) { model.manager.pullIn(waiting: waiting) }
             } label: {
                 // How many slips wait across the rail, so the way to the tray says why to go.
                 HStack(spacing: Spacing.xxs) {
@@ -94,9 +96,7 @@ struct RailFoot: View {
             // Only once there is more than one machine. On a rail that has always been one Mac
             // this is a page saying "there is one machine", which is what the rail already says.
             if model.namesMachines {
-                Button("Machines", systemImage: "rectangle.stack") {
-                    withAnimation(Motion.opening) { model.manager.page = 2 }
-                }
+                Button("Machines", systemImage: "rectangle.stack") { showMachines = true }
                 .accessibilityIdentifier("open-machines")
             }
         }

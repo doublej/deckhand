@@ -65,9 +65,13 @@ def leave_manager() -> None:
 
 
 @router.post("/manager/say", status_code=201)
-def say_to_manager(text: str = Body(embed=True)) -> dict:
+def say_to_manager(
+    text: str = Body(embed=True),
+    viewing: str = Body(default="", description="the session on screen behind the panel"),
+    viewing_name: str = Body(default="", description="that session's name"),
+) -> dict:
     """Say something to the manager. Answers with the entry, not with the reply."""
-    entry = agent.ask(text)
+    entry = agent.ask(text, viewing, viewing_name)
     if not entry:
         raise HTTPException(status_code=400, detail="nothing to say")
     return {"entry": entry, "working": True}
@@ -77,6 +81,8 @@ def say_to_manager(text: str = Body(embed=True)) -> dict:
 async def speak_to_manager(
     file: UploadFile,
     say: bool = Query(default=True, description="false to transcribe only, for the review card"),
+    viewing: str = Query(default="", description="the session on screen behind the panel"),
+    viewing_name: str = Query(default="", description="that session's name"),
 ) -> dict:
     """A clip for the manager: utt turns it into text and the manager is asked with it.
 
@@ -104,7 +110,7 @@ async def speak_to_manager(
     # word list could never reach: the manager runs no filter chain. `notes` is what the card
     # draws under the words, so a swap is never silent here either.
     spoken, swaps = aliases.applied(heard.text)
-    entry = agent.ask(spoken) if say else {}
+    entry = agent.ask(spoken, viewing, viewing_name) if say else {}
     return {"text": spoken, "error": None, "said": bool(entry), "entry": entry or None,
             "notes": swaps}
 

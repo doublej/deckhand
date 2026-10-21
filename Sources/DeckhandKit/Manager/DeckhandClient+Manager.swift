@@ -16,21 +16,29 @@ public extension DeckhandClient {
 
     /// Say something to the manager. Answers with the entry it was written as, not with the
     /// reply: the Mac never makes the phone wait for a model, and the reply arrives by poll.
+    ///
+    /// `viewing` is the session whose page the panel was pulled in over, so "this one" means it.
     @discardableResult
-    func askManager(_ text: String) async throws -> ManagerEntry {
-        struct Asked: Encodable { let text: String }
+    func askManager(_ text: String, viewing: Session? = nil) async throws -> ManagerEntry {
         struct Answer: Decodable { let entry: ManagerEntry }
         var req = request(.post, "manager/say")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let body = try JSONEncoder().encode(Asked(text: text))
+        let body = try JSONEncoder().encode(["text": text,
+                                             "viewing": viewing?.sessionId ?? "",
+                                             "viewing_name": viewing?.name ?? ""])
         let answer: Answer = try decode(try await send(req, body: body))
         return answer.entry
     }
 
     /// A clip spoken into the panel. `say: false` transcribes only, for the review card.
-    func upload(clip: URL, say: Bool = true) async throws -> ManagerHeard {
+    func upload(clip: URL, say: Bool = true, viewing: Session? = nil) async throws -> ManagerHeard {
         let boundary = "deckhand.\(UUID().uuidString)"
-        var req = request(.post, "manager/audio?say=\(say)")
+        var path = "manager/audio?say=\(say)"
+        if let viewing {
+            let name = viewing.name.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ""
+            path += "&viewing=\(viewing.sessionId)&viewing_name=\(name)"
+        }
+        var req = request(.post, path)
         req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         // The Mac transcribes before answering, and utt's first request loads the model. The
         // same 200 seconds a session's clip gets, and for the same reason.

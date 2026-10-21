@@ -47,12 +47,11 @@ struct DeckhandApp: App {
                 // `manager.route` rather than a second slot beside it: the rail already acts on
                 // exactly this ask, from the manager, and a second way to say "open this session"
                 // is a second place the answer can drift.
+                //
+                // Every other `deckhand://` link goes the same way — `DeepLink` holds the shapes.
                 .onOpenURL { url in
-                    guard let opened = CardLink.session(openedBy: url) else { return }
-                    Task {
-                        await model.refreshSessions()
-                        model.manager.route = .session(opened)
-                    }
+                    guard let link = DeepLink(url) else { return }
+                    Task { await model.follow(link) }
                 }
         }
     }

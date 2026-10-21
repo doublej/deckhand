@@ -1,129 +1,191 @@
 import DeckhandKit
 import SwiftUI
 
-/// The rail, the manager and the machines, side by side, with the screen sliding between them.
+/// The manager as a drawer: pulled in over whatever screen is up, and put back to leave it
+/// exactly where it was.
 ///
-/// **Why a shell and not a `TabView(.page)`.** Paging a `TabView` is a UIKit pan inside the view,
-/// and the rail is a `List`: that pan would run against every row's own gestures with no say in
-/// which drags it answers to. This needs the say.
+/// It was a screen of its own, the rail's neighbour, which meant reaching it from a session took
+/// three moves — out, across, and a tap on its tab — and it was off entirely while a session's
+/// page was up. A drawer is reached from anywhere and costs nothing to leave.
 ///
-/// **Why the whole screen and not a strip at the edge of it.** It was a 24pt clear strip overlaid
-/// on the trailing edge, taking the touch before the `List` could see it. That works and it is
-/// 24 points wide, which means aiming at an edge to reach a screen — and it cost that strip its
-/// vertical scrolling, the same price `SessionView.back` pays for its 20. Widening a strip only
-/// makes both worse: a bigger patch of dead scrolling, still a patch.
+/// **Two ways in, and a handle is the one that is everywhere.** A small pill sits on the trailing
+/// edge of every screen; tap it or drag it in. On the rail the whole screen also answers a
+/// trailing-going sideways drag, as it always has: `simultaneousGesture` **watches** every drag
+/// without claiming any — the rail scrolls, a row opens on a tap and talks on a hold, exactly as
+/// before — and moves the drawer for that one shape. Every row action lives on the leading edge
+/// (`SessionListView.row`), so a leading-going drag is the row's and this never answers to one.
+/// On a session's page (`ManagerDesk.covered`) that whole-screen swipe stands down: a sideways
+/// drag there already pages the panes and a leading one leaves, so only the handle opens it.
 ///
-/// So it takes the touch from nothing at all. `simultaneousGesture` **watches** every drag on the
-/// screen without claiming any of them — the rail scrolls, a row opens on a tap, a row talks on a
-/// hold, all exactly as before — and this moves the screen for one shape of drag: sideways rather
-/// than up the page, and going the one way there is something to reveal. Every row action lives
-/// on the leading edge now (`SessionListView.row`), so a leading-going drag is the row's and this
-/// never answers to one. What is left is a gesture the rail has no use for, which is what lets it
-/// be the whole screen.
+/// **Out** is the dimmed strip left showing, or a trailing-going drag on the drawer itself — the
+/// way it came in, reversed.
 ///
-/// It stands down entirely while a session's page is up (`ManagerDesk.covered`). This shell wraps
-/// the whole app, so without that it was a *third* meaning for a sideways drag on a screen that
-/// already has two — it took `SessionView`'s pane paging and the leading-edge way out with it.
-///
-/// The panel opens the other way too, from the glyph in `RailFoot`, and so does the machines
-/// page. A gesture nobody is told about is not a way in for somebody using VoiceOver.
-///
-/// **Three screens rather than two**, and the machines page is the far one on purpose: it is
-/// the one a person visits when something is missing, not the one they live on. One drag moves
-/// one screen — never two — so a flick from the rail can never overshoot the manager.
+/// The handle is a strip of touch the size of a thumb, not an edge: a clear strip down the whole
+/// edge costs its width in vertical scrolling, the price `SessionView.back` pays for its 20.
 struct ManagerShell<Content: View>: View {
     @Bindable var model: AppModel
     @ViewBuilder let content: () -> Content
 
-    /// How far the finger has taken the screen, added to wherever it already was. Zero at rest.
+    /// How far the finger has pulled the drawer, added to wherever it already was: positive is
+    /// further in. Zero at rest.
     @State private var drag: CGFloat = 0
     @Environment(\.layoutDirection) private var direction
 
-    /// Which way the screen moves. `HStack` already lays its children out right-to-left in a
-    /// right-to-left reading, so revealing the second one means moving the stack the other way —
-    /// the sign is the whole of the difference and there is no second code path.
-    private var sign: CGFloat { direction == .rightToLeft ? -1 : 1 }
+    /// What of the screen behind stays showing, dimmed, as the place to tap to put it back.
+    private var margin: CGFloat { 44 }
+    /// Computed rather than `static let`, which a generic type may not have.
+    /// Wider than this and a line of the conversation is too long to read; a phone on its side is.
+    private var widest: CGFloat { 480 }
 
-    /// The far edge of the stack, as a page index. One more page is one more entry here and
-    /// one more child below it; nothing else in this file counts screens. A computed property
-    /// rather than a `static let`, which a generic type may not have.
-    private var last: Int { 2 }
+    private var desk: ManagerDesk { model.manager }
+
+    /// Which way is "in". `layoutDirection` rather than a constant, so the drawer comes from the
+    /// trailing edge in a right-to-left reading too; the sign is the whole of the difference.
+    private var sign: CGFloat { direction == .rightToLeft ? -1 : 1 }
 
     var body: some View {
         GeometryReader { geometry in
-            let width = geometry.size.width
-            HStack(spacing: 0) {
+            let width = min(geometry.size.width - margin, widest)
+            let shown = revealed(width)
+            ZStack(alignment: .trailing) {
                 content()
-                    .frame(width: width)
-                    // Nothing behind the panel is reachable while it is open: it is off the
-                    // screen, and a stray touch landing on a row you cannot see is worse than
-                    // no touch at all.
-                    .disabled(model.manager.page != 0)
-                ManagerView(model: model)
-                    .frame(width: width)
-                    .disabled(model.manager.page != 1)
-                MachinesView(model: model)
-                    .frame(width: width)
-                    .disabled(model.manager.page != 2)
+                    // Nothing behind the drawer is reachable while it is in: a stray touch on a
+                    // row you can barely see is worse than no touch at all.
+                    .disabled(desk.open)
+                    .accessibilityHidden(desk.open)
+                    .simultaneousGesture(swipe(width))
+                scrim(shown / width)
+                drawer(width, shown: shown)
+                handle(width)
+                    .opacity(shown > 0 ? 0 : 1)
             }
-            .frame(width: width * CGFloat(last + 1), alignment: .leading)
-            .offset(x: sign * offset(width))
-            .simultaneousGesture(slide(width))
+        }
+        // While it is closed, a slow look at the conversation — `watching: false`, so the Mac
+        // still pushes — keeps the handle's unread dot true. Open, `ManagerView` polls itself.
+        .task(id: desk.open) {
+            while !Task.isCancelled && !desk.open {
+                await model.pollManager(watching: false)
+                try? await Task.sleep(for: .seconds(15))
+            }
         }
     }
 
-    /// Where the stack sits: at rest, whichever page is up; mid-drag, wherever the finger is.
-    /// Clamped to one page either side, so a long drag cannot skip a screen.
-    private func offset(_ width: CGFloat) -> CGFloat {
-        let page = CGFloat(model.manager.page)
-        let settled = -width * page
-        return min(-width * max(0, page - 1), max(-width * min(CGFloat(last), page + 1),
-                                                  settled + drag))
+    /// What is left of the screen behind, dimmed as far as the drawer is in, and the place to tap
+    /// to put it back.
+    private func scrim(_ fraction: CGFloat) -> some View {
+        Color.black
+            .opacity(0.45 * fraction)
+            .ignoresSafeArea()
+            .allowsHitTesting(desk.open)
+            .onTapGesture { settle(open: false) }
+            .accessibilityHidden(true)
     }
 
-    /// The drag that moves the screen, watched for anywhere on it.
-    ///
-    /// A real minimum distance, or a tap becomes a one-pixel drag and the screen twitches under
-    /// every touch.
-    private func slide(_ width: CGFloat) -> some Gesture {
+    private func drawer(_ width: CGFloat, shown: CGFloat) -> some View {
+        ManagerView(model: model)
+            .frame(width: width)
+            .shadow(color: .black.opacity(shown > 0 ? 0.3 : 0), radius: 12)
+            // Out past the trailing edge by however much is not yet pulled in, and the shadow's
+            // width further when closed so none of it shows.
+            .offset(x: sign * (width - shown + (shown > 0 ? 0 : 24)))
+            .disabled(!desk.open)
+            .accessibilityHidden(!desk.open)
+            .simultaneousGesture(swipe(width))
+    }
+
+    /// How much of the drawer is in: all of it at rest when open, none when closed, and wherever
+    /// the finger is in between.
+    private func revealed(_ width: CGFloat) -> CGFloat {
+        min(width, max(0, (desk.open ? width : 0) + drag))
+    }
+
+    /// The pill on the trailing edge, and the count of slips waiting across the rail beside it so
+    /// it says why to pull. A dot when the manager has said something you have not read.
+    private func handle(_ width: CGFloat) -> some View {
+        pill
+            .padding(.trailing, 3)
+            .frame(width: 32, height: 104, alignment: .trailing)
+            .contentShape(Rectangle())
+            .onTapGesture { settle(open: true) }
+            .gesture(pull(width))
+            .accessibilityElement()
+            .accessibilityLabel("Manager")
+            .accessibilityValue(waiting > 0 ? "\(waiting) waiting" : "")
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction { settle(open: true) }
+            .accessibilityIdentifier("manager-handle")
+            .allowsHitTesting(!desk.open)
+    }
+
+    private var pill: some View {
+        HStack(spacing: Spacing.xxs) {
+            if waiting > 0 {
+                Text("\(waiting)")
+                    .font(.system(size: 11, weight: .bold).monospacedDigit())
+                    .foregroundStyle(Palette.lcdYellow)
+            }
+            VStack(spacing: Spacing.xxs) {
+                Circle()
+                    .fill(Palette.tint)
+                    .frame(width: 6, height: 6)
+                    .opacity(desk.unread ? 1 : 0)
+                Capsule()
+                    .fill(Palette.tint.opacity(0.7))
+                    .frame(width: 5, height: 52)
+            }
+        }
+    }
+
+    private var waiting: Int { model.visibleSessions.reduce(0) { $0 + $1.waitingPages } }
+
+    /// The handle's own drag: it follows the finger from the first point, wherever it goes.
+    private func pull(_ width: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 4, coordinateSpace: .global)
+            .onChanged { value in drag = -sign * value.translation.width }
+            .onEnded { value in finish(value, width) }
+    }
+
+    /// The whole-screen drag, watched for on the rail and on the drawer. A real minimum distance,
+    /// or a tap becomes a one-pixel drag and the screen twitches under every touch.
+    private func swipe(_ width: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 20, coordinateSpace: .global)
             .onChanged { value in
                 guard mine(value) else { return }
-                drag = sign * value.translation.width
+                drag = -sign * value.translation.width
             }
             // Whatever this turned into by the time the finger left, a drag this one has already
-            // moved the screen for is this one's to put down. Asking `mine` again here is how the
-            // screen ends up parked halfway: swipe out, change your mind, come back, let go.
+            // moved the drawer for is this one's to put down. Asking `mine` again here is how the
+            // drawer ends up parked halfway: swipe in, change your mind, come back, let go.
             .onEnded { value in
                 guard drag != 0 else { return }
-                settle(value, width)
+                finish(value, width)
             }
     }
 
-    /// Whether this drag is the one that moves the screen: sideways rather than up the page, and
-    /// pointing a way there is something to reveal.
-    ///
-    /// This is the whole of what keeps the rail's own gestures intact, and it is why nothing here
-    /// has to win an arbitration fight. A drag up or down the page is the list's. A leading-going
-    /// drag **on the rail** is the row's — every row action lives on that edge — which is why
-    /// going back is only ever answered to from a page that has something behind it.
+    /// Whether this drag is the one that moves the drawer: sideways rather than up the page, and
+    /// pointing the way there is something to move. Closed, only on the rail; open, anywhere on it.
     private func mine(_ value: DragGesture.Value) -> Bool {
-        guard !model.manager.covered else { return false }
-        let sideways = sign * value.translation.width
-        guard abs(sideways) > abs(value.translation.height) else { return false }
-        return sideways < 0 ? model.manager.page < last : model.manager.page > 0
+        guard abs(value.translation.width) > abs(value.translation.height) else { return false }
+        let inward = -sign * value.translation.width > 0
+        return desk.open ? !inward : inward && !desk.covered
     }
 
-    /// One page on or one page back, decided on where it was let go *and* where it was going. A
-    /// flick that covered a third of the screen means the same thing as a slow drag across most
-    /// of it.
-    private func settle(_ gesture: DragGesture.Value, _ width: CGFloat) {
-        let moved = sign * gesture.translation.width
-        let thrown = sign * gesture.predictedEndTranslation.width
+    /// In or out, decided on where it was let go *and* where it was going: a flick that covered a
+    /// third of the drawer means the same as a slow drag across most of it.
+    private func finish(_ value: DragGesture.Value, _ width: CGFloat) {
+        let moved = -sign * value.translation.width
+        let thrown = -sign * value.predictedEndTranslation.width
         let far = abs(moved) > width / 3 || abs(thrown) > width / 2
-        let step = moved < 0 ? 1 : -1
+        settle(open: far ? moved > 0 : desk.open)
+    }
+
+    private func settle(open: Bool) {
         withAnimation(Motion.opening) {
-            if far { model.manager.page = min(last, max(0, model.manager.page + step)) }
+            if open && !desk.open {
+                desk.pullIn(waiting: waiting)
+            } else {
+                desk.open = open
+            }
             drag = 0
         }
     }

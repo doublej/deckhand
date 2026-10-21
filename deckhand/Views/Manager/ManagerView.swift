@@ -1,7 +1,7 @@
 import DeckhandKit
 import SwiftUI
 
-/// The manager panel: the rail, one swipe further left.
+/// The manager panel: the drawer pulled in over any screen, by its handle or a swipe on the rail.
 ///
 /// Everything else in this app speaks to a session. This speaks to the manager — one Claude
 /// session running inside the daemon that can read every session on the Mac, speak into them,
@@ -61,7 +61,7 @@ struct ManagerView: View {
         HStack(spacing: Spacing.medium) {
             tab("TRAY", .tray, count: desk.tray.waitingCount, unread: false)
             tab("MANAGER", .manager, count: 0,
-                unread: (desk.entries.last?.id ?? 0) > desk.readEntry || desk.working)
+                unread: desk.unread || desk.working)
         }
         .padding(.top, Spacing.extraSmall)
         .onChange(of: desk.entries.last?.id) { _, last in

@@ -183,8 +183,8 @@ and each is a line on `ManagerDesk` plus a case in `ManagerRoute` when it is wan
 - **No file tools.** `Read`, `Glob` and `Grep` would make the manager far more capable and would
   widen the phone's reach from "what a session touched" to "anything on the Mac". If it needs a
   file read, it can ask a session to read it.
-- **The panel polls only while it is open.** A command cannot reach a phone that has swiped away
-  from the panel until it swipes back.
+- **The panel polls fast only while it is open.** Closed, the drawer looks every 15 s with
+  `watching=false`, so a command reaches the phone within that and the Mac still pushes.
 - **No streaming below the block.** Text arrives one block at a time, which on a run that calls
   four tools is already the difference between a live conversation and a spinner.
 

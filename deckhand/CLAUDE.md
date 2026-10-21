@@ -13,7 +13,8 @@ to edit**; change `project.yml` and run `just generate`.
 `Views/Manager/` is the manager panel and everything about it, including its own `AppModel`
 extension — `deckhand/` is on the 16-file gate, so `ManagerDesk.swift` holds the state object and
 the model's half of it together, the way `Views/Rail/Linking.swift` already does.
-The panel opens on the tray (`Tray*.swift`), the manager's conversation one tap over — see
+The panel is a drawer (`ManagerShell`) and opens on the manager's conversation, the tray
+(`Tray*.swift`) one tap over — on the tray instead when slips wait and nothing is unread. See
 `docs/tray.md`.
 
 `Model` holds the listing and the selection; the files beside it are one feature each
@@ -229,9 +230,8 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   try to hit — and the page's own edge-swipe-to-leave has to be arbitrated against the paging
   rather than restricted to the first pane. It fires from **every** pane, and the strip that
   catches it wins by being drawn over them.
-- **There are three panes and all three are things you read: the transcript, the dashboard, the
-  briefing.** It was five. Slips, files and orders were three swipes each of which had to be
-  *arrived* at before you could learn whether it had anything on it, and a carousel you page past
+- **There are three panes: the transcript, the briefing, the dashboard** — the two reads first.
+  It was five. Slips, files and orders were three swipes each of which had to be *arrived* at before you could learn whether it had anything on it, and a carousel you page past
   on the way to the transcript is the wrong home for something you do once. They are squares now.
   The transcript opens first because it is what a session is opened to read, and the order here is
   the swipe order, so the leading edge that leaves the page is still the first pane's.
@@ -429,8 +429,9 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   `UIPasteboard.general.image` is what triggers the system's paste consent, and only then.
 - **A busy session cannot be made to read early.** The queue drains when a turn ends, so the
   phone's "force" is Escape and the button says "Stop the run so it reads this".
-- **The manager panel is a shell around the root, not a `TabView(.page)` around the rail**, and
-  its swipe takes the touch from nothing. Paging a `TabView` is a UIKit pan *inside* the view,
+- **The manager panel is a drawer over the root, pulled in by a handle on every screen**, and on
+  the rail also by a swipe that takes the touch from nothing. The handle is a thumb-sized patch,
+  not an edge strip, and the swipe below is the rail's alone. Paging a `TabView` is a UIKit pan *inside* the view,
   with no say in which drags it answers to; a clear strip overlaid on the trailing edge — what
   this was, 24pt of it — has the say but costs its own width in vertical scrolling, the same
   price `SessionView.back` pays for 20, and means aiming at an edge to reach a screen.
@@ -440,11 +441,11 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   **Every row action moved to the leading edge** (star *and* hide), so a leading-going drag is
   the row's and this never answers to one. **A drag up the page is the list's**, which is what
   keeps a full-screen gesture from costing what a strip cost.
-  **It stands down while a session's page is up** (`ManagerDesk.covered`, set by `SessionView`) —
+  **It stands down while a session's page is up** (`ManagerDesk.covered`, from `viewing`) —
   the shell wraps the whole app, so without that it is a third meaning for a sideways drag on a
   screen that already has two, and it silently took the pane paging and the way out with it.
   `ManagerPanelTests` holds one test per clause; they are the design, not decoration.
-  `RailFoot` gets a glyph too: a gesture nobody is told about is not a way in for VoiceOver.
+  The handle is the VoiceOver way in (`manager-handle`), and `RailFoot` keeps its glyph.
 - **An `accessibilityIdentifier` on a container renames every element under it.** The manager
   panel wore `manager-panel` on its outermost `VStack`, and SwiftUI pushed that name down onto
   the text field, both buttons and the talk mark — every one of them came back *called*
@@ -473,7 +474,8 @@ chooses between it and the web view. `Views/Projects/` is the picker that starts
   list. Both halves are needed and neither is visible from the other — the scheme is registered in
   `project.yml` (there is no checked-in Info.plist to put it in), and `App.swift` reads the URL.
   The shape is written once, in `DeckhandKit/LiveActivity.swift`: `Deck.cardLink` for the widget,
-  `CardLink.session(openedBy:)` for the app. `CardLink` sits **outside** that file's `#if os(iOS)`
+  `DeepLink` for the app, which reads every `deckhand://` link — its doc comment is the table of
+  shapes, and a notification carrying `link` in its payload goes the same way. `CardLink` sits **outside** that file's `#if os(iOS)`
   on purpose — `Deck` needs ActivityKit and cannot exist on the Mac, but a URL is only characters,
   so `just test` holds both ends of it down. Two things it caught: `lastPathComponent` answers
   `"/"` rather than empty for `deckhand://sessions/`, which would send the rail hunting for a
