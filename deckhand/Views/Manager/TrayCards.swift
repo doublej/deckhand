@@ -66,6 +66,33 @@ struct SlipQuestion: View {
     let row: TraySession
     let slip: TraySlip
     let open: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.extraSmall) {
+            Text(slip.title)
+                .font(Typography.prose.weight(.semibold))
+                .foregroundStyle(Palette.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+            SlipControls(ask: slip.ask, open: open) { json in
+                // A decision is signed with the phone's key; anything else goes as it always did.
+                slip.decision == nil
+                    ? await model.answerSlip(slip, of: row, valueJSON: json)
+                    : await model.answerTrayDecision(slip, of: row, valueJSON: json)
+            }
+        }
+    }
+}
+
+/// A slip's answers drawn by the app: two buttons, a list of rows, a field, or the way to the
+/// page. The tray asks a slip in place with these, and a decision's page has them as its bar —
+/// the only buttons a decision takes.
+struct SlipControls: View {
+    let ask: SlipAsk
+    /// The way to the page, for what cannot be answered here. Nil where the page is already on
+    /// screen: a pick then takes its typed answer in a field of its own.
+    let open: (() -> Void)?
+    /// Sends the value's JSON; answers why it did not go, or nil.
+    let send: (String) async -> String?
     @State private var sending = false
     @State private var failure: String?
     @State private var typed = ""
@@ -76,10 +103,6 @@ struct SlipQuestion: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.extraSmall) {
-            Text(slip.title)
-                .font(Typography.prose.weight(.semibold))
-                .foregroundStyle(Palette.textPrimary)
-                .fixedSize(horizontal: false, vertical: true)
             answers
                 .disabled(sending)
                 .opacity(sending ? 0.5 : 1)
@@ -92,39 +115,50 @@ struct SlipQuestion: View {
     }
 
     @ViewBuilder private var answers: some View {
-        switch slip.ask.kind {
+        switch ask.kind {
         case .confirm:
             HStack(spacing: Spacing.extraSmall) {
-                choice(slip.ask.decline ?? "No", filled: false) { send(SlipAsk.answer(false)) }
-                choice(slip.ask.accept ?? "Yes", filled: true) { send(SlipAsk.answer(true)) }
+                choice(ask.decline ?? "No", filled: false) { answer(SlipAsk.answer(false)) }
+                choice(ask.accept ?? "Yes", filled: true) { answer(SlipAsk.answer(true)) }
             }
         case .pick:
             VStack(spacing: Spacing.xxs) {
-                ForEach(slip.ask.options ?? [], id: \.self) { option in
-                    row(option, symbol: "circle") { send(SlipAsk.answer(option)) }
+                ForEach(ask.options ?? [], id: \.self) { option in
+                    row(option, symbol: "circle") { answer(SlipAsk.answer(option)) }
                 }
-                if slip.ask.other == true { row("Something else…", symbol: "ellipsis", act: open) }
+                if ask.other == true {
+                    if let open {
+                        row("Something else…", symbol: "ellipsis", act: open)
+                    } else {
+                        field("Something else")
+                    }
+                }
             }
         case .text:
-            HStack(spacing: Spacing.extraSmall) {
-                TextField(slip.ask.label ?? "Answer", text: $typed, axis: .vertical)
-                    .font(Typography.prose)
-                    .lineLimit(1...4)
-                    .padding(.horizontal, Spacing.extraSmall)
-                    .padding(.vertical, Spacing.xxs + 2)
-                    .background(RoundedRectangle(cornerRadius: Radius.small, style: .continuous)
-                        .fill(Palette.textPrimary.opacity(0.06)))
-                Button("Send", systemImage: "arrow.up") { send(SlipAsk.answer(words)) }
-                    .labelStyle(.iconOnly)
-                    .font(.system(size: 13, weight: .semibold))
-                    .frame(minWidth: Self.target, minHeight: Self.target)
-                    .contentShape(Rectangle())
-                    .disabled(words.isEmpty)
-            }
+            field(ask.label ?? "Answer")
         case .aloud:
-            row("Answer aloud", symbol: "waveform", act: open)
+            if let open { row("Answer aloud", symbol: "waveform", act: open) }
         case .page:
-            row("Open the slip", symbol: "doc.richtext", act: open)
+            if let open { row("Open the slip", symbol: "doc.richtext", act: open) }
+        }
+    }
+
+    /// A field and its send, for a text slip and for a pick's own answer.
+    private func field(_ label: String) -> some View {
+        HStack(spacing: Spacing.extraSmall) {
+            TextField(label, text: $typed, axis: .vertical)
+                .font(Typography.prose)
+                .lineLimit(1...4)
+                .padding(.horizontal, Spacing.extraSmall)
+                .padding(.vertical, Spacing.xxs + 2)
+                .background(RoundedRectangle(cornerRadius: Radius.small, style: .continuous)
+                    .fill(Palette.textPrimary.opacity(0.06)))
+            Button("Send", systemImage: "arrow.up") { answer(SlipAsk.answer(words)) }
+                .labelStyle(.iconOnly)
+                .font(.system(size: 13, weight: .semibold))
+                .frame(minWidth: Self.target, minHeight: Self.target)
+                .contentShape(Rectangle())
+                .disabled(words.isEmpty)
         }
     }
 
@@ -170,11 +204,11 @@ struct SlipQuestion: View {
 
     /// One tap, one answer: the controls stand down while it is in flight, because a second press
     /// is a second answer into the session.
-    private func send(_ json: String) {
+    private func answer(_ json: String) {
         sending = true
         failure = nil
         Task {
-            failure = await model.answerSlip(slip, of: row, valueJSON: json)
+            failure = await send(json)
             sending = false
         }
     }

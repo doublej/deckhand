@@ -6,13 +6,15 @@ struct Answerable {
     let slip: String
     let accept: String
     let decline: String
+    /// Set when the slip is a decision, which the card's Yes then signs for.
+    let hash: String?
 }
 
 extension Deck.ContentState {
     /// The slip this card can answer, when the Mac sent all three of its parts.
     var answerable: Answerable? {
         guard let slip, let accept, let decline else { return nil }
-        return Answerable(slip: slip, accept: accept, decline: decline)
+        return Answerable(slip: slip, accept: accept, decline: decline, hash: hash)
     }
 }
 
@@ -38,7 +40,7 @@ struct Answers: View {
     }
 
     private func choice(_ label: String, yes: Bool, fill: Color, ink: Color) -> some View {
-        Button(intent: AnswerSlip(session: deck.session, slip: ask.slip, yes: yes)) {
+        Button(intent: AnswerSlip(session: deck.session, slip: ask.slip, hash: ask.hash, yes: yes)) {
             Text(label)
                 .font(Typography.primaryRow)
                 .foregroundStyle(ink)

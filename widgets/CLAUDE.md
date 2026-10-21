@@ -28,8 +28,10 @@ number on the Lock Screen is drawn by iOS for free, and the card's own space goe
   the line is that slip's question — a Yes under any other sentence answers something unread.
   `AnswerSlip` posts `{"answer": bool}` and redraws the card at once; answering one of several
   moves the card to the next with a quiet update, never one that raises a swiped-away card.
-- **A confirm decision's card also carries `hash`** (the page's sha256), which `AnswerSlip` signs
-  over; a decision moves the card silently, its one alert is a notification — `docs/artifacts.md`.
+- **A confirm decision's card also carries `hash`** (the page's sha256), and `AnswerSlip` signs
+  the Yes over it with the phone's key (`deckhand/Decisions/PhoneKey.swift`, compiled into this
+  target only so the intent builds). A decision moves the card silently; its one alert is a
+  notification — `docs/artifacts.md`. No `hash` means a slip that is not a decision.
 - **`Kind` decodes unknown as `finished`, the quiet one.** The Mac is upgraded by a git pull and
   the phone by a rebuild, so they are routinely a version apart. A daemon that learns a louder
   kind must never be able to make an older phone louder than it was built to be — the same

@@ -147,12 +147,45 @@ struct ArtifactView: View {
     /// session's own page and that card is behind this one.
     @ViewBuilder private var saying: some View {
         if html != nil, aloud == nil {
-            SayOnPage(model: model,
-                      session: session,
-                      artifact: artifact,
-                      say: say,
-                      talk: talk,
-                      commented: { dismiss() })
+            VStack(spacing: 0) {
+                SayOnPage(model: model,
+                          session: session,
+                          artifact: artifact,
+                          say: say,
+                          talk: talk,
+                          commented: { dismiss() })
+                deciding
+            }
+        }
+    }
+
+    /// A decision's answer, drawn by the app and nowhere else: the page's own buttons cannot
+    /// answer one (`ArtifactPage.refusal`), because script on the page could press them with no
+    /// tap. These sign with the phone's key.
+    @ViewBuilder private var deciding: some View {
+        if let ask = artifact.decisionAsk {
+            VStack(alignment: .leading, spacing: Spacing.extraSmall) {
+                if artifact.answered {
+                    Text(artifact.answeredBy.map { "Answered on \($0)" } ?? "Answered")
+                        .font(Typography.hint)
+                        .foregroundStyle(Palette.textSecondary)
+                } else if artifact.expired == true {
+                    Text("This decision has expired")
+                        .font(Typography.hint)
+                        .foregroundStyle(Palette.textSecondary)
+                } else {
+                    if let action = artifact.action, !action.isEmpty {
+                        Text(action)
+                            .font(Typography.hint)
+                            .foregroundStyle(Palette.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    SlipControls(ask: ask, open: nil) { await decide($0) }
+                }
+            }
+            .padding(Spacing.small)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Palette.surfaceGround)
         }
     }
 
@@ -187,8 +220,31 @@ struct ArtifactView: View {
 
     /// The page called `window.deckhand.respond`. Straight on to the Mac: the answer is the
     /// person's own and nothing here edits it or asks them to confirm it twice.
+    ///
+    /// Not for a decision. The bridge already throws there, but any script on the page can post
+    /// to the handler directly, so the refusal is here as well.
     private func respond(_ json: String) {
+        guard !artifact.isDecision else {
+            said = .refused("Answer this decision with the buttons below the page")
+            return
+        }
         Task { _ = await answering(json) }
+    }
+
+    /// A decision answered from the bar: signed, sent, and the screen closes once it went.
+    private func decide(_ json: String) async -> String? {
+        do {
+            let sent = try await model.answerDecision(artifact, in: session.sessionId,
+                                                      valueJSON: json)
+            said = sent.went ? .sent(sent.deliveredBy) : .refused(refusal(sent))
+            guard sent.went else { return refusal(sent) }
+            model.clearDraft(for: artifact)
+            dismiss()
+            return nil
+        } catch {
+            said = .refused(reason(error))
+            return reason(error)
+        }
     }
 
     /// The same answer, awaited, and it says whether it actually went.

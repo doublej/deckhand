@@ -38,15 +38,21 @@ public struct Deck: ActivityAttributes {
         public var slip: String?
         public var accept: String?
         public var decline: String?
+        /// The slip's page hash when the slip is a decision: the card's Yes is then signed with
+        /// the phone's key over exactly this version of the page. Nil for anything else, and for
+        /// a Mac older than decisions, whose cards answer the way they always did.
+        public var hash: String?
 
         public init(kind: Kind, line: String, when: Double,
-                    slip: String? = nil, accept: String? = nil, decline: String? = nil) {
+                    slip: String? = nil, accept: String? = nil, decline: String? = nil,
+                    hash: String? = nil) {
             self.kind = kind
             self.line = line
             self.when = when
             self.slip = slip
             self.accept = accept
             self.decline = decline
+            self.hash = hash
         }
 
         public var moment: Date { Date(timeIntervalSince1970: when) }

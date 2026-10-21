@@ -85,6 +85,7 @@ public enum ArtifactPage {
     /// same thing to it, and the absence of the answer file already says "unanswered" — so a page
     /// that does this has a bug, and a `TypeError` in the page's own console is where the agent
     /// that wrote it will look. `false`, `0`, `""` and `[]` are answers and go as they are.
+    /// On a decision page it throws whatever it is given (`refusal`).
     ///
     /// `answer` is what the person said last time, as the JSON text of the value, or `null` where
     /// nobody has. A page that was answered and then reopened drew itself blank while the row above
@@ -109,6 +110,7 @@ public enum ArtifactPage {
               answer: \(literal(answer)),
               draft: \(literal(draft)),
               respond: function (value) {
+                if (\(artifact.isDecision)) throw new Error(\(refusal));
                 if (value === undefined || value === null) throw new TypeError('deckhand.respond(value) needs a value; null is not an answer');
                 post({ kind: 'respond', json: JSON.stringify(value) });
               },
@@ -160,6 +162,13 @@ public enum ArtifactPage {
       window.addEventListener('pageshow', soon);
     })();
     """
+
+    /// What `respond` throws on a decision page, as a JavaScript string literal. A decision is
+    /// answered by the app's own buttons under the page and signed with the phone's key; script
+    /// on the page is whatever an agent wrote, and could answer with no tap at all. The page can
+    /// catch this and show it. The app refuses a `respond` message from a decision page as well,
+    /// because a page can post to the handler without going through this function.
+    public static let refusal = #"'This is a decision: answer it with the buttons under the page.'"#
 
     /// One JSON value, or `null` where there is nothing to put there.
     ///
