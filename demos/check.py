@@ -66,7 +66,8 @@ def check(path: Path) -> tuple[str, list[str]]:
     faults += [f"<{tag}> opened on line {line} and never closed" for tag, line in page.stack]
     if not page.title:
         faults.append("no <title> — that is where the artifact's name comes from")
-    if "window.deckhand.respond" not in text:
+    # A decision is answered by the app's own signed controls, never by the page (`artifacts.md`).
+    if "window.deckhand.respond" not in text and 'name="deckhand-decision"' not in text:
         faults.append("never calls window.deckhand.respond — it cannot answer")
     faults += [f"contains {banned!r}, which the CSP blocks" for banned in BANNED if banned in text]
     return page.title, faults

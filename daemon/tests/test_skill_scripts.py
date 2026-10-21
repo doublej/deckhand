@@ -46,33 +46,29 @@ def slip(tmp_path, *args, session=""):
     return page, page.read_text(), title
 
 
-def test_a_pick_carries_its_options_and_nothing_of_the_demo(tmp_path):
+def test_a_decision_page_is_its_words_and_the_choices_are_the_apps(tmp_path):
+    """The app draws a decision's controls under the page; a second copy on it was dead weight."""
     page, said, title = slip(tmp_path, "--kind", "pick", "--title", "Which branch",
                              "--note", "Three worktrees are waiting.",
                              "--option", "develop", "--option", "main")
 
     assert page.name == "which-branch.html"
     assert title == "Which branch"
-    assert 'value="develop"' in said and 'value="main"' in said
+    assert '<p class="lead">Three worktrees are waiting.</p>' in said
+    assert "&quot;develop&quot;, &quot;main&quot;" in said  # the choices, in the meta tag only
+    assert "<input" not in said and "<button" not in said and "<script>" not in said
     assert "feature/artifacts" not in said
-    # The row that takes a typed answer stays: the page's own script selects on it.
-    assert 'name="branch" value=""' in said
 
 
-def test_a_confirm_says_back_the_words_on_its_own_buttons(tmp_path):
-    _, said, _ = slip(tmp_path, "--kind", "confirm", "--title", "Tag 0.4.0 and push it?",
-                      "--option", "Tag and push", "--option", "Hold", "--action", "tag and push")
+def test_a_note_keeps_its_paragraphs_bullets_and_headings(tmp_path):
+    _, said, _ = slip(tmp_path, "--kind", "confirm", "--title", "Ship it?", "--action", "ship",
+                      "--note", "Gates are clean.\n\n## What ran\n- `just check`\n- **all** green"
+                                "\nThen <this>.")
 
-    assert '<button id="yes" class="primary">Tag and push</button>' in said
-    assert '<button id="no">Hold</button>' in said
-    assert '(before.answer ? "Tag and push" : "Hold")' in said
-
-
-def test_a_text_slip_starts_empty(tmp_path):
-    _, said, _ = slip(tmp_path, "--kind", "text", "--title", "What should this be called?")
-
-    assert '<input id="name" type="text" value=""' in said
-    assert "artifacts" not in said
+    assert '<p class="lead">Gates are clean.</p>' in said
+    assert "<h2>What ran</h2>" in said
+    assert "<ul><li><code>just check</code></li><li><strong>all</strong> green</li></ul>" in said
+    assert "<p>Then &lt;this&gt;.</p>" in said
 
 
 def test_an_aloud_slip_declares_its_questions_and_the_app_reads_that_block(tmp_path):

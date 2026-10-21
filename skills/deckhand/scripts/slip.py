@@ -20,6 +20,11 @@ and means the folder rather than a session.
     slip.py --kind pick --title "Which branch" --option develop --option main
     slip.py --kind text --title "What should this session be called?"
     slip.py --kind aloud --title "Before I start" --question "scope:How far should this go?"
+    slip.py --kind confirm --title "Ship it?" --image ~/dev/x/before.png --image ~/dev/x/after.png
+
+**A picture named is a picture shown.** Any image path in the title or the note is attached to the
+page on its own, and a path that does not exist stops the script: "see ~/shots/a.png" on a phone
+is a sentence nobody can follow. `--image` attaches one the words do not name.
 
 Prints the path it wrote. Four kinds are mechanical. `form` and `tweak` are not — copy those out
 of `templates/` by hand and edit them.
@@ -36,11 +41,15 @@ the slug) does not rewrite it: the existing answer is printed instead, as JSON �
 from __future__ import annotations
 
 import argparse
+import base64
 import html
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -52,6 +61,49 @@ TEMPLATES = Path(__file__).resolve().parent.parent / "templates"
 # The daemon's own rule for an artifact id, copied from `artifacts.ID` — one segment, so `..`
 # cannot be spelled and no path can. A slug it refuses is a slip the phone never lists.
 SLUG = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
+
+
+# An absolute or `~/` path to a picture, however the agent wrote the sentence around it.
+IMAGE_PATH = re.compile(r"(?:~|/)[^\s,;()\"'<>]*?\.(?:png|jpe?g|gif|webp)\b", re.IGNORECASE)
+# One picture is kept under this once shrunk, so a few of them never make the page too big for
+# the phone to be served (the daemon refuses a page over 4 MB).
+IMAGE_BUDGET = 700_000
+MIME = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+        ".gif": "image/gif", ".webp": "image/webp"}
+
+
+def namedImages(*texts: str) -> list[str]:
+    """Every picture path the words mention, in order, once."""
+    found: list[str] = []
+    for text in texts:
+        for path in IMAGE_PATH.findall(text):
+            if path not in found:
+                found.append(path)
+    return found
+
+
+def embedImage(path: str) -> str:
+    """One picture as a `<figure>` with a `data:` URI — the page may fetch nothing, so it carries it.
+
+    Shrunk with `sips` (always on a Mac) when it is large; a picture that is still too big is
+    refused rather than silently left out.
+    """
+    source = Path(path).expanduser()
+    if not source.is_file():
+        sys.exit(f"slip.py: {path} is mentioned or attached but is not a file")
+    data, mime = source.read_bytes(), MIME[source.suffix.lower()]
+    if len(data) > IMAGE_BUDGET and shutil.which("sips"):
+        with tempfile.TemporaryDirectory() as scratch:
+            small = Path(scratch) / "small.jpg"
+            subprocess.run(["sips", "-Z", "1280", "-s", "format", "jpeg", str(source),
+                            "--out", str(small)], check=True, capture_output=True)
+            data, mime = small.read_bytes(), "image/jpeg"
+    if len(data) > 2 * IMAGE_BUDGET:
+        sys.exit(f"slip.py: {path} is {len(data)} bytes even shrunk — attach a smaller crop")
+    uri = f"data:{mime};base64,{base64.b64encode(data).decode()}"
+    return (f'\n  <figure><img src="{uri}" alt="{html.escape(source.name)}" '
+            f'style="max-width:100%;border-radius:8px">'
+            f"<figcaption class=\"hint\">{html.escape(source.name)}</figcaption></figure>")
 
 
 def buildSlug(title: str) -> str:
@@ -72,62 +124,72 @@ def swap(page: str, pattern: str, replacement: str) -> str:
     return page
 
 
-def fillCommon(page: str, title: str, slug: str, note: str) -> str:
-    """The four things every page has: its name, its id, its question and the line under it."""
+BULLET = re.compile(r"^\s*[-*•]\s+")
+
+
+def inline(text: str) -> str:
+    """One line of the note, escaped, with `code` and **bold** — the two the stylesheet draws."""
+    said = html.escape(text.strip())
+    said = re.sub(r"`([^`]+)`", r"<code>\1</code>", said)
+    return re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", said)
+
+
+def buildNote(note: str) -> str:
+    """The note as the page's own prose, rather than one paragraph with its line breaks eaten.
+
+    A blank line ends a paragraph, `## ` is a heading, `- `, `* ` or `• ` a bullet; any other line
+    break stays one. The first paragraph is the lead.
+    """
+    parts: list[str] = []
+    prose: list[str] = []
+    items: list[str] = []
+
+    def flush() -> None:
+        if prose:
+            parts.append("<p>" + "<br>".join(prose) + "</p>")
+        if items:
+            parts.append("<ul>" + "".join(f"<li>{item}</li>" for item in items) + "</ul>")
+        prose.clear()
+        items.clear()
+
+    for line in note.strip().splitlines():
+        if not line.strip():
+            flush()
+        elif line.lstrip().startswith("#"):
+            flush()
+            parts.append(f"<h2>{inline(line.lstrip().lstrip('#'))}</h2>")
+        elif BULLET.match(line):
+            if prose:
+                flush()
+            items.append(inline(BULLET.sub("", line, count=1)))
+        else:
+            if items:
+                flush()
+            prose.append(inline(line))
+    flush()
+    if parts and parts[0].startswith("<p>"):
+        parts[0] = '<p class="lead">' + parts[0][3:]
+    return "".join(f"\n  {part}" for part in parts)
+
+
+def fillCommon(page: str, title: str, slug: str, note: str, images: list[str],
+               decision: bool) -> str:
+    """The four things every page has: its name, its id, its question and the words under it.
+
+    A decision's page is those words and nothing else. The app draws its answer below the page and
+    signs it with the phone's key; the template's own buttons could not answer one (`respond` is
+    refused), so they were only a second, dead copy of the choices.
+    """
     page = swap(page, r"<title>.*?</title>", f"<title>{html.escape(title)}</title>")
     page = swap(page, r'<p class="eyebrow" id="slug">.*?</p>',
                 f'<p class="eyebrow" id="slug">{html.escape(slug)}</p>')
-    page = swap(page, r"<h1>.*?</h1>", f"<h1>{html.escape(title)}</h1>")
-    lead = f'\n  <p class="lead">{html.escape(note)}</p>' if note else ""
-    return swap(page, r'\n\s*<p class="lead">.*?</p>', lead)
-
-
-def fillConfirm(page: str, options: list[str]) -> str:
-    """Yes and no, in that order — the primary button is what you are asking for."""
-    # Short on purpose: these are the Lock Screen card's two buttons as well as the page's.
-    yes = options[0] if options else "Yes"
-    no = options[1] if len(options) > 1 else "No"
-    page = swap(page, r"\n\s*<h2>What ran</h2>\s*<ul>.*?</ul>", "")
-    page = swap(page, r'<button id="no">.*?</button>',
-                f'<button id="no">{html.escape(no)}</button>')
-    page = swap(page, r'<button id="yes" class="primary">.*?</button>',
-                f'<button id="yes" class="primary">{html.escape(yes)}</button>')
-    # The page says back what you answered, in the words on the buttons, so the two have to move
-    # together — a reopened confirm reading "You answered: Tag and push" under different buttons
-    # is the page lying about its own state.
-    return swap(page, r'\(before\.answer \? ".*?" : ".*?"\)',
-                f"(before.answer ? {json.dumps(yes)} : {json.dumps(no)})")
-
-
-def fillPick(page: str, options: list[str]) -> str:
-    """One row per option, plus the row that takes a typed answer.
-
-    `name="branch"` stays: the page's own script selects on it, and the last row's empty value is
-    what tells that script to show the field. Both are the template's, not this script's.
-    """
-    if not options:
-        sys.exit("slip.py: a pick needs at least one --option")
-    rows = "".join(
-        f"\n    <label>\n      <span>{html.escape(choice)}</span>"
-        f'\n      <input type="radio" name="branch" value="{html.escape(choice)}">\n    </label>'
-        for choice in options
-    )
-    rows += ('\n    <label>\n      <span>Something else<small>Say it yourself.</small></span>'
-             '\n      <input type="radio" name="branch" value="">\n    </label>')
-    page = swap(page, r"\n\s*<h2>Branch</h2>", "")
-    page = swap(page, r'<div class="rows">.*?</div>', f'<div class="rows">{rows}\n  </div>')
-    return swap(page, r'placeholder="Branch name" aria-label="Branch name"',
-                'placeholder="Something else" aria-label="Something else"')
-
-
-def fillText(page: str, options: list[str]) -> str:
-    """One field, empty, with whatever the first option says over it."""
-    label = options[0] if options else "Answer"
-    page = swap(page, r'<label class="eyebrow" for="name">.*?</label>',
-                f'<label class="eyebrow" for="name">{html.escape(label)}</label>')
-    page = swap(page, r'<input id="name" type="text" value=".*?"',
-                '<input id="name" type="text" value=""')
-    return swap(page, r'\n\s*<p class="hint">Renaming runs.*?</p>', "")
+    words = f"<h1>{html.escape(title)}</h1>" + buildNote(note)
+    words += "".join(embedImage(path) for path in images)
+    if decision:
+        page = swap(page, r"\n<script>.*?</script>", "")
+        return swap(page, r"<h1>.*?</main>", f"{words}\n</main>")
+    page = swap(page, r'\n\s*<p class="lead">.*?</p>', "")
+    return swap(page, r"<h1>.*?</h1>", words)
 
 
 def fillDecision(page: str, kind: str, options: list[str], action: str, expires: float) -> str:
@@ -174,7 +236,12 @@ def main() -> int:
     parse.add_argument("--kind", required=True, choices=("confirm", "pick", "text", "aloud"))
     parse.add_argument("--title", required=True, help="the question, and the slip's name")
     parse.add_argument("--slug", help="the artifact id; made from the title when left out")
-    parse.add_argument("--note", default="", help="the line under the question")
+    parse.add_argument("--note", default="",
+                       help="the words under the question. A blank line starts a paragraph, "
+                            "'## ' a heading, '- ' a bullet; `code` and **bold** work")
+    parse.add_argument("--image", action="append", default=[], metavar="PATH",
+                       help="attach a picture. Pictures named in --title or --note are attached "
+                            "without this")
     parse.add_argument("--option", action="append", default=[], metavar="TEXT",
                        help="pick: one row. confirm: the yes label, then the no label. "
                             "text: the field's label")
@@ -204,6 +271,8 @@ def main() -> int:
     # under one it refuses is one the phone never lists — the failure nobody notices.
     if said.session and not SLUG.fullmatch(said.session):
         sys.exit(f"slip.py: {said.session!r} is not a session id — one segment, no dot, no slash")
+    if said.kind == "pick" and not said.option:
+        sys.exit("slip.py: a pick needs at least one --option")
     if said.kind == "confirm" and not said.action.strip():
         sys.exit("slip.py: a confirm is a decision and needs --action: exactly what a yes allows")
 
@@ -214,12 +283,13 @@ def main() -> int:
         print(json.dumps({"id": slug, "answered": True} | kept, ensure_ascii=False, indent=2))
         return 0
 
-    page = fillCommon((TEMPLATES / f"{said.kind}.html").read_text(), said.title, slug, said.note)
+    images = said.image + [path for path in namedImages(said.title, said.note)
+                           if path not in said.image]
+    page = fillCommon((TEMPLATES / f"{said.kind}.html").read_text(), said.title, slug, said.note,
+                      images, decision=said.kind != "aloud")
     if said.kind == "aloud":
         page = fillAloud(page, said.question)
     else:
-        page = {"confirm": fillConfirm, "pick": fillPick, "text": fillText}[said.kind](
-            page, said.option)
         page = fillDecision(page, said.kind, said.option, said.action.strip() or said.title,
                             time.time() + said.expires_hours * 3600)
 

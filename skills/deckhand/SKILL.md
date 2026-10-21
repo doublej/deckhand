@@ -85,6 +85,11 @@ Act on exactly what that line covers. To look at it yourself:
 python3 ~/.claude/skills/deckhand/scripts/answer.py which-branch --wait 300
 ```
 
+**Show a picture, never only name it.** A path to a screenshot or crop in a sentence is useless on
+a phone. `--image PATH` attaches one to the page, and any image path in `--title` or `--note` is
+attached on its own (a path that does not exist stops the script). Write a slip by hand and you
+embed the picture as a `data:` URI yourself, so use the script.
+
 `--kind` is `confirm`, `pick`, `text` or `aloud`. **Confirm, pick and text are decisions**: the
 phone answers one only with a signature from its own key. A confirm needs `--action`, exactly what a
 yes allows in one line (`--action "tag 0.4.0 and push the tag, nothing else"`); a pick or text

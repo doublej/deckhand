@@ -273,7 +273,8 @@ on `read_answer`: ask, stop, and act on that message when it arrives. It covers 
 `action` line and nothing more.
 
 `action` is required for a confirm: exactly what a yes allows, in one line. Keep the question
-under 80 characters — the card shows it and nothing else — and put detail in `note`. The answer
+under 80 characters — the card shows it and nothing else — and put detail in `note`, where a
+blank line starts a paragraph, `## ` a heading and `- ` a bullet. The answer
 is `{"answer": true}` or `{"answer": false}`, or `{"reply": "<text>"}` typed on the Lock
 Screen. `expires_hours` (default 24) is how long the question stands.
 
