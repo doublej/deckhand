@@ -1,4 +1,5 @@
-"""The two routes that feed the Lock Screen: the phone's tokens, and an agent calling for you.
+"""The routes that feed the Lock Screen: the phone's tokens, an agent calling for you, and a
+caller on this Mac asking you something with no session behind it (`callbacks.py`).
 
 Out of `app.py` when that file reached its line budget; they belong with the push they feed. A
 module of their own rather than `push/__init__.py`, because `/notify` looks a session up through
@@ -7,11 +8,13 @@ module of their own rather than `push/__init__.py`, because `/notify` looks a se
 
 from __future__ import annotations
 
+import asyncio
 from typing import Annotated
 
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, Body, Header, HTTPException, Request
 
 from .. import push, saying
+from . import callbacks
 
 router = APIRouter(tags=["push"])
 
@@ -58,3 +61,25 @@ def ask_for_attention(session_id: str, line: Annotated[str, Body(embed=True)]) -
     if error := push.called(session, said):
         return {"pushed": False, "why": error}
     return {"pushed": True}
+
+
+@router.post("/notify", status_code=202)
+async def notify(request: Request) -> dict:
+    """An alert with buttons and no session, whose tap this Mac answers to a loopback caller.
+
+    `{title, line, actions: [{id, label}], callback: {url, body}}`, 4 KB at most. The action ids
+    name a category the app already has (`approve`, `deny`); `callback.url` is http on
+    127.0.0.1 or localhost only; every `"$action"` value in `callback.body` becomes the tapped
+    id. 202 `{id}` once APNs took it, 502 when APNs refused, 503 when this Mac cannot send.
+    """
+    return {"id": await asyncio.to_thread(callbacks.notify, await request.body())}
+
+
+@router.post("/notify/{notify_id}/answer")
+def answer_notify(notify_id: str, proof: Annotated[dict | None, Body(embed=True)] = None,
+                  x_deckhand_token: str = Header(default="")) -> dict:
+    """The phone's tap, signed like a decision's answer with the session `notify` and the notify
+    id as its slip, and the action id as its value. Calls back once: a second tap is answered
+    from the first. 410 once the notify is a day old, 502 when the caller did not take it.
+    """
+    return callbacks.answered(notify_id, proof, x_deckhand_token)

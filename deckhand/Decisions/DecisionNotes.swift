@@ -11,6 +11,9 @@ import UserNotifications
 ///
 /// A pick has no buttons — a notification has room for a few short ones and a pick's rows are
 /// whatever an agent wrote — so a tap opens the slip, through the notification's own `link`.
+///
+/// A notify (`POST /notify`, `CallbackNote`) is the one alert here with no session: Allow and
+/// Deny, signed the same way, and the Mac answers whoever on it asked.
 enum DecisionNotes {
     /// At launch, before anything can be delivered (`AppDelegate`).
     static func register() {
@@ -27,8 +30,19 @@ enum DecisionNotes {
             UNNotificationCategory(identifier: Note.Category.confirm, actions: [approve, deny, reply],
                                    intentIdentifiers: []),
             UNNotificationCategory(identifier: Note.Category.pick, actions: [], intentIdentifiers: []),
-            UNNotificationCategory(identifier: Note.Category.text, actions: [reply], intentIdentifiers: [])
+            UNNotificationCategory(identifier: Note.Category.text, actions: [reply], intentIdentifiers: []),
+            allowDeny
         ])
+    }
+
+    /// A notify's Allow and Deny, behind the same unlock as a decision's Approve and Deny.
+    private static var allowDeny: UNNotificationCategory {
+        let allow = UNNotificationAction(identifier: CallbackNote.Action.approve, title: "Allow",
+                                         options: [.authenticationRequired])
+        let refuse = UNNotificationAction(identifier: CallbackNote.Action.deny, title: "Deny",
+                                          options: [.authenticationRequired, .destructive])
+        return UNNotificationCategory(identifier: CallbackNote.Category.allowDeny,
+                                      actions: [allow, refuse], intentIdentifiers: [])
     }
 
     /// Answer the button that was pressed. True when it was a decision's own button, answered or
@@ -36,6 +50,11 @@ enum DecisionNotes {
     /// which the delegate opens like any other.
     static func answered(_ response: UNNotificationResponse) async -> Bool {
         let content = response.notification.request.content
+        if let note = CallbackNote(userInfo: content.userInfo),
+           let action = CallbackNote.action(for: response.actionIdentifier) {
+            await send(action, for: note)
+            return true
+        }
         guard let note = DecisionNote(userInfo: content.userInfo),
               let value = DecisionNote.value(
                 category: content.categoryIdentifier, action: response.actionIdentifier,
@@ -62,15 +81,37 @@ enum DecisionNotes {
         }
     }
 
+    /// The Mac calls the asker back; only a refusal, or a caller that did not take it, is said.
+    private static func send(_ action: String, for note: CallbackNote) async {
+        guard let client = ServerSettings.load().client() else {
+            await tell(note, "Deckhand has no Mac to reach — open the app and pair it.")
+            return
+        }
+        do {
+            try await PhoneKey.answerNotify(with: client, id: note.id, action: action)
+        } catch {
+            await tell(note, why(error))
+        }
+    }
+
     /// A refusal has to be said where the button was, because nothing else is on screen.
     private static func tell(_ note: DecisionNote, _ why: String) async {
+        await tell(note.question, why, id: "decision-\(note.session)-\(note.artifact)",
+                   thread: note.session, userInfo: ["session": note.session])
+    }
+
+    private static func tell(_ note: CallbackNote, _ why: String) async {
+        await tell(note.question, why, id: "notify-\(note.id)", thread: "notify")
+    }
+
+    private static func tell(_ question: String?, _ why: String, id: String, thread: String,
+                             userInfo: [String: String] = [:]) async {
         let content = UNMutableNotificationContent()
         content.title = "Not answered"
-        content.body = [note.question, why].compactMap { $0 }.joined(separator: " — ")
-        content.threadIdentifier = note.session
-        content.userInfo = ["session": note.session]
-        let request = UNNotificationRequest(identifier: "decision-\(note.session)-\(note.artifact)",
-                                            content: content, trigger: nil)
+        content.body = [question, why].compactMap { $0 }.joined(separator: " — ")
+        content.threadIdentifier = thread
+        content.userInfo = userInfo
+        let request = UNNotificationRequest(identifier: id, content: content, trigger: nil)
         try? await UNUserNotificationCenter.current().add(request)
     }
 

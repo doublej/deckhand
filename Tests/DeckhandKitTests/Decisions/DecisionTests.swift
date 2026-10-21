@@ -97,6 +97,17 @@ struct DecisionTests {
         #expect(DecisionNote(userInfo: ["deckhand": "manager"]) == nil)
     }
 
+    @Test("a notify's buttons send the Mac's own action ids, and only its own key decodes")
+    func callbackNotes() throws {
+        #expect(CallbackNote.action(for: CallbackNote.Action.approve) == "approve")
+        #expect(CallbackNote.action(for: CallbackNote.Action.deny) == "deny")
+        #expect(CallbackNote.action(for: "com.apple.UNNotificationDefaultActionIdentifier") == nil)
+        let note = try #require(CallbackNote(userInfo: ["notify": ["id": "ab12", "question": "In?"]]))
+        #expect(note.id == "ab12")
+        #expect(note.question == "In?")
+        #expect(CallbackNote(userInfo: ["decision": ["session": "sid"]]) == nil)
+    }
+
     @Test("a refusal's code becomes a sentence, and anything else stays the error it was")
     func refusals() {
         func refusal(_ status: Int, _ code: String) -> DecisionRefusal? {

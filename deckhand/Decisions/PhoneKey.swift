@@ -101,6 +101,13 @@ enum PhoneKey {
                                                signer: signer)
     }
 
+    /// A notify's Allow or Deny, signed the same way and registered first for the same reason.
+    static func answerNotify(with client: DeckhandClient, id: String, action: String) async throws {
+        let signer = try EnclaveKeyStore().key()
+        try await client.registerKey(signer)
+        try await client.answerNotify(id, action: action, signer: signer)
+    }
+
     /// Hand the Mac the key now — after pairing by code, so a refusal is heard there and not at
     /// the first decision.
     static func register(with client: DeckhandClient) async throws {

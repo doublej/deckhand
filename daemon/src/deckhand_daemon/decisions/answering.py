@@ -59,21 +59,8 @@ def taken(proof: object, token: str, session: sessions.Session, session_id: str,
 
     Raises the refusal the contract names for the first check that fails.
     """
-    if not isinstance(proof, dict):
-        raise refusal(403, "UNSIGNED", "a decision is answered only with the phone's signature")
-    device = devices.known(token)
-    if device is None or "scope" in device or not device.get("key"):
-        raise refusal(403, "NO_KEY", "only a paired phone with a filed key answers a decision")
+    device, said = proven(proof, token, session=session_id, artifact=artifact_id)
     payload, signature = str(proof.get("payload", "")), str(proof.get("signature", ""))
-    said = proofs.verify(device["key"], payload, signature)
-    if said is None:
-        raise refusal(403, "BAD_SIGNATURE", "that signature is not this phone's over that payload")
-    if (said.get("v") != proofs.VERSION or said.get("session") != session_id
-            or said.get("artifact") != artifact_id or "value" not in said):
-        raise refusal(400, "MISMATCH", "the signed payload is for another session or slip")
-    at = said.get("at")
-    if isinstance(at, bool) or not isinstance(at, int | float) or abs(time.time() - at) > WINDOW:
-        raise refusal(403, "OLD_PROOF", f"signed more than {int(WINDOW)} s from now")
     found = located(session, session_id, artifact_id)
     if found is None:
         raise HTTPException(status_code=404, detail="no artifact with that id in this project")
@@ -94,6 +81,31 @@ def taken(proof: object, token: str, session: sessions.Session, session_id: str,
         raise refusal(409, "ANSWERED", "this decision already has an answer",
                       answer=pages.kept(answer))
     return record, page, answer, metas
+
+
+def proven(proof: object, token: str, **expected: str) -> tuple[dict, dict]:
+    """`(device, signed payload)` when `proof` is a filed phone key's, signed for `expected`.
+
+    Who signed, then what was signed, then when — raising UNSIGNED, NO_KEY, BAD_SIGNATURE,
+    MISMATCH or OLD_PROOF for the first that fails. A decision expects its session and slip; a
+    notify (`push/callbacks.py`) expects the session `notify` and its own id.
+    """
+    if not isinstance(proof, dict):
+        raise refusal(403, "UNSIGNED", "a decision is answered only with the phone's signature")
+    device = devices.known(token)
+    if device is None or "scope" in device or not device.get("key"):
+        raise refusal(403, "NO_KEY", "only a paired phone with a filed key answers a decision")
+    said = proofs.verify(device["key"], str(proof.get("payload", "")),
+                         str(proof.get("signature", "")))
+    if said is None:
+        raise refusal(403, "BAD_SIGNATURE", "that signature is not this phone's over that payload")
+    if (said.get("v") != proofs.VERSION or "value" not in said
+            or any(said.get(field) != wanted for field, wanted in expected.items())):
+        raise refusal(400, "MISMATCH", "the signed payload is for another session or slip")
+    at = said.get("at")
+    if isinstance(at, bool) or not isinstance(at, int | float) or abs(time.time() - at) > WINDOW:
+        raise refusal(403, "OLD_PROOF", f"signed more than {int(WINDOW)} s from now")
+    return device, said
 
 
 def _written_first(answer: Path, record: dict) -> bool:

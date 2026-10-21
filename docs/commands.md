@@ -540,6 +540,8 @@ inside a helper is not listed, so treat the column as the least a route can answ
 |---|---|---|---|---|
 | `POST /live/token` | body `{token, kind, session?}` | 200 | 400, 401, 422 | The phone hands over what the Mac needs to reach its Lock Screen. |
 | `POST /sessions/{session_id}/notify` | body `{line}` | 200 | 400, 401, 404, 422 | An agent asking for the person outright, in its own words. |
+| `POST /notify` | — | 202 | 401 | An alert with buttons and no session, whose tap this Mac answers to a loopback caller. |
+| `POST /notify/{notify_id}/answer` | body `{proof?}` | 200 | 401, 422 | The phone's tap, signed like a decision's answer with the session `notify` and the notify id as its slip, and the action id as its value. Calls back once: a second tap is answered from the first. 410 once the notify is a day old, 502 when the caller did not take it. |
 
 ### projects
 

@@ -94,6 +94,22 @@ public extension DeckhandClient {
         }
     }
 
+    /// Answer a notify with one of its action ids, signed as a decision of the session `notify`
+    /// so the Mac checks it with the same key and the same rules. The Mac calls back once.
+    func answerNotify(_ id: String, action: String, signer: any DecisionSigner, now: Date = .now)
+        async throws {
+        let payload = DecisionPayload(session: "notify", artifact: id, hash: "",
+                                      value: .string(action), signedAt: now)
+        var req = request(.post, "notify/\(pathSafe(id))/answer")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body = try JSONEncoder().encode(["proof": try DecisionProof(payload, signedBy: signer)])
+        do {
+            _ = try await send(req, body: body)
+        } catch {
+            throw DecisionRefusal(answering: error) ?? error
+        }
+    }
+
     private func pathSafe(_ id: String) -> String {
         id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
     }
