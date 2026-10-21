@@ -103,7 +103,7 @@ class _Server(MCPServer):
 INSTRUCTIONS = f"""Tools for reaching the person and the Mac around this session.
 
 **Not here on purpose — the person's own, so stop looking:**
-{refused.markdown()}
+{refused.markdown(routes=False)}
 
 - `presence` first: `laptop` or `headset` means ask in this conversation; `phone` means
   `ask_on_phone`, or `call_for_attention` for something they must see.

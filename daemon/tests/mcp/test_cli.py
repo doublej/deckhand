@@ -109,7 +109,9 @@ def test_every_refusal_is_named_where_an_agent_looks_and_none_shadows_a_command(
                                                                                 capsys):
     assert not set(refused.BY_VERB) & ({c["name"] for c in cli.COMMANDS} | {"prime"})
     routes = [row["route"] for row in refused.REFUSED]
-    assert all(route in server.server.instructions for route in routes)
+    told = server.server.instructions
+    assert all(row["why"] in told for row in refused.REFUSED)
+    assert not any(route in told for route in routes)
 
     async def status():
         return {"where": "laptop"}

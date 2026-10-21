@@ -47,7 +47,12 @@ BY_VERB = {verb: f"{row['why']} ({row['route']})"
            for row in REFUSED for verb in row["verbs"].split()}
 
 
-def markdown() -> str:
-    """One line per row, for the server's instructions and `deckhand prime`."""
-    return "\n".join(f"- {row['verbs'].replace(' ', ', ')} — `{row['route']}`: {row['why']}"
+def markdown(routes: bool = True) -> str:
+    """One line per row, for the server's instructions and `deckhand prime`.
+
+    The instructions leave the routes out: they are read on every turn, and a route there is the
+    path around the refusal handed over with it. `prime` is asked for, so it keeps them.
+    """
+    return "\n".join(f"- {row['verbs'].replace(' ', ', ')}"
+                     f"{f' — `{row['route']}`' if routes else ''}: {row['why']}"
                      for row in REFUSED)
