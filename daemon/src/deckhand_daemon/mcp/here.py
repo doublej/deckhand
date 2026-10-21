@@ -132,7 +132,8 @@ async def reach(method: str, path: str, **sent: object) -> dict | list:
     """One call to the daemon. Every expected failure comes back as `{"error": sentence, "code":
     WORD}`, the code being what the `deckhand` command turns into its exit status. A 204 is `{}`."""
     # Always `agent`: these are an agent's calls, and saying so keeps its words off the person's.
-    headers = {config.TOKEN_HEADER: config.token(), config.CALLER_HEADER: "agent"}
+    headers = {config.TOKEN_HEADER: config.token(), config.CALLER_HEADER: "agent",
+               **dict(sent.pop("headers", None) or {})}
     url = f"http://127.0.0.1:{config.PORT}{path}"
     try:
         async with httpx.AsyncClient(timeout=TIMEOUT) as client:

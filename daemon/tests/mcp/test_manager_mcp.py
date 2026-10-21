@@ -122,3 +122,21 @@ def test_what_a_borrowed_tool_did_is_written_under_its_callers_name(token, monke
     talk.say("act", "the manager's own")
     assert [e["text"] for e in talk.entries()][-2:] == [
         "voice-agent: started deckhand in multi-stack/deckhand", "the manager's own"]
+
+
+def test_a_forwarded_call_keeps_the_token_and_adds_who_it_is_for(monkeypatch):
+    """`reach` sets its own headers; a caller's go beside them, not instead or twice."""
+    import httpx
+
+    seen = {}
+
+    async def request(self, method, url, headers=None, **kwargs):
+        seen.update(headers)
+        return httpx.Response(200, json={"text": "ok"})
+
+    monkeypatch.setattr(httpx.AsyncClient, "request", request)
+    monkeypatch.setattr(manager.here, "mine", lambda: {"name": "deckhand-2"})
+    answer = asyncio.run(manager._forwarded("list_sessions")({}))
+    assert answer["content"][0]["text"] == "ok"
+    assert seen["x-deckhand-for"] == "deckhand-2" and seen["x-deckhand-caller"] == "agent"
+    assert "x-deckhand-token" in seen
