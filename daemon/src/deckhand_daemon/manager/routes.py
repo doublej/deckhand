@@ -10,7 +10,7 @@ done. The panel draws what was said immediately and fills in the answer as the p
 which is also why a run taking a minute is not a failed request.
 
 `POST /manager/tools/{name}` is the other way to be the manager: one of its own tools, run here
-for `deckhand-manager-mcp` (`mcp/manager.py`), so a session the person is talking to at the
+for `deckhand-control-mcp` (`mcp/manager.py`), so a session the person is talking to at the
 keyboard can do what the panel's manager does and nothing it does not.
 """
 
@@ -22,7 +22,7 @@ import time
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Body, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Body, Header, HTTPException, Query, UploadFile
 
 from .. import config, plugin, sessions, transcribe
 from ..log import log
@@ -134,13 +134,19 @@ def clear_manager() -> dict:
 
 
 @router.post("/manager/tools/{name}")
-async def run_manager_tool(name: str, args: dict) -> dict:
+async def run_manager_tool(name: str, args: dict,
+                           by: str = Header(default="", alias="x-deckhand-for")) -> dict:
     """One of the manager's tools, run in this process — where the fleet's links and the
-    conversation file already live — and answered as the text the tool said."""
+    conversation file already live — and answered as the text the tool said. `x-deckhand-for`
+    names whose call it is, and the panel writes what it did under that name."""
     found = _tools().get(name)
     if found is None:
         raise HTTPException(status_code=404, detail=f"the manager has no tool called {name!r}")
-    answer = await found.handler(args)
+    held = talk.caller.set(by or "a session")
+    try:
+        answer = await found.handler(args)
+    finally:
+        talk.caller.reset(held)
     return {"text": "\n".join(block["text"] for block in answer["content"])}
 
 

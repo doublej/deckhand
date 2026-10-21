@@ -8,6 +8,14 @@ from deckhand_daemon import config, sessions
 
 
 @pytest.fixture(autouse=True)
+def keep_the_real_state_clean(tmp_path, monkeypatch):
+    """No test writes into the live data dir. The manager's conversation is there, and a test
+    that skipped `claude_home` put its "could not start a session in /private/var/…" lines into
+    the panel the person reads and the manager resumes from."""
+    monkeypatch.setenv("DECKHAND_DATA_DIR", str(tmp_path / "data"))
+
+
+@pytest.fixture(autouse=True)
 def keep_the_real_log_clean(tmp_path, monkeypatch):
     """A test run must never appear in the log file the user watches in Console.app."""
     from deckhand_daemon import log as log_module

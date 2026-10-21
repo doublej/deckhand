@@ -233,6 +233,25 @@ def server(described: dict[str, str]):
     return create_sdk_mcp_server(name="deckhand", tools=build(described))
 
 
+#: What a tool may be called without, its handler filling in the default. The SDK's `{name: type}`
+#: shorthand marks every key required, so an agent leaving out `turns` was refused, and one meaning
+#: "every machine" had to guess `""` for `machine`.
+OPTIONAL = {"read_session": {"turns"}, "list_projects": {"query", "machine"},
+            "read_settings": {"folder"}, "start_session": {"machine", "model"},
+            "start_scratch_session": {"model"}, "set_switch": {"folder"}, "look": {"session"}}
+
+
+def _loosened(one):
+    """`one` with its shorthand written out as JSON Schema, and only what it needs required."""
+    import dataclasses
+
+    kinds = {str: "string", int: "integer"}
+    shape = {name: {"type": kinds[kind]} for name, kind in one.input_schema.items()}
+    return dataclasses.replace(one, input_schema={
+        "type": "object", "properties": shape,
+        "required": [name for name in shape if name not in OPTIONAL.get(one.name, ())]})
+
+
 def build(described: dict[str, str]) -> list:
     """The same tools, unmounted. `server` mounts them for the run in this daemon;
     `POST /manager/tools/{name}` runs one for `deckhand-manager-mcp`, a session acting as the
@@ -313,7 +332,7 @@ def build(described: dict[str, str]) -> list:
             focus_session, show_on_phone, look]
     if len(made) != len(TOOLS):
         log.warning("the manager's tool list and TOOLS have drifted apart")
-    return made
+    return [_loosened(one) for one in made]
 
 
 #: The names the model calls them by once the server above is mounted. Spelled out rather than

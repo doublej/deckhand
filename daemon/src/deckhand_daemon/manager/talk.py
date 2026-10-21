@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import time
+from contextvars import ContextVar
 from pathlib import Path
 
 from ..config import data_dir
@@ -71,6 +72,12 @@ def newest() -> int:
     return kept[-1]["id"] if kept else 0
 
 
+#: Whose call an action is, when it is not the manager's own: the session or MCP client using its
+#: tools (`mcp/manager.py`). Its acts are written under that name, or the panel shows the work of
+#: a voice agent elsewhere as the manager's, and neither the person nor the manager can tell.
+caller: ContextVar[str] = ContextVar("caller", default="")
+
+
 def say(role: str, text: str, **extra: object) -> dict:
     """Append one entry and hand it back with the id it was given.
 
@@ -81,6 +88,8 @@ def say(role: str, text: str, **extra: object) -> dict:
         raise ValueError(f"{role!r} is not a role the panel can draw")
     if not text.strip() and not extra:
         return {}
+    if role == "act" and (by := caller.get()):
+        text = f"{by}: {text.strip()}"
     book = read()
     entry = {"id": book["next"], "role": role, "text": text.strip(), "said_at": time.time(), **extra}
     book["entries"].append(entry)

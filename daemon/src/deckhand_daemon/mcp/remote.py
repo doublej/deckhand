@@ -2,7 +2,7 @@
 
 For a client that is not on this Mac — reached from outside as
 `https://deckhand-mcp.jurrejan.com/mcp`, the NAS Caddy passing `/mcp` and nothing else. The same
-server `deckhand-manager-mcp` speaks over stdio, with the daemon's own handlers rather than
+server `deckhand-control-mcp` speaks over stdio, with the daemon's own handlers rather than
 forwarded ones, because this already is the daemon.
 
 **A bearer token, and a scope of its own.** MCP clients send `Authorization: Bearer`, so that is
@@ -23,6 +23,8 @@ from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from starlette.responses import JSONResponse
 
 from .. import pairing
+from ..manager import talk
+from ..pairing import devices
 from . import manager
 
 _sessions: StreamableHTTPSessionManager | None = None
@@ -45,10 +47,16 @@ class _Gate:
 
     async def __call__(self, scope, receive, send) -> None:
         given = dict(scope["headers"]).get(b"authorization", b"").decode()
-        if not pairing.allows_manager(given.removeprefix("Bearer ").strip()):
+        token = given.removeprefix("Bearer ").strip()
+        if not pairing.allows_manager(token):
             await JSONResponse({"detail": "bad token"}, status_code=401)(scope, receive, send)
             return
-        await _sessions.handle_request(scope, receive, send)
+        # The name the token was minted under is who did it, in the panel and to the manager.
+        held = talk.caller.set((devices.known(token) or {}).get("name") or "this Mac's token")
+        try:
+            await _sessions.handle_request(scope, receive, send)
+        finally:
+            talk.caller.reset(held)
 
 
 endpoint = _Gate()
