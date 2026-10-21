@@ -56,7 +56,8 @@ def asked(wanted: list[str], why: str, asker: str, rows: list[dict]) -> dict:
     alert = {"title": sending.shortened(f"{asker or 'A session'} asks to end {count}",
                                         sending.ASKING),
              "line": sending.shortened(f"{named} — {why}", sending.ASKING),
-             "category": callbacks.CATEGORIES[frozenset({"approve", "deny"})]}
+             "category": callbacks.CATEGORIES[frozenset({"approve", "deny"})],
+             "labels": {"approve": "End", "deny": "Keep"}}
     nid = callbacks.sent(alert, {"ends": ends, "actions": ["approve", "deny"]})
     log.info("end request %s from %s: %s", nid, asker or "?", named)
     return {"id": nid, "sessions": [e["name"] for e in ends]}

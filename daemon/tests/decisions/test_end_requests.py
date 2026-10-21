@@ -43,14 +43,14 @@ def asked(token, names, why="idle for two days"):
         headers={config.TOKEN_HEADER: token})
 
 
-def test_the_alert_names_each_session_and_ends_nothing(token, pushed, listed, ended):  # noqa: F811
+def test_the_card_names_each_session_and_ends_nothing(token, pushed, listed, ended):  # noqa: F811
     answered = asked(token, ["velvet-pika", "cold-otter"])
     assert answered.status_code == 202, answered.text
     assert answered.json()["sessions"] == ["velvet-pika", "cold-otter"]
-    alert = pushed[0][0]["aps"]
-    assert alert["category"] == "CALLBACK_ALLOW_DENY"
-    assert alert["alert"]["title"] == "deckhand asks to end 2 sessions"
-    assert alert["alert"]["body"].startswith("velvet-pika (ubuntu), cold-otter")
+    card = pushed[0]
+    assert card.name == "deckhand asks to end 2 sessions"
+    assert card.line.startswith("velvet-pika (ubuntu), cold-otter")
+    assert (card.accept, card.decline) == ("End", "Keep")
     assert ended == []
 
 

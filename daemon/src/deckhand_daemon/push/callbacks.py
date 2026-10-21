@@ -164,8 +164,8 @@ def notify(raw: bytes) -> str:
 
 
 def sent(asked: dict, row: dict) -> str:
-    """Keep `row` by a new notify id and send the alert `asked` describes. A row with `ends`
-    instead of `url` is answered in this daemon (`end_requests.py`), never posted."""
+    """Keep `row` by a new notify id and raise the card `asked` describes, or its alert. A row
+    with `ends` instead of `url` is answered in this daemon (`end_requests.py`), never posted."""
     nid = secrets.token_hex(8)
     row = row | {"at": time.time()}
     with _lock:
