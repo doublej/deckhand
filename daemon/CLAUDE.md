@@ -29,7 +29,7 @@ filters/        # what happens to a prompt between the phone and the session
 projects/       # the folders on this Mac, and starting a session in one of them
 prompts/        # every prompt this daemon sends a model, and nothing else
 manager/       # the manager: its conversation, its facade of tools, its run, its routes
-mcp/            # the fourteen tools a session inside this Mac gets, over stdio and as `deckhand`
+mcp/            # the fifteen tools a session inside this Mac gets, over stdio and as `deckhand`
 space/          # the headset's space: planes, poses, its camera, /windows passed through to :4181
 briefings.py    # where briefings are kept, and the one worker that keeps them current
 summarize.py    # what happened since you last spoke, via the Claude Agent SDK
@@ -218,6 +218,9 @@ the words carry, so it fails and says why instead. The receipt names the route t
   a cancel and types `/compact` or `/clear` the same way a spoken line is typed. The peer socket
   can do none of them, so a session with no pane cannot be controlled from the phone and the
   menu says so rather than failing quietly. `clear` is the only irreversible thing in the app.
+  `exit` is the exception: without a pane it is SIGTERM to the process, sent by the machine it
+  runs on after a fresh listing there (`sessions/ending.py`, a hand's `POST /sessions/{id}/end`).
+  An agent can only ask for it — one signed Allow on the phone (`push/end_requests.py`).
 - **Renaming is `/rename`, Claude Code's own command**, typed into the pane like anything else
   — it is `supportsNonInteractive`, so with an argument it renames without opening a picker.
   Verified against a live session: the registry's `name` and `nameSince` both move. A busy

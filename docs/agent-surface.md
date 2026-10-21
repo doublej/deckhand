@@ -139,7 +139,7 @@ the daemon, because neither needs to.
 
 **Built on 2026-09-10, ahead of that evidence and on JJ's say-so** — the point of the surface was
 always that a session could work the app rather than only read about it. It lives in
-`daemon/src/deckhand_daemon/mcp/`, is installed once with `just install-mcp`, and is the fourteen
+`daemon/src/deckhand_daemon/mcp/`, is installed once with `just install-mcp`, and is the fifteen
 tools in [`docs/commands.md`](commands.md) with the refusals below. Two of them do not touch the daemon at all: `ask_on_phone`
 and `read_answer` run the skill's own scripts, so the tool and the shell command write the same
 file. The rest of this section is what was designed and is what shipped; phase 3's agent token
@@ -228,7 +228,8 @@ postscript.
 - **No route argument anywhere.** `say_to_session` is socket-only and takes no route. An agent
   choosing `keyboard` is an agent claiming to be the person, which is the one thing the whole
   design refuses. The same rule governs the skill's prose: it documents `route` as the person's
-  setting and never as an agent's parameter.
+  setting and never as an agent's parameter. `say_to_session manager` reaches the manager down its
+  inbox the same way; `/manager/say` would arrive as the person.
 - **No `/control`.** Cancel, compact and clear are keystrokes the person presses. `clear` is the
   only irreversible thing in the app and must not be a verb here at all, exactly as
   `control-surface.md` concluded for its own surface.
@@ -246,7 +247,8 @@ postscript.
   outright; the refusal comes back as `{pushed: false, why}` and the agent is expected to say so.
 - **Planes, yes; sessions, no.** `open_plane`/`close_plane` move furniture in the headset
   (`docs/space.md`). A session is never a kept plane, so nothing here closes one — that stays
-  `/control exit`, the person's press.
+  `/control exit`, the person's press. An agent may only *ask*: `ask_to_end` names sessions on
+  one Allow/Deny alert, and the person's signed Allow is the press (`push/end_requests.py`).
 - **The refusals are one table**, `mcp/refused.py`, rendered into the server's instructions,
   `deckhand prime`, `docs/commands.md`, and a `PERSON_ONLY` answer per verb.
 

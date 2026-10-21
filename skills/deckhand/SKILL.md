@@ -37,7 +37,7 @@ itself, so say in one line that the slip is there.
 
 ## The same things as tools, and as one command
 
-Where the `deckhand` MCP server is installed, fourteen tools arrive with it and are the shorter path.
+Where the `deckhand` MCP server is installed, fifteen tools arrive with it and are the shorter path.
 `presence` says where the person is; `ask_on_phone` and `read_answer` write and read exactly the
 file the scripts below do; `call_for_attention` puts a card on the Lock Screen; `whoami` says
 which session this is; and `sessions` and `say_to_session` reach the other sessions on this Mac.

@@ -47,7 +47,7 @@ load-bearing: it never types into a pane. See [docs/manager.md](docs/manager.md)
 | `daemon/…/fleet/` | The rest of the network: atlas's registry, the ssh links, the hands, the merge. |
 | `daemon/…/manager/` | The manager: its conversation, its facade of tools, its run, its routes. |
 | `daemon/…/space/` | The headset's space, and the pass-through to deckhand-windows. |
-| `daemon/…/mcp/` | The fourteen tools an agent *inside* a session gets — the person's tmux among them — over stdio (`just install-mcp`) and as the `deckhand` command (`just install-cli`). |
+| `daemon/…/mcp/` | The fifteen tools an agent *inside* a session gets — the person's tmux among them — over stdio (`just install-mcp`) and as the `deckhand` command (`just install-cli`). |
 | `skills/deckhand/` | The same surface as prose and two scripts, for a session with no tools. |
 | `Sources/DeckhandKit/` | Models, HTTP client, pure logic, design layer — everything `just test` can reach. |
 | `Sources/IconMaker/` | Draws the app icon from the same grid as the in-app mark (`just icon`). |
