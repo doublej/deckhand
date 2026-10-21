@@ -5,16 +5,22 @@ nothing at all unless the person at the Mac has opened a window (`window.py`). E
 opens a window or lists or revokes devices needs **this Mac's own token** — a paired phone holds
 a device token and gets a 403 here, so no device can open a window for another or revoke a
 sibling.
+
+`/devices/key` is the other way round: only a **device** token, never this Mac's, may file a
+signing key, because a key filed with a token every agent can read proves nothing.
 """
 
 from __future__ import annotations
 
+import base64
 import secrets
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from .. import beacon, config, plugin
+from ..decisions import proofs
 from ..log import log
 from . import MANAGER, TRANSCRIBE, allows, devices, window
 
@@ -97,6 +103,57 @@ def check(x_deckhand_token: str = Header(default="")) -> dict:
 def listing() -> dict:
     """Every device paired with a code: id, name, kind, when it paired, when it was last heard."""
     return {"devices": devices.listing()}
+
+
+def require_device(x_deckhand_token: str = Header(default="")) -> dict:
+    """A device paired by code, with no scope: the only caller that may file a key.
+
+    Never this Mac's token. Every agent on the Mac can read that file, so a key filed with it
+    would be a key any of them could have filed, and it would prove nothing about who tapped.
+    """
+    if x_deckhand_token and secrets.compare_digest(x_deckhand_token, config.token()):
+        raise HTTPException(status_code=403, detail={
+            "code": "NOT_A_DEVICE", "error": "pair this phone by code to answer decisions"})
+    device = devices.known(x_deckhand_token)
+    if device is None:
+        raise HTTPException(status_code=401, detail="bad token")
+    if "scope" in device:
+        raise HTTPException(status_code=403, detail={
+            "code": "NOT_A_DEVICE", "error": f"a {device['scope']}-only token holds no key"})
+    return device
+
+
+class Keying(BaseModel):
+    publicKey: str = Field(max_length=200)
+
+
+@router.put("/devices/key")
+def file_key(keying: Keying, device: Annotated[dict, Depends(require_device)]) -> dict:
+    """The phone's public signing key, filed on its own row. First key wins.
+
+    The same key again is 200, so the phone can send it on every launch. A different one is 409:
+    swapping the key is what an attacker holding this device's token would do, so it takes a
+    re-pair — revoking the row on the Mac takes the key with it.
+    """
+    raw = proofs.key_from(keying.publicKey)
+    if raw is None:
+        raise HTTPException(status_code=400, detail={
+            "code": "BAD_KEY", "error": "publicKey is not a base64 P-256 point (x963, 65 bytes)"})
+    said = base64.b64encode(raw).decode()
+    if device.get("key") not in (None, said):
+        raise HTTPException(status_code=409, detail={
+            "code": "KEY_TAKEN", "error": "re-pair to change the key",
+            "fingerprint": device.get("fingerprint")})
+    if device.get("key") is None:
+        devices.give_key(device["id"], said, proofs.fingerprint(raw))
+        log.info("%s filed its signing key %s", device["name"], proofs.fingerprint(raw))
+    return {"registered": True, "fingerprint": proofs.fingerprint(raw)}
+
+
+@router.get("/devices/key")
+def read_key(device: Annotated[dict, Depends(require_device)]) -> dict:
+    """Whether the calling device has filed a key, and its fingerprint."""
+    return {"registered": bool(device.get("key")), "fingerprint": device.get("fingerprint")}
 
 
 @router.delete("/devices/{device_id}", status_code=204, dependencies=[Depends(require_mac)])

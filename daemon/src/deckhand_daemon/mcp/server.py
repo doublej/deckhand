@@ -50,12 +50,7 @@ shell command (`mcp/cli.py`, `deckhand prime`), so a session without these tools
 
 from __future__ import annotations
 
-import asyncio
-import json
 import os
-import subprocess
-import sys
-from pathlib import Path
 from typing import Literal
 from urllib.parse import quote
 
@@ -64,17 +59,11 @@ from mcp.types import ToolAnnotations
 
 from . import here, refused
 from .here import match as _match
+from .slips import ask_on_phone, read_answer
+from .slips import folder as _folder
+from .slips import nobody as _nobody
 from .tmux import tmux_arrange, tmux_tree
 
-# The skill's own scripts, from this repo rather than from `~/.claude/skills/deckhand` — the same
-# files either way, since that is a symlink, and this way a checkout that has not been installed
-# still works. `templates/` beside them are symlinks into `demos/`, so there is one copy of every
-# page and `just demo-check` gates it.
-SCRIPTS = Path(__file__).resolve().parents[4] / "skills" / "deckhand" / "scripts"
-# A slip nobody answers should not hold a tool call open forever, and Claude Code's own tool
-# timeout is well under this anyway — so the default is to look once and let the daemon's message
-# wake the session when the answer lands.
-MAX_WAIT = 600.0
 READ_ONLY = ToolAnnotations(read_only_hint=True, open_world_hint=False)
 WRITES = ToolAnnotations(open_world_hint=False)
 
@@ -106,35 +95,6 @@ server.tool(annotations=READ_ONLY)(tmux_tree)
 server.tool(annotations=WRITES)(tmux_arrange)
 
 
-async def _script(name: str, *args: str) -> tuple[bool, str]:
-    """Run one of the skill's scripts. Returns (it worked, what it printed).
-
-    In a subprocess rather than imported: both scripts end an argument they dislike with
-    `sys.exit(sentence)`, which is right for a command and would take this server down with it.
-    """
-    done = await asyncio.to_thread(
-        subprocess.run, [sys.executable, str(SCRIPTS / name), *args],
-        capture_output=True, text=True, check=False, timeout=MAX_WAIT + 30,
-    )
-    return done.returncode == 0, (done.stdout or done.stderr).strip()
-
-
-NO_SESSION = ("this is not running inside a Claude Code or OpenCode session, so there is no folder "
-              "to write a slip in and no session to speak as")
-
-
-def _folder() -> tuple[dict, str] | tuple[None, str]:
-    """This session's record and its folder, or a sentence saying there is no session above."""
-    held = here.mine()
-    if held is None:
-        return None, NO_SESSION
-    return held, held.get("cwd", "")
-
-
-def _nobody(why: str) -> dict:
-    return {"error": why, "code": "NO_SESSION"}
-
-
 @server.tool(annotations=READ_ONLY)
 async def whoami() -> dict:
     """Which session this is: its id, its name, the folder it is working in."""
@@ -145,61 +105,8 @@ async def whoami() -> dict:
             "folder": held.get("cwd", ""), "status": held.get("status", "")}
 
 
-@server.tool(annotations=WRITES)
-async def ask_on_phone(question: str,
-                       kind: Literal["confirm", "pick", "text", "aloud"] = "confirm",
-                       options: list[str] | None = None,
-                       note: str = "", questions: list[str] | None = None) -> dict:
-    """Ask the person a question on their phone. Returns the slip's id, to read the answer by.
-
-    A yes-or-no question is the default and the fastest to answer: a confirm is answered straight
-    from the Lock Screen card, without opening the app. Keep it under 80 characters — the card
-    shows the question and nothing else — and put any detail in `note`, which the page shows.
-    The answer is `{"answer": true}` or `{"answer": false}`.
-
-    `kind` is one of confirm, pick, text, aloud. `options` is the yes label then the no label for
-    a confirm, one row per choice for a pick, and the field's label for a text. `questions` is for
-    an aloud slip only, each one `id:the question`, and the person answers by speaking.
-
-    The page is written into this session's own folder and appears on the phone within seconds.
-    Asking the same question again replaces the page and drops any answer already given to it.
-    """
-    held, why = _folder()
-    if held is None:
-        return _nobody(why)
-    if kind not in ("confirm", "pick", "text", "aloud"):
-        return {"error": f"{kind!r} is not a kind of slip — confirm, pick, text or aloud",
-                "code": "BAD_KIND"}
-    args = ["--kind", kind, "--title", question, "--dir", why, "--session", held["sessionId"]]
-    if note:
-        args += ["--note", note]
-    for choice in options or []:
-        args += ["--option", choice]
-    for asked in questions or []:
-        args += ["--question", asked]
-    worked, said = await _script("slip.py", *args)
-    if not worked:
-        return {"error": said, "code": "REFUSED"}
-    return {"id": Path(said).stem, "title": question, "waiting": True, "page": said}
-
-
-@server.tool(annotations=READ_ONLY)
-async def read_answer(id: str, wait_seconds: float = 0.0) -> dict:
-    """What the person answered on a slip, if they have. `wait_seconds` blocks for up to ten
-    minutes; left out it looks once, which is usually right because the daemon messages this
-    session the moment an answer lands."""
-    held, why = _folder()
-    if held is None:
-        return _nobody(why)
-    waited = max(0.0, min(float(wait_seconds), MAX_WAIT))
-    worked, said = await _script("answer.py", id, "--wait", str(waited), "--dir", why,
-                                 "--session", held["sessionId"])
-    if not worked:
-        return {"answered": False, "why": said}
-    try:
-        return {"answered": True, "value": json.loads(said)}
-    except json.JSONDecodeError:
-        return {"answered": True, "value": said}
+server.tool(annotations=WRITES)(ask_on_phone)
+server.tool(annotations=READ_ONLY)(read_answer)
 
 
 @server.tool(annotations=READ_ONLY)

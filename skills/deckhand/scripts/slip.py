@@ -15,13 +15,22 @@ asked. `$CLAUDE_CODE_SESSION_ID` is that id and is in every Bash call Claude Cod
 in a terminal — the slip is written flat, which is the older scope
 and means the folder rather than a session.
 
-    slip.py --kind confirm --title "Tag 0.4.0 and push it?" --option "Tag and push"
+    slip.py --kind confirm --title "Tag 0.4.0 and push it?" --option "Tag and push" \\
+            --action "tag 0.4.0 on develop and push the tag, nothing else"
     slip.py --kind pick --title "Which branch" --option develop --option main
     slip.py --kind text --title "What should this session be called?"
     slip.py --kind aloud --title "Before I start" --question "scope:How far should this go?"
 
 Prints the path it wrote. Four kinds are mechanical. `form` and `tweak` are not — copy those out
 of `templates/` by hand and edit them.
+
+**Confirm, pick and text are decisions**: four `<meta>` tags in the head say so, with the
+choices, `--action` (what a yes allows, required for a confirm) and when the question lapses
+(`--expires-hours`, 24 by default). The phone answers one only with a signature from its own key,
+and the daemon types that answer into this session as the person's next message — so ask, end the
+turn, and the answer arrives. Asking an answered decision again under the same id (`--key`, else
+the slug) does not rewrite it: the existing answer is printed instead, as JSON — `id`,
+`"answered": true`, and what `answer.py` prints.
 """
 
 from __future__ import annotations
@@ -32,7 +41,10 @@ import json
 import os
 import re
 import sys
+import time
 from pathlib import Path
+
+import answer  # beside this file: the one reader of an answer, verified or not
 
 # `templates/` sits beside `scripts/`, and resolving first is what makes this work through the
 # `~/.claude/skills/deckhand` symlink: the templates are relative links into the repo's `demos/`.
@@ -118,6 +130,23 @@ def fillText(page: str, options: list[str]) -> str:
     return swap(page, r'\n\s*<p class="hint">Renaming runs.*?</p>', "")
 
 
+def fillDecision(page: str, kind: str, options: list[str], action: str, expires: float) -> str:
+    """The four `<meta>` tags that make a confirm, pick or text a decision (`docs/artifacts.md`).
+
+    The choices are the labels the person sees: yes then no for a confirm, the rows of a pick, the
+    field's label for a text — the same defaults the fill functions above draw.
+    """
+    choices = {"confirm": [options[0] if options else "Yes",
+                           options[1] if len(options) > 1 else "No"],
+               "pick": options, "text": [options[0] if options else "Answer"]}[kind]
+    metas = "".join(
+        f'<meta name="deckhand-{name}" content="{html.escape(value, quote=True)}">\n'
+        for name, value in (("decision", kind), ("choices", json.dumps(choices, ensure_ascii=False)),
+                            ("action", " ".join(action.split())),
+                            ("expires", str(int(expires)))))
+    return swap(page, r"</head>", f"{metas}</head>")
+
+
 def fillAloud(page: str, questions: list[str]) -> str:
     """The declaration block, which is the whole of what an aloud slip is.
 
@@ -160,15 +189,30 @@ def main() -> int:
                        help="whose slip this is (default: $CLAUDE_CODE_SESSION_ID, else OpenCode's "
                             "$OPENCODE_SESSION_ID). Empty writes "
                             "it to the folder, where every session working there sees it")
+    parse.add_argument("--action", default="",
+                       help="decisions: exactly what a yes allows, in one line. Required for a "
+                            "confirm; a pick or text defaults to the question")
+    parse.add_argument("--expires-hours", type=float, default=24.0, metavar="HOURS",
+                       help="decisions: how long the question stands (default: 24)")
+    parse.add_argument("--key", help="the dedup key: the slip id, overriding --slug and the title")
     said = parse.parse_args()
 
-    slug = said.slug or buildSlug(said.title)
+    slug = said.key or said.slug or buildSlug(said.title)
     if not SLUG.fullmatch(slug):
         sys.exit(f"slip.py: {slug!r} is not a slip id — letters, digits, - and _, one segment")
     # Loudly rather than flat: the daemon holds a session id to this same rule, so a slip filed
     # under one it refuses is one the phone never lists — the failure nobody notices.
     if said.session and not SLUG.fullmatch(said.session):
         sys.exit(f"slip.py: {said.session!r} is not a session id — one segment, no dot, no slash")
+    if said.kind == "confirm" and not said.action.strip():
+        sys.exit("slip.py: a confirm is a decision and needs --action: exactly what a yes allows")
+
+    folder = Path(said.dir).expanduser().resolve() / ".deckhand" / "artifacts" / said.session
+    where = folder / f"{slug}.html"
+    # Asking an answered decision again must not wipe the person's answer: print it instead.
+    if (kept := answer.answeredDecision(where)) is not None:
+        print(json.dumps({"id": slug, "answered": True} | kept, ensure_ascii=False, indent=2))
+        return 0
 
     page = fillCommon((TEMPLATES / f"{said.kind}.html").read_text(), said.title, slug, said.note)
     if said.kind == "aloud":
@@ -176,10 +220,10 @@ def main() -> int:
     else:
         page = {"confirm": fillConfirm, "pick": fillPick, "text": fillText}[said.kind](
             page, said.option)
+        page = fillDecision(page, said.kind, said.option, said.action.strip() or said.title,
+                            time.time() + said.expires_hours * 3600)
 
-    folder = Path(said.dir).expanduser().resolve() / ".deckhand" / "artifacts" / said.session
     folder.mkdir(parents=True, exist_ok=True)
-    where = folder / f"{slug}.html"
     where.write_text(page)
     # An answer beside a page that has just been rewritten answers the old question, and the
     # phone would draw the slip as answered. Deleting it is how `docs/artifacts.md` says to ask

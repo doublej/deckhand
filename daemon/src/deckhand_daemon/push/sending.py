@@ -77,11 +77,15 @@ class Card:
     slip: str = ""
     accept: str = ""
     decline: str = ""
+    #: A decision's page hash, which the card's buttons sign over. Only with a slip.
+    hash: str = ""
 
     def state(self) -> dict:
         said = {"kind": self.kind, "line": self.line, "when": self.when}
         if self.slip:
             said |= {"slip": self.slip, "accept": self.accept, "decline": self.decline}
+        if self.slip and self.hash:
+            said["hash"] = self.hash
         return said
 
 
@@ -274,26 +278,38 @@ def told(text: str) -> str | None:
     Activity card is per session and the manager is not one, which is why this is not a card.
     `thread-id` stacks them as one conversation, and `deckhand` is what a tap opens.
     """
-    if not (token := tokens().get("device")):
-        return "the phone has not allowed notifications yet"
-    if not (auth := bearer()):
-        return "no push key on this Mac — run `just sync-apns`"
     body = text if len(text) <= MAX_TOLD else text[:MAX_TOLD - 1].rstrip() + "…"
     payload = {"aps": {"alert": {"title": "Manager", "body": body}, "sound": "default",
                        "thread-id": "manager"},
                "deckhand": "manager"}
-    error = _post(token, payload, auth, "notification", push_type="alert", topic=APP_TOPIC)
+    error = alert(payload)
     if error:
         log.info("manager: %s", error)
     return error
 
 
+def alert(payload: dict, collapse: str = "") -> str | None:
+    """A plain notification to the app's own device token. Returns an error, or None.
+
+    `collapse` becomes `apns-collapse-id`, so a second push for the same thing replaces the first
+    rather than stacking under it — a decision's is `<sid>:<aid>`.
+    """
+    if not (token := tokens().get("device")):
+        return "the phone has not allowed notifications yet"
+    if not (auth := bearer()):
+        return "no push key on this Mac — run `just sync-apns`"
+    return _post(token, payload, auth, "notification", push_type="alert", topic=APP_TOPIC,
+                 collapse=collapse)
+
+
 def _post(token: str, payload: dict, auth: str, kind: str, *, push_type: str = "liveactivity",
-          topic: str = TOPIC) -> str | None:
+          topic: str = TOPIC, collapse: str = "") -> str | None:
     import httpx  # HTTP/2 only: APNs refuses anything else
 
     headers = {"authorization": f"bearer {auth}", "apns-topic": topic,
                "apns-push-type": push_type, "apns-priority": "10"}
+    if collapse:
+        headers["apns-collapse-id"] = collapse
     try:
         with httpx.Client(http2=True, timeout=TIMEOUT) as client:
             answer = client.post(f"https://{HOST}/3/device/{token}", json=payload,

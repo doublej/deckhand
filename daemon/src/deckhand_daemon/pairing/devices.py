@@ -8,6 +8,10 @@ has to be typable, because nobody types it.
 **Revoking one is deleting its row**, and it stops working on the very next request: the check
 reads the rows this process holds, and a delete writes through them.
 
+**A phone may file one public key on its own row** (`key`, base64, and `fingerprint`), which is
+what proves a decision's answer was tapped on it — `decisions/`. Public on purpose: it grants
+nothing, and `GET /devices` shows it so a person can compare fingerprints.
+
 **`seen` is written at most every few minutes.** The phone asks something every few seconds, and
 a file rewritten per request is a disk busy for nothing; the stamp is only ever read by a person
 deciding which row is the phone they lost.
@@ -103,3 +107,23 @@ def forget(device_id: str) -> dict | None:
             _keep(rows)
             return public(row)
     return None
+
+
+def keyed(fingerprint: str) -> dict | None:
+    """The device whose registered key has this fingerprint, or None — `decisions/proofs.py`."""
+    if not fingerprint:
+        return None
+    return next((row for row in _rows()
+                 if row.get("key") and row.get("fingerprint") == fingerprint), None)
+
+
+def give_key(device_id: str, key: str, fingerprint: str) -> None:
+    """File the phone's public key on its own row. The route has already made first key win.
+
+    Revoking the device deletes the row and the key with it, which is how a key is changed: re-pair.
+    """
+    rows = _rows()
+    for row in rows:
+        if row["id"] == device_id:
+            row["key"], row["fingerprint"] = key, fingerprint
+    _keep(rows)

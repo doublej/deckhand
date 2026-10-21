@@ -35,18 +35,18 @@ the rest of the folder is unaffected, the way every other store in this daemon d
 
 from __future__ import annotations
 
-import asyncio
 import html
 import json
 import re
 import time
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Any
 
-from fastapi import APIRouter, Body, HTTPException, Query
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse
 
-from . import deliver, plugin, sessions
+from . import sessions
+from .decisions import pages
 from .log import log
 from .saying import live_session
 
@@ -140,7 +140,9 @@ def counted(session: sessions.Session) -> dict:
     """
     rows = listing(session)
     answered = sum(1 for row in rows if row["answered"])
-    return {"artifacts_waiting": len(rows) - answered, "artifacts_answered": answered}
+    # A decision that lapsed unanswered is waiting on nobody: it can no longer be answered.
+    waiting = sum(1 for row in rows if not row["answered"] and not row["expired"])
+    return {"artifacts_waiting": waiting, "artifacts_answered": answered}
 
 
 def page(session: sessions.Session, artifact_id: str) -> str | None:
@@ -194,7 +196,9 @@ def answer(session: sessions.Session, artifact_id: str, value: Any) -> dict | No
     answer_file = _file(session, artifact_id, ".answer.json")
     if found is None or answer_file is None or not found.is_file():
         return None
-    written = {"id": artifact_id, "answeredAt": time.time(), "value": value}
+    # `verified` is false for every answer that comes this way: a decision's goes through
+    # `decisions/answering.py`, which is the only writer that checks a signature.
+    written = {"id": artifact_id, "answeredAt": time.time(), "value": value, "verified": False}
     answer_file.write_text(json.dumps(written, indent=2))
     log.info("%s answered the artifact %s", session.name, artifact_id)
     return written | {"file": str(answer_file)}
@@ -216,7 +220,7 @@ def _ignore(session: sessions.Session) -> None:
             log.warning("could not make %s ignore itself: %s", ignore.parent, error)
 
 
-def _inside(spot: Path, artifact_id: str, suffix: str) -> Path | None:
+def inside(spot: Path, artifact_id: str, suffix: str) -> Path | None:
     """One file of this artifact's, inside that one folder, or None.
 
     The only place an id from the phone turns into a path, so it is the only place the check has
@@ -243,9 +247,9 @@ def _file(session: sessions.Session, artifact_id: str, suffix: str) -> Path | No
     two of them.
     """
     for spot in _spots(session):
-        page_at = _inside(spot, artifact_id, ".html")
+        page_at = inside(spot, artifact_id, ".html")
         if page_at is not None and page_at.is_file():
-            return _inside(spot, artifact_id, suffix)
+            return inside(spot, artifact_id, suffix)
     return None
 
 
@@ -257,24 +261,26 @@ def _row(spot: Path, artifact_id: str, shared: bool) -> dict | None:
     other half of what a row means — it says this page belongs to the folder and every session
     working in it is looking at the same one, so answering it is not answering *this* session.
     """
-    found = _inside(spot, artifact_id, ".html")
+    found = inside(spot, artifact_id, ".html")
     if found is None:
         return None
     try:
         modified = found.stat().st_mtime
     except OSError:
         return None
-    beside = _inside(spot, artifact_id, ".answer.json")
+    beside = inside(spot, artifact_id, ".answer.json")
     return {
         "id": artifact_id,
-        "title": _title(found, artifact_id),
+        "title": titled(found, artifact_id),
         "modified": modified,
         "answered": beside is not None and beside.is_file(),
         "shared": shared,
+        # What makes it a decision, its hash, and whether its answer is proven: `decisions/`.
+        **pages.fields(found, beside),
     }
 
 
-def _title(path: Path, artifact_id: str) -> str:
+def titled(path: Path, artifact_id: str) -> str:
     """The page's own `<title>`, which is the artifact's name. Its id when it has none.
 
     A page being written as this is read, or one that is not text, falls back to the id rather
@@ -298,7 +304,7 @@ def _brief(value: Any) -> str:
     return said if len(said) <= BRIEF else said[:BRIEF] + "…"
 
 
-def _message(written: dict) -> str:
+def message(written: dict) -> str:
     """What the session is told. The person's own answer, so it reads as the person saying it.
 
     It names the slip, carries the answer when it is short, and says where the whole of it is: a
@@ -343,41 +349,3 @@ async def read_answer(session_id: str, artifact_id: str) -> dict:
     if page(session, artifact_id) is None:
         raise HTTPException(status_code=404, detail="no artifact with that id in this project")
     return {"value": answered(session, artifact_id)}
-
-
-@router.post("/sessions/{session_id}/artifacts/{artifact_id}/answer")
-async def answer_artifact(
-    session_id: str,
-    artifact_id: str,
-    value: Annotated[Any, Body(embed=True)],
-    route: str | None = Query(default=None, description="auto, keyboard or socket"),
-) -> dict:
-    """Take the answer, write it down, then tell the session — in that order, and it matters.
-
-    A delivery that fails must not lose an answer. The file is the record and the message is only
-    the wake-up, so a session whose pane has gone still finds the answer on disk, and the phone
-    is told that the delivery failed rather than that the answer did.
-
-    It travels by the route the person chose for speaking, because it is the person speaking.
-    `nudge.py` pins the socket for the opposite reason: what it sends is the daemon's own question
-    and has to arrive labelled as another agent's.
-
-    `value` is any JSON value but a required one, and `null` is therefore not sendable: FastAPI
-    cannot tell a field that is missing from one that is explicitly null, so accepting null would
-    make an empty body an answer. `false`, `0`, `""` and `[]` all arrive intact, and an answer
-    carrying nothing at all is what the absence of the file already says.
-    """
-    session = await live_session(session_id)
-    written = answer(session, artifact_id, value)
-    if written is None:
-        raise HTTPException(status_code=404, detail="no artifact with that id in this project")
-    chosen = route or plugin.route()
-    taken, error = await asyncio.to_thread(deliver.deliver, session, _message(written), chosen)
-    log.info("the answer to %s in %s: %s", artifact_id, session.name,
-             error or f"{taken} took it")
-    return {
-        "answer": written,
-        "delivered": taken is not None,
-        "delivered_by": taken,
-        "delivery_error": error,
-    }

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from deckhand_daemon.mcp import cli, refused, server, tmux
+from deckhand_daemon.mcp import cli, refused, server, slips, tmux
 
 
 def test_every_tool_is_a_command_and_every_command_a_tool():
@@ -18,7 +18,7 @@ def test_every_tool_is_a_command_and_every_command_a_tool():
 
 def test_every_error_code_a_tool_can_return_is_known():
     """An unknown code would end the command in a KeyError instead of a hint."""
-    source = "".join(Path(m.__file__).read_text() for m in (server, server.here, tmux))
+    source = "".join(Path(m.__file__).read_text() for m in (server, server.here, tmux, slips))
     for code in ("NO_SESSION", "DAEMON_DOWN", "REFUSED", "BAD_ANSWER", "BAD_KIND",
                  "NO_SUCH_SESSION", "CODEX_THREAD", "BAD_PLANE", "NO_SUCH_PLANE",
                  "NOT_STARTABLE", "NO_TMUX", "NO_SUCH_TARGET", "BAD_ARRANGE", "TMUX_REFUSED"):

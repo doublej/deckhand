@@ -85,12 +85,12 @@ COMMANDS: list[dict[str, str]] = [
      "does": "every live session on this Mac, with how many slips each has waiting"},
     {"name": "ask", "tool": "ask_on_phone",
      "args": "QUESTION|- [--kind confirm|pick|text|aloud] [--option LABEL]... [--note TEXT] "
-             "[--question id:text]...",
-     "does": "put a slip on the phone; answers with its id. confirm: two --option, yes then no. "
-             "pick: one --option per choice. text: --option is the field label. aloud: "
-             "--question per spoken answer"},
+             "[--question id:text]... [--action TEXT] [--expires-hours H] [--key ID]",
+     "does": "put a slip on the phone; answers with its id. confirm: two --option, yes then no, "
+             "and --action. pick: one --option per choice. text: --option is the field label. "
+             "aloud: --question per spoken answer. Then end the turn: a decision's answer arrives"},
     {"name": "answer", "tool": "read_answer", "args": "ID [--wait SECONDS]",
-     "does": "the person's answer to a slip; exit 4 while there is none. --wait blocks up to 600"},
+     "does": "the answer, `verified` if their phone signed it; exit 4 while none. --wait max 600"},
     {"name": "notify", "tool": "call_for_attention", "args": "LINE|-",
      "does": "a Lock Screen card asking for the person; exit 4 when the folder refuses"},
     {"name": "say", "tool": "say_to_session", "args": "SESSION TEXT|-",
@@ -146,6 +146,9 @@ def build_parser() -> Parser:
     ask.add_argument("--option", action="append", default=[])
     ask.add_argument("--note", default="")
     ask.add_argument("--question", action="append", default=[], dest="questions")
+    ask.add_argument("--action", default="")
+    ask.add_argument("--expires-hours", type=float, default=24.0)
+    ask.add_argument("--key", default="")
     sub.choices["answer"].add_argument("id")
     sub.choices["answer"].add_argument("--wait", type=float, default=0.0)
     sub.choices["notify"].add_argument("line", help="what to say, or - to read it from stdin")
@@ -185,7 +188,8 @@ async def _call(a: argparse.Namespace) -> dict[str, Any]:
             return await server.sessions()
         case "ask":
             return await server.ask_on_phone(_text(a.title), kind=a.kind, options=a.option,
-                                             note=a.note, questions=a.questions)
+                                             note=a.note, questions=a.questions, action=a.action,
+                                             expires_hours=a.expires_hours, key=a.key)
         case "answer":
             return await server.read_answer(a.id, wait_seconds=a.wait)
         case "notify":
@@ -287,10 +291,9 @@ def prime(detected: dict[str, Any]) -> str:
 ## Start here
 1. `deckhand presence` — `laptop` or `headset`: the person is reading this conversation, ask here
    and stop. `phone`: go on.
-2. `deckhand ask "Ship it?"` — prints the slip id. A yes-or-no question is answered from the Lock
-   Screen without opening the app; keep it under 80 characters and put detail in `--note`.
-3. `deckhand answer <id>` — exit 4 until they answer. The daemon also messages this session the
-   moment an answer lands, so there is no need to poll.
+2. `deckhand ask "Ship it?" --action "…"` — prints the slip id; then end your turn: their signed
+   answer arrives as your next message. Under 80 characters; detail in `--note`.
+3. `deckhand answer <id>` — exit 4 until they answer; `verified` says their phone signed it.
 4. Nothing to ask but they must know: `deckhand notify "Build done, 3 tests fail"`.
 
 ## Commands
@@ -330,8 +333,8 @@ When the person puts a page beside you, or takes one away, a message from the da
 ## Guardrails
 - `say` is socket-only: the words arrive labelled as another Claude session, carrying none of
   the person's authority. Nothing here types into a pane, on purpose — do not go around it.
-- A slip is a file in this session's own folder, `.deckhand/artifacts/`. Asking the same
-  question again replaces it and drops any answer already given.
+- A slip is a file in this session's own folder, `.deckhand/artifacts/`. Asking an answered
+  decision again returns its answer; any other slip is replaced and its answer dropped.
 - `notify` is for a finished long job or a stuck session, never for progress.
 - `presence` moves the moment the person sits down or walks off: ask it again before each
   question, never cache it.

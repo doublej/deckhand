@@ -26,6 +26,7 @@ from dataclasses import asdict
 from fastapi import APIRouter, Query
 
 from .. import artifacts, briefings, config, sessions, tasks
+from ..decisions import announcing
 from ..log import log
 from ..reading import transcripts
 from ..settings import wants
@@ -89,7 +90,9 @@ def sweep() -> None:
     live = sessions.live_sessions()
     alive = {s.session_id for s in live}
     for session in live:
-        _slipped(session)
+        listed = artifacts.listing(session)  # newest first
+        _slipped(session, listed)
+        announcing.swept(session, listed)
         _cleared(session)
         if session.provider == "opencode":
             _stopped(session)
@@ -103,14 +106,17 @@ def sweep() -> None:
         end(gone)
 
 
-def _slipped(session) -> None:
+def _slipped(session, listed: list[dict]) -> None:
     """A slip this session put on the phone that nothing has answered — and the moment the last
     one is answered, which is a card with nothing left to ask about. A directory listing per
     session per sweep: the honest cost of noticing a file appear without a filesystem watcher,
     against a folder the session wrote to seconds ago, so it is warm.
-    # ponytail: polled; a real watcher if this ever shows up in the log's timings."""
-    listed = artifacts.listing(session)  # newest first
-    rows = [row for row in listed if not row["answered"]]
+    # ponytail: polled; a real watcher if this ever shows up in the log's timings.
+
+    A decision that lapsed unanswered is no longer waiting, so it leaves the card the way an
+    answered one does. A new decision moves the card **silently**: its one alert is
+    `decisions/announcing.py`'s, carrying the decision, and the Mac's `/alerts` never lists it."""
+    rows = [row for row in listed if not row["answered"] and not row.get("expired")]
     waiting = {row["id"] for row in rows}
     was = _slips.get(session.session_id)
     _slips[session.session_id] = waiting
@@ -137,7 +143,7 @@ def _slipped(session) -> None:
         log.info("lock screen: %s has a slip waiting, but this folder is set quiet", session.name)
         return
     log.info("lock screen: %s is waiting on a slip", session.name)
-    announce(session, ASKING, slip=fresh[0])
+    announce(session, ASKING, slip=fresh[0], loud=not fresh[0].get("decision"))
 
 
 def _stopped(session) -> None:
@@ -206,7 +212,8 @@ def called(session, line: str) -> str | None:
     _said[session.session_id] = said
     feed.add("called", session, line=" ".join(line.split()))
     log.info("lock screen: %s called for you: %s", session.name, said)
-    announce(session, ASKING)
+    # A decision already waiting has had its one alert; this folds into its card, quietly.
+    announce(session, ASKING, loud=not announcing.open_decision(artifacts.listing(session)))
     return None
 
 
@@ -237,7 +244,13 @@ def announce(session, kind: str, slip: dict | None = None, loud: bool = True) ->
     the person did not read."""
     line, ask = _line(session.session_id, kind), {}
     shape = shapes.ask(artifacts.page(session, slip["id"])) if slip else {}
-    if slip and shape["kind"] == "confirm":
+    if slip and slip.get("decision"):
+        # The question itself, and a confirm's own two choices with the hash its buttons sign.
+        line = shortened(slip["title"], kind)
+        if slip["decision"] == "confirm" and len(slip["choices"]) >= 2:
+            ask = {"slip": slip["id"], "accept": slip["choices"][0],
+                   "decline": slip["choices"][1], "hash": slip["hash"]}
+    elif slip and shape["kind"] == "confirm":
         line = shortened(slip["title"], kind)
         ask = {"slip": slip["id"], "accept": shape["accept"], "decline": shape["decline"]}
     card = Card(session=session.session_id, name=session.name, kind=kind, line=line,
