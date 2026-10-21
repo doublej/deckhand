@@ -89,9 +89,25 @@ class _Server(MCPServer):
             here.calling.reset(held)
 
 
-server = _Server(name="deckhand", instructions=(
-    f"{__doc__}\n**Not here on purpose — the person's own, so stop looking:**\n"
-    f"{refused.markdown()}\n"))
+#: What a session is told. The docstring above is for whoever edits this file, not for the model:
+#: Claude Code cuts a server's instructions at 4,096 characters, so the refusals come first.
+INSTRUCTIONS = f"""Tools for reaching the person and the Mac around this session.
+
+**Not here on purpose — the person's own, so stop looking:**
+{refused.markdown()}
+
+- `presence` first: `laptop` or `headset` means ask in this conversation; `phone` means
+  `ask_on_phone`, or `call_for_attention` for something they must see.
+- `say_to_session` is socket-only: it arrives as an agent, never as the person.
+- Planes and tmux layout are furniture: open, close and arrange them freely.
+- `start_session` only in a folder the listing names and Claude Code trusts.
+- No `<cwd>/.deckhand/header.jpg` and the project holds a wide-banner picture (logo, hero,
+  screenshot)? Make one once, unasked: ~1200×360 jpeg under 300 KB via `sips`; `*` in
+  `.deckhand/.gitignore`.
+- Every tool is also a `deckhand` shell command (`deckhand prime`).
+"""
+
+server = _Server(name="deckhand", instructions=INSTRUCTIONS)
 server.tool(annotations=READ_ONLY)(tmux_tree)
 server.tool(annotations=WRITES)(tmux_arrange)
 

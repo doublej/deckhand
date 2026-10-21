@@ -11,15 +11,9 @@ max_turns: 16
 timeout: 60
 ask: "Update <task_list> from the evidence above using the tools, then return the briefing alone."
 tools:
-  add_task: >-
-    Add an ask the person has made that is not in the list yet. Their words, shortened to a few.
-    Never a step you decided to take.
-  set_task_state: >-
-    Move an ask along: todo (nothing done yet), doing (started, unfinished), done (finished,
-    nothing about it still open).
-  drop_task: >-
-    Remove an ask for good. Only when the person withdrew it or it was never theirs. An ask that
-    is finished is done, not dropped.
+  add_task: Add a missing ask from the person, in their words (rules in <list_rules>).
+  set_task_state: Move an ask to todo, doing or done.
+  drop_task: Remove an ask the person withdrew or that was never theirs.
 ---
 
 <task>
@@ -100,7 +94,5 @@ strings, and **bold** at most twice, for a blocker, decision or pending question
 
 <finish>
 Make the task-list calls first, then return the briefing alone: no preamble, no sign-off, no
-account of what you did to the list. When you use a tool you may say a brief sentence first. If
-no tool can express what you need, say so instead of guessing. Do not include internal or system
-XML tags in your answer. Stop after the briefing.
+account of what you did to the list. Stop after the briefing.
 </finish>

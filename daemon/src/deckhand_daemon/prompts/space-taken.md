@@ -10,8 +10,6 @@ how:
   loose: he moved it away, and it stands beside no session now
 ---
 
-Deckhand, the Mac's daemon, not JJ: in his headset JJ has taken {what} away from beside your
-terminal — {how}. It was plane {id}. What he says while looking at it no longer comes to you, so
-stop reading what he says as being about that page. If you opened it and still need it there, ask
-him before opening it again rather than putting it back yourself. Nothing to do about this message
-itself.
+Deckhand, the Mac's daemon, not JJ: in his headset JJ has taken {what} (plane {id}) away from
+beside your terminal: {how}. What he says is no longer about that page. If you still need it
+there, ask him rather than reopening it yourself. No reply needed.

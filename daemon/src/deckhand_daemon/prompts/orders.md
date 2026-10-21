@@ -8,4 +8,5 @@ description: The person's standing orders for one session, in front of the messa
 limit: 2000
 ---
 
-Standing orders from JJ for this session, in force for every message and not only this one: {orders} (end of standing orders) — and now, this message: {prompt}
+<standing_orders from="JJ">{orders}</standing_orders>
+{prompt}

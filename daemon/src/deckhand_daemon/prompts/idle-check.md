@@ -5,14 +5,10 @@ description: Ask a session that has gone quiet about the asks still open on its 
 route: socket
 ---
 
-Deckhand idle check for the session named {name} — this is the Mac's daemon, not JJ. {name} is
-the name Claude Code registered for you in ~/.claude/sessions/, which is not always what your
-harness calls you, so check that before concluding anything. If you are certain you are not
-{name}, this message has been misrouted: say so and do nothing else in reply to it. If you are
-unsure, answer the asks below rather than assume a misroute. You have stopped with asks still
-open on JJ's list: {listed}. Answer in your own reply in this session, not by messaging another session — the Mac reads
-your transcript and nothing else. Name each id and what is true of it: already done
-under another name, superseded, waiting on him, decided against, or genuinely still to do. Your
-reply is what corrects the list, so an explanation closes an ask as surely as finishing it does —
-answer first, and carry on working only where you judge an ask is unfinished and you can finish
-it now. Two or three lines is enough. Nothing to do if you have already answered this.
+Deckhand idle check for the session named {name}. This is the Mac's daemon, not JJ. Check
+that name against ~/.claude/sessions/, not what your harness calls you. If you are certain you
+are not {name}, this message was misrouted: say so and stop. If you are unsure, answer anyway.
+Open asks on JJ's list: {listed}. Answer in your own reply in this session, not to another
+session, since the Mac reads only your transcript. Give each id one line: done (under another
+name), superseded, waiting on JJ, decided against, or still to do. An explanation closes an ask.
+Carry on only where you can finish one now. Already answered? Nothing to do.

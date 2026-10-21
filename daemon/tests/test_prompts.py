@@ -31,7 +31,7 @@ def test_a_placeholder_left_unfilled_would_be_sent_to_a_live_session():
     assert "{" not in filled
 
     crafted = prompts.load("crafting").filled(
-        skill="/tmp/SKILL.md", target="opus-5", cwd="/tmp", name="quiet-gannet")
+        profile="Be direct.", target="opus-5", cwd="/tmp", name="quiet-gannet")
     assert "{" not in crafted
 
 

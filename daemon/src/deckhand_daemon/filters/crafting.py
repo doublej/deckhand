@@ -5,13 +5,12 @@ gap between what a person means and what they dictate is widest: no editing, no 
 breath, and the session at the other end gets a run-on sentence to act on. This hands that
 sentence to the skill that already knows how to turn it into a prompt.
 
-The whole of the SDK setup is `Read`, one model, and a system prompt that names the file to
-read — all of it declared in `prompts/crafting.md`. That is not a shortcut around skills — it *is* how a skill works. `setting_sources=[]`
-for the reason `summarize.py` records (loading the user's config starts every MCP server they
-have configured, which cost more than a minute), and a skill is only reachable through the
-settings it is declared in. So rather than pay that, the skill's own progressive disclosure is
-used directly: the agent reads `SKILL.md`, and the skill tells it which single reference file it
-needs for the target model. Two reads and an answer.
+The SDK setup is one model, no tools and one turn, all declared in `prompts/crafting.md`.
+`setting_sources=[]` for the reason `summarize.py` records (loading the user's config starts
+every MCP server they have configured, which cost more than a minute). The skill is not loaded
+as a skill: its calibration for the target model, `references/lint-<target>.md`, is inlined into
+the system prompt. Reading the whole `SKILL.md` first cost ~7k tokens a crafted line, read twice
+over three turns, for an authoring workflow a one-breath rewrite never uses.
 
 **This filter is not idempotent**, and it is the first one that is not. Crafting an already
 crafted prompt rewrites it a second time. That is why `/say` grew a `prepared` flag: once a
@@ -62,6 +61,16 @@ def _floor(settings: dict) -> int:
     return int(given) if isinstance(given, (int, float)) and given > 0 else 12
 
 
+def _profile(target: str) -> str:
+    """The skill's lint file for `target`, else its generic one, else nothing: the rules in the
+    system prompt are enough to craft with, and a missing file must not stop the words."""
+    references = SKILL.parent / "references"
+    for page in (references / f"lint-{Path(target).name}.md", references / "lint-generic.md"):
+        if page.is_file():
+            return page.read_text()
+    return ""
+
+
 async def _run(prompt: Prompt, target: str) -> tuple[str | None, str | None]:
     """One model, one tool, no settings, no MCP. Every expected failure is a sentence."""
     try:
@@ -72,15 +81,10 @@ async def _run(prompt: Prompt, target: str) -> tuple[str | None, str | None]:
     options = ClaudeAgentOptions(
         model=MODEL,
         system_prompt=CRAFTING.filled(
-            skill=SKILL, target=target, cwd=prompt.cwd, name=prompt.session_name
+            profile=_profile(target), target=target, cwd=prompt.cwd, name=prompt.session_name
         ),
-        # Read alone. The skill is a file and following it is reading it; nothing here writes,
-        # runs or fetches. `bypassPermissions` is what makes that unattended, so the list has to
-        # be the one in `tools`: allowed_tools auto-approves calls, tools= is what removes the
-        # built-ins. Measured — with allowed_tools alone the model was asked to Write a file and
-        # did. ponytail: Read is still not confined to the skill folder by anything but the
-        # system prompt. A PreToolUse hook denying a file_path is what narrows that, and it does
-        # fire under bypassPermissions; add one if a filter ever reads somewhere it should not.
+        # No tools: `tools=` is what removes the built-ins (allowed_tools alone only
+        # auto-approves; measured, the model was asked to Write a file and did).
         tools=CRAFTING.settings["allowed_tools"],
         allowed_tools=CRAFTING.settings["allowed_tools"],
         permission_mode="bypassPermissions",

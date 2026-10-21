@@ -10,7 +10,7 @@ def test_the_viewed_session_reaches_the_model_and_not_the_panel(claude_home):
     agent.clear()
     # The panel draws the person's own words; the model reads which session "this one" is.
     assert entry["text"] == "summarise this one"
-    assert "deckhand (id abc123)" in queued
+    assert 'session="deckhand" id="abc123"' in queued
     assert queued.endswith("summarise this one")
 
 
