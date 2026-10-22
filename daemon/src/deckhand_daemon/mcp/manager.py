@@ -66,7 +66,7 @@ def _forwarded(name: str):
                                   headers={"x-deckhand-for": _caller()})
         if "error" in answer:
             return {**said(answer["error"]), "is_error": True}
-        return said(answer["text"])
+        return {**said(answer["text"]), "is_error": bool(answer.get("is_error"))}
 
     return run
 

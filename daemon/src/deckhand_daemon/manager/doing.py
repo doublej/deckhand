@@ -187,7 +187,8 @@ def server(described: dict[str, str]):
 #: What a tool may be called without, its handler filling in the default. The SDK's `{name: type}`
 #: shorthand marks every key required, so an agent leaving out `turns` was refused, and one meaning
 #: "every machine" had to guess `""` for `machine`.
-OPTIONAL = {"read_session": {"turns"}, "list_projects": {"query", "machine"},
+OPTIONAL = {"list_sessions": {"machine", "state"}, "read_session": {"turns", "before", "parts"},
+            "read_context": {"whole"}, "list_projects": {"query", "machine"},
             "read_settings": {"folder"}, "start_session": {"machine", "model"},
             "start_scratch_session": {"model"}, "set_switch": {"folder"}, "look": {"session"}}
 
@@ -196,7 +197,7 @@ def _loosened(one):
     """`one` with its shorthand written out as JSON Schema, and only what it needs required."""
     import dataclasses
 
-    kinds = {str: "string", int: "integer"}
+    kinds = {str: "string", int: "integer", bool: "boolean"}
     shape = {name: {"type": kinds[kind]} for name, kind in one.input_schema.items()}
     return dataclasses.replace(one, input_schema={
         "type": "object", "properties": shape,
@@ -217,16 +218,19 @@ def build(described: dict[str, str]) -> list:
 
     from . import tools as reading
 
-    @tool("list_sessions", described["list_sessions"], {}, annotations=reads)
-    async def list_sessions(_: dict) -> dict:
-        return await reading.listing()
+    @tool("list_sessions", described["list_sessions"], {"machine": str, "state": str},
+          annotations=reads)
+    async def list_sessions(args: dict) -> dict:
+        return await reading.listing(str(args.get("machine", "")), str(args.get("state", "")))
 
-    @tool("read_session", described["read_session"], {"session": str, "turns": int}, annotations=reads)
+    @tool("read_session", described["read_session"],
+          {"session": str, "turns": int, "before": int, "parts": str}, annotations=reads)
     async def read_session(args: dict) -> dict:
         session = find(str(args.get("session", "")))
         if session is None:
             return missing(str(args.get("session", "")))
-        return await reading.one(session, max(0, min(int(args.get("turns") or 0), 20)))
+        return await reading.one(session, max(0, min(int(args.get("turns") or 0), 20)),
+                                 max(0, int(args.get("before") or 0)), str(args.get("parts", "")))
 
     @tool(
         "list_projects",
@@ -243,12 +247,13 @@ def build(described: dict[str, str]) -> list:
     async def read_settings(args: dict) -> dict:
         return reading.switches(str(args.get("folder", "")))
 
-    @tool("read_context", described["read_context"], {"session": str}, annotations=reads)
+    @tool("read_context", described["read_context"], {"session": str, "whole": bool},
+          annotations=reads)
     async def read_context(args: dict) -> dict:
         session = find(str(args.get("session", "")))
         if session is None:
             return missing(str(args.get("session", "")))
-        return await reading.loaded(session)
+        return await reading.loaded(session, bool(args.get("whole")))
 
     @tool("say_to_session", described["say_to_session"], {"session": str, "text": str})
     async def say_to_session(args: dict) -> dict:

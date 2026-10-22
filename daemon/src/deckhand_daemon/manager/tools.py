@@ -76,7 +76,7 @@ def missing(wanted: str) -> dict:
         )
         or "none — no session is running anywhere"
     )
-    return said(f"no live session called {wanted!r}. Live right now: {names}")
+    return {**said(f"no live session called {wanted!r}. Live right now: {names}"), "is_error": True}
 
 
 def _quiet_for(updated_at: float) -> str:
@@ -89,7 +89,7 @@ def _quiet_for(updated_at: float) -> str:
     return f"{minutes // 60}h"
 
 
-async def listing() -> dict:
+async def listing(machine: str = "", state: str = "") -> dict:
     """Every machine, then every live session on all of them. The manager's first look, always.
 
     The machines come first and they are not decoration: without them a manager asked for
@@ -103,6 +103,8 @@ async def listing() -> dict:
     rows = await merge.listings([s.to_json() for s in local])
     known = {s.session_id: s for s in local}
     here = registry.here()
+    rows = [row for row in rows if (not machine or (row.get("machine") or here) == machine)
+            and (not state or row.get("status") == state)]
     window = sessions.context_window()
     drawn = [
         _here_line(found, window)
@@ -110,6 +112,9 @@ async def listing() -> dict:
         else _away_line(row, here)
         for row in rows
     ]
+    if machine or state:  # narrowed: the asker already knows the machines
+        where = f" on {machine}" if machine else ""
+        return said("\n".join(drawn) or f"no {state or 'live'} session{where} right now.")
     body = "\n".join(drawn) or "nothing is running on any machine right now."
     return said(f"{_machines(await merge.machines())}\n\n{body}")
 
@@ -168,7 +173,7 @@ def _away_line(row: dict, here: str) -> str:
     )
 
 
-async def one(session: sessions.Session, turns: int) -> dict:
+async def one(session: sessions.Session, turns: int, before: int = 0, parts: str = "") -> dict:
     """Everything about one session worth knowing before acting on it.
 
     **Half of this is the daemon's and half is the session's own disk**, and the split decides
@@ -182,26 +187,32 @@ async def one(session: sessions.Session, turns: int) -> dict:
     chain = filter_config.load(filter_config.key(session.machine, session.name))
     here = registry.here()
     away = (session.machine or here) != here
-    parts = [
+    # `parts` names the sections wanted; empty is all of them. The head always comes.
+    wanted = {name.strip() for name in parts.split(",") if name.strip()}
+    sections = {
+        "briefing": lambda: f"briefing: {brief.get('summary') or '(none written yet)'}",
+        "asks": lambda: f"asks:\n{tasks.render(session.session_id)}",
+        "orders": lambda: f"orders: {kept.load(session.session_id) or '(none)'}",
+        "filters": lambda: f"filters: {_chain(chain)}",
+    }
+    drawn = [
         f"{session.name} [{session.status}] in {_tilde(session.cwd)}"
         + (f" on {session.machine}" if away else ""),
         f"id: {session.session_id}",
         *([] if away else ["context {} · {}".format(*_fill(session, sessions.context_window()))]),
-        f"briefing: {brief.get('summary') or '(none written yet)'}",
-        f"asks:\n{tasks.render(session.session_id)}",
-        f"orders: {kept.load(session.session_id) or '(none)'}",
-        f"filters: {_chain(chain)}",
+        *(make() for name, make in sections.items() if not wanted or name in wanted),
     ]
-    rows = (
-        (await _asked(session, "/artifacts")).get("artifacts", [])
-        if away
-        else artifacts.listing(session)
-    )
-    if waiting := [row for row in rows if not row.get("answered") and row.get("kind", "ask") == "ask"]:
-        parts.append("slips waiting: " + ", ".join(f"{r['id']} — {r['title']}" for r in waiting))
+    if not wanted or "slips" in wanted:
+        rows = (
+            (await _asked(session, "/artifacts")).get("artifacts", [])
+            if away
+            else artifacts.listing(session)
+        )
+        if waiting := [r for r in rows if not r.get("answered") and r.get("kind", "ask") == "ask"]:
+            drawn.append("slips waiting: " + ", ".join(f"{r['id']} — {r['title']}" for r in waiting))
     if turns:
-        parts.append("last of the conversation:\n" + await _turns(session, turns, away))
-    return said("\n\n".join(parts))
+        drawn.append("conversation:\n" + await _turns(session, turns, away, before))
+    return said("\n\n".join(drawn))
 
 
 async def _asked(session: sessions.Session, path: str) -> dict:
@@ -277,7 +288,7 @@ def switches(folder: str) -> dict:
     return said(f"{head}:\n{lines}")
 
 
-async def loaded(session: sessions.Session) -> dict:
+async def loaded(session: sessions.Session, whole: bool = False) -> dict:
     """Every CLAUDE.md a session in that folder is running under, and what it costs.
 
     Asked of the machine the folder is on, for the reason `one` gives: a tree walked here for a
@@ -295,6 +306,10 @@ async def loaded(session: sessions.Session) -> dict:
         total = sum(d.tokens for d in read)
     if not docs:
         return said(f"{session.name} runs under no CLAUDE.md at all.")
+    if not whole:  # the total and where it comes from; the tree is a thousand tokens on its own
+        top = ", ".join(f"{label} ~{count}" for _, label, count in sorted(docs, key=lambda d: -d[2])[:5])
+        return said(f"{session.name} is loaded with ~{total} tokens of context from {len(docs)} "
+                    f"CLAUDE.md file(s); the largest: {top}. `whole` draws the tree.")
     lines = "\n".join(f"  {prefix}{label} — ~{count} tokens" for prefix, label, count in docs)
     return said(f"{session.name} is loaded with ~{total} tokens of context:\n{lines}")
 
@@ -321,23 +336,35 @@ def _reached(session: sessions.Session) -> str:
     return "pane" if session.pane else "no pane"
 
 
-async def _turns(session: sessions.Session, limit: int, away: bool) -> str:
-    """The last turns: asked of the machine that holds them, else read where that provider keeps
-    them — Claude's transcript, or the Codex or OpenCode server the phone's routes read."""
+#: How much of one turn a reading shows. The rest is said to exist, never dropped in silence.
+CUT = 400
+
+
+async def _turns(session: sessions.Session, limit: int, away: bool, before: int = 0) -> str:
+    """`limit` turns ending `before` from the newest: asked of the machine that holds them, else
+    read where that provider keeps them — Claude's transcript, or the Codex or OpenCode server the
+    phone's routes read. Says when a turn was cut and what `before` reads the page older."""
     if away:
-        rows = (await _asked(session, f"/turns?limit={limit}")).get("turns", [])
+        answer = await _asked(session, f"/turns?limit={limit}&before={before}")
+        rows, more = answer.get("turns", []), bool(answer.get("more"))
         read = [(str(row.get("role", "")), str(row.get("text", ""))) for row in rows]
     else:
-        reader = {"codex": codex_turns, opencode.PROVIDER: opencode_turns}.get(session.provider)
+        reader = {"codex": codex_turns, opencode.PROVIDER: opencode_turns}.get(session.provider,
+                                                                            transcripts)
         try:
-            found = (transcripts.read_turns(session.session_id, limit=limit) if reader is None
-                     else reader.page_turns(session.session_id, limit, 0)[0])
+            found, more = reader.page_turns(session.session_id, limit, before)
         except (codex.CodexError, opencode.OpenCodeError) as error:
             return f"  ({session.provider} would not answer: {error})"
         read = [(turn.role, turn.text) for turn in found]
     if not read:
         return "  (nothing readable in the transcript)"
-    return "\n".join(f"  {role}: {' '.join(text.split())[:400]}" for role, text in read)
+    flat = [(role, " ".join(text.split())) for role, text in read]
+    lines = [f"  {role}: {text[:CUT]}{'…' if len(text) > CUT else ''}" for role, text in flat]
+    if any(len(text) > CUT for _, text in flat):
+        lines.append(f"  (… is a turn cut at {CUT} characters: `look` /turns has them whole)")
+    if more:
+        lines.append(f"  (older turns: before={before + len(read)})")
+    return "\n".join(lines)
 
 
 def _tilde(folder: str) -> str:

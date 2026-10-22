@@ -19,11 +19,13 @@ tools:
     name, which machine it is on, whether it is busy, the folder, how full its context is, how
     many asks are open, how many slips are waiting, the model answering it, how long an idle one
     has sat quiet, and the last briefing's headline. A session on another machine carries fewer
-    facts on its row — the rest is read off that machine by read_session.
+    facts on its row — the rest is read off that machine by read_session. `machine` (an id) and
+    `state` (busy or idle) narrow it, and then the machines are left out.
   read_session: >-
     Everything about one session: its context fill and model, its briefing, its open asks, its
     standing orders, its filter chain, any slips waiting, and optionally the last few rounds of its conversation. `turns` is
-    how many rounds to include — 0 for none, up to 20.
+    how many rounds to include — 0 for none, up to 20; the answer gives the `before` that reads
+    the page older. `parts` picks sections, comma-separated: briefing, asks, orders, filters, slips.
   list_projects: >-
     Folders on any machine a session could be started in, newest activity first. `query` narrows
     by name or path and you should almost always pass one — there are several hundred. `machine`
@@ -35,8 +37,8 @@ tools:
     What this Mac has been set to do. Empty `folder` is the global answers; a folder path is what
     actually applies there once its own overrides are laid over the global ones.
   read_context: >-
-    Every CLAUDE.md a session in that folder is loaded with, drawn as a tree, and what it costs
-    in tokens. What to reach for when somebody asks why a session is behaving as it is. Read off
+    What the CLAUDE.md files a session (by name or id) runs under cost in tokens: the total and
+    the five largest, or with `whole` the full tree. What to reach for when somebody asks why a session is behaving as it is. Read off
     the machine the folder is on, so it is right for a remote session too.
   say_to_session: >-
     Put words into a session's own inbox. They arrive labelled as a message from another Claude

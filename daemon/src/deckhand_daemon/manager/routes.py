@@ -147,7 +147,8 @@ async def run_manager_tool(name: str, args: dict,
         answer = await found.handler(args)
     finally:
         talk.caller.reset(held)
-    return {"text": "\n".join(block["text"] for block in answer["content"])}
+    return {"text": "\n".join(block["text"] for block in answer["content"]),
+            "is_error": bool(answer.get("is_error"))}
 
 
 @functools.cache
