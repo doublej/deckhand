@@ -93,8 +93,8 @@ async def _tell(args: dict) -> dict:
 
 
 async def _end(args: dict) -> dict:
-    """Ask the person to end sessions, on any machine, by name or id: one Allow/Deny card on
-    their phone naming each and your `why`. **This ends nothing** — only their Allow does, and
+    """The one way to stop, end or terminate sessions from here: it asks the person, on any
+    machine, by name or id — one Allow/Deny card on their phone naming each and your `why`. **This ends nothing** — only their Allow does, and
     nothing tells you which they chose; `list_sessions` later shows it. For cleanup the person
     asked for. Refused unless each name is exactly one Claude session with a process."""
     return _answered(await here.reach("POST", "/end-requests", json={

@@ -72,7 +72,8 @@ tools:
     there is nothing to bring up for a session on another machine.
   show_on_phone: >-
     Move the phone's own screen. `action` is open_session, close_session, open_pane,
-    open_settings, open_projects or refresh; `target` is a session name for open_session and a
+    open_settings, open_projects or refresh — close_session closes the phone's page, never the
+    session; `target` is a session name for open_session and a
     pane name (summary, slips, transcript, files, orders) for open_pane. Use it when what you
     are saying is better looked at than described.
   look: >-
