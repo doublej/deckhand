@@ -205,6 +205,14 @@ def start_here(path: str = Body(embed=True), model: str = Body(embed=True, defau
     answers that can disagree. What this checks is the thing only this machine knows: whether
     Claude Code has been trusted in that folder.
 
+    **The trust check is not waived from over there, whatever the daemon says.** The Mac's own
+    `starting.start` lets the manager past it for a path the person typed; `tmux.start` carries
+    the measurement that says why that cannot cross the wire. A hand refusing is a sentence the
+    person can act on; a hand obeying is a window sitting on a dialog in a tmux session.
+
+    `~` is the person's home *here*, and `tmux.start` is what expands it: the daemon's home is a
+    different folder on a different disk.
+
     200 with an `error` rather than a 4xx, matching `deliver` above: the daemon reads None from
     `proxy.call` as "that machine is not reachable", so a refusal spelled as a status code would
     arrive as the wrong sentence entirely.

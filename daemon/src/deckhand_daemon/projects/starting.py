@@ -161,21 +161,44 @@ def _trust(folder: Path) -> None:
     log.info("made %s and recorded it as trusted", folder)
 
 
-def start(cwd: str) -> tuple[Session | None, str | None]:
-    """Start a session in `cwd`. Returns (the session, None) or (None, why not)."""
+def start(
+    cwd: str, *, person_named_it: bool = False, model: str = ""
+) -> tuple[Session | None, str | None]:
+    """Start a session in `cwd`. Returns (the session, None) or (None, why not).
+
+    **On this Mac the trust record is this daemon's gate and not Claude Code's**, which is the
+    measurement written out under *What the trust dialog actually does* in `docs/manager.md`:
+    Claude Code shows no dialog here in a folder it has never been trusted in, starts anyway, and
+    files the folder as `hasTrustDialogAccepted: false`. So what this gate stands in for is
+    *somebody having chosen this folder* — and `person_named_it` is that question already
+    answered, by the person saying the path out loud into the manager's panel.
+
+    **`this Mac` is load-bearing and was learnt the hard way.** The same flag on Ubuntu's hand
+    stranded a tmux window on the trust dialog: same 2.1.278, same launch line, `/home/jurrejan`
+    recorded exactly as `/Users/jurrejan` is here, and it asked. Whatever the difference is, it
+    is not one this daemon can see from another machine — so `projects/tmux.py` keeps its check
+    and this parameter does not cross the wire.
+
+    False for every other caller, and that is deliberate: the phone's picker and a project name
+    both reach a folder through a list, where the record is the only thing that says the person
+    ever meant it. `docs/manager.md` under *Any folder, when the person names one* is the whole
+    of the reasoning.
+    """
     folder = Path(cwd)
     if not folder.is_dir():
         return None, f"{cwd} is not a folder on this Mac"
-    if cwd not in trusted():
-        return None, (f"Claude Code has not been trusted in {folder.name} yet — it has to be "
-                      f"started there once on the Mac and the trust question answered")
+    if not person_named_it and cwd not in trusted():
+        return None, (
+            f"Claude Code has not been trusted in {folder.name} yet — it has to be "
+            f"started there once on the Mac and the trust question answered"
+        )
     from . import tmux  # tmux.py builds on this module, so not at the top
 
     running = live_sessions(paned_only=False)
     known = {s.session_id for s in running}
-    # The folder's own model where it has one, and Claude Code's own default where it has
-    # not — an absent flag and a flag saying "the default" are different things to the CLI.
-    chosen = wants.resolved(str(folder)).session_model
+    # The model asked for this one start, else the folder's own, else Claude Code's default —
+    # an absent flag and a flag saying "the default" are different things to the CLI.
+    chosen = model or wants.resolved(str(folder)).session_model
     model = ["--model", chosen] if chosen else []
     name = free_name(folder.name, running)
     launch = " ".join(["claude", "--name", shlex.quote(name), *model, *FLAGS])

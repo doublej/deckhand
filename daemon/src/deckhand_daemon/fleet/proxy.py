@@ -36,11 +36,19 @@ READY_TIMEOUT = 20.0
 WARM_TIMEOUT = 90.0
 
 
-async def call(machine_id: str, method: str, path: str, **kwargs) -> dict | None:
+async def call(
+    machine_id: str, method: str, path: str, timeout: float = TIMEOUT, **kwargs
+) -> dict | None:
     """One request to one hand. None when the machine is not reachable — never an exception.
 
     A caller merging several machines' answers must not lose the ones that worked because one
     was asleep, so a dead machine is an absence here rather than a failure.
+
+    `timeout` is for the one call that is not a read. Starting a session waits for Claude Code's
+    own session record to land — `projects/starting.SETTLE`, forty seconds — so at the eight this
+    file is built around it timed out every time, **marked the link down, and reported "that
+    machine is not reachable"** while the session was starting perfectly well over there. A read
+    has no business taking that long and keeps the short one.
     """
     link = links.links().get(machine_id)
     if link is None:
@@ -53,7 +61,7 @@ async def call(machine_id: str, method: str, path: str, **kwargs) -> dict | None
     if not link.alive and not (links.start(link) and await ready(link)):
         return None
     try:
-        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        async with httpx.AsyncClient(timeout=timeout) as client:
             r = await client.request(
                 method, f"{link.base_url}{path}", headers={TOKEN_HEADER: token()}, **kwargs
             )

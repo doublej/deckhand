@@ -27,6 +27,9 @@ from . import commands, sources, starting
 router = APIRouter(tags=["projects"])
 PROVIDERS = ("claude", "codex", "opencode")
 SPOKEN = {"claude": "Claude Code", "codex": "Codex", "opencode": "OpenCode"}
+#: What a hand spends before it starts waiting for the session record: the tmux call itself, plus
+#: room for the ssh hop. On top of `starting.SETTLE`, which is the wait that dominates.
+TMUX_HEADROOM = 20.0
 
 
 @router.get("/projects")
@@ -50,7 +53,7 @@ async def list_projects() -> dict:
     found, source = await asyncio.to_thread(sources.catalog)
     here = registry.here()
     counts = await asyncio.to_thread(_live_counts, here)
-    allowed = await _trusted(here)
+    allowed = await trusted_everywhere(here)
     for project in found:
         machine = project.machine or here
         # Resolved on this Mac only: the dev tree here carries a symlink, and resolving a path
@@ -75,8 +78,13 @@ def _live_counts(here: str) -> dict[tuple[str, str], int]:
     return counts
 
 
-async def _trusted(here: str) -> dict[str, frozenset[str]]:
-    """Every machine's trusted folders, this one's read off disk and the rest asked for at once."""
+async def trusted_everywhere(here: str) -> dict[str, frozenset[str]]:
+    """Every machine's trusted folders, this one's read off disk and the rest asked for at once.
+
+    Not private, because the manager asks the same question: a folder on Ubuntu marked against
+    this Mac's own trust record would read as untrusted every time, which is a lie about a
+    machine that has its own answer.
+    """
     answers = await proxy.every("GET", "/projects/trusted")
     found = {here: frozenset(starting.trusted())}
     for machine_id, body in answers.items():
@@ -115,7 +123,10 @@ async def start_project_session(
         raise HTTPException(status_code=409,
                             detail=f"a {SPOKEN[provider]} session starts on this Mac only")
     if machine != here:
-        return await _start_over_there(machine, path)
+        started, error = await start_over_there(machine, path)
+        if started is None:
+            raise HTTPException(status_code=409, detail=error)
+        return {"session": started}
     if provider == "codex":
         return {"session": await asyncio.to_thread(_start_codex, path, here)}
     if provider == "opencode":
@@ -151,8 +162,13 @@ def _start_opencode(path: str, here: str) -> dict:
     return Session(**record, machine=here).to_json()
 
 
-async def _start_over_there(machine: str, path: str) -> dict:
-    """Ask that machine's hand to start it, and hand back the session it made.
+async def start_over_there(
+    machine: str, path: str, model: str = ""
+) -> tuple[dict | None, str | None]:
+    """Ask that machine's hand to start it, and hand back the session it made, or why not.
+
+    A pair rather than an exception because there are two callers now and only one of them is a
+    route: the manager turns the same refusal into a sentence on somebody's phone.
 
     The model goes across rather than being looked up over there: what the person set for this
     folder is on this Mac, and a hand keeps no settings of its own that could disagree.
@@ -160,17 +176,27 @@ async def _start_over_there(machine: str, path: str) -> dict:
     A hand answers 200 with an `error` for a refusal — "not trusted there" is a sentence, not a
     status code — so None from `proxy.call` means only one thing, and it is the one thing a
     status code would have been ambiguous about: that machine is not reachable at all.
+
+    Two callers stand behind this now and they differ in one thing only: this route checked the
+    path against atlas's catalogue first, and the manager's path door did not. Neither can waive
+    the hand's trust check — `projects/tmux.py` carries the measurement that says why.
     """
     answer = await proxy.call(
-        machine, "POST", "/projects/session",
-        json={"path": path, "model": wants.resolved(path).session_model},
+        machine,
+        "POST",
+        "/projects/session",
+        # Long, because the hand does not answer until Claude Code has written its own session
+        # record over there — `starting.SETTLE` plus the tmux call in front of it. The phone is
+        # waiting on this one, and waiting is right: the answer is the session itself.
+        timeout=starting.SETTLE + TMUX_HEADROOM,
+        json={"path": path, "model": model or wants.resolved(path).session_model},
     )
     if answer is None:
-        raise HTTPException(status_code=409, detail=f"{machine} is not reachable right now")
+        return None, f"{machine} is not reachable right now"
     if error := answer.get("error"):
-        raise HTTPException(status_code=409, detail=error)
+        return None, error
     sources.forget()
-    return {"session": answer.get("session")}
+    return answer.get("session"), None
 
 
 @router.get("/projects/commands")

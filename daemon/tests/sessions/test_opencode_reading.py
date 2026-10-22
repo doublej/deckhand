@@ -1,5 +1,7 @@
 """An OpenCode session read the way a Claude one is: by the manager, and by the briefing worker."""
 
+import asyncio
+
 import pytest
 from opencode_fake import NOW, info
 
@@ -41,13 +43,13 @@ def session(opencode_service):
 
 
 def test_the_manager_reads_the_conversation_out_of_the_service(session):
-    text = tools.one(session, 4)["content"][0]["text"]
+    text = asyncio.run(tools.one(session, 4))["content"][0]["text"]
     assert "Voice notes go through utt now." in text
     assert "nothing readable" not in text
 
 
 def test_the_manager_listing_has_its_context_and_says_why_there_is_no_pane(session):
-    line = next(row for row in tools.listing()["content"][0]["text"].splitlines()
+    line = next(row for row in asyncio.run(tools.listing())["content"][0]["text"].splitlines()
                 if row.startswith(f"- {session.name}"))
     assert "context 10%" in line  # 100k of the model's 1M window, not Claude's
     assert "over opencode's API" in line

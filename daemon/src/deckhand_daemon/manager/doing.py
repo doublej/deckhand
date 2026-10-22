@@ -21,16 +21,9 @@ And one that is not about the keyboard: **no rewriting a filter chain.** A chain
 between a prompt and a session, and an agent that can edit it can remove the step that would
 have stopped it. Reading one is fine and `tools.one` does.
 
-Everything else is here, because the person is holding the phone this ran from. `start_session`
-is deliberately allowed where `docs/agent-surface.md` refuses it: that refusal is about an agent
-starting a process nobody asked for, and this one only ever runs because somebody spoke into the
-panel. Both gates it inherits are unchanged — the folder must be on this Mac's own project list,
-and Claude Code must already be trusted there.
-
-`start_scratch_session` is the one thing here that **makes** something on the Mac, and the bound
-is why it is not a general "create a folder" verb: it is the sandbox or it is nothing. A task
-with no project on this Mac had nowhere to go at all before it, so the only answer left was a
-refusal. `projects.starting.scratch_folder` holds the whole of where; read it before widening.
+Everything else is here, because the person is holding the phone this ran from. The two verbs
+that **make** a session rather than speak to one are next door in `opening.py`, where the whole
+of what they may open is written down — this file is what may be done to a session that exists.
 """
 
 from __future__ import annotations
@@ -38,9 +31,9 @@ from __future__ import annotations
 from .. import deliver, sessions
 from ..log import log
 from ..orders import kept
-from ..projects import sources, starting
 from ..settings import wants
 from . import talk
+from .opening import begin, scratch
 from .tools import find, missing, said
 
 #: The switches a folder or this Mac can be given an answer for. `route` is deliberately not one
@@ -91,48 +84,6 @@ def order(wanted: str, text: str) -> dict:
     if not written:
         return said(f"{session.name} now has no standing orders — nothing is added to its prompts.")
     return said(f"{session.name}'s standing orders are now: {written}")
-
-
-def begin(wanted: str) -> dict:
-    """Open a terminal in a folder on this Mac and start Claude Code in it."""
-    found, _ = sources.catalog()
-    lowered = (wanted or "").strip().lower()
-    match = next(
-        (p for p in found if p.name.lower() == lowered or p.path.lower() == lowered),
-        next((p for p in found if lowered and lowered in p.relative.lower()), None),
-    )
-    if match is None:
-        return said(f"no project called {wanted!r} on this Mac. Use list_projects to find it.")
-    if match.path not in starting.trusted():
-        return said(
-            f"{match.name} has never been trusted by Claude Code, so a session started there "
-            f"would stop at a trust prompt nobody can answer. The person has to open it once "
-            f"themselves."
-        )
-    session, error = starting.start(match.path)
-    if session is None:
-        talk.say("act", f"could not start a session in {match.name}: {error}")
-        return said(f"it did not start: {error}")
-    sources.forget()
-    talk.say("act", f"started {session.name} in {match.relative or match.path}")
-    return said(f"{session.name} is running in {match.path}.")
-
-
-def scratch(task: str) -> dict:
-    """Make a folder under the sandbox for a task with no home, and start a session in it."""
-    folder, why = starting.scratch_folder(task)
-    if folder is None:
-        return said(why)
-    session, error = starting.start(str(folder))
-    if session is None:
-        talk.say("act", f"made {folder.name} but nothing started in it: {error}")
-        return said(f"the folder is there and nothing started in it: {error}")
-    sources.forget()
-    talk.say("act", f"started {session.name} in a new scratch folder, {folder.name}")
-    return said(
-        f"{session.name} is running in {folder}, a folder made for this and holding nothing "
-        f"else. Say what the work is with say_to_session — it has been told nothing yet."
-    )
 
 
 def switch(folder: str, key: str, value: str) -> dict:
@@ -268,18 +219,25 @@ def build(described: dict[str, str]) -> list:
 
     @tool("list_sessions", described["list_sessions"], {}, annotations=reads)
     async def list_sessions(_: dict) -> dict:
-        return reading.listing()
+        return await reading.listing()
 
     @tool("read_session", described["read_session"], {"session": str, "turns": int}, annotations=reads)
     async def read_session(args: dict) -> dict:
         session = find(str(args.get("session", "")))
         if session is None:
             return missing(str(args.get("session", "")))
-        return reading.one(session, max(0, min(int(args.get("turns") or 0), 20)))
+        return await reading.one(session, max(0, min(int(args.get("turns") or 0), 20)))
 
-    @tool("list_projects", described["list_projects"], {"query": str}, annotations=reads)
+    @tool(
+        "list_projects",
+        described["list_projects"],
+        {"query": str, "machine": str},
+        annotations=reads,
+    )
     async def list_projects(args: dict) -> dict:
-        return reading.catalogue(str(args.get("query", "")), limit=30)
+        return await reading.catalogue(
+            str(args.get("query", "")), str(args.get("machine", "")), limit=30
+        )
 
     @tool("read_settings", described["read_settings"], {"folder": str}, annotations=reads)
     async def read_settings(args: dict) -> dict:
@@ -290,7 +248,7 @@ def build(described: dict[str, str]) -> list:
         session = find(str(args.get("session", "")))
         if session is None:
             return missing(str(args.get("session", "")))
-        return reading.loaded(session)
+        return await reading.loaded(session)
 
     @tool("say_to_session", described["say_to_session"], {"session": str, "text": str})
     async def say_to_session(args: dict) -> dict:
@@ -300,13 +258,15 @@ def build(described: dict[str, str]) -> list:
     async def set_orders(args: dict) -> dict:
         return order(str(args.get("session", "")), str(args.get("text", "")))
 
-    @tool("start_session", described["start_session"], {"project": str})
+    @tool("start_session", described["start_session"],
+          {"project": str, "machine": str, "model": str})
     async def start_session(args: dict) -> dict:
-        return begin(str(args.get("project", "")))
+        return await begin(str(args.get("project", "")), str(args.get("machine", "")),
+                           str(args.get("model", "")))
 
-    @tool("start_scratch_session", described["start_scratch_session"], {"task": str})
+    @tool("start_scratch_session", described["start_scratch_session"], {"task": str, "model": str})
     async def start_scratch_session(args: dict) -> dict:
-        return scratch(str(args.get("task", "")))
+        return scratch(str(args.get("task", "")), str(args.get("model", "")))
 
     @tool("set_switch", described["set_switch"], {"folder": str, "key": str, "value": str})
     async def set_switch(args: dict) -> dict:

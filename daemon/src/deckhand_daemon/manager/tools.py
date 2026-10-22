@@ -13,12 +13,15 @@ UUID, and one told the actual list will not.
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 from .. import artifacts, briefings, sessions, tasks
 from ..filters import config as filter_config
+from ..fleet import merge, proxy, registry
 from ..orders import kept
-from ..projects import sources, starting
+from ..projects import routes as project_routes
+from ..projects import sources
 from ..reading import context, transcripts
 from ..sessions import codex, codex_turns, opencode, opencode_turns
 from ..settings import wants
@@ -30,9 +33,27 @@ def said(text: str) -> dict:
     return {"content": [{"type": "text", "text": text}]}
 
 
+def everywhere() -> list[sessions.Session]:
+    """Every session on every machine, this Mac's first.
+
+    The remote half comes out of the last listing rather than a fresh fan-out, which is what
+    `merge` is for — and `listing()` is the tool the manager is told to call first, so by the
+    time a name is being resolved the cache is a second old. A machine that has gone quiet since
+    simply stops appearing, which is the right answer rather than a stale row.
+    """
+    local = sessions.live_sessions()
+    remote = [built for row in merge.remote_rows() if (built := merge.session(row["session_id"]))]
+    return local + remote
+
+
 def find(wanted: str) -> sessions.Session | None:
-    """The session that name or id means, or None. Exact name first, then id, then a prefix."""
-    live = sessions.live_sessions()
+    """The session that name or id means, or None. Exact name first, then id, then a prefix.
+
+    This Mac wins a tie, because two machines genuinely can hold a session of the same name and
+    the one in front of the person is the one they mean. Naming the machine is `list_sessions`'s
+    job and the prompt says to look first.
+    """
+    live = everywhere()
     wanted = (wanted or "").strip()
     for session in live:
         if session.name == wanted or session.session_id == wanted:
@@ -47,76 +68,201 @@ def find(wanted: str) -> sessions.Session | None:
 
 def missing(wanted: str) -> dict:
     """What to say when a name matched nothing: the names that exist, so the next guess lands."""
-    names = ", ".join(s.name for s in sessions.live_sessions()) or "none — no session is running"
+    here = registry.here()
+    names = (
+        ", ".join(
+            s.name if (s.machine or here) == here else f"{s.name} (on {s.machine})"
+            for s in everywhere()
+        )
+        or "none — no session is running anywhere"
+    )
     return said(f"no live session called {wanted!r}. Live right now: {names}")
 
 
-def listing() -> dict:
-    """Every live session in a line each. The manager's first look at the Mac, always."""
-    live = sessions.live_sessions()
-    if not live:
-        return said("nothing is running on this Mac right now.")
+def _quiet_for(updated_at: float) -> str:
+    """How long since this session last did anything, coarse enough to read at a glance."""
+    minutes = int(max(0, time.time() - updated_at) // 60)
+    if minutes < 1:
+        return "just now"
+    if minutes < 60:
+        return f"{minutes}m"
+    return f"{minutes // 60}h"
+
+
+async def listing() -> dict:
+    """Every machine, then every live session on all of them. The manager's first look, always.
+
+    The machines come first and they are not decoration: without them a manager asked for
+    something "on Ubuntu" has no way to know Ubuntu is a machine at all, and answers that it
+    only manages this Mac — which was true of the tools and was never true of the network.
+
+    This is also what fills `merge`'s map of which session is where, so every `find` after it
+    can resolve a name on another machine.
+    """
+    local = sessions.live_sessions()
+    rows = await merge.listings([s.to_json() for s in local])
+    known = {s.session_id: s for s in local}
+    here = registry.here()
     window = sessions.context_window()
-    lines = []
-    for session in live:
-        fill = sessions.filled(session, window)["context"]
-        share = f"{100 * fill['used'] // fill['limit']}%" if fill["limit"] and fill["used"] else "—"
-        slips = artifacts.counted(session).get("artifacts_waiting", 0)
-        open_asks = len(tasks.outstanding(session.session_id))
-        headline = briefings.of(session.session_id).get("headline") or ""
-        lines.append(
-            f"- {session.name} [{session.status}] in {_tilde(session.cwd)} · context {share}"
-            f" · {open_asks} open ask(s) · {slips} slip(s) waiting"
-            f" · {_reached(session)}"
-            + (f"\n    {headline}" if headline else "")
+    drawn = [
+        _here_line(found, window)
+        if (found := known.get(row.get("session_id", "")))
+        else _away_line(row, here)
+        for row in rows
+    ]
+    body = "\n".join(drawn) or "nothing is running on any machine right now."
+    return said(f"{_machines(await merge.machines())}\n\n{body}")
+
+
+def _machines(rows: list[dict]) -> str:
+    """Which machines there are, by the names the person says, and which answer right now."""
+    lines = [
+        f"- {row['id']} ({row['label']}) — "
+        + (
+            "this Mac"
+            if row.get("primary")
+            else ("reachable" if row.get("reachable") else "not reachable right now")
         )
-    return said("\n".join(lines))
+        + f", {row['os']}"
+        for row in rows
+    ]
+    return "machines on this network:\n" + "\n".join(lines)
 
 
-def one(session: sessions.Session, turns: int) -> dict:
-    """Everything about one session worth knowing before acting on it."""
+def _here_line(session: sessions.Session, window: int) -> str:
+    """A session on this Mac: everything the daemon holds about it, on one line."""
+    share, model = _fill(session, window)
+    slips = artifacts.counted(session).get("artifacts_waiting", 0)
+    open_asks = len(tasks.outstanding(session.session_id))
+    headline = briefings.of(session.session_id).get("headline") or ""
+    quiet = f" · quiet {_quiet_for(session.updated_at)}" if session.status != "busy" else ""
+    return (
+        f"- {session.name} [{session.status}] in {_tilde(session.cwd)} · context {share}"
+        f" · {model}"
+        f" · {open_asks} open ask(s) · {slips} slip(s) waiting"
+        f" · {_reached(session)}{quiet}"
+        + (f"\n    {headline}" if headline else "")
+    )
+
+
+def _fill(session: sessions.Session, window: int) -> tuple[str, str]:
+    """How full its context is, and the model answering it: what decides reuse or a fresh start."""
+    filled = sessions.filled(session, window)
+    fill = filled["context"]
+    share = f"{100 * fill['used'] // fill['limit']}%" if fill["limit"] and fill["used"] else "—"
+    return share, (filled.get("model") or "model unknown").removeprefix("claude-")
+
+
+def _away_line(row: dict, here: str) -> str:
+    """A session on another machine, out of that machine's own listing.
+
+    Fewer facts than a local row, and that is honest rather than lazy: how full a context is,
+    what slips are waiting and what the last briefing said are read off the disk that holds the
+    files, and this is the listing rather than the reading. `read_session` goes and asks.
+    """
+    status = row.get("status", "unknown")
+    quiet = "" if status == "busy" else f" · quiet {_quiet_for(row.get('updated_at') or 0.0)}"
+    return (
+        f"- {row.get('name')} [{status}] on {row.get('machine') or here}"
+        f" in {row.get('cwd')} · no pane{quiet}"
+    )
+
+
+async def one(session: sessions.Session, turns: int) -> dict:
+    """Everything about one session worth knowing before acting on it.
+
+    **Half of this is the daemon's and half is the session's own disk**, and the split decides
+    which machine answers. The briefing, the ask list, the standing orders and the filter chain
+    are kept here for every session wherever it runs, so they are read here. The slips and the
+    transcript are files in the session's `cwd`, so for a session on another machine they are
+    asked of that machine — reading this Mac's disk for them would answer about the wrong
+    folder while looking exactly like an answer.
+    """
     brief = briefings.of(session.session_id)
     chain = filter_config.load(filter_config.key(session.machine, session.name))
+    here = registry.here()
+    away = (session.machine or here) != here
     parts = [
-        f"{session.name} [{session.status}] in {_tilde(session.cwd)}",
+        f"{session.name} [{session.status}] in {_tilde(session.cwd)}"
+        + (f" on {session.machine}" if away else ""),
         f"id: {session.session_id}",
+        *([] if away else ["context {} · {}".format(*_fill(session, sessions.context_window()))]),
         f"briefing: {brief.get('summary') or '(none written yet)'}",
         f"asks:\n{tasks.render(session.session_id)}",
         f"orders: {kept.load(session.session_id) or '(none)'}",
         f"filters: {_chain(chain)}",
     ]
-    waiting = [row for row in artifacts.listing(session) if not row.get("answered")]
-    if waiting:
+    rows = (
+        (await _asked(session, "/artifacts")).get("artifacts", [])
+        if away
+        else artifacts.listing(session)
+    )
+    if waiting := [row for row in rows if not row.get("answered") and row.get("kind", "ask") == "ask"]:
         parts.append("slips waiting: " + ", ".join(f"{r['id']} — {r['title']}" for r in waiting))
     if turns:
-        parts.append("last of the conversation:\n" + _turns(session, turns))
+        parts.append("last of the conversation:\n" + await _turns(session, turns, away))
     return said("\n\n".join(parts))
 
 
-def catalogue(query: str, limit: int) -> dict:
-    """Folders a session could be started in, newest activity first.
+async def _asked(session: sessions.Session, path: str) -> dict:
+    """One read handed to the machine that holds the files. Empty when it is not reachable,
+    which every caller draws as "nothing to show" beside facts this daemon answered itself."""
+    answer = await proxy.call(session.machine, "GET", f"/sessions/{session.session_id}{path}")
+    return answer or {}
 
-    Filtered here rather than handed over whole: this Mac knows about several hundred and a
+
+async def catalogue(query: str, machine: str, limit: int) -> dict:
+    """Folders a session could be started in, on any machine, newest activity first.
+
+    Filtered here rather than handed over whole: the network knows about several hundred and a
     listing that long is a tool answer nobody reads to the end of, model or person.
+
+    **The folders themselves are read here**, out of atlas's catalogue, so a machine that is
+    asleep still has its folders listed. Only the trust flag needs that machine: it is a dialog
+    answered at its own keyboard and nothing else holds the answer. So a machine that did not
+    answer has its folders marked *unknown* rather than untrusted — `/projects` draws the phone's
+    picker the stricter way on purpose, but a sentence saying a folder cannot be started in is a
+    fact, and "I could not ask" is not that fact.
     """
     found, source = sources.catalog()
+    here = registry.here()
     query = (query or "").strip().lower()
+    machine = (machine or "").strip().lower()
+    if machine:
+        found = [p for p in found if (p.machine or here).lower() == machine]
     if query:
         found = [p for p in found if query in p.name.lower() or query in p.relative.lower()]
-    trusted = starting.trusted()
-    live = {Path(s.cwd) for s in sessions.live_sessions()}
     if not found:
-        return said(f"no project matches {query!r} (list from {source}).")
+        where = f" on {machine}" if machine else ""
+        return said(f"no project matches {query!r}{where} (list from {source}).")
+    allowed = await project_routes.trusted_everywhere(here)
+    live = {(s.machine or here, s.cwd) for s in everywhere()}
     lines = [
         f"- {p.name} — {p.relative or p.path}"
+        + (f" · on {p.machine}" if (p.machine or here) != here else "")
         + (f" · {p.framework}" if p.framework else "")
         + (f" · {p.branch}{'*' if p.dirty else ''}" if p.branch else "")
-        + (" · a session is already here" if Path(p.path) in live else "")
-        + ("" if p.path in trusted else " · NOT TRUSTED — a session cannot be started here")
+        + (" · a session is already here" if (p.machine or here, p.path) in live else "")
+        + _trust(p, allowed, here)
         for p in found[:limit]
     ]
     more = f"\n({len(found) - limit} more; narrow the query)" if len(found) > limit else ""
     return said("\n".join(lines) + more)
+
+
+def _trust(project: sources.Project, allowed: dict[str, frozenset[str]], here: str) -> str:
+    """Whether Claude Code has been trusted there — or that nobody could be asked.
+
+    A machine missing from `allowed` altogether did not answer, and its folders are unknown
+    rather than refused. Said apart because the manager repeats this to a person, and "a session
+    cannot be started here" is a different sentence from "that machine is asleep".
+    """
+    on = project.machine or here
+    if on not in allowed:
+        return f" · {on} did not answer — whether it is trusted there is unknown"
+    if project.path in allowed[on]:
+        return ""
+    return " · NOT TRUSTED — a session cannot be started here"
 
 
 def switches(folder: str) -> dict:
@@ -131,13 +277,25 @@ def switches(folder: str) -> dict:
     return said(f"{head}:\n{lines}")
 
 
-def loaded(session: sessions.Session) -> dict:
-    """Every CLAUDE.md a session in that folder is running under, and what it costs."""
-    docs = context.documents(session.cwd)
+async def loaded(session: sessions.Session) -> dict:
+    """Every CLAUDE.md a session in that folder is running under, and what it costs.
+
+    Asked of the machine the folder is on, for the reason `one` gives: a tree walked here for a
+    path that only exists over there is a confident answer about a folder nobody asked about.
+    """
+    here = registry.here()
+    if (session.machine or here) != here:
+        answer = await _asked(session, "/context")
+        found = answer.get("documents", [])
+        docs = [(d.get("prefix", ""), d.get("label", ""), d.get("tokens", 0)) for d in found]
+        total = answer.get("tokens", 0)
+    else:
+        read = context.documents(session.cwd)
+        docs = [(d.prefix, d.label, d.tokens) for d in read]
+        total = sum(d.tokens for d in read)
     if not docs:
         return said(f"{session.name} runs under no CLAUDE.md at all.")
-    total = sum(doc.tokens for doc in docs)
-    lines = "\n".join(f"  {doc.prefix}{doc.label} — ~{doc.tokens} tokens" for doc in docs)
+    lines = "\n".join(f"  {prefix}{label} — ~{count} tokens" for prefix, label, count in docs)
     return said(f"{session.name} is loaded with ~{total} tokens of context:\n{lines}")
 
 
@@ -163,20 +321,23 @@ def _reached(session: sessions.Session) -> str:
     return "pane" if session.pane else "no pane"
 
 
-def _turns(session: sessions.Session, limit: int) -> str:
-    """The last turns, read where that provider keeps them: Claude's transcript, or the Codex or
-    OpenCode server — the readers the phone's own routes use."""
-    reader = {"codex": codex_turns, opencode.PROVIDER: opencode_turns}.get(session.provider)
-    if reader is None:
-        read = transcripts.read_turns(session.session_id, limit=limit)
+async def _turns(session: sessions.Session, limit: int, away: bool) -> str:
+    """The last turns: asked of the machine that holds them, else read where that provider keeps
+    them — Claude's transcript, or the Codex or OpenCode server the phone's routes read."""
+    if away:
+        rows = (await _asked(session, f"/turns?limit={limit}")).get("turns", [])
+        read = [(str(row.get("role", "")), str(row.get("text", ""))) for row in rows]
     else:
+        reader = {"codex": codex_turns, opencode.PROVIDER: opencode_turns}.get(session.provider)
         try:
-            read = reader.page_turns(session.session_id, limit, 0)[0]
+            found = (transcripts.read_turns(session.session_id, limit=limit) if reader is None
+                     else reader.page_turns(session.session_id, limit, 0)[0])
         except (codex.CodexError, opencode.OpenCodeError) as error:
             return f"  ({session.provider} would not answer: {error})"
+        read = [(turn.role, turn.text) for turn in found]
     if not read:
         return "  (nothing readable in the transcript)"
-    return "\n".join(f"  {turn.role}: {' '.join(turn.text.split())[:400]}" for turn in read)
+    return "\n".join(f"  {role}: {' '.join(text.split())[:400]}" for role, text in read)
 
 
 def _tilde(folder: str) -> str:

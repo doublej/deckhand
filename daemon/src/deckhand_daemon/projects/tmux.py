@@ -48,13 +48,27 @@ def start(cwd: str, model: str = "") -> tuple[Session | None, str | None]:
 
     `model` is the hub's answer for this folder, passed across rather than looked up: what the
     person set is on the Mac, and a hand keeps no settings of its own to disagree with it.
+
+    **The trust check stays, and does not take the daemon's word for anything.** `starting.start`
+    on the Mac lets the manager past it for a folder the person named by path, on the strength of
+    a measurement that Claude Code never asks the trust question there. That measurement does not
+    hold here: Ubuntu, on the *same* 2.1.278 and with `/home/jurrejan` recorded exactly as
+    `/Users/jurrejan` is on the Mac, drew the dialog and sat on it — a tmux window nobody can
+    answer, reported forty seconds later as a session that never appeared. So a hand refuses,
+    and the refusal is the useful half: it says to open that folder there once.
+
+    **`~` is expanded here and nowhere else.** A path on this machine's disk means this machine's
+    home, and the daemon that forwarded it has a different one — so "the user folder on Ubuntu"
+    can only be answered by Ubuntu.
     """
-    folder = Path(cwd)
+    folder = Path(cwd).expanduser()
     if not folder.is_dir():
         return None, f"{cwd} is not a folder on this machine"
-    if cwd not in trusted():
-        return None, (f"Claude Code has not been trusted in {folder.name} yet — it has to be "
-                      f"started there once on that machine and the trust question answered")
+    if str(folder) not in trusted():
+        return None, (
+            f"Claude Code has not been trusted in {folder.name} yet — it has to be "
+            f"started there once on that machine and the trust question answered"
+        )
     running = live_sessions(paned_only=False)
     known = {s.session_id for s in running}
     name = free_name(folder.name, running)
