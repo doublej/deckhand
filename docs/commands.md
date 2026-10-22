@@ -118,7 +118,7 @@ Each command is one MCP tool, and each tool is the route or script it reaches.
 | `deckhand notify` | `call_for_attention` | `POST /sessions/{id}/notify` | no |
 | `deckhand read` | `read_session` | `GET /sessions`, `GET /sessions/{id}/turns` | yes |
 | `deckhand say` | `say_to_session` | `GET /sessions`, `GET /manager/session`, `POST /sessions/{id}/say` | no |
-| `deckhand end` | `ask_to_end` | `POST /end-requests` | no |
+| `deckhand end` | `request_end_session` | `POST /end-requests` | no |
 | `deckhand open` | `open_plane` | `POST /space/planes` | no |
 | `deckhand space` | `space` | `GET /space`, `GET /windows`, `GET /sessions/{id}/space` | yes |
 | `deckhand start` | `start_session` | `POST /space/sessions`, `GET /projects` | no |
@@ -143,7 +143,7 @@ one table, `daemon/src/deckhand_daemon/mcp/refused.py`.
 <!-- generated:refused -->
 | Verbs | What does it for the person | Why no tool or command |
 |---|---|---|
-| `cancel`, `stop`, `compact`, `clear`, `exit`, `kill` | `POST /sessions/{id}/control` | keystrokes the person presses on a session's own pane. `clear` cannot be undone, and closing a session is theirs alone: `ask_to_end` asks them, and only their Allow ends one |
+| `cancel`, `stop`, `compact`, `clear`, `exit`, `kill` | `POST /sessions/{id}/control` | keystrokes the person presses on a session's own pane. `clear` cannot be undone, and closing a session is theirs alone: `request_end_session` asks them, and only their Allow ends one |
 | `rename` | `POST /sessions/{id}/name` | it types `/rename` into the pane, which is the keyboard route and arrives as the person |
 | `type`, `keyboard` | `POST /sessions/{id}/say?route=keyboard` | the keyboard route arrives as the person at the machine; `say` goes down the socket labelled as an agent, and is the only way an agent speaks to a session |
 | `respond`, `reply` | `POST /sessions/{id}/artifacts/{aid}/answer` | a slip is answered by the person; an agent answering one is asking and answering itself |
@@ -171,7 +171,7 @@ command takes `--json`; `-` for a question, line or text reads it from stdin.
 | `deckhand notify` | `LINE\|-` | `call_for_attention` | `BAD_ANSWER`, `DAEMON_DOWN`, `NO_SESSION`, `REFUSED`, `NOT_PUSHED` | a Lock Screen card asking for the person; exit 4 when the folder refuses |
 | `deckhand read` | `SESSION [--turns N] [--before N]` | `read_session` | `BAD_ANSWER`, `DAEMON_DOWN`, `NO_SUCH_SESSION`, `REFUSED` | another session's conversation, text only: the last N turns (default 1, 0 for the whole transcript); pass the answer's `older` as --before for the page before |
 | `deckhand say` | `SESSION TEXT\|-` | `say_to_session` | `BAD_ANSWER`, `CODEX_THREAD`, `DAEMON_DOWN`, `NO_SUCH_SESSION`, `REFUSED`, `NOT_DELIVERED` | message another session down its inbox, as an agent — `manager` is the manager; exit 4 when it was not said |
-| `deckhand end` | `SESSION... --why TEXT` | `ask_to_end` | `BAD_ANSWER`, `DAEMON_DOWN`, `REFUSED` | ask the person, on their phone, to end these sessions on any machine; ends nothing itself — only their Allow does |
+| `deckhand end` | `SESSION... --why TEXT` | `request_end_session` | `BAD_ANSWER`, `DAEMON_DOWN`, `REFUSED` | ask the person, on their phone, to end these sessions on any machine; ends nothing itself — only their Allow does |
 | `deckhand open` | `[URL] [--window ID] [--title TEXT]` | `open_plane` | `BAD_ANSWER`, `BAD_PLANE`, `DAEMON_DOWN`, `REFUSED` | put a web page, or a Mac window by id, beside this session in the person's headset; the URL must be reachable from the headset on the LAN |
 | `deckhand space` | `[--full]` | `space` | `BAD_ANSWER`, `DAEMON_DOWN`, `REFUSED` | where this session is in the headset, what is beside it, and every page and window open; --full adds every kept pose |
 | `deckhand start` | `[FOLDER] [--provider claude\|codex\|opencode]` | `start_session` | `BAD_ANSWER`, `DAEMON_DOWN`, `NOT_STARTABLE`, `NO_SESSION`, `REFUSED` | start a session beside this one in the headset; brief it with `say` |
@@ -349,14 +349,15 @@ can be stopped by that session's filters, so read the receipt: `went: false` mea
 said, whatever the reason beside it. Nothing comes back down this tool: the manager answers
 in its panel, so say who you are and, if you need a reply, how to reach you.
 
-### `ask_to_end` — writes
+### `request_end_session` — writes
 
 Arguments: `names`: string[], `why`: string  
 Reaches: `POST /end-requests`  
 Fails with: `BAD_ANSWER`, `DAEMON_DOWN`, `REFUSED`
 
-Ask the person to end sessions — on any machine, by name or id — with one Allow/Deny alert
-on their phone naming each one and your `why`. **This ends nothing.** Their Allow ends them,
+Request the person's approval to stop, close, end or terminate sessions — on any machine,
+by name or id — with one Allow/Deny alert on their phone naming each one and your `why`. The
+only way to end a session from here, and **it ends nothing itself.** Their Allow ends them,
 by SIGTERM to each process on its own machine; Deny or no tap and nothing happens, and
 nothing tells you which: look at `sessions` later rather than waiting on it.
 

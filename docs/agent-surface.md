@@ -247,7 +247,7 @@ postscript.
   outright; the refusal comes back as `{pushed: false, why}` and the agent is expected to say so.
 - **Planes, yes; sessions, no.** `open_plane`/`close_plane` move furniture in the headset
   (`docs/space.md`). A session is never a kept plane, so nothing here closes one — that stays
-  `/control exit`, the person's press. An agent may only *ask*: `ask_to_end` names sessions on
+  `/control exit`, the person's press. An agent may only *ask*: `request_end_session` names sessions on
   one Allow/Deny alert, and the person's signed Allow is the press (`push/end_requests.py`).
 - **The refusals are one table**, `mcp/refused.py`, rendered into the server's instructions,
   `deckhand prime`, `docs/commands.md`, and a `PERSON_ONLY` answer per verb.

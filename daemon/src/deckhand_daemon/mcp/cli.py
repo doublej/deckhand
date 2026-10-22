@@ -121,7 +121,7 @@ async def _call(a: argparse.Namespace) -> dict[str, Any]:
         case "say":
             return await server.say_to_session(a.session, _text(a.text))
         case "end":
-            return await server.ask_to_end(a.sessions, a.why)
+            return await server.request_end_session(a.sessions, a.why)
         case "open":
             return await server.open_plane(a.url, window=a.window, title=a.title)
         case "space":

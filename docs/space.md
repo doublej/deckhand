@@ -154,7 +154,7 @@ that session's own routes, so the filter chain, the orders and the delivery reco
 as they do from the phone. The worst an agent can do here is clutter the room.
 
 A session is not furniture. Closing one is `/control exit`, pressed by the person on that
-session's own plane — or their signed Allow on an agent's `ask_to_end` — and an agent has no
+session's own plane — or their signed Allow on an agent's `request_end_session` — and an agent has no
 other way to it: a session's plane comes from the listing and
 is never kept in the space, so `DELETE /space/planes/{id}` has nothing to name it by. Like every
 other refusal on the agent surface, this is absence rather than a fence, and the agent token in

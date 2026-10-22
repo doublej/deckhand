@@ -24,7 +24,7 @@ skill's own `slip.py` and `answer.py` rather than talking to the daemon. One cop
 and the tool and the shell command an agent might type produce the same file.
 
 **What it refuses, and how.** By absence: there is no route argument, no `/control`, no `PUT`, and
-no way to close a session (`ask_to_end` asks the person to, and only their Allow ends one) — the
+no way to close a session (`request_end_session` asks the person to, and only their Allow ends one) — the
 whole list, with a reason each, closes these instructions. `say_to_session` is socket-only, because an agent choosing the keyboard
 route is an agent claiming to be the person. None of this is a fence — the agent keeps `Bash` and
 the token is a readable file — it is there so an agent does not *drift* into speaking as the
@@ -214,9 +214,10 @@ async def say_to_session(session: str, text: str) -> dict:
 
 
 @server.tool(annotations=WRITES)
-async def ask_to_end(names: list[str], why: str) -> dict:
-    """Ask the person to end sessions — on any machine, by name or id — with one Allow/Deny alert
-    on their phone naming each one and your `why`. **This ends nothing.** Their Allow ends them,
+async def request_end_session(names: list[str], why: str) -> dict:
+    """Request the person's approval to stop, close, end or terminate sessions — on any machine,
+    by name or id — with one Allow/Deny alert on their phone naming each one and your `why`. The
+    only way to end a session from here, and **it ends nothing itself.** Their Allow ends them,
     by SIGTERM to each process on its own machine; Deny or no tap and nothing happens, and
     nothing tells you which: look at `sessions` later rather than waiting on it.
 

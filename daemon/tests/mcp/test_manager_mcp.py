@@ -53,7 +53,7 @@ def test_mcp_over_http_takes_a_manager_token_that_opens_nothing_else(token):
         answered = c.post("/mcp", json=listed, headers={**accept, "authorization": f"Bearer {scoped}"})
     assert answered.status_code == 200
     names = {tool["name"] for tool in answered.json()["result"]["tools"]}
-    assert len(names) == 17 and {"tmux_tree", "tmux_arrange", "tell_manager", "ask_to_end"} <= names
+    assert len(names) == 17 and {"tmux_tree", "tmux_arrange", "tell_manager", "request_end_session"} <= names
     shapes = {tool["name"]: tool["inputSchema"] for tool in answered.json()["result"]["tools"]}
     # What a handler defaults is not required: a voice agent leaving out `turns` was refused.
     assert shapes["read_session"]["required"] == ["session"]

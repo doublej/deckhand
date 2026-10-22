@@ -12,7 +12,7 @@ from __future__ import annotations
 REFUSED: list[dict[str, str]] = [
     {"verbs": "cancel stop compact clear exit kill", "route": "POST /sessions/{id}/control",
      "why": "keystrokes the person presses on a session's own pane. `clear` cannot be undone, "
-            "and closing a session is theirs alone: `ask_to_end` asks them, and only their "
+            "and closing a session is theirs alone: `request_end_session` asks them, and only their "
             "Allow ends one"},
     {"verbs": "rename", "route": "POST /sessions/{id}/name",
      "why": "it types `/rename` into the pane, which is the keyboard route and arrives as the "

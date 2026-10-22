@@ -18,7 +18,7 @@ stdio, the token's name over HTTP — and the panel shows who did it.
 **It never types into a pane.** `say_to_session` goes down the session's inbox socket and arrives
 labelled as another agent, carrying none of the person's authority. There is no tool to stop,
 compact, clear, close or rename a session, to answer a slip, or to edit a filter chain — those are
-the person's own presses, and `manager/doing.py` says why for each. Ending one is `ask_to_end`:
+the person's own presses, and `manager/doing.py` says why for each. Ending one is `request_end_session`:
 a card on the person's phone, and only their Allow ends anything.
 
 Installed apart from `deckhand-mcp` on purpose (`claude mcp add deckhand-control -- uv run
@@ -50,7 +50,7 @@ calling them does not reach it: to brief the manager — the agent behind the pe
 — use `tell_manager`. Each action you take shows in its panel under your name.
 
 No tool stops, compacts, clears, closes or renames a session, answers a slip or edits a filter \
-chain: those are the person's own presses. To end sessions, `ask_to_end` asks the person on \
+chain: those are the person's own presses. To end sessions, `request_end_session` asks the person on \
 their phone. `say_to_session` and `tell_manager` arrive labelled as another agent, never as the \
 person."""
 
@@ -93,8 +93,9 @@ async def _tell(args: dict) -> dict:
 
 
 async def _end(args: dict) -> dict:
-    """The one way to stop, end or terminate sessions from here: it asks the person, on any
-    machine, by name or id — one Allow/Deny card on their phone naming each and your `why`. **This ends nothing** — only their Allow does, and
+    """Request the person's approval to stop, close, end or terminate sessions — the only way to
+    from here — on any machine, by name or id: one Allow/Deny card on their phone naming each and
+    your `why`. **This ends nothing** — only their Allow does, and
     nothing tells you which they chose; `list_sessions` later shows it. For cleanup the person
     asked for. Refused unless each name is exactly one Claude session with a process."""
     return _answered(await here.reach("POST", "/end-requests", json={
@@ -131,7 +132,7 @@ OWN_TOOLS = [
     SdkMcpTool("tell_manager", inspect.cleandoc(_tell.__doc__),
                {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]},
                _tell, ToolAnnotations(openWorldHint=False)),
-    SdkMcpTool("ask_to_end", inspect.cleandoc(_end.__doc__),
+    SdkMcpTool("request_end_session", inspect.cleandoc(_end.__doc__),
                {"type": "object", "required": ["names", "why"], "properties": {
                    "names": {"type": "array", "items": {"type": "string"}},
                    "why": {"type": "string"}}},

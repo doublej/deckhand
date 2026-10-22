@@ -74,7 +74,7 @@ COMMANDS: list[dict[str, str]] = [
     {"name": "say", "tool": "say_to_session", "args": "SESSION TEXT|-",
      "does": "message another session down its inbox, as an agent — `manager` is the manager; "
              "exit 4 when it was not said"},
-    {"name": "end", "tool": "ask_to_end", "args": "SESSION... --why TEXT",
+    {"name": "end", "tool": "request_end_session", "args": "SESSION... --why TEXT",
      "does": "ask the person, on their phone, to end these sessions on any machine; ends "
              "nothing itself — only their Allow does"},
     {"name": "open", "tool": "open_plane", "args": "[URL] [--window ID] [--title TEXT]",
